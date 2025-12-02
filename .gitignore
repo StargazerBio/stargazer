@@ -1,6 +1,9 @@
 # Context directory (reference materials)
 context/*
 
+# Scratch directory for one of testing
+scratch/*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

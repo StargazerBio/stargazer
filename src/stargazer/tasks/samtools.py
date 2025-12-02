@@ -13,17 +13,57 @@ from typing import Optional, List
 import flyte
 from flyte.io import File
 
+from stargazer.types.reference import Reference
+from stargazer.config import parabricks_env
 
-# Create task environment for Samtools
-# Samtools doesn't require GPU resources
-samtools_env = flyte.TaskEnvironment(
-    name="samtools",
-    image=flyte.Image.from_base("quay.io/biocontainers/samtools:1.21--h50ea8bc_0"),
-    resources=flyte.Resources(
-        cpu=4,
-        memory="8Gi",
-    ),
-)
+
+@parabricks_env.task
+async def samtools_faidx(ref: File) -> Reference:
+    """
+    Create a FASTA index (.fai file) using samtools faidx.
+
+    Args:
+        ref: Input FASTA file to index
+
+    Returns:
+        Reference object containing the FASTA and its .fai index
+    """
+    # Download input file
+    ref_local = await ref.download()
+    ref_path = Path(ref_local)
+
+    # Index file will be created as <ref>.fai
+    index_path = f"{ref_local}.fai"
+
+    # Run samtools faidx to create the index
+    args = [ref_local]
+    returncode, stdout, stderr = await run_samtools("faidx", args)
+
+    if returncode != 0:
+        raise RuntimeError(f"samtools faidx failed with code {returncode}:\n{stderr}")
+
+    # Verify index was created
+    if not Path(index_path).exists():
+        raise RuntimeError(f"Expected index file {index_path} was not created")
+
+    # Create reference directory with both files
+    ref_dir_path = ref_path.parent / f"{ref_path.stem}_indexed"
+    ref_dir_path.mkdir(exist_ok=True)
+
+    # Copy files to reference directory
+    import shutil
+    shutil.copy(ref_local, ref_dir_path / ref_path.name)
+    shutil.copy(index_path, ref_dir_path / f"{ref_path.name}.fai")
+
+    # Upload as directory
+    from flyte.io import Dir
+    ref_dir = await Dir.from_local(str(ref_dir_path))
+
+    return Reference(
+        ref_name=ref_path.name,
+        index_name=ref_path.name,
+        ref_dir=ref_dir,
+    )
 
 
 async def run_samtools(
@@ -60,15 +100,7 @@ async def run_samtools(
     )
 
 
-@dataclass
-class FaidxOutputs:
-    """Output files from samtools faidx tool."""
-    fasta: File  # Input FASTA file (reference)
-    fai: File  # FASTA index file (.fai)
-    extracted_sequences: Optional[File] = None  # Extracted sequences (if regions specified)
-
-
-@samtools_env.task
+@parabricks_env.task
 async def faidx(
     ref: File,
     regions: Optional[List[str]] = None,
@@ -81,7 +113,7 @@ async def faidx(
     mark_strand: Optional[str] = None,
     write_index: bool = False,
     threads: int = 1,
-) -> FaidxOutputs:
+) -> Reference:
     """
     Run samtools faidx to index FASTA files or extract subsequences.
 
@@ -178,16 +210,8 @@ async def faidx(
     if output_path and Path(output_path).exists():
         extracted_file = await File.from_local(output_path)
 
-    return FaidxOutputs(
-        fasta=fasta_file,
-        fai=fai_file,
-        extracted_sequences=extracted_file,
+    return Reference(
+        ref=ref,
+        index=index_path,
+        ref_dir=Path(index_path).parent,
     )
-
-
-if __name__ == "__main__":
-    # Example of how to run these tasks
-    flyte.init_from_config()
-
-    # Deploy the environment to make tasks available
-    flyte.deploy(samtools_env)

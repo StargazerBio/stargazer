@@ -1,5 +1,9 @@
 # Stargazer - Flyte v2 Migration Project
 
+**General Guidelines**
+- When I say task, I am referring to a Flyte V2 task, not a raw python function
+- Tasks are collected into workflows which are just regular tasks calling other tasks, sync or async
+
 ## Context Directory Reference
 
 The `/context` directory contains essential reference materials for developing Stargazer on Flyte v2:
@@ -36,6 +40,10 @@ The `/context` directory contains essential reference materials for developing S
   - Existing tasks (see `tasks/` subdirectory)
   - Workflow compositions (see `workflows/` subdirectory)
   - **Note:** Do not copy v1 syntax directly; adapt patterns to v2 API
+  
+## Scratch Directory
+
+The `scratch` directory is intended for one-off testing and hypothesis validation. It contains nothing persistent and will not be committed to git.
 
 ## Project Structure
 
@@ -71,6 +79,7 @@ stargazer/
 │   └── integration/         # Integration tests
 │       └── __init__.py
 ├── context/                 # Reference materials (see above)
+├── scratch/                 # Scratch materials (see above)
 ├── Dockerfile
 ├── pyproject.toml
 └── README.md
