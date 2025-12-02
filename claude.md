@@ -3,6 +3,17 @@
 **General Guidelines**
 - When I say task, I am referring to a Flyte V2 task, not a raw python function
 - Tasks are collected into workflows which are just regular tasks calling other tasks, sync or async
+- This project uses UV so the appropriate commands are `uv add` and `uv pip install -e .`
+- If something is changed that you didn't change, it's not a typo, it's a manual change. I do still write code occassionally..
+
+**Dev Process**
+- You will implement features piece by piece in a sequential fashion
+- Handle a single case well at first instead of trying to anticipate every way the app will be used
+- Do not add complexity until it is needed, which may be never
+- Commits will be small and carry a short and meaningful messages
+- Simple tests will be written before implementation and you will pause to ensure they're capturing the right behavior
+- Implementation will be tightly scoped so it can be understood
+- Tests will run until they pass
 
 ## Context Directory Reference
 

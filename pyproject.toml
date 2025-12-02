@@ -1,9 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "stargazer"
 version = "0.1.0"
-description = "Add your description here"
+description = "Bioinformatics workflow orchestration system combining IPFS storage with Flyte v2"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "requests>=2.32.5",
+    "aiohttp>=3.9.0",
+    "aiofiles>=24.1.0",
+    "flyte>=2.0.0b31",
+    "pytest>=9.0.1",
 ]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+asyncio_mode = "auto"
