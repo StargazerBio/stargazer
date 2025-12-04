@@ -9,8 +9,7 @@ To populate expected CIDs, run:
 
 import os
 import pytest
-from pathlib import Path
-from stargazer.utils.pinata import PinataClient, PinataFile
+from stargazer.utils.pinata import PinataClient
 from config import TEST_ROOT, CIDS
 
 

@@ -8,11 +8,11 @@ import shutil
 from dataclasses import dataclass
 from typing import Optional, Self
 from pathlib import Path
-from itertools import product
 
 from flyte.io import Dir
 
 from stargazer.utils.pinata import PinataClient
+from stargazer.utils.query import generate_query_combinations
 
 
 @dataclass
@@ -82,31 +82,11 @@ class Reference:
         )
         ref.client = PinataClient()
 
-        # Separate list-valued and scalar-valued filters
-        list_filters = {}
-        scalar_filters = {}
-
-        for key, value in filters.items():
-            if isinstance(value, list):
-                list_filters[key] = value
-            else:
-                scalar_filters[key] = value
-
-        # Generate cartesian product of list-valued filters
-        if list_filters:
-            # Get keys and values for cartesian product
-            keys = list(list_filters.keys())
-            value_lists = [list_filters[k] for k in keys]
-
-            # Generate all combinations
-            query_combinations = []
-            for combo in product(*value_lists):
-                query = {"type": "reference", **scalar_filters}
-                query.update(dict(zip(keys, combo)))
-                query_combinations.append(query)
-        else:
-            # No list filters, just one query
-            query_combinations = [{"type": "reference", **scalar_filters}]
+        # Generate query combinations using cartesian product for list-valued filters
+        query_combinations = generate_query_combinations(
+            base_query={"type": "reference"},
+            filters=filters,
+        )
 
         # Execute all queries and collect results
         all_files = []
