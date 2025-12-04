@@ -5,6 +5,7 @@
 - Tasks are collected into workflows which are just regular tasks calling other tasks, sync or async
 - This project uses UV so the appropriate commands are `uv add` and `uv pip install -e .`
 - If something is changed that you didn't change, it's not a typo, it's a manual change. I do still write code occassionally..
+- Don't use the "if TYPE_CHECKING:" pattern anywhere, Flyte will always check types
 
 **Dev Process**
 - You will implement features piece by piece in a sequential fashion
