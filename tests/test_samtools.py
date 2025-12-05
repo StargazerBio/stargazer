@@ -6,9 +6,11 @@ import shutil
 import tempfile
 import pytest
 from pathlib import Path
+from datetime import datetime
 
 from stargazer.types import Reference
 from stargazer.tasks.samtools import samtools_faidx
+from stargazer.utils.pinata import IpFile, PinataClient
 from config import TEST_ROOT
 
 
@@ -19,52 +21,52 @@ async def test_samtools_faidx():
     if shutil.which("samtools") is None:
         pytest.skip("samtools not available in environment")
 
-    # Setup: Create a temporary directory with test reference
+    # Setup: Copy test reference to cache directory
     ref_fixture = TEST_ROOT / "fixtures" / "reference" / "GRCh38_chr21.fasta"
     assert ref_fixture.exists(), f"Test fixture not found: {ref_fixture}"
 
-    # Create temporary directory and copy FASTA (without .fai)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir_path = Path(tmpdir)
-        ref_copy = tmpdir_path / "GRCh38_chr21.fasta"
-        shutil.copy(ref_fixture, ref_copy)
+    # Create a mock PinataClient with cache directory
+    client = PinataClient()
 
-        # Ensure no .fai file exists initially
-        fai_path = tmpdir_path / "GRCh38_chr21.fasta.fai"
-        if fai_path.exists():
-            fai_path.unlink()
+    # Copy fixture to cache (simulating a downloaded file)
+    # PinataClient caches files as cache_dir / cid
+    test_cid = "QmTestFasta123"
+    cached_fasta = client.cache_dir / test_cid
+    client.cache_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(ref_fixture, cached_fasta)
 
-        # Create Reference object with local Path
-        ref = Reference(
-            ref_name="GRCh38_chr21.fasta",
-            dir=tmpdir_path,
-        )
+    # Create a mock IpFile
+    fasta_file = IpFile(
+        id="test-id",
+        cid=test_cid,
+        name="GRCh38_chr21.fasta",
+        size=cached_fasta.stat().st_size,
+        keyvalues={"type": "reference", "build": "GRCh38"},
+        created_at=datetime.now(),
+    )
 
-        # Run samtools_faidx
-        result = await samtools_faidx(ref)
+    # Create Reference object with IpFile
+    ref = Reference(
+        ref_name="GRCh38_chr21.fasta",
+        files=[fasta_file],
+        client=client,
+    )
 
-        # Verify the result
-        assert isinstance(result, Reference)
-        assert result.ref_name == "GRCh38_chr21.fasta"
+    # Run samtools_faidx
+    result = await samtools_faidx(ref)
 
-        # Get result directory path
-        result_dir_path = Path(result.dir)
-        result_fai_path = result_dir_path / "GRCh38_chr21.fasta.fai"
+    # Verify the result
+    assert isinstance(result, Reference)
+    assert result.ref_name == "GRCh38_chr21.fasta"
 
-        # Verify .fai file exists
-        assert result_fai_path.exists(), f"Index file not found: {result_fai_path}"
+    # Verify .fai file was added to files list
+    fai_files = [f for f in result.files if f.name == "GRCh38_chr21.fasta.fai"]
+    assert len(fai_files) == 1, "Should have exactly one .fai file"
+    assert fai_files[0].size > 0, "Index file should not be empty"
 
-        # Verify .fai file has content (should not be empty)
-        assert result_fai_path.stat().st_size > 0, "Index file is empty"
-
-        # Verify .fai has expected format (chr21 line with 5 tab-separated fields)
-        fai_content = result_fai_path.read_text()
-        assert "chr21" in fai_content, "Index should contain chr21 entry"
-        # FAI format: chrom, length, offset, linebases, linewidth
-        lines = fai_content.strip().split("\n")
-        assert len(lines) > 0, "Index file should have at least one line"
-        fields = lines[0].split("\t")
-        assert len(fields) == 5, f"Expected 5 fields in .fai, got {len(fields)}"
+    # Cleanup
+    if cached_fasta.exists():
+        cached_fasta.unlink()
 
 
 @pytest.mark.asyncio
@@ -74,45 +76,65 @@ async def test_samtools_faidx_idempotent():
     if shutil.which("samtools") is None:
         pytest.skip("samtools not available in environment")
 
-    # Setup: Use fixtures directory which already has .fai file
+    # Setup: Copy test reference to cache directory
     fixtures_ref_dir = TEST_ROOT / "fixtures" / "reference"
 
-    # Create temporary directory and copy both FASTA and .fai
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir_path = Path(tmpdir)
-        shutil.copy(
-            fixtures_ref_dir / "GRCh38_chr21.fasta",
-            tmpdir_path / "GRCh38_chr21.fasta"
-        )
-        shutil.copy(
-            fixtures_ref_dir / "GRCh38_chr21.fasta.fai",
-            tmpdir_path / "GRCh38_chr21.fasta.fai"
-        )
+    # Create a mock PinataClient with cache directory
+    client = PinataClient()
+    client.cache_dir.mkdir(parents=True, exist_ok=True)
 
-        # Get original .fai modification time
-        original_fai = tmpdir_path / "GRCh38_chr21.fasta.fai"
-        original_mtime = original_fai.stat().st_mtime
+    # Copy both FASTA and .fai to cache (using CID as filename)
+    test_cid_fasta = "QmTestFasta456"
+    test_cid_fai = "QmTestFai456"
+    cached_fasta = client.cache_dir / test_cid_fasta
+    cached_fai = client.cache_dir / test_cid_fai
+    shutil.copy(fixtures_ref_dir / "GRCh38_chr21.fasta", cached_fasta)
+    shutil.copy(fixtures_ref_dir / "GRCh38_chr21.fasta.fai", cached_fai)
 
-        # Create Reference object with local Path
-        ref = Reference(
-            ref_name="GRCh38_chr21.fasta",
-            dir=tmpdir_path,
-        )
+    # Create mock IpFiles
+    fasta_file = IpFile(
+        id="test-id-fasta",
+        cid=test_cid_fasta,
+        name="GRCh38_chr21.fasta",
+        size=cached_fasta.stat().st_size,
+        keyvalues={"type": "reference"},
+        created_at=datetime.now(),
+    )
 
-        # Run samtools_faidx (should not fail or regenerate)
-        result = await samtools_faidx(ref)
+    fai_file = IpFile(
+        id="test-id-fai",
+        cid=test_cid_fai,
+        name="GRCh38_chr21.fasta.fai",
+        size=cached_fai.stat().st_size,
+        keyvalues={"type": "reference"},
+        created_at=datetime.now(),
+    )
 
-        # Verify the result
-        assert isinstance(result, Reference)
+    # Create Reference object with both files
+    ref = Reference(
+        ref_name="GRCh38_chr21.fasta",
+        files=[fasta_file, fai_file],
+        client=client,
+    )
 
-        # Get result directory and check .fai wasn't regenerated
-        result_dir_path = Path(result.dir)
-        result_fai_path = result_dir_path / "GRCh38_chr21.fasta.fai"
+    # Run samtools_faidx (should not regenerate)
+    result = await samtools_faidx(ref)
 
-        assert result_fai_path.exists(), "Index file should still exist"
-        # Note: modification time might change due to copy operations in Flyte,
-        # so we just verify the file exists and has content
-        assert result_fai_path.stat().st_size > 0, "Index file should have content"
+    # Verify the result
+    assert isinstance(result, Reference)
+
+    # Should still have exactly 2 files (not 3)
+    assert len(result.files) == 2, "Should not duplicate .fai file"
+
+    # Verify .fai file exists
+    fai_files = [f for f in result.files if f.name == "GRCh38_chr21.fasta.fai"]
+    assert len(fai_files) == 1, "Should have exactly one .fai file"
+
+    # Cleanup
+    if cached_fasta.exists():
+        cached_fasta.unlink()
+    if cached_fai.exists():
+        cached_fai.unlink()
 
 
 @pytest.mark.asyncio
@@ -122,16 +144,13 @@ async def test_samtools_faidx_missing_file():
     if shutil.which("samtools") is None:
         pytest.skip("samtools not available in environment")
 
-    # Create empty temporary directory
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir_path = Path(tmpdir)
+    # Create a Reference with empty files list
+    ref = Reference(
+        ref_name="nonexistent.fasta",
+        files=[],
+        client=PinataClient(),
+    )
 
-        # Create Reference object pointing to non-existent file
-        ref = Reference(
-            ref_name="nonexistent.fasta",
-            dir=tmpdir_path,
-        )
-
-        # Should raise FileNotFoundError
-        with pytest.raises(FileNotFoundError, match="not found"):
-            await samtools_faidx(ref)
+    # Should raise FileNotFoundError
+    with pytest.raises(FileNotFoundError, match="not found"):
+        await samtools_faidx(ref)

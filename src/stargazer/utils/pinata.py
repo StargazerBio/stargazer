@@ -21,8 +21,8 @@ import aiofiles
 
 
 @dataclass
-class PinataFile:
-    """Represents a file stored in Pinata."""
+class IpFile:
+    """Represents a file stored in IPFS (via Pinata or other service)."""
     id: str
     cid: str
     name: Optional[str]
@@ -31,7 +31,7 @@ class PinataFile:
     created_at: datetime
 
     @classmethod
-    def from_api_response(cls, data: dict) -> "PinataFile":
+    def from_api_response(cls, data: dict) -> "IpFile":
         """Parse from Pinata API JSON response."""
         return cls(
             id=data["id"],
@@ -111,7 +111,7 @@ class PinataClient:
         self,
         path: Path,
         keyvalues: Optional[dict[str, str]] = None,
-    ) -> PinataFile:
+    ) -> IpFile:
         """
         Upload a file to Pinata.
 
@@ -120,7 +120,7 @@ class PinataClient:
             keyvalues: Metadata key-value pairs for querying
 
         Returns:
-            PinataFile with CID and metadata
+            IpFile with CID and metadata
         """
         url = f"{self.UPLOAD_BASE}/files"
 
@@ -135,7 +135,7 @@ class PinataClient:
             async with session.post(url, headers=self._headers(), data=data) as response:
                 response.raise_for_status()
                 result = await response.json()
-                return PinataFile.from_api_response(result.get("data", result))
+                return IpFile.from_api_response(result.get("data", result))
 
     async def download_file(self, cid: str, dest: Optional[Path] = None) -> Path:
         """
@@ -204,7 +204,7 @@ class PinataClient:
 
         return cache_path
 
-    async def query_files(self, keyvalues: dict[str, str]) -> list[PinataFile]:
+    async def query_files(self, keyvalues: dict[str, str]) -> list[IpFile]:
         """
         Query files by keyvalue metadata.
 
@@ -212,7 +212,7 @@ class PinataClient:
             keyvalues: Metadata key-value pairs to filter by
 
         Returns:
-            List of matching PinataFile objects
+            List of matching IpFile objects
 
         Example:
             files = await client.query_files({"type": "reference", "build": "GRCh38"})
@@ -233,7 +233,7 @@ class PinataClient:
                 data = await response.json()
 
                 return [
-                    PinataFile.from_api_response(f)
+                    IpFile.from_api_response(f)
                     for f in data.get("data", {}).get("files", [])
                 ]
 
