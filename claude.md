@@ -311,6 +311,11 @@ if __name__ == "__main__":
 7. **Documentation:** Include docstrings explaining purpose and behavior
 8. **Learn from V1:** Use `stargazer_flyte_v1/` for workflow logic, but adapt to v2 API
 
+## Style Preferences
+
+1. **Paths:** Use pathlib.Path for all filesystem operations e.g. joinpath. Use resolve() to get absolute Paths
+whenever appropriate. Only convert to str when absolutely necessary, e.g. immediately before a subprocess call.
+
 ## Quick Reference Workflow
 
 When implementing a new pipeline component:

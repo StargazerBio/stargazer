@@ -39,7 +39,6 @@ async def test_hydrate_no_results():
     # Test that a query with no matches raises ValueError
     # Using a nonsense build name that definitely doesn't exist
     with pytest.raises(ValueError, match="No files found matching queries"):
-        await Reference.hydrate(
-            ref_filename="genome.fa",
-            build="NonexistentBuild12345",
+        await Reference.pinata_hydrate(
+            ref_name="genome.fa",
         )

@@ -35,7 +35,7 @@ class Reference:
         Downloads the directory if needed.
         """
         dir_path = Path(self.dir.download_sync())
-        return dir_path / self.ref_name
+        return dir_path.joinpath(self.ref_name).resolve()
 
     @classmethod
     async def pinata_hydrate(
