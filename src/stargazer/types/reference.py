@@ -5,7 +5,7 @@ A reference is a directory in IPFS containing reference files.
 """
 import tempfile
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, Self
 from pathlib import Path
 
@@ -21,20 +21,30 @@ class Reference:
     A reference genome stored as a directory.
 
     Attributes:
-        dir: Flyte directory containing reference files
-        ref_name: ref_name of the main reference file
+        dir: Directory containing reference files (Flyte Dir or local Path)
+        ref_name: Name of the main reference file
+        client: Optional PinataClient for IPFS operations
     """
 
-    dir: Dir
     ref_name: str
-    client: Optional[PinataClient] = None
+    dir: Dir | Path
+    client: PinataClient | None = None
 
     def get_ref_path(self) -> Path:
         """
         Get the local path to the reference file.
-        Downloads the directory if needed.
+        Downloads the directory if needed (for Flyte Dir).
+
+        Returns:
+            Absolute path to the reference file
         """
-        dir_path = Path(self.dir.download_sync())
+        # Handle Flyte Dir - download if needed
+        if isinstance(self.dir, Dir):
+            dir_path = Path(self.dir.download_sync())
+        else:
+            # Handle local Path
+            dir_path = Path(self.dir)
+
         return dir_path.joinpath(self.ref_name).resolve()
 
     @classmethod
@@ -50,36 +60,32 @@ class Reference:
         Always queries with type="reference" prefix.
 
         Args:
-            ref_name: ref_name of the reference file in the directory
-            client: Optional PinataClient instance
+            ref_name: Name of the reference file in the directory
             **filters: Metadata filters (e.g., build="GRCh38", tool=["fasta", "bwa"])
 
         Returns:
-            List of Reference instances matching the queries
+            Reference instance with files downloaded from Pinata
 
         Raises:
             ValueError: If no files match any of the query combinations
 
         Example:
             # Single query
-            refs = await Reference.hydrate(
+            ref = await Reference.pinata_hydrate(
                 ref_name="genome.fa",
                 build="GRCh38",
                 tool="fasta"
             )
 
             # Multi-dimensional query (produces 3 queries for tool list)
-            refs = await Reference.hydrate(
+            ref = await Reference.pinata_hydrate(
                 ref_name="genome.fa",
                 build="GRCh38",
                 tool=["fasta", "faidx", "bwa"]
             )
         """
-        # Create Reference instance
-        ref = cls(
-            dir=await Dir.from_local(tempfile.mkdtemp()),
-            ref_name=ref_name,
-        )
+        # Create Reference instance with local directory
+        ref = cls(ref_name=ref_name, dir=Path(tempfile.mkdtemp()))
         ref.client = PinataClient()
 
         # Generate query combinations using cartesian product for list-valued filters
@@ -99,10 +105,10 @@ class Reference:
                 f"No files found matching queries. Filters: {filters}"
             )
 
-        # Download and hydrate each file into a Reference
+        # Download and hydrate each file into the Reference directory
         for pinata_file in all_files:
-            # Download the directory from IPFS
+            # Download the file from IPFS
             fpath = await ref.client.download_file(pinata_file.cid)
-            shutil.move(fpath, Path(ref.dir.path).joinpath(pinata_file.name))
+            shutil.move(fpath, ref.dir / pinata_file.name)
 
         return ref

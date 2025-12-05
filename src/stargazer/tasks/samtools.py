@@ -22,14 +22,18 @@ async def samtools_faidx(ref: Reference) -> Reference:
     Returns:
         Reference object with the .fai index file added to the ref directory
     """
-    # Download the reference directory
-    await ref.dir.download()
+    # Download the reference directory if it's a Flyte Dir
+    if isinstance(ref.dir, Dir):
+        await ref.dir.download()
+
+    # Get the reference file path
     ref_file_path = ref.get_ref_path()
 
     # Verify the reference file exists
     if not ref_file_path.exists():
+        dir_path = ref.dir.path if isinstance(ref.dir, Dir) else str(ref.dir)
         raise FileNotFoundError(
-            f"Reference file {ref.ref_name} not found in {ref.dir.path}"
+            f"Reference file {ref.ref_name} not found in {dir_path}"
         )
 
     # Run samtools faidx
@@ -37,7 +41,9 @@ async def samtools_faidx(ref: Reference) -> Reference:
     if fai_path.exists():
         return ref
 
+    # Get working directory for command execution
+    cwd = ref.dir.path if isinstance(ref.dir, Dir) else str(ref.dir)
     cmd = ["samtools", "faidx", ref_file_path, "--fai-idx", fai_path]
-    await _run(cmd, cwd=ref.dir.path)
+    await _run(cmd, cwd=cwd)
 
     return ref

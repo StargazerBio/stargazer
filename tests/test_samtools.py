@@ -2,13 +2,11 @@
 Tests for samtools tasks.
 """
 
-import os
 import shutil
 import tempfile
 import pytest
 from pathlib import Path
 
-from flyte.io import Dir
 from stargazer.types import Reference
 from stargazer.tasks.samtools import samtools_faidx
 from config import TEST_ROOT
@@ -36,11 +34,10 @@ async def test_samtools_faidx():
         if fai_path.exists():
             fai_path.unlink()
 
-        # Create Reference object
-        ref_dir = await Dir.from_local(str(tmpdir_path))
+        # Create Reference object with local Path
         ref = Reference(
-            dir=ref_dir,
             ref_name="GRCh38_chr21.fasta",
+            dir=tmpdir_path,
         )
 
         # Run samtools_faidx
@@ -50,8 +47,8 @@ async def test_samtools_faidx():
         assert isinstance(result, Reference)
         assert result.ref_name == "GRCh38_chr21.fasta"
 
-        # Download result directory to check contents
-        result_dir_path = Path(await result.dir.download())
+        # Get result directory path
+        result_dir_path = Path(result.dir)
         result_fai_path = result_dir_path / "GRCh38_chr21.fasta.fai"
 
         # Verify .fai file exists
@@ -96,11 +93,10 @@ async def test_samtools_faidx_idempotent():
         original_fai = tmpdir_path / "GRCh38_chr21.fasta.fai"
         original_mtime = original_fai.stat().st_mtime
 
-        # Create Reference object
-        ref_dir = await Dir.from_local(str(tmpdir_path))
+        # Create Reference object with local Path
         ref = Reference(
-            dir=ref_dir,
             ref_name="GRCh38_chr21.fasta",
+            dir=tmpdir_path,
         )
 
         # Run samtools_faidx (should not fail or regenerate)
@@ -109,8 +105,8 @@ async def test_samtools_faidx_idempotent():
         # Verify the result
         assert isinstance(result, Reference)
 
-        # Download result and check .fai wasn't regenerated
-        result_dir_path = Path(await result.dir.download())
+        # Get result directory and check .fai wasn't regenerated
+        result_dir_path = Path(result.dir)
         result_fai_path = result_dir_path / "GRCh38_chr21.fasta.fai"
 
         assert result_fai_path.exists(), "Index file should still exist"
@@ -131,10 +127,9 @@ async def test_samtools_faidx_missing_file():
         tmpdir_path = Path(tmpdir)
 
         # Create Reference object pointing to non-existent file
-        ref_dir = await Dir.from_local(str(tmpdir_path))
         ref = Reference(
-            dir=ref_dir,
             ref_name="nonexistent.fasta",
+            dir=tmpdir_path,
         )
 
         # Should raise FileNotFoundError
