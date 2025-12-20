@@ -41,11 +41,10 @@ async def samtools_faidx(ref: Reference) -> Reference:
     # Run samtools faidx in the cache directory
     # The .fai will be created next to the source file
     fai_path = ref_file_path.parent / fai_name
-    cmd = ["samtools", "faidx", str(ref_file_path), "--fai-idx", str(fai_path)]
+    cmd = ["samtools", "faidx", ref_file_path, "--fai-idx", fai_path]
     await _run(cmd, cwd=str(ref_file_path.parent))
 
     # Create an IpFile for the .fai (for now, just a local reference)
-    # In production, you'd upload this to IPFS via Pinata
     fai_file = IpFile(
         id="local",
         cid="local",  # Would be real CID after upload

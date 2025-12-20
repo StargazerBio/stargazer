@@ -27,6 +27,46 @@ class Reference:
     files: list[IpFile] = field(default_factory=list)
     client: PinataClient = field(default_factory=PinataClient)
 
+    async def add_files(
+        self,
+        file_paths: list[Path],
+        keyvalues: dict[str, str] | None = None,
+    ) -> None:
+        """
+        Upload files and add to reference.
+
+        Uploads files to IPFS (or copies to local cache if STARGAZER_LOCAL_ONLY is set)
+        and adds the resulting IpFile objects to this reference's files list.
+
+        Args:
+            file_paths: List of local file paths to upload
+            keyvalues: Optional metadata key-value pairs to attach to all files
+
+        Raises:
+            FileNotFoundError: If any file path doesn't exist
+            ValueError: If file_paths is empty
+
+        Example:
+            # Upload to IPFS (default)
+            ref = Reference(ref_name="genome.fa")
+            await ref.add_files(
+                file_paths=[Path("genome.fa"), Path("genome.fa.fai")],
+                keyvalues={"type": "reference", "build": "GRCh38", "tool": "fasta"}
+            )
+        """
+        if not file_paths:
+            raise ValueError("No files to add. file_paths is empty.")
+
+        # Validate all paths exist before uploading
+        for path in file_paths:
+            if not path.exists():
+                raise FileNotFoundError(f"File not found: {path}")
+
+        # Upload each file (client handles local_only mode) and collect IpFile objects
+        for path in file_paths:
+            ipfile = await self.client.upload_file(path, keyvalues=keyvalues)
+            self.files.append(ipfile)
+
     async def fetch(self) -> Path:
         """
         Fetch all reference files to local cache.

@@ -10,9 +10,10 @@ Provides async interface for:
 
 import os
 import json
+import shutil
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -74,6 +75,7 @@ class PinataClient:
         jwt: Optional[str] = None,
         gateway: Optional[str] = None,
         cache_dir: Optional[Path] = None,
+        local_only: Optional[bool] = None,
     ):
         """
         Initialize Pinata client.
@@ -82,6 +84,8 @@ class PinataClient:
             jwt: Pinata JWT token (defaults to PINATA_JWT env var)
             gateway: IPFS gateway URL (defaults to gateway.pinata.cloud)
             cache_dir: Local cache directory for downloads
+            local_only: If True, copy files to cache instead of uploading to IPFS
+                       (defaults to STARGAZER_LOCAL_ONLY env var)
         """
         self._jwt = jwt or os.environ.get("PINATA_JWT")
         self.gateway = gateway or os.environ.get(
@@ -92,6 +96,13 @@ class PinataClient:
             os.environ.get("STARGAZER_CACHE", str(Path.home() / ".stargazer" / "cache"))
         )
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Check for local_only mode from env var if not explicitly set
+        if local_only is None:
+            local_only_env = os.environ.get("STARGAZER_LOCAL_ONLY", "").lower()
+            self.local_only = local_only_env in ("1", "true", "yes")
+        else:
+            self.local_only = local_only
 
     @property
     def jwt(self) -> str:
@@ -113,7 +124,11 @@ class PinataClient:
         keyvalues: Optional[dict[str, str]] = None,
     ) -> IpFile:
         """
-        Upload a file to Pinata.
+        Upload a file to Pinata or copy to local cache.
+
+        Behavior depends on self.local_only (set via STARGAZER_LOCAL_ONLY env var):
+        - If False (default): Upload to IPFS via Pinata
+        - If True: Copy to local cache without uploading
 
         Args:
             path: Local file path
@@ -122,20 +137,40 @@ class PinataClient:
         Returns:
             IpFile with CID and metadata
         """
-        url = f"{self.UPLOAD_BASE}/files"
+        if self.local_only:
+            # Local-only mode: copy to cache without uploading
+            local_cid = f"local_{path.name}_{path.stat().st_size}"
 
-        async with aiohttp.ClientSession() as session:
-            data = aiohttp.FormData()
-            data.add_field('file', open(path, 'rb'), filename=path.name)
-            data.add_field('name', path.name)
+            # Copy to cache
+            cache_path = self.cache_dir / local_cid
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, cache_path)
 
-            if keyvalues:
-                data.add_field('keyvalues', json.dumps(keyvalues))
+            # Create IpFile object for local reference
+            return IpFile(
+                id=local_cid,
+                cid=local_cid,
+                name=path.name,
+                size=path.stat().st_size,
+                keyvalues=keyvalues or {},
+                created_at=datetime.now(timezone.utc),
+            )
+        else:
+            # Upload to IPFS via Pinata
+            url = f"{self.UPLOAD_BASE}/files"
 
-            async with session.post(url, headers=self._headers(), data=data) as response:
-                response.raise_for_status()
-                result = await response.json()
-                return IpFile.from_api_response(result.get("data", result))
+            async with aiohttp.ClientSession() as session:
+                data = aiohttp.FormData()
+                data.add_field('file', open(path, 'rb'), filename=path.name)
+                data.add_field('name', path.name)
+
+                if keyvalues:
+                    data.add_field('keyvalues', json.dumps(keyvalues))
+
+                async with session.post(url, headers=self._headers(), data=data) as response:
+                    response.raise_for_status()
+                    result = await response.json()
+                    return IpFile.from_api_response(result.get("data", result))
 
     async def download_file(self, cid: str, dest: Optional[Path] = None) -> Path:
         """
