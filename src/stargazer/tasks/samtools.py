@@ -1,7 +1,6 @@
 """
 Samtools tasks for reference genome indexing.
 """
-import tempfile
 from pathlib import Path
 from datetime import datetime
 
@@ -22,60 +21,41 @@ async def samtools_faidx(ref: Reference) -> Reference:
     Returns:
         Reference object with the .fai index file added
     """
-    # Initialize client if needed
-    if not ref.client:
-        from stargazer.utils.pinata import PinataClient
-        ref.client = PinataClient()
+    # Fetch all reference files to cache
+    await ref.fetch()
 
-    # Create a temporary working directory
-    tmpdir = Path(tempfile.mkdtemp())
+    # Get the cached reference file path
+    ref_file_path = ref.get_ref_path()
 
-    try:
-        # Download all reference files to temp directory
-        for pinata_file in ref.files:
-            file_path = await ref.client.download_file(pinata_file.cid)
-            # Move to our working directory with the original name
-            dest = tmpdir / pinata_file.name
-            dest.write_bytes(Path(file_path).read_bytes())
-
-        # Get the reference file path
-        ref_file_path = tmpdir / ref.ref_name
-
-        # Verify the reference file exists
-        if not ref_file_path.exists():
-            raise FileNotFoundError(
-                f"Reference file {ref.ref_name} not found after download"
-            )
-
-        # Check if .fai already exists
-        fai_path = Path(f"{ref_file_path}.fai")
-        fai_name = f"{ref.ref_name}.fai"
-
-        # Check if we already have the .fai in our files list
-        if any(f.name == fai_name for f in ref.files):
-            return ref
-
-        # Run samtools faidx
-        cmd = ["samtools", "faidx", str(ref_file_path), "--fai-idx", str(fai_path)]
-        await _run(cmd, cwd=str(tmpdir))
-
-        # Create an IpFile for the .fai (for now, just a local reference)
-        # In production, you'd upload this to IPFS via Pinata
-        fai_file = IpFile(
-            id="local",
-            cid="local",  # Would be real CID after upload
-            name=fai_name,
-            size=fai_path.stat().st_size,
-            keyvalues={},
-            created_at=datetime.now(),
+    # Verify the reference file exists
+    if not ref_file_path.exists():
+        raise FileNotFoundError(
+            f"Reference file {ref.ref_name} not found in cache"
         )
 
-        # Add the .fai file to the reference
-        ref.files.append(fai_file)
-
+    # Check if we already have the .fai in our files list
+    fai_name = f"{ref.ref_name}.fai"
+    if any(f.name == fai_name for f in ref.files):
         return ref
 
-    finally:
-        # Cleanup temp directory
-        import shutil
-        shutil.rmtree(tmpdir, ignore_errors=True)
+    # Run samtools faidx in the cache directory
+    # The .fai will be created next to the source file
+    fai_path = ref_file_path.parent / fai_name
+    cmd = ["samtools", "faidx", str(ref_file_path), "--fai-idx", str(fai_path)]
+    await _run(cmd, cwd=str(ref_file_path.parent))
+
+    # Create an IpFile for the .fai (for now, just a local reference)
+    # In production, you'd upload this to IPFS via Pinata
+    fai_file = IpFile(
+        id="local",
+        cid="local",  # Would be real CID after upload
+        name=fai_name,
+        size=fai_path.stat().st_size,
+        keyvalues={},
+        created_at=datetime.now(),
+    )
+
+    # Add the .fai file to the reference
+    ref.files.append(fai_file)
+
+    return ref

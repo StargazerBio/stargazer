@@ -20,25 +20,52 @@ class Reference:
     Attributes:
         ref_name: Name of the main reference file
         files: List of IpFile objects containing reference data
-        client: Optional PinataClient for IPFS operations
+        client: PinataClient for IPFS operations (initialized on first use)
     """
 
     ref_name: str
     files: list[IpFile] = field(default_factory=list)
-    client: PinataClient | None = None
+    client: PinataClient = field(default_factory=PinataClient)
+
+    async def fetch(self) -> Path:
+        """
+        Fetch all reference files to local cache.
+
+        Downloads all files in the reference to the PinataClient cache.
+        Returns the cache directory containing all files.
+
+        Returns:
+            Path to cache directory containing all reference files
+
+        Example:
+            ref = await Reference.pinata_hydrate(ref_name="genome.fa", build="GRCh38")
+            cache_dir = await ref.fetch()
+            # All files now in cache_dir
+        """
+        if not self.files:
+            raise ValueError("No files to fetch. Reference is empty.")
+
+        # Download all files to cache
+        for ipfile in self.files:
+            await self.client.download_file(ipfile.cid)
+
+        # Return the cache directory
+        # All files are cached at client.cache_dir / cid
+        # We'll return a directory that contains all our files
+        return self.client.cache_dir
 
     def get_ref_path(self) -> Path:
         """
-        Get the local path to the reference file.
-        Downloads the file from Pinata if needed.
+        Get the local cached path to the reference file.
+
+        The reference must be fetched first using fetch().
 
         Returns:
-            Absolute path to the reference file
-        """
-        # Initialize client if needed
-        if not self.client:
-            self.client = PinataClient()
+            Absolute path to the cached reference file
 
+        Raises:
+            FileNotFoundError: If file not found in cache (need to fetch first)
+        """
         # Find the reference file by name
         ref_file = None
         for f in self.files:
@@ -51,16 +78,49 @@ class Reference:
                 f"Reference file {self.ref_name} not found in files list"
             )
 
-        # Download and return path (uses client's cache)
-        # Note: download_file is async, so we need sync version or make this async
-        # For now, use the cache path directly if available
-        cache_path = self.client.cache_dir / ref_file.cid / ref_file.name
+        # Return cached path
+        cache_path = self.client.cache_dir / ref_file.cid
         if cache_path.exists():
             return cache_path
 
         raise FileNotFoundError(
             f"Reference file {self.ref_name} not in cache. "
-            "Download it first using client.download_file()"
+            "Call await ref.fetch() first to download files."
+        )
+
+    def get_file_path(self, filename: str) -> Path:
+        """
+        Get the local cached path to any file in the reference.
+
+        Args:
+            filename: Name of the file to get path for
+
+        Returns:
+            Absolute path to the cached file
+
+        Raises:
+            FileNotFoundError: If file not found
+        """
+        # Find the file by name
+        target_file = None
+        for f in self.files:
+            if f.name == filename:
+                target_file = f
+                break
+
+        if not target_file:
+            raise FileNotFoundError(
+                f"File {filename} not found in files list"
+            )
+
+        # Return cached path
+        cache_path = self.client.cache_dir / target_file.cid
+        if cache_path.exists():
+            return cache_path
+
+        raise FileNotFoundError(
+            f"File {filename} not in cache. "
+            "Call await ref.fetch() first to download files."
         )
 
     @classmethod

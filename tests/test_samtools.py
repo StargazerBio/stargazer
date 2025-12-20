@@ -25,17 +25,14 @@ async def test_samtools_faidx():
     ref_fixture = TEST_ROOT / "fixtures" / "reference" / "GRCh38_chr21.fasta"
     assert ref_fixture.exists(), f"Test fixture not found: {ref_fixture}"
 
-    # Create a mock PinataClient with cache directory
+    # Create a PinataClient and pre-populate cache
     client = PinataClient()
-
-    # Copy fixture to cache (simulating a downloaded file)
-    # PinataClient caches files as cache_dir / cid
     test_cid = "QmTestFasta123"
     cached_fasta = client.cache_dir / test_cid
     client.cache_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(ref_fixture, cached_fasta)
 
-    # Create a mock IpFile
+    # Create a Reference with the cached file
     fasta_file = IpFile(
         id="test-id",
         cid=test_cid,
@@ -45,14 +42,13 @@ async def test_samtools_faidx():
         created_at=datetime.now(),
     )
 
-    # Create Reference object with IpFile
     ref = Reference(
         ref_name="GRCh38_chr21.fasta",
         files=[fasta_file],
         client=client,
     )
 
-    # Run samtools_faidx
+    # Run samtools_faidx - it will call ref.fetch() internally
     result = await samtools_faidx(ref)
 
     # Verify the result
@@ -64,9 +60,15 @@ async def test_samtools_faidx():
     assert len(fai_files) == 1, "Should have exactly one .fai file"
     assert fai_files[0].size > 0, "Index file should not be empty"
 
+    # Verify .fai file exists in cache directory
+    fai_path = cached_fasta.parent / "GRCh38_chr21.fasta.fai"
+    assert fai_path.exists(), "Index file should be in cache directory"
+
     # Cleanup
     if cached_fasta.exists():
         cached_fasta.unlink()
+    if fai_path.exists():
+        fai_path.unlink()
 
 
 @pytest.mark.asyncio
@@ -79,11 +81,10 @@ async def test_samtools_faidx_idempotent():
     # Setup: Copy test reference to cache directory
     fixtures_ref_dir = TEST_ROOT / "fixtures" / "reference"
 
-    # Create a mock PinataClient with cache directory
+    # Create a PinataClient and pre-populate cache
     client = PinataClient()
     client.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    # Copy both FASTA and .fai to cache (using CID as filename)
     test_cid_fasta = "QmTestFasta456"
     test_cid_fai = "QmTestFai456"
     cached_fasta = client.cache_dir / test_cid_fasta
@@ -91,7 +92,7 @@ async def test_samtools_faidx_idempotent():
     shutil.copy(fixtures_ref_dir / "GRCh38_chr21.fasta", cached_fasta)
     shutil.copy(fixtures_ref_dir / "GRCh38_chr21.fasta.fai", cached_fai)
 
-    # Create mock IpFiles
+    # Create Reference with both files already present
     fasta_file = IpFile(
         id="test-id-fasta",
         cid=test_cid_fasta,
@@ -110,7 +111,6 @@ async def test_samtools_faidx_idempotent():
         created_at=datetime.now(),
     )
 
-    # Create Reference object with both files
     ref = Reference(
         ref_name="GRCh38_chr21.fasta",
         files=[fasta_file, fai_file],
@@ -148,9 +148,8 @@ async def test_samtools_faidx_missing_file():
     ref = Reference(
         ref_name="nonexistent.fasta",
         files=[],
-        client=PinataClient(),
     )
 
-    # Should raise FileNotFoundError
-    with pytest.raises(FileNotFoundError, match="not found"):
+    # Should raise ValueError when trying to fetch empty reference
+    with pytest.raises(ValueError, match="No files to fetch"):
         await samtools_faidx(ref)
