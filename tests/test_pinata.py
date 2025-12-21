@@ -93,48 +93,64 @@ async def test_query():
 
 @pytest.mark.asyncio
 async def test_download_file():
-    """Test downloading a file from Pinata by CID."""
-    # Initialize client (no API key needed for public downloads)
+    """Test downloading a file from Pinata by CID using Pinata API."""
+    # Check for API key (now required for Pinata API downloads)
+    if not os.environ.get("PINATA_JWT"):
+        pytest.skip("PINATA_JWT environment variable not set")
+
     client = PinataClient()
 
-    # Use a well-known IPFS test file that's widely available
-    # This is the "Hello World" example from IPFS
-    test_cid = "QmZ4tDuvesekSs4qM5ZBKpXiZGun7S2CYtEZRB3DYXkjGx"
-    expected_content = "hello worlds\n"
+    # Upload a test file first so we have a known CID to download
+    test_file = TEST_ROOT.joinpath("fixtures", "dummy.txt")
+    assert test_file.exists(), f"Test file not found: {test_file}"
 
-    print(f"\nDownloading well-known test file with CID: {test_cid}")
+    print(f"\nUploading test file for download test: {test_file.name}")
+    uploaded_file = await client.upload_file(
+        test_file,
+        keyvalues={"test": "download"}
+    )
 
     try:
-        # Download the file (will use cache)
-        downloaded_path = await client.download_file(test_cid)
-    except Exception as e:
-        # If file is not accessible, skip the test with helpful message
-        pytest.skip(
-            f"CID {test_cid} is not accessible via IPFS gateway. "
-            f"This may indicate IPFS gateway issues. Error: {e}"
-        )
+        expected_content = test_file.read_text()
 
-    # Verify the file was downloaded
-    assert downloaded_path.exists(), f"Downloaded file not found at: {downloaded_path}"
-    print(f"✓ File downloaded successfully to: {downloaded_path}")
+        print(f"Downloading file with CID: {uploaded_file.cid}")
 
-    # Read and verify content
-    content = downloaded_path.read_text()
-    assert content == expected_content, f"Content mismatch: expected '{expected_content}', got '{content}'"
-    print(f"✓ File content verified - matches expected 'hello worlds\\n'")
+        # Download the file using Pinata API
+        downloaded_ipfile = await client.download_file(uploaded_file)
 
-    # Test downloading to a specific destination
-    dest_path = TEST_ROOT.joinpath("fixtures", "downloaded_test.txt")
-    dest_path.parent.mkdir(parents=True, exist_ok=True)
+        # Verify the file was downloaded
+        assert downloaded_ipfile.path is not None, "Downloaded file should have a path"
+        assert downloaded_ipfile.path.exists(), f"Downloaded file not found at: {downloaded_ipfile.path}"
+        print(f"✓ File downloaded successfully to: {downloaded_ipfile.path}")
 
-    print(f"Downloading to specific destination: {dest_path}")
-    result_path = await client.download_file(test_cid, dest=dest_path)
+        # Verify IpFile metadata is preserved
+        assert downloaded_ipfile.cid == uploaded_file.cid, "CID should match"
+        assert downloaded_ipfile.name == uploaded_file.name, "Name should match"
+        assert downloaded_ipfile.keyvalues.get("test") == "download", "Keyvalues should be preserved"
 
-    assert result_path == dest_path, "Destination path should match"
-    assert dest_path.exists(), "File should exist at destination"
-    assert dest_path.read_text() == content, "Content should match original"
-    print(f"✓ Download to specific destination successful")
+        # Read and verify content
+        content = downloaded_ipfile.path.read_text()
+        assert content == expected_content, f"Content mismatch: expected '{expected_content}', got '{content}'"
+        print(f"✓ File content verified")
 
-    # Clean up the destination file (keep cache)
-    dest_path.unlink()
-    print(f"✓ Test cleanup complete")
+        # Test downloading to a specific destination
+        dest_path = TEST_ROOT.joinpath("fixtures", "downloaded_test.txt")
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+        print(f"Downloading to specific destination: {dest_path}")
+        result_ipfile = await client.download_file(uploaded_file, dest=dest_path)
+
+        assert result_ipfile.path == dest_path, "Destination path should match"
+        assert dest_path.exists(), "File should exist at destination"
+        assert dest_path.read_text() == content, "Content should match original"
+        print(f"✓ Download to specific destination successful")
+
+        # Clean up the destination file (keep cache)
+        dest_path.unlink()
+        print(f"✓ Test cleanup complete")
+
+    finally:
+        # Clean up: delete the uploaded test file
+        print(f"Deleting test file: {uploaded_file.id}")
+        await client.delete_file(uploaded_file.id)
+        print(f"✓ File deleted successfully")

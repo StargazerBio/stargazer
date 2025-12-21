@@ -85,9 +85,9 @@ class Reference:
         if not self.files:
             raise ValueError("No files to fetch. Reference is empty.")
 
-        # Download all files to cache
+        # Download all files to cache and update their paths
         for ipfile in self.files:
-            await self.client.download_file(ipfile.cid)
+            await self.client.download_file(ipfile)
 
         # Return the cache directory
         # All files are cached at client.cache_dir / cid

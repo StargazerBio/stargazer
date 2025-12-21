@@ -30,6 +30,7 @@ class IpFile:
     size: int
     keyvalues: dict[str, str]
     created_at: datetime
+    local_path: Optional[Path] = None  # Local cached file path
 
     @classmethod
     def from_api_response(cls, data: dict) -> "IpFile":
@@ -41,6 +42,7 @@ class IpFile:
             size=data["size"],
             keyvalues=data.get("keyvalues", {}),
             created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")),
+            local_path=None,  # Set when file is downloaded
         )
 
 
@@ -172,19 +174,22 @@ class PinataClient:
                     result = await response.json()
                     return IpFile.from_api_response(result.get("data", result))
 
-    async def download_file(self, cid: str, dest: Optional[Path] = None) -> Path:
+    async def download_file(self, ipfile: IpFile, dest: Optional[Path] = None) -> IpFile:
         """
-        Download a file by CID via IPFS gateway.
+        Download a file using Pinata API and update IpFile with local path.
         Uses local cache to avoid re-downloading.
 
         Args:
-            cid: IPFS CID
-            dest: Optional destination path
+            ipfile: IpFile object to download
+            dest: Optional destination path (otherwise uses cache)
 
         Returns:
-            Path to downloaded file
+            Updated IpFile with path set to downloaded file location
         """
         import shutil
+        import time
+
+        cid = ipfile.cid
 
         # Check cache first
         cache_key = cid.replace("/", "_")
@@ -194,50 +199,72 @@ class PinataClient:
             if dest:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(cache_path, dest)
-                return dest
-            return cache_path
+                ipfile.path = dest
+            else:
+                ipfile.path = cache_path
+            return ipfile
 
-        # Try multiple gateways in case of rate limiting
-        gateways = [
-            self.gateway,
-            "https://ipfs.io",
-            "https://cloudflare-ipfs.com",
-            "https://dweb.link",
-        ]
+        # If it's a local CID (from local_only mode), it should already be in cache
+        if cid.startswith("local_"):
+            raise FileNotFoundError(
+                f"Local file {cid} not found in cache. It may have been deleted."
+            )
+
+        # Use Pinata API to create a signed download link
+        # First, construct the file URL using the gateway and CID
+        file_url = f"{self.gateway}/files/{cid}"
+
+        # Create signed download link via Pinata API
+        create_link_url = f"{self.API_BASE}/files/private/download_link"
+
+        current_time = int(time.time())
+        expires_in = 3600  # 1 hour expiration
+
+        request_body = {
+            "url": file_url,
+            "date": current_time,
+            "expires": expires_in,
+            "method": "GET"
+        }
 
         # Set timeout for the request (60 seconds total, 10 seconds for connection)
         timeout = aiohttp.ClientTimeout(total=60, connect=10)
 
-        last_error = None
-        for gateway in gateways:
-            url = f"{gateway}/ipfs/{cid}"
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                # Get signed URL from Pinata API
+                async with session.post(
+                    create_link_url,
+                    headers=self._headers(),
+                    json=request_body
+                ) as response:
+                    response.raise_for_status()
+                    result = await response.json()
+                    signed_url = result.get("data")
 
-            try:
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.get(url) as response:
-                        response.raise_for_status()
+                if not signed_url:
+                    raise ValueError("No signed URL returned from Pinata API")
 
-                        cache_path.parent.mkdir(parents=True, exist_ok=True)
-                        async with aiofiles.open(cache_path, 'wb') as f:
-                            async for chunk in response.content.iter_chunked(8192):
-                                await f.write(chunk)
+                # Download file using the signed URL
+                async with session.get(signed_url) as response:
+                    response.raise_for_status()
 
-                        # Success! Break out of gateway loop
-                        break
-            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                last_error = e
-                # Try next gateway
-                continue
-        else:
-            # All gateways failed
-            raise last_error or Exception("All IPFS gateways failed")
+                    cache_path.parent.mkdir(parents=True, exist_ok=True)
+                    async with aiofiles.open(cache_path, 'wb') as f:
+                        async for chunk in response.content.iter_chunked(8192):
+                            await f.write(chunk)
+
+        except aiohttp.ClientError as e:
+            raise Exception(f"Failed to download file from Pinata: {e}")
 
         if dest:
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(cache_path, dest)
-            return dest
+            ipfile.path = dest
+        else:
+            ipfile.path = cache_path
 
-        return cache_path
+        return ipfile
 
     async def query_files(self, keyvalues: dict[str, str]) -> list[IpFile]:
         """
