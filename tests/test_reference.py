@@ -11,7 +11,7 @@ import tempfile
 import pytest
 from pathlib import Path
 from stargazer.types import Reference
-from stargazer.utils.pinata import PinataClient
+from stargazer.utils.pinata import default_client, PinataClient
 
 @pytest.mark.asyncio
 async def test_add_files_empty_list():
@@ -53,7 +53,7 @@ async def test_add_files_success():
 
         await ref.add_files(
             file_paths=[test_file1, test_file2],
-            keyvalues={"type": "test", "purpose": "unit_test"}
+            keyvalues={"type": "test", "purpose": "unit_test", "env": "test"}
         )
 
         # Verify files were added to reference
@@ -61,52 +61,62 @@ async def test_add_files_success():
         assert all(f.cid for f in ref.files)
         assert all(f.keyvalues.get("type") == "test" for f in ref.files)
         assert all(f.keyvalues.get("purpose") == "unit_test" for f in ref.files)
+        assert all(f.keyvalues.get("env") == "test" for f in ref.files)
 
 
 @pytest.mark.asyncio
 async def test_add_files_local_only():
     """Test local-only mode via STARGAZER_LOCAL_ONLY env var."""
-    # Create temporary test files
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir_path = Path(tmpdir)
+    # Save original local_only state
+    original_local_only = default_client.local_only
 
-        # Create test files
-        test_file1 = tmpdir_path / "local_test1.txt"
-        test_file2 = tmpdir_path / "local_test2.txt"
+    try:
+        # Enable local-only mode on default_client
+        default_client.local_only = True
+        # Create temporary test files
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
 
-        test_file1.write_text("Local test content 1")
-        test_file2.write_text("Local test content 2")
+            # Create test files
+            test_file1 = tmpdir_path / "local_test1.txt"
+            test_file2 = tmpdir_path / "local_test2.txt"
 
-        # Create reference with local_only client
-        client = PinataClient(local_only=True)
-        ref = Reference(ref_name="local_test1.txt", client=client)
+            test_file1.write_text("Local test content 1")
+            test_file2.write_text("Local test content 2")
 
-        await ref.add_files(
-            file_paths=[test_file1, test_file2],
-            keyvalues={"type": "test", "mode": "local"}
-        )
+            # Create reference (uses default_client which is now in local_only mode)
+            ref = Reference(ref_name="local_test1.txt")
 
-        # Verify files were added to reference
-        assert len(ref.files) == 2
+            await ref.add_files(
+                file_paths=[test_file1, test_file2],
+                keyvalues={"type": "test", "mode": "local", "env": "test"}
+            )
 
-        # Verify all files have local CIDs
-        for f in ref.files:
-            assert f.cid.startswith("local_")
-            assert f.keyvalues.get("type") == "test"
-            assert f.keyvalues.get("mode") == "local"
+            # Verify files were added to reference
+            assert len(ref.files) == 2
 
-        # Verify files exist in cache
-        for f in ref.files:
-            cache_path = ref.client.cache_dir / f.cid
-            assert cache_path.exists()
-            assert cache_path.is_file()
+            # Verify all files have local CIDs
+            for f in ref.files:
+                assert f.cid.startswith("local_")
+                assert f.keyvalues.get("type") == "test"
+                assert f.keyvalues.get("mode") == "local"
+                assert f.keyvalues.get("env") == "test"
 
-        # Verify file contents match original
-        cache_file1 = ref.client.cache_dir / ref.files[0].cid
-        cache_file2 = ref.client.cache_dir / ref.files[1].cid
+            # Verify files exist in cache
+            for f in ref.files:
+                cache_path = default_client.cache_dir / f.cid
+                assert cache_path.exists()
+                assert cache_path.is_file()
 
-        assert cache_file1.read_text() == "Local test content 1"
-        assert cache_file2.read_text() == "Local test content 2"
+            # Verify file contents match original
+            cache_file1 = default_client.cache_dir / ref.files[0].cid
+            cache_file2 = default_client.cache_dir / ref.files[1].cid
+
+            assert cache_file1.read_text() == "Local test content 1"
+            assert cache_file2.read_text() == "Local test content 2"
+    finally:
+        # Restore original local_only state
+        default_client.local_only = original_local_only
 
 
 @pytest.mark.asyncio

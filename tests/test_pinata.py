@@ -9,7 +9,7 @@ To populate expected CIDs, run:
 
 import os
 import pytest
-from stargazer.utils.pinata import PinataClient, IpFile
+from stargazer.utils.pinata import default_client, IpFile
 from config import TEST_ROOT, CIDS
 
 
@@ -20,16 +20,13 @@ async def test_upload_and_delete_file():
     if not os.environ.get("PINATA_JWT"):
         pytest.skip("PINATA_JWT environment variable not set")
 
-    # Initialize client
-    client = PinataClient()
-
     # Use the smallest reference file for quick testing
     test_file = TEST_ROOT.joinpath("fixtures", "dummy.txt")
     assert test_file.exists(), f"Test file not found: {test_file}"
 
     # Upload the file with test metadata
     print(f"\nUploading test file: {test_file.name}")
-    test_file = await client.upload_file(
+    test_file = await default_client.upload_file(
         test_file,
         keyvalues={"test": "true"}
     )
@@ -53,7 +50,7 @@ async def test_upload_and_delete_file():
     finally:
         # Clean up: delete the file
         print(f"Deleting test file: {test_file.id}")
-        await client.delete_file(test_file.id)
+        await default_client.delete_file(test_file.id)
         print(f"✓ File deleted successfully")
 
 
@@ -64,7 +61,6 @@ async def test_query():
     if not os.environ.get("PINATA_JWT"):
         pytest.skip("PINATA_JWT environment variable not set")
 
-    client = PinataClient()
     fixtures_dir = TEST_ROOT.joinpath("fixtures", "reference")
 
     # Files to upload (excluding large fasta for speed)
@@ -76,8 +72,9 @@ async def test_query():
 
     # Query by keyvalue to find all reference files
     print("\nQuerying files by keyvalue (type=reference)...")
-    found_files = await client.query_files({"type": "reference"})
+    found_files = await default_client.query_files({"type": "reference"})
     print(found_files)
+
     # Should find at least our uploaded files
     assert len(found_files) >= len(test_files), \
         f"Should find at least {len(test_files)} files, found {len(found_files)}"
@@ -114,13 +111,11 @@ async def test_download_file():
         created_at=datetime.now(timezone.utc),
     )
 
-    client = PinataClient()
-
     print(f"\nDownloading well-known IPFS file with CID: {test_cid}")
 
     try:
         # Download the file using IPFS gateways
-        downloaded_ipfile = await client.download_file(test_ipfile)
+        downloaded_ipfile = await default_client.download_file(test_ipfile)
     except Exception as e:
         # If file is not accessible, skip the test
         pytest.skip(
@@ -147,7 +142,7 @@ async def test_download_file():
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Downloading to specific destination: {dest_path}")
-    result_ipfile = await client.download_file(test_ipfile, dest=dest_path)
+    result_ipfile = await default_client.download_file(test_ipfile, dest=dest_path)
 
     assert result_ipfile.local_path == dest_path, "Destination path should match"
     assert dest_path.exists(), "File should exist at destination"

@@ -10,7 +10,7 @@ from datetime import datetime
 
 from stargazer.types import Reference
 from stargazer.tasks.samtools import samtools_faidx
-from stargazer.utils.pinata import IpFile, PinataClient
+from stargazer.utils.pinata import IpFile, default_client
 from config import TEST_ROOT
 
 
@@ -25,11 +25,10 @@ async def test_samtools_faidx():
     ref_fixture = TEST_ROOT / "fixtures" / "reference" / "GRCh38_chr21.fasta"
     assert ref_fixture.exists(), f"Test fixture not found: {ref_fixture}"
 
-    # Create a PinataClient and pre-populate cache
-    client = PinataClient()
-    test_cid = "QmTestFasta123"
-    cached_fasta = client.cache_dir / test_cid
-    client.cache_dir.mkdir(parents=True, exist_ok=True)
+    # Pre-populate cache using default_client
+    test_cid = "QmTestChr21Fasta"
+    cached_fasta = default_client.cache_dir / test_cid
+    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(ref_fixture, cached_fasta)
 
     # Create a Reference with the cached file
@@ -38,14 +37,13 @@ async def test_samtools_faidx():
         cid=test_cid,
         name="GRCh38_chr21.fasta",
         size=cached_fasta.stat().st_size,
-        keyvalues={"type": "reference", "build": "GRCh38"},
+        keyvalues={"type": "reference", "build": "GRCh38", "env": "test"},
         created_at=datetime.now(),
     )
 
     ref = Reference(
         ref_name="GRCh38_chr21.fasta",
         files=[fasta_file],
-        client=client,
     )
 
     # Run samtools_faidx - it will call ref.fetch() internally
@@ -66,7 +64,7 @@ async def test_samtools_faidx():
     assert fai_files[0].keyvalues.get("build") == "GRCh38", "Should copy build metadata from reference"
 
     # Verify .fai file exists at local_path
-    # Samtools creates files with the CID as base name (e.g., QmTestFasta123.fai)
+    # Samtools creates files with the CID as base name (e.g., QmTestChr21Fasta.fai)
     assert fai_files[0].local_path is not None, "Should have local_path set"
     assert fai_files[0].local_path.exists(), "Index file should exist at local_path"
 
@@ -88,14 +86,13 @@ async def test_samtools_faidx_idempotent():
     # Setup: Copy test reference to cache directory
     fixtures_ref_dir = TEST_ROOT / "fixtures" / "reference"
 
-    # Create a PinataClient and pre-populate cache
-    client = PinataClient()
-    client.cache_dir.mkdir(parents=True, exist_ok=True)
+    # Pre-populate cache using default_client
+    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    test_cid_fasta = "QmTestFasta456"
-    test_cid_fai = "QmTestFai456"
-    cached_fasta = client.cache_dir / test_cid_fasta
-    cached_fai = client.cache_dir / test_cid_fai
+    test_cid_fasta = "QmTestChr21FastaIdempotent"
+    test_cid_fai = "QmTestChr21FAI"
+    cached_fasta = default_client.cache_dir / test_cid_fasta
+    cached_fai = default_client.cache_dir / test_cid_fai
     shutil.copy(fixtures_ref_dir / "GRCh38_chr21.fasta", cached_fasta)
     shutil.copy(fixtures_ref_dir / "GRCh38_chr21.fasta.fai", cached_fai)
 
@@ -105,7 +102,7 @@ async def test_samtools_faidx_idempotent():
         cid=test_cid_fasta,
         name="GRCh38_chr21.fasta",
         size=cached_fasta.stat().st_size,
-        keyvalues={"type": "reference"},
+        keyvalues={"type": "reference", "env": "test"},
         created_at=datetime.now(),
     )
 
@@ -114,14 +111,13 @@ async def test_samtools_faidx_idempotent():
         cid=test_cid_fai,
         name="GRCh38_chr21.fasta.fai",
         size=cached_fai.stat().st_size,
-        keyvalues={"type": "reference"},
+        keyvalues={"type": "reference", "env": "test"},
         created_at=datetime.now(),
     )
 
     ref = Reference(
         ref_name="GRCh38_chr21.fasta",
         files=[fasta_file, fai_file],
-        client=client,
     )
 
     # Run samtools_faidx (should not regenerate)

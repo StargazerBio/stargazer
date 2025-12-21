@@ -10,7 +10,7 @@ from datetime import datetime
 
 from stargazer.types import Reference
 from stargazer.tasks.bwa import bwa_index
-from stargazer.utils.pinata import IpFile, PinataClient
+from stargazer.utils.pinata import IpFile, default_client
 from config import TEST_ROOT
 
 
@@ -25,11 +25,10 @@ async def test_bwa_index():
     ref_fixture = TEST_ROOT / "fixtures" / "reference" / "GRCh38_chr21.fasta"
     assert ref_fixture.exists(), f"Test fixture not found: {ref_fixture}"
 
-    # Create a PinataClient and pre-populate cache
-    client = PinataClient()
-    test_cid = "QmTestBwaFasta123"
-    cached_fasta = client.cache_dir / test_cid
-    client.cache_dir.mkdir(parents=True, exist_ok=True)
+    # Pre-populate cache using default_client
+    test_cid = "QmTestChr21Fasta"
+    cached_fasta = default_client.cache_dir / test_cid
+    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(ref_fixture, cached_fasta)
 
     # Create a Reference with the cached file
@@ -38,14 +37,13 @@ async def test_bwa_index():
         cid=test_cid,
         name="GRCh38_chr21.fasta",
         size=cached_fasta.stat().st_size,
-        keyvalues={"type": "reference", "build": "GRCh38"},
+        keyvalues={"type": "reference", "build": "GRCh38", "env": "test"},
         created_at=datetime.now(),
     )
 
     ref = Reference(
         ref_name="GRCh38_chr21.fasta",
         files=[fasta_file],
-        client=client,
     )
 
     # Run bwa_index - it will call ref.fetch() internally
@@ -69,7 +67,7 @@ async def test_bwa_index():
         assert index_files[0].keyvalues.get("build") == "GRCh38", f"Index file {ext} should copy build metadata from reference"
 
         # Verify file exists at the local_path
-        # BWA creates files with the CID as base name (e.g., QmTestBwaFasta123.amb)
+        # BWA creates files with the CID as base name (e.g., QmTestChr21Fasta.amb)
         assert index_files[0].local_path is not None, f"Index file {ext} should have local_path set"
         assert index_files[0].local_path.exists(), f"Index file {ext} should exist at local_path"
 
@@ -96,13 +94,12 @@ async def test_bwa_index_idempotent():
     # Setup: Copy test reference to cache directory
     fixtures_ref_dir = TEST_ROOT / "fixtures" / "reference"
 
-    # Create a PinataClient and pre-populate cache
-    client = PinataClient()
-    client.cache_dir.mkdir(parents=True, exist_ok=True)
+    # Pre-populate cache using default_client
+    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
 
     # Create test CIDs for all files
-    test_cid_fasta = "QmTestBwaFasta456"
-    cached_fasta = client.cache_dir / test_cid_fasta
+    test_cid_fasta = "QmTestChr21FastaIdempotent"
+    cached_fasta = default_client.cache_dir / test_cid_fasta
     shutil.copy(fixtures_ref_dir / "GRCh38_chr21.fasta", cached_fasta)
 
     files_list = [
@@ -111,18 +108,19 @@ async def test_bwa_index_idempotent():
             cid=test_cid_fasta,
             name="GRCh38_chr21.fasta",
             size=cached_fasta.stat().st_size,
-            keyvalues={"type": "reference"},
+            keyvalues={"type": "reference", "env": "test"},
             created_at=datetime.now(),
         )
     ]
 
     # Add all index files if they exist in fixtures
     index_extensions = [".amb", ".ann", ".bwt", ".pac", ".sa"]
+    ext_names = ["amb", "ann", "bwt", "pac", "sa"]
     for i, ext in enumerate(index_extensions):
         index_fixture = fixtures_ref_dir / f"GRCh38_chr21.fasta{ext}"
         if index_fixture.exists():
-            test_cid_index = f"QmTestBwaIndex{i}"
-            cached_index = client.cache_dir / test_cid_index
+            test_cid_index = f"QmTestChr21{ext_names[i].upper()}"
+            cached_index = default_client.cache_dir / test_cid_index
             shutil.copy(index_fixture, cached_index)
 
             files_list.append(
@@ -131,7 +129,7 @@ async def test_bwa_index_idempotent():
                     cid=test_cid_index,
                     name=f"GRCh38_chr21.fasta{ext}",
                     size=cached_index.stat().st_size,
-                    keyvalues={"type": "reference"},
+                    keyvalues={"type": "reference", "env": "test"},
                     created_at=datetime.now(),
                 )
             )
@@ -139,7 +137,6 @@ async def test_bwa_index_idempotent():
     ref = Reference(
         ref_name="GRCh38_chr21.fasta",
         files=files_list,
-        client=client,
     )
 
     # Run bwa_index (should not regenerate if all files present)
@@ -155,7 +152,7 @@ async def test_bwa_index_idempotent():
     if cached_fasta.exists():
         cached_fasta.unlink()
     for i, ext in enumerate(index_extensions):
-        cached_index = client.cache_dir / f"QmTestBwaIndex{i}"
+        cached_index = default_client.cache_dir / f"QmTestChr21{ext_names[i].upper()}"
         if cached_index.exists():
             cached_index.unlink()
 

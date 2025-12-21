@@ -55,7 +55,8 @@ async def wgs_call_snv(
     return ref
 
 if __name__ == "__main__":
+    import pprint
     flyte.init_from_config()
     r =  flyte.with_runcontext(mode="local").run(wgs_call_snv, ref_name="GRCh38_chr21.fasta")
-    print(r)
     r.wait()
+    pprint.pprint(r.outputs)
