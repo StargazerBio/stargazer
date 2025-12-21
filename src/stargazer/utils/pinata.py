@@ -274,8 +274,10 @@ class PinataClient:
         url = f"{self.API_BASE}/files/private"
         params = {"pageLimit": 1000, "order": "DESC"}
 
+        # Add metadata filters using the correct format: metadata[key]=value
         if keyvalues:
-            params["metadata"] = json.dumps(keyvalues)
+            for key, value in keyvalues.items():
+                params[f"metadata[{key}]"] = value
 
         async with aiohttp.ClientSession() as session:
             async with session.get(
@@ -303,3 +305,12 @@ class PinataClient:
         async with aiohttp.ClientSession() as session:
             async with session.delete(url, headers=self._headers()) as response:
                 response.raise_for_status()
+
+
+# Default module-level client instance
+# Configured via environment variables:
+# - PINATA_JWT: Pinata JWT token
+# - PINATA_GATEWAY: IPFS gateway URL (default: https://gateway.pinata.cloud)
+# - STARGAZER_CACHE: Local cache directory (default: ~/.stargazer/cache)
+# - STARGAZER_LOCAL_ONLY: If set to "1", "true", or "yes", copy files locally instead of uploading to IPFS
+default_client = PinataClient()

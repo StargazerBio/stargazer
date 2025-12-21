@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Self
 from pathlib import Path
 
-from stargazer.utils.pinata import PinataClient, IpFile
+from stargazer.utils.pinata import default_client, IpFile
 from stargazer.utils.query import generate_query_combinations
 
 
@@ -20,12 +20,10 @@ class Reference:
     Attributes:
         ref_name: Name of the main reference file
         files: List of IpFile objects containing reference data
-        client: PinataClient for IPFS operations (initialized on first use)
     """
 
     ref_name: str
     files: list[IpFile] = field(default_factory=list)
-    client: PinataClient = field(default_factory=PinataClient)
 
     async def add_files(
         self,
@@ -64,7 +62,7 @@ class Reference:
 
         # Upload each file (client handles local_only mode) and collect IpFile objects
         for path in file_paths:
-            ipfile = await self.client.upload_file(path, keyvalues=keyvalues)
+            ipfile = await default_client.upload_file(path, keyvalues=keyvalues)
             self.files.append(ipfile)
 
     async def fetch(self) -> Path:
@@ -87,12 +85,12 @@ class Reference:
 
         # Download all files to cache and update their paths
         for ipfile in self.files:
-            await self.client.download_file(ipfile)
+            await default_client.download_file(ipfile)
 
         # Return the cache directory
         # All files are cached at client.cache_dir / cid
         # We'll return a directory that contains all our files
-        return self.client.cache_dir
+        return default_client.cache_dir
 
     def get_ref_path(self) -> Path:
         """
@@ -198,9 +196,6 @@ class Reference:
                 tool=["fasta", "faidx", "bwa"]
             )
         """
-        # Create client
-        client = PinataClient()
-
         # Generate query combinations using cartesian product for list-valued filters
         query_combinations = generate_query_combinations(
             base_query={"type": "reference"},
@@ -210,7 +205,7 @@ class Reference:
         # Execute all queries and collect results
         all_files = []
         for query in query_combinations:
-            files = await client.query_files(query)
+            files = await default_client.query_files(query)
             all_files.extend(files)
 
         if not all_files:
@@ -219,4 +214,4 @@ class Reference:
             )
 
         # Create Reference instance with the files
-        return cls(ref_name=ref_name, files=all_files, client=client)
+        return cls(ref_name=ref_name, files=all_files)
