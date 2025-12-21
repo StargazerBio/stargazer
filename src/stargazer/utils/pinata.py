@@ -210,52 +210,44 @@ class PinataClient:
                 f"Local file {cid} not found in cache. It may have been deleted."
             )
 
-        # Use Pinata API to create a signed download link
-        # First, construct the file URL using the gateway and CID
-        file_url = f"{self.gateway}/files/{cid}"
+        # Try multiple IPFS gateways in case of issues
+        # Start with Pinata, then fall back to public gateways
+        gateways = [
+            f"{self.gateway}/ipfs/{cid}",
+            f"https://ipfs.io/ipfs/{cid}",
+            f"https://cloudflare-ipfs.com/ipfs/{cid}",
+            f"https://dweb.link/ipfs/{cid}",
+        ]
 
-        # Create signed download link via Pinata API
-        create_link_url = f"{self.API_BASE}/files/private/download_link"
+        # Set timeout for the request (30 seconds total, 10 seconds for connection)
+        timeout = aiohttp.ClientTimeout(total=30, connect=10)
 
-        current_time = int(time.time())
-        expires_in = 3600  # 1 hour expiration
+        last_error = None
+        for gateway_url in gateways:
+            try:
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    # Use auth for Pinata gateway, no auth for public gateways
+                    use_auth = gateway_url.startswith(self.gateway)
+                    headers = self._headers() if (use_auth and self._jwt) else {}
 
-        request_body = {
-            "url": file_url,
-            "date": current_time,
-            "expires": expires_in,
-            "method": "GET"
-        }
+                    async with session.get(gateway_url, headers=headers) as response:
+                        response.raise_for_status()
 
-        # Set timeout for the request (60 seconds total, 10 seconds for connection)
-        timeout = aiohttp.ClientTimeout(total=60, connect=10)
+                        cache_path.parent.mkdir(parents=True, exist_ok=True)
+                        async with aiofiles.open(cache_path, 'wb') as f:
+                            async for chunk in response.content.iter_chunked(8192):
+                                await f.write(chunk)
 
-        try:
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                # Get signed URL from Pinata API
-                async with session.post(
-                    create_link_url,
-                    headers=self._headers(),
-                    json=request_body
-                ) as response:
-                    response.raise_for_status()
-                    result = await response.json()
-                    signed_url = result.get("data")
+                        # Success! Break out of gateway loop
+                        break
 
-                if not signed_url:
-                    raise ValueError("No signed URL returned from Pinata API")
-
-                # Download file using the signed URL
-                async with session.get(signed_url) as response:
-                    response.raise_for_status()
-
-                    cache_path.parent.mkdir(parents=True, exist_ok=True)
-                    async with aiofiles.open(cache_path, 'wb') as f:
-                        async for chunk in response.content.iter_chunked(8192):
-                            await f.write(chunk)
-
-        except aiohttp.ClientError as e:
-            raise Exception(f"Failed to download file from Pinata: {e}")
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                last_error = e
+                # Try next gateway
+                continue
+        else:
+            # All gateways failed
+            raise Exception(f"Failed to download file from all IPFS gateways. Last error: {last_error}")
 
         if dest:
             dest.parent.mkdir(parents=True, exist_ok=True)
