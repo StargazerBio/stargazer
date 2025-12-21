@@ -118,10 +118,9 @@ class Reference:
                 f"Reference file {self.ref_name} not found in files list"
             )
 
-        # Return cached path
-        cache_path = self.client.cache_dir / ref_file.cid
-        if cache_path.exists():
-            return cache_path
+        # Return the path from the IpFile (set by download_file)
+        if ref_file.local_path and ref_file.local_path.exists():
+            return ref_file.local_path
 
         raise FileNotFoundError(
             f"Reference file {self.ref_name} not in cache. "
@@ -153,10 +152,9 @@ class Reference:
                 f"File {filename} not found in files list"
             )
 
-        # Return cached path
-        cache_path = self.client.cache_dir / target_file.cid
-        if cache_path.exists():
-            return cache_path
+        # Return the path from the IpFile (set by download_file)
+        if target_file.local_path and target_file.local_path.exists():
+            return target_file.local_path
 
         raise FileNotFoundError(
             f"File {filename} not in cache. "

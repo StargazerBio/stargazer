@@ -129,16 +129,16 @@ async def test_download_file():
         )
 
     # Verify the file was downloaded
-    assert downloaded_ipfile.path is not None, "Downloaded file should have a path"
-    assert downloaded_ipfile.path.exists(), f"Downloaded file not found at: {downloaded_ipfile.path}"
-    print(f"✓ File downloaded successfully to: {downloaded_ipfile.path}")
+    assert downloaded_ipfile.local_path is not None, "Downloaded file should have a path"
+    assert downloaded_ipfile.local_path.exists(), f"Downloaded file not found at: {downloaded_ipfile.local_path}"
+    print(f"✓ File downloaded successfully to: {downloaded_ipfile.local_path}")
 
     # Verify IpFile metadata is preserved
     assert downloaded_ipfile.cid == test_cid, "CID should match"
     assert downloaded_ipfile.name == "hello.txt", "Name should match"
 
     # Read and verify content
-    content = downloaded_ipfile.path.read_text()
+    content = downloaded_ipfile.local_path.read_text()
     assert content == expected_content, f"Content mismatch: expected '{expected_content}', got '{content}'"
     print(f"✓ File content verified - matches expected 'hello worlds\\n'")
 
@@ -149,7 +149,7 @@ async def test_download_file():
     print(f"Downloading to specific destination: {dest_path}")
     result_ipfile = await client.download_file(test_ipfile, dest=dest_path)
 
-    assert result_ipfile.path == dest_path, "Destination path should match"
+    assert result_ipfile.local_path == dest_path, "Destination path should match"
     assert dest_path.exists(), "File should exist at destination"
     assert dest_path.read_text() == content, "Content should match original"
     print(f"✓ Download to specific destination successful")

@@ -199,9 +199,9 @@ class PinataClient:
             if dest:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(cache_path, dest)
-                ipfile.path = dest
+                ipfile.local_path = dest
             else:
-                ipfile.path = cache_path
+                ipfile.local_path = cache_path
             return ipfile
 
         # If it's a local CID (from local_only mode), it should already be in cache
@@ -252,9 +252,9 @@ class PinataClient:
         if dest:
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(cache_path, dest)
-            ipfile.path = dest
+            ipfile.local_path = dest
         else:
-            ipfile.path = cache_path
+            ipfile.local_path = cache_path
 
         return ipfile
 
