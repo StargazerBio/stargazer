@@ -4,6 +4,7 @@ Query generation utilities for Stargazer.
 Utilities for generating metadata queries, including support for
 cartesian product queries across multiple dimensions.
 """
+
 from itertools import product
 from typing import Any, Dict, List
 

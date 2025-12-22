@@ -1,6 +1,7 @@
 """
 Unit tests for query generation utilities.
 """
+
 from stargazer.utils.query import generate_query_combinations
 
 

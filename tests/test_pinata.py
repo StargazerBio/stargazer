@@ -26,10 +26,7 @@ async def test_upload_and_delete_file():
 
     # Upload the file with test metadata
     print(f"\nUploading test file: {test_file.name}")
-    test_file = await default_client.upload_file(
-        test_file,
-        keyvalues={"test": "true"}
-    )
+    test_file = await default_client.upload_file(test_file, keyvalues={"test": "true"})
 
     try:
         # Verify upload succeeded
@@ -41,9 +38,10 @@ async def test_upload_and_delete_file():
         # If we have an expected CID, verify it matches (CIDs are deterministic)
         expected_cid = CIDS.get("dummy.txt")
         if expected_cid:
-            assert test_file.cid == expected_cid, \
+            assert test_file.cid == expected_cid, (
                 f"CID mismatch: expected {expected_cid}, got {test_file.cid}"
-            print(f"✓ CID matches expected value")
+            )
+            print("✓ CID matches expected value")
         else:
             print(f"  Note: Add to CIDS: 'dummy.txt': '{test_file.cid}'")
 
@@ -51,7 +49,7 @@ async def test_upload_and_delete_file():
         # Clean up: delete the file
         print(f"Deleting test file: {test_file.id}")
         await default_client.delete_file(test_file.id)
-        print(f"✓ File deleted successfully")
+        print("✓ File deleted successfully")
 
 
 @pytest.mark.asyncio
@@ -60,8 +58,6 @@ async def test_query():
     # Check for API key
     if not os.environ.get("PINATA_JWT"):
         pytest.skip("PINATA_JWT environment variable not set")
-
-    fixtures_dir = TEST_ROOT.joinpath("fixtures", "reference")
 
     # Files to upload (excluding large fasta for speed)
     test_files = [
@@ -76,15 +72,17 @@ async def test_query():
     print(found_files)
 
     # Should find at least our uploaded files
-    assert len(found_files) >= len(test_files), \
+    assert len(found_files) >= len(test_files), (
         f"Should find at least {len(test_files)} files, found {len(found_files)}"
+    )
     print(f"✓ Found {len(found_files)} reference test files")
 
     # Verify our uploaded files are in the results
     found_cids = {f.cid for f in found_files}
     for test_file in test_files:
-        assert CIDS.get(test_file) in found_cids, \
+        assert CIDS.get(test_file) in found_cids, (
             f"Uploaded file {test_file} (CID: {CIDS.get(test_file)}) not found in query results"
+        )
         print(f"✓ Verified {test_file} in query results")
 
 
@@ -102,6 +100,7 @@ async def test_download_file():
 
     # Create a mock IpFile for testing
     from datetime import datetime, timezone
+
     test_ipfile = IpFile(
         id="test-download-id",
         cid=test_cid,
@@ -124,8 +123,12 @@ async def test_download_file():
         )
 
     # Verify the file was downloaded
-    assert downloaded_ipfile.local_path is not None, "Downloaded file should have a path"
-    assert downloaded_ipfile.local_path.exists(), f"Downloaded file not found at: {downloaded_ipfile.local_path}"
+    assert downloaded_ipfile.local_path is not None, (
+        "Downloaded file should have a path"
+    )
+    assert downloaded_ipfile.local_path.exists(), (
+        f"Downloaded file not found at: {downloaded_ipfile.local_path}"
+    )
     print(f"✓ File downloaded successfully to: {downloaded_ipfile.local_path}")
 
     # Verify IpFile metadata is preserved
@@ -134,8 +137,10 @@ async def test_download_file():
 
     # Read and verify content
     content = downloaded_ipfile.local_path.read_text()
-    assert content == expected_content, f"Content mismatch: expected '{expected_content}', got '{content}'"
-    print(f"✓ File content verified - matches expected 'hello worlds\\n'")
+    assert content == expected_content, (
+        f"Content mismatch: expected '{expected_content}', got '{content}'"
+    )
+    print("✓ File content verified - matches expected 'hello worlds\\n'")
 
     # Test downloading to a specific destination
     dest_path = TEST_ROOT.joinpath("fixtures", "downloaded_test.txt")
@@ -147,8 +152,8 @@ async def test_download_file():
     assert result_ipfile.local_path == dest_path, "Destination path should match"
     assert dest_path.exists(), "File should exist at destination"
     assert dest_path.read_text() == content, "Content should match original"
-    print(f"✓ Download to specific destination successful")
+    print("✓ Download to specific destination successful")
 
     # Clean up the destination file (keep cache)
     dest_path.unlink()
-    print(f"✓ Test cleanup complete")
+    print("✓ Test cleanup complete")

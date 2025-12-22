@@ -24,6 +24,7 @@ import aiofiles
 @dataclass
 class IpFile:
     """Represents a file stored in IPFS (via Pinata or other service)."""
+
     id: str
     cid: str
     name: Optional[str]
@@ -41,7 +42,9 @@ class IpFile:
             name=data.get("name"),
             size=data["size"],
             keyvalues=data.get("keyvalues", {}),
-            created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")),
+            created_at=datetime.fromisoformat(
+                data["created_at"].replace("Z", "+00:00")
+            ),
             local_path=None,  # Set when file is downloaded
         )
 
@@ -91,8 +94,7 @@ class PinataClient:
         """
         self._jwt = jwt or os.environ.get("PINATA_JWT")
         self.gateway = gateway or os.environ.get(
-            "PINATA_GATEWAY",
-            "https://gateway.pinata.cloud"
+            "PINATA_GATEWAY", "https://gateway.pinata.cloud"
         )
         self.cache_dir = cache_dir or Path(
             os.environ.get("STARGAZER_CACHE", str(Path.home() / ".stargazer" / "cache"))
@@ -163,18 +165,22 @@ class PinataClient:
 
             async with aiohttp.ClientSession() as session:
                 data = aiohttp.FormData()
-                data.add_field('file', open(path, 'rb'), filename=path.name)
-                data.add_field('name', path.name)
+                data.add_field("file", open(path, "rb"), filename=path.name)
+                data.add_field("name", path.name)
 
                 if keyvalues:
-                    data.add_field('keyvalues', json.dumps(keyvalues))
+                    data.add_field("keyvalues", json.dumps(keyvalues))
 
-                async with session.post(url, headers=self._headers(), data=data) as response:
+                async with session.post(
+                    url, headers=self._headers(), data=data
+                ) as response:
                     response.raise_for_status()
                     result = await response.json()
                     return IpFile.from_api_response(result.get("data", result))
 
-    async def download_file(self, ipfile: IpFile, dest: Optional[Path] = None) -> IpFile:
+    async def download_file(
+        self, ipfile: IpFile, dest: Optional[Path] = None
+    ) -> IpFile:
         """
         Download a file using Pinata API and update IpFile with local path.
         Uses local cache to avoid re-downloading.
@@ -187,7 +193,6 @@ class PinataClient:
             Updated IpFile with path set to downloaded file location
         """
         import shutil
-        import time
 
         cid = ipfile.cid
 
@@ -234,7 +239,7 @@ class PinataClient:
                         response.raise_for_status()
 
                         cache_path.parent.mkdir(parents=True, exist_ok=True)
-                        async with aiofiles.open(cache_path, 'wb') as f:
+                        async with aiofiles.open(cache_path, "wb") as f:
                             async for chunk in response.content.iter_chunked(8192):
                                 await f.write(chunk)
 
@@ -247,7 +252,9 @@ class PinataClient:
                 continue
         else:
             # All gateways failed
-            raise Exception(f"Failed to download file from all IPFS gateways. Last error: {last_error}")
+            raise Exception(
+                f"Failed to download file from all IPFS gateways. Last error: {last_error}"
+            )
 
         if dest:
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -281,9 +288,7 @@ class PinataClient:
 
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                url,
-                headers=self._headers(),
-                params=params
+                url, headers=self._headers(), params=params
             ) as response:
                 response.raise_for_status()
                 data = await response.json()

@@ -3,7 +3,7 @@ Reference genome type for Stargazer.
 
 A reference is a collection of files stored in IPFS.
 """
-import tempfile
+
 from dataclasses import dataclass, field
 from typing import Self
 from pathlib import Path
@@ -146,9 +146,7 @@ class Reference:
                 break
 
         if not target_file:
-            raise FileNotFoundError(
-                f"File {filename} not found in files list"
-            )
+            raise FileNotFoundError(f"File {filename} not found in files list")
 
         # Return the path from the IpFile (set by download_file)
         if target_file.local_path and target_file.local_path.exists():
@@ -209,9 +207,7 @@ class Reference:
             all_files.extend(files)
 
         if not all_files:
-            raise ValueError(
-                f"No files found matching queries. Filters: {filters}"
-            )
+            raise ValueError(f"No files found matching queries. Filters: {filters}")
 
         # Create Reference instance with the files
         return cls(ref_name=ref_name, files=all_files)

@@ -1,7 +1,7 @@
 """
 BWA tasks for reference genome indexing and alignment.
 """
-from pathlib import Path
+
 from datetime import datetime
 
 from stargazer.types import Reference
@@ -39,9 +39,7 @@ async def bwa_index(ref: Reference) -> Reference:
 
     # Verify the reference file exists
     if not ref_file_path.exists():
-        raise FileNotFoundError(
-            f"Reference file {ref.ref_name} not found in cache"
-        )
+        raise FileNotFoundError(f"Reference file {ref.ref_name} not found in cache")
 
     # BWA index creates 5 files with these extensions
     index_extensions = [".amb", ".ann", ".bwt", ".pac", ".sa"]

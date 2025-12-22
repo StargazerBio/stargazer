@@ -1,7 +1,7 @@
 """
 Samtools tasks for reference genome indexing.
 """
-from pathlib import Path
+
 from datetime import datetime
 
 from stargazer.types import Reference
@@ -29,9 +29,7 @@ async def samtools_faidx(ref: Reference) -> Reference:
 
     # Verify the reference file exists
     if not ref_file_path.exists():
-        raise FileNotFoundError(
-            f"Reference file {ref.ref_name} not found in cache"
-        )
+        raise FileNotFoundError(f"Reference file {ref.ref_name} not found in cache")
 
     # Check if we already have the .fai in our files list
     fai_name = f"{ref.ref_name}.fai"
@@ -46,9 +44,7 @@ async def samtools_faidx(ref: Reference) -> Reference:
     await _run(cmd, cwd=str(ref_file_path.parent))
 
     if not fai_path.exists():
-        raise FileNotFoundError(
-            f"FASTA index file {fai_path.name} was not created"
-        )
+        raise FileNotFoundError(f"FASTA index file {fai_path.name} was not created")
 
     # Get the reference file's metadata to copy over
     ref_file = None

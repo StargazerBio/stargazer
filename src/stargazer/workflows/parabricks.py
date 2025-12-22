@@ -6,19 +6,15 @@ This workflow chains together:
 2. samtools faidx to create FASTA index
 3. bwa index to create BWA alignment indices
 """
+
 import flyte
-from pathlib import Path
 
 from stargazer.types import Reference
 from stargazer.config import pb_env
-from stargazer.tasks.samtools import samtools_faidx
-from stargazer.tasks.bwa import bwa_index
 
 
 @pb_env.task
-async def wgs_call_snv(
-    ref_name: str
-) -> Reference:
+async def wgs_call_snv(ref_name: str) -> Reference:
     """
     Complete reference genome indexing workflow.
 
@@ -54,9 +50,13 @@ async def wgs_call_snv(
 
     return ref
 
+
 if __name__ == "__main__":
     import pprint
+
     flyte.init_from_config()
-    r =  flyte.with_runcontext(mode="local").run(wgs_call_snv, ref_name="GRCh38_chr21.fasta")
+    r = flyte.with_runcontext(mode="local").run(
+        wgs_call_snv, ref_name="GRCh38_chr21.fasta"
+    )
     r.wait()
     pprint.pprint(r.outputs)

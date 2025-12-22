@@ -3,9 +3,7 @@ Tests for samtools tasks.
 """
 
 import shutil
-import tempfile
 import pytest
-from pathlib import Path
 from datetime import datetime
 
 from stargazer.types import Reference
@@ -59,9 +57,15 @@ async def test_samtools_faidx():
     assert fai_files[0].size > 0, "Index file should not be empty"
 
     # Verify the .fai file has metadata
-    assert fai_files[0].keyvalues.get("tool") == "samtools_faidx", "Should have tool metadata"
-    assert fai_files[0].keyvalues.get("type") == "reference", "Should have type metadata"
-    assert fai_files[0].keyvalues.get("build") == "GRCh38", "Should copy build metadata from reference"
+    assert fai_files[0].keyvalues.get("tool") == "samtools_faidx", (
+        "Should have tool metadata"
+    )
+    assert fai_files[0].keyvalues.get("type") == "reference", (
+        "Should have type metadata"
+    )
+    assert fai_files[0].keyvalues.get("build") == "GRCh38", (
+        "Should copy build metadata from reference"
+    )
 
     # Verify .fai file exists at local_path
     # Samtools creates files with the CID as base name (e.g., QmTestChr21Fasta.fai)

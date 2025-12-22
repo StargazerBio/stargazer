@@ -13,6 +13,7 @@ from pathlib import Path
 from stargazer.types import Reference
 from stargazer.utils.pinata import default_client, PinataClient
 
+
 @pytest.mark.asyncio
 async def test_add_files_empty_list():
     """Test that add_files raises error when file_paths is empty."""
@@ -53,7 +54,7 @@ async def test_add_files_success():
 
         await ref.add_files(
             file_paths=[test_file1, test_file2],
-            keyvalues={"type": "test", "purpose": "unit_test", "env": "test"}
+            keyvalues={"type": "test", "purpose": "unit_test", "env": "test"},
         )
 
         # Verify files were added to reference
@@ -89,7 +90,7 @@ async def test_add_files_local_only():
 
             await ref.add_files(
                 file_paths=[test_file1, test_file2],
-                keyvalues={"type": "test", "mode": "local", "env": "test"}
+                keyvalues={"type": "test", "mode": "local", "env": "test"},
             )
 
             # Verify files were added to reference

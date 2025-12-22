@@ -3,9 +3,7 @@ Tests for BWA tasks.
 """
 
 import shutil
-import tempfile
 import pytest
-from pathlib import Path
 from datetime import datetime
 
 from stargazer.types import Reference
@@ -62,14 +60,24 @@ async def test_bwa_index():
         assert index_files[0].size > 0, f"Index file {ext} should not be empty"
 
         # Verify the index file has metadata
-        assert index_files[0].keyvalues.get("tool") == "bwa_index", f"Index file {ext} should have tool metadata"
-        assert index_files[0].keyvalues.get("type") == "reference", f"Index file {ext} should have type metadata"
-        assert index_files[0].keyvalues.get("build") == "GRCh38", f"Index file {ext} should copy build metadata from reference"
+        assert index_files[0].keyvalues.get("tool") == "bwa_index", (
+            f"Index file {ext} should have tool metadata"
+        )
+        assert index_files[0].keyvalues.get("type") == "reference", (
+            f"Index file {ext} should have type metadata"
+        )
+        assert index_files[0].keyvalues.get("build") == "GRCh38", (
+            f"Index file {ext} should copy build metadata from reference"
+        )
 
         # Verify file exists at the local_path
         # BWA creates files with the CID as base name (e.g., QmTestChr21Fasta.amb)
-        assert index_files[0].local_path is not None, f"Index file {ext} should have local_path set"
-        assert index_files[0].local_path.exists(), f"Index file {ext} should exist at local_path"
+        assert index_files[0].local_path is not None, (
+            f"Index file {ext} should have local_path set"
+        )
+        assert index_files[0].local_path.exists(), (
+            f"Index file {ext} should exist at local_path"
+        )
 
     # Total files should be 1 (fasta) + 5 (index files) = 6
     assert len(result.files) == 6
