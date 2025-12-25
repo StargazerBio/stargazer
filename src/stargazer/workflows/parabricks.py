@@ -9,8 +9,8 @@ This workflow chains together:
 
 import flyte
 
-from stargazer.types import Reference
 from stargazer.config import pb_env
+from stargazer.types import Reference
 
 
 @pb_env.task
@@ -55,8 +55,6 @@ if __name__ == "__main__":
     import pprint
 
     flyte.init_from_config()
-    r = flyte.with_runcontext(mode="local").run(
-        wgs_call_snv, ref_name="GRCh38_chr21.fasta"
-    )
+    r = flyte.with_runcontext(mode="local").run(wgs_call_snv, ref_name="GRCh38_TP53.fa")
     r.wait()
     pprint.pprint(r.outputs)

@@ -3,13 +3,14 @@ Tests for samtools tasks.
 """
 
 import shutil
-import pytest
 from datetime import datetime
 
-from stargazer.types import Reference
-from stargazer.tasks.samtools import samtools_faidx
-from stargazer.utils.pinata import IpFile, default_client
+import pytest
 from config import TEST_ROOT
+
+from stargazer.tasks.samtools import samtools_faidx
+from stargazer.types import Reference
+from stargazer.utils.pinata import IpFile, default_client
 
 
 @pytest.mark.asyncio
@@ -20,11 +21,11 @@ async def test_samtools_faidx():
         pytest.skip("samtools not available in environment")
 
     # Setup: Copy test reference to cache directory
-    ref_fixture = TEST_ROOT / "fixtures" / "reference" / "GRCh38_chr21.fasta"
+    ref_fixture = TEST_ROOT / "fixtures" / "GRCh38_TP53.fa"
     assert ref_fixture.exists(), f"Test fixture not found: {ref_fixture}"
 
     # Pre-populate cache using default_client
-    test_cid = "QmTestChr21Fasta"
+    test_cid = "QmTestTP53Fasta"
     cached_fasta = default_client.cache_dir / test_cid
     default_client.cache_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(ref_fixture, cached_fasta)
@@ -33,14 +34,14 @@ async def test_samtools_faidx():
     fasta_file = IpFile(
         id="test-id",
         cid=test_cid,
-        name="GRCh38_chr21.fasta",
+        name="GRCh38_TP53.fa",
         size=cached_fasta.stat().st_size,
         keyvalues={"type": "reference", "build": "GRCh38", "env": "test"},
         created_at=datetime.now(),
     )
 
     ref = Reference(
-        ref_name="GRCh38_chr21.fasta",
+        ref_name="GRCh38_TP53.fa",
         files=[fasta_file],
     )
 
@@ -49,10 +50,10 @@ async def test_samtools_faidx():
 
     # Verify the result
     assert isinstance(result, Reference)
-    assert result.ref_name == "GRCh38_chr21.fasta"
+    assert result.ref_name == "GRCh38_TP53.fa"
 
     # Verify .fai file was added to files list
-    fai_files = [f for f in result.files if f.name == "GRCh38_chr21.fasta.fai"]
+    fai_files = [f for f in result.files if f.name == "GRCh38_TP53.fa.fai"]
     assert len(fai_files) == 1, "Should have exactly one .fai file"
     assert fai_files[0].size > 0, "Index file should not be empty"
 
@@ -68,7 +69,7 @@ async def test_samtools_faidx():
     )
 
     # Verify .fai file exists at local_path
-    # Samtools creates files with the CID as base name (e.g., QmTestChr21Fasta.fai)
+    # Samtools creates files with the CID as base name (e.g., QmTestTP53Fasta.fai)
     assert fai_files[0].local_path is not None, "Should have local_path set"
     assert fai_files[0].local_path.exists(), "Index file should exist at local_path"
 
@@ -88,23 +89,23 @@ async def test_samtools_faidx_idempotent():
         pytest.skip("samtools not available in environment")
 
     # Setup: Copy test reference to cache directory
-    fixtures_ref_dir = TEST_ROOT / "fixtures" / "reference"
+    fixtures_ref_dir = TEST_ROOT / "fixtures"
 
     # Pre-populate cache using default_client
     default_client.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    test_cid_fasta = "QmTestChr21FastaIdempotent"
-    test_cid_fai = "QmTestChr21FAI"
+    test_cid_fasta = "QmTestTP53FastaIdempotent"
+    test_cid_fai = "QmTestTP53FAI"
     cached_fasta = default_client.cache_dir / test_cid_fasta
     cached_fai = default_client.cache_dir / test_cid_fai
-    shutil.copy(fixtures_ref_dir / "GRCh38_chr21.fasta", cached_fasta)
-    shutil.copy(fixtures_ref_dir / "GRCh38_chr21.fasta.fai", cached_fai)
+    shutil.copy(fixtures_ref_dir / "GRCh38_TP53.fa", cached_fasta)
+    shutil.copy(fixtures_ref_dir / "GRCh38_TP53.fa.fai", cached_fai)
 
     # Create Reference with both files already present
     fasta_file = IpFile(
         id="test-id-fasta",
         cid=test_cid_fasta,
-        name="GRCh38_chr21.fasta",
+        name="GRCh38_TP53.fa",
         size=cached_fasta.stat().st_size,
         keyvalues={"type": "reference", "env": "test"},
         created_at=datetime.now(),
@@ -113,14 +114,14 @@ async def test_samtools_faidx_idempotent():
     fai_file = IpFile(
         id="test-id-fai",
         cid=test_cid_fai,
-        name="GRCh38_chr21.fasta.fai",
+        name="GRCh38_TP53.fa.fai",
         size=cached_fai.stat().st_size,
         keyvalues={"type": "reference", "env": "test"},
         created_at=datetime.now(),
     )
 
     ref = Reference(
-        ref_name="GRCh38_chr21.fasta",
+        ref_name="GRCh38_TP53.fa",
         files=[fasta_file, fai_file],
     )
 
@@ -134,7 +135,7 @@ async def test_samtools_faidx_idempotent():
     assert len(result.files) == 2, "Should not duplicate .fai file"
 
     # Verify .fai file exists
-    fai_files = [f for f in result.files if f.name == "GRCh38_chr21.fasta.fai"]
+    fai_files = [f for f in result.files if f.name == "GRCh38_TP53.fa.fai"]
     assert len(fai_files) == 1, "Should have exactly one .fai file"
 
     # Cleanup

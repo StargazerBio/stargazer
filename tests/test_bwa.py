@@ -3,13 +3,14 @@ Tests for BWA tasks.
 """
 
 import shutil
-import pytest
 from datetime import datetime
 
-from stargazer.types import Reference
-from stargazer.tasks.bwa import bwa_index
-from stargazer.utils.pinata import IpFile, default_client
+import pytest
 from config import TEST_ROOT
+
+from stargazer.tasks.bwa import bwa_index
+from stargazer.types import Reference
+from stargazer.utils.pinata import IpFile, default_client
 
 
 @pytest.mark.asyncio
@@ -20,11 +21,11 @@ async def test_bwa_index():
         pytest.skip("bwa not available in environment")
 
     # Setup: Copy test reference to cache directory
-    ref_fixture = TEST_ROOT / "fixtures" / "reference" / "GRCh38_chr21.fasta"
+    ref_fixture = TEST_ROOT / "fixtures" / "GRCh38_TP53.fa"
     assert ref_fixture.exists(), f"Test fixture not found: {ref_fixture}"
 
     # Pre-populate cache using default_client
-    test_cid = "QmTestChr21Fasta"
+    test_cid = "QmTestTP53Fasta"
     cached_fasta = default_client.cache_dir / test_cid
     default_client.cache_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(ref_fixture, cached_fasta)
@@ -33,14 +34,14 @@ async def test_bwa_index():
     fasta_file = IpFile(
         id="test-id",
         cid=test_cid,
-        name="GRCh38_chr21.fasta",
+        name="GRCh38_TP53.fa",
         size=cached_fasta.stat().st_size,
         keyvalues={"type": "reference", "build": "GRCh38", "env": "test"},
         created_at=datetime.now(),
     )
 
     ref = Reference(
-        ref_name="GRCh38_chr21.fasta",
+        ref_name="GRCh38_TP53.fa",
         files=[fasta_file],
     )
 
@@ -49,12 +50,12 @@ async def test_bwa_index():
 
     # Verify the result
     assert isinstance(result, Reference)
-    assert result.ref_name == "GRCh38_chr21.fasta"
+    assert result.ref_name == "GRCh38_TP53.fa"
 
     # Verify all 5 BWA index files were added
     index_extensions = [".amb", ".ann", ".bwt", ".pac", ".sa"]
     for ext in index_extensions:
-        index_name = f"GRCh38_chr21.fasta{ext}"
+        index_name = f"GRCh38_TP53.fa{ext}"
         index_files = [f for f in result.files if f.name == index_name]
         assert len(index_files) == 1, f"Should have exactly one {ext} file"
         assert index_files[0].size > 0, f"Index file {ext} should not be empty"
@@ -71,7 +72,7 @@ async def test_bwa_index():
         )
 
         # Verify file exists at the local_path
-        # BWA creates files with the CID as base name (e.g., QmTestChr21Fasta.amb)
+        # BWA creates files with the CID as base name (e.g., QmTestTP53Fasta.amb)
         assert index_files[0].local_path is not None, (
             f"Index file {ext} should have local_path set"
         )
@@ -100,21 +101,21 @@ async def test_bwa_index_idempotent():
         pytest.skip("bwa not available in environment")
 
     # Setup: Copy test reference to cache directory
-    fixtures_ref_dir = TEST_ROOT / "fixtures" / "reference"
+    fixtures_ref_dir = TEST_ROOT / "fixtures"
 
     # Pre-populate cache using default_client
     default_client.cache_dir.mkdir(parents=True, exist_ok=True)
 
     # Create test CIDs for all files
-    test_cid_fasta = "QmTestChr21FastaIdempotent"
+    test_cid_fasta = "QmTestTP53FastaIdempotent"
     cached_fasta = default_client.cache_dir / test_cid_fasta
-    shutil.copy(fixtures_ref_dir / "GRCh38_chr21.fasta", cached_fasta)
+    shutil.copy(fixtures_ref_dir / "GRCh38_TP53.fa", cached_fasta)
 
     files_list = [
         IpFile(
             id="test-id-fasta",
             cid=test_cid_fasta,
-            name="GRCh38_chr21.fasta",
+            name="GRCh38_TP53.fa",
             size=cached_fasta.stat().st_size,
             keyvalues={"type": "reference", "env": "test"},
             created_at=datetime.now(),
@@ -125,9 +126,9 @@ async def test_bwa_index_idempotent():
     index_extensions = [".amb", ".ann", ".bwt", ".pac", ".sa"]
     ext_names = ["amb", "ann", "bwt", "pac", "sa"]
     for i, ext in enumerate(index_extensions):
-        index_fixture = fixtures_ref_dir / f"GRCh38_chr21.fasta{ext}"
+        index_fixture = fixtures_ref_dir / f"GRCh38_TP53.fa{ext}"
         if index_fixture.exists():
-            test_cid_index = f"QmTestChr21{ext_names[i].upper()}"
+            test_cid_index = f"QmTestTP53{ext_names[i].upper()}"
             cached_index = default_client.cache_dir / test_cid_index
             shutil.copy(index_fixture, cached_index)
 
@@ -135,7 +136,7 @@ async def test_bwa_index_idempotent():
                 IpFile(
                     id=f"test-id-{ext}",
                     cid=test_cid_index,
-                    name=f"GRCh38_chr21.fasta{ext}",
+                    name=f"GRCh38_TP53.fa{ext}",
                     size=cached_index.stat().st_size,
                     keyvalues={"type": "reference", "env": "test"},
                     created_at=datetime.now(),
@@ -143,7 +144,7 @@ async def test_bwa_index_idempotent():
             )
 
     ref = Reference(
-        ref_name="GRCh38_chr21.fasta",
+        ref_name="GRCh38_TP53.fa",
         files=files_list,
     )
 
@@ -160,7 +161,7 @@ async def test_bwa_index_idempotent():
     if cached_fasta.exists():
         cached_fasta.unlink()
     for i, ext in enumerate(index_extensions):
-        cached_index = default_client.cache_dir / f"QmTestChr21{ext_names[i].upper()}"
+        cached_index = default_client.cache_dir / f"QmTestTP53{ext_names[i].upper()}"
         if cached_index.exists():
             cached_index.unlink()
 

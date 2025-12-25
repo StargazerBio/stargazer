@@ -3,14 +3,16 @@ Test for Pinata file upload, deletion, and querying using real API.
 
 This test requires a valid PINATA_JWT environment variable.
 
-To populate expected CIDs, run:
-    python tests/upload_reference_files.py
+To populate expected CIDs for test files, run:
+    python cli/upload_to_pinata.py tests/fixtures/FILE -m type=reference -m env=test --update-config
 """
 
 import os
+
 import pytest
-from stargazer.utils.pinata import default_client, IpFile
-from config import TEST_ROOT, CIDS
+from config import CIDS, TEST_ROOT
+
+from stargazer.utils.pinata import IpFile, default_client
 
 
 @pytest.mark.asyncio
@@ -59,12 +61,18 @@ async def test_query():
     if not os.environ.get("PINATA_JWT"):
         pytest.skip("PINATA_JWT environment variable not set")
 
-    # Files to upload (excluding large fasta for speed)
+    # Files to upload (TP53 reference files)
     test_files = [
-        "GRCh38_chr21.fasta",
-        "GRCh38_chr21.fasta.fai",
-        "GRCh38_chr21.dict",
+        "GRCh38_TP53.fa",
+        "GRCh38_TP53.fa.fai",
     ]
+
+    # Check if CIDs are populated
+    if not all(CIDS.get(f) for f in test_files):
+        pytest.skip(
+            "CIDs not populated for TP53 files. "
+            "Run upload_reference_files.py to upload files and populate CIDs."
+        )
 
     # Query by keyvalue to find all reference files
     print("\nQuerying files by keyvalue (type=reference)...")
