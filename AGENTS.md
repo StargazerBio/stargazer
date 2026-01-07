@@ -15,6 +15,8 @@
 - Simple tests will be written before implementation and you will pause to ensure they're capturing the right behavior
 - Implementation will be tightly scoped so it can be understood
 - Tests will run until they pass
+- All necessary CLI tools e.g. parabricks, bwa etc, are available in PATH. Use them to generate test assets as needed and
+  alert the user if they are not available.
 
 ## Context Directory Reference
 
