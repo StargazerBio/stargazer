@@ -2,12 +2,9 @@
 Samtools tasks for reference genome indexing.
 """
 
-from datetime import datetime
-
 from stargazer.types import Reference
 from stargazer.config import pb_env
 from stargazer.utils import _run
-from stargazer.utils.pinata import IpFile
 
 
 @pb_env.task
@@ -60,18 +57,7 @@ async def samtools_faidx(ref: Reference) -> Reference:
         if "build" in ref_file.keyvalues:
             keyvalues["build"] = ref_file.keyvalues["build"]
 
-    # Create an IpFile for the .fai with metadata
-    fai_file = IpFile(
-        id="local",
-        cid="local",  # Would be real CID after upload
-        name=fai_name,
-        size=fai_path.stat().st_size,
-        keyvalues=keyvalues,
-        created_at=datetime.now(),
-        local_path=fai_path,
-    )
-
-    # Add the .fai file to the reference
-    ref.files.append(fai_file)
+    # Upload .fai file to Pinata and add to reference
+    await ref.add_files(file_paths=[fai_path], keyvalues=keyvalues)
 
     return ref

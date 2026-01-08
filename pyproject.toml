@@ -32,3 +32,7 @@ python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
 asyncio_mode = "auto"
+filterwarnings = [
+    # Ignore Pydantic deprecation warnings from flyte package (third-party)
+    "ignore:Support for class-based `config` is deprecated:pydantic.warnings.PydanticDeprecatedSince20",
+]

@@ -107,6 +107,8 @@ class Alignment:
         # Upload each file (client handles local_only mode) and collect IpFile objects
         for path in file_paths:
             ipfile = await default_client.upload_file(path, keyvalues=keyvalues)
+            # Preserve local_path so the file remains accessible without re-downloading
+            ipfile.local_path = path.resolve()
             self.files.append(ipfile)
 
     async def fetch(self) -> Path:

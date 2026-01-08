@@ -4,12 +4,9 @@ HaplotypeCaller task for Stargazer.
 Calls germline variants from aligned BAM using GATK HaplotypeCaller.
 """
 
-from datetime import datetime
-
 from stargazer.config import pb_env
 from stargazer.types import Reference, Alignment, Variants
 from stargazer.utils import _run
-from stargazer.utils.pinata import IpFile
 
 
 @pb_env.task
@@ -77,7 +74,12 @@ async def haplotypecaller(
             f"stderr: {stderr}"
         )
 
-    # Create Variants object with output VCF
+    # Create Variants object first, then add files to trigger upload
+    variants = Variants(
+        sample_id=alignment.sample_id,
+        vcf_name=output_vcf.name,
+    )
+
     # Build metadata for VCF file
     keyvalues = {
         "type": "variants",
@@ -92,21 +94,7 @@ async def haplotypecaller(
             keyvalues["build"] = f.keyvalues["build"]
             break
 
-    # Create IpFile for the VCF (local only for now)
-    vcf_file = IpFile(
-        id="local",
-        cid="local",
-        name=output_vcf.name,
-        size=output_vcf.stat().st_size,
-        keyvalues=keyvalues,
-        created_at=datetime.now(),
-        local_path=output_vcf,
-    )
-
-    variants = Variants(
-        sample_id=alignment.sample_id,
-        vcf_name=output_vcf.name,
-        files=[vcf_file],
-    )
+    # Upload VCF file to Pinata and add to variants
+    await variants.add_files(file_paths=[output_vcf], keyvalues=keyvalues)
 
     return variants

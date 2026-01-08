@@ -4,12 +4,9 @@ fq2bam task for Stargazer.
 Aligns FASTQ reads to reference genome, sorts, and marks duplicates using Parabricks.
 """
 
-from datetime import datetime
-
 from stargazer.config import pb_env
 from stargazer.types import Reference, Reads, Alignment
 from stargazer.utils import _run
-from stargazer.utils.pinata import IpFile
 
 
 @pb_env.task
@@ -93,7 +90,12 @@ async def fq2bam(
             f"fq2bam did not create output BAM at {output_bam}. stderr: {stderr}"
         )
 
-    # Create Alignment object with output BAM
+    # Create Alignment object first, then add files to trigger upload
+    alignment = Alignment(
+        sample_id=reads.sample_id,
+        bam_name=output_bam.name,
+    )
+
     # Build metadata for BAM file
     keyvalues = {
         "type": "alignment",
@@ -104,21 +106,7 @@ async def fq2bam(
         "duplicates_marked": "true",  # fq2bam marks duplicates by default
     }
 
-    # Create IpFile for the BAM (local only for now)
-    bam_file = IpFile(
-        id="local",
-        cid="local",
-        name=output_bam.name,
-        size=output_bam.stat().st_size,
-        keyvalues=keyvalues,
-        created_at=datetime.now(),
-        local_path=output_bam,
-    )
-
-    alignment = Alignment(
-        sample_id=reads.sample_id,
-        bam_name=output_bam.name,
-        files=[bam_file],
-    )
+    # Upload BAM file to Pinata and add to alignment
+    await alignment.add_files(file_paths=[output_bam], keyvalues=keyvalues)
 
     return alignment

@@ -2,12 +2,9 @@
 BWA tasks for reference genome indexing and alignment.
 """
 
-from datetime import datetime
-
 from stargazer.types import Reference
 from stargazer.config import pb_env
 from stargazer.utils import _run
-from stargazer.utils.pinata import IpFile
 
 
 @pb_env.task
@@ -76,10 +73,11 @@ async def bwa_index(ref: Reference) -> Reference:
         if "build" in ref_file.keyvalues:
             keyvalues["build"] = ref_file.keyvalues["build"]
 
-    # Add each index file to the reference
+    # Collect all index file paths
     # BWA creates index files with the input filename as base
     # e.g., if input is /path/to/QmABC, it creates QmABC.amb, QmABC.ann, etc.
     base_name = ref_file_path.name
+    index_file_paths = []
 
     for ext in index_extensions:
         # Index files are named after the cached file (CID), not ref_name
@@ -90,21 +88,9 @@ async def bwa_index(ref: Reference) -> Reference:
                 f"BWA index file {cached_index_path.name} was not created"
             )
 
-        # The user-facing name should use ref_name for consistency
-        user_facing_name = f"{ref.ref_name}{ext}"
+        index_file_paths.append(cached_index_path)
 
-        # Create an IpFile for the index file with metadata
-        index_file = IpFile(
-            id="local",
-            cid="local",  # Would be real CID after upload
-            name=user_facing_name,
-            size=cached_index_path.stat().st_size,
-            keyvalues=keyvalues,
-            created_at=datetime.now(),
-            local_path=cached_index_path,
-        )
-
-        # Add the index file to the reference
-        ref.files.append(index_file)
+    # Upload all index files to Pinata and add to reference
+    await ref.add_files(file_paths=index_file_paths, keyvalues=keyvalues)
 
     return ref
