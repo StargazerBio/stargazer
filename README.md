@@ -8,7 +8,7 @@ Stargazer is an open-science initiative to democratize access to bioinformatics 
 
 ## Why Stargazer?
 
-Modern bioinformatics is fragmented. Researchers spend more time wrestling with toolchains than doing science. Fire-and-forget bash pipelines with opaquely versioned tools produce results that are difficult to reproduce and impossible to trace. Data provenance is an afterthought, collaboration is friction-laden, and scaling up means starting over.
+Modern bioinformatics is fragmented. Researchers spend more time wrestling with toolchains than doing science. Fire-and-forget bash pipelines with opaquely versioned tools produce results that are difficult to reproduce and impossible to trace. Data provenance and availability requires maintenance, collaboration is friction-laden, and scaling up means starting over.
 
 Stargazer changes that.
 
