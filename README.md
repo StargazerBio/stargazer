@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/images/8-bit_stargazer_no-bg.jpg" alt="Stargazer" width="400">
+</p>
+
 # Stargazer
 
 **The perpetual progress machine for computational biology.**
