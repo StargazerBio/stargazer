@@ -11,5 +11,5 @@ CIDS = {
     "GRCh38_TP53.fa.bwt": "bafkreigmugdxgf4lcczuws6rvgy7ufl24twf3kdgilwv2rtiyq5iwdyu7i",
     "GRCh38_TP53.fa.pac": "bafkreicouoxr5idj6ohh56bxxxuhwk7sjhrvk7xai5blczw762ny6t4eoy",
     "GRCh38_TP53.fa.sa": "bafkreic2h3ct6sqgiaqjmqyuwlvmja6iujaauqs3lqgl3miflgks4nkzae",
-    "dummy.txt": "bafkreicm65sxaw7ismw7l4tfr6g375oluzprmm2zqk72piull7krwx2nqa",
+    "upload_delete.txt": "bafkreig6q7s5lt4sbmwmmh5mfvgegyytpokycpnj4opt2gb6hhflm2adfi",
 }

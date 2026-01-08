@@ -8,6 +8,7 @@ To populate expected CIDs for test files, run:
 """
 
 import os
+import time
 
 import pytest
 from config import CIDS, TEST_ROOT
@@ -23,7 +24,7 @@ async def test_upload_and_delete_file():
         pytest.skip("PINATA_JWT environment variable not set")
 
     # Use the smallest reference file for quick testing
-    test_file = TEST_ROOT.joinpath("fixtures", "dummy.txt")
+    test_file = TEST_ROOT.joinpath("fixtures", "upload_delete.txt")
     assert test_file.exists(), f"Test file not found: {test_file}"
 
     # Upload the file with test metadata
@@ -38,19 +39,20 @@ async def test_upload_and_delete_file():
         print(f"✓ Upload successful - ID: {test_file.id}, CID: {test_file.cid}")
 
         # If we have an expected CID, verify it matches (CIDs are deterministic)
-        expected_cid = CIDS.get("dummy.txt")
+        expected_cid = CIDS.get("upload_delete.txt")
         if expected_cid:
             assert test_file.cid == expected_cid, (
                 f"CID mismatch: expected {expected_cid}, got {test_file.cid}"
             )
             print("✓ CID matches expected value")
         else:
-            print(f"  Note: Add to CIDS: 'dummy.txt': '{test_file.cid}'")
+            print(f"  Note: Add to CIDS: 'upload_delete.txt': '{test_file.cid}'")
 
     finally:
         # Clean up: delete the file
-        print(f"Deleting test file: {test_file.id}")
-        await default_client.delete_file(test_file.id)
+        print(f"Deleting test file {test_file.id} after 20 sec cooldown")
+        time.sleep(20)
+        await default_client.delete_file(test_file)
         print("✓ File deleted successfully")
 
 
@@ -106,7 +108,7 @@ async def test_download_file():
     test_cid = "QmZ4tDuvesekSs4qM5ZBKpXiZGun7S2CYtEZRB3DYXkjGx"
     expected_content = "hello worlds\n"
 
-    # Create a mock IpFile for testing
+    # Create a mock IpFile for testing (public file on IPFS)
     from datetime import datetime, timezone
 
     test_ipfile = IpFile(
@@ -116,6 +118,7 @@ async def test_download_file():
         size=13,
         keyvalues={},
         created_at=datetime.now(timezone.utc),
+        is_public=True,
     )
 
     print(f"\nDownloading well-known IPFS file with CID: {test_cid}")

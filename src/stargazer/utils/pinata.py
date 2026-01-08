@@ -11,7 +11,6 @@ Provides async interface for:
 import os
 import json
 import shutil
-import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,10 +31,15 @@ class IpFile:
     keyvalues: dict[str, str]
     created_at: datetime
     local_path: Optional[Path] = None  # Local cached file path
+    is_public: bool = False  # Whether file is on public IPFS (vs private Pinata)
 
     @classmethod
     def from_api_response(cls, data: dict) -> "IpFile":
         """Parse from Pinata API JSON response."""
+        # Determine visibility from network field (defaults to private if not present)
+        network = data.get("network", "private")
+        is_public = network == "public"
+
         return cls(
             id=data["id"],
             cid=data["cid"],
@@ -45,8 +49,15 @@ class IpFile:
             created_at=datetime.fromisoformat(
                 data["created_at"].replace("Z", "+00:00")
             ),
-            local_path=None,  # Set when file is downloaded
+            local_path=None,
+            is_public=is_public,
         )
+
+    def public_url(self, gateway: str = "https://ipfs.io") -> Optional[str]:
+        """Get public gateway URL. Returns None if file is private."""
+        if self.is_public:
+            return f"{gateway}/ipfs/{self.cid}"
+        return None
 
 
 class PinataClient:
@@ -56,20 +67,23 @@ class PinataClient:
     Usage:
         client = PinataClient()
 
-        # Upload with metadata
+        # Upload with metadata (visibility controlled by STARGAZER_PUBLIC env var)
         file = await client.upload_file(
             Path("data.bam"),
             keyvalues={"type": "alignment", "sample": "NA12878"}
         )
 
+        # Upload explicitly as public
+        file = await client.upload_file(Path("data.bam"), public=True)
+
         # Query by keyvalues
         files = await client.query_files({"type": "alignment", "sample": "NA12878"})
 
-        # Download by CID
-        local_path = await client.download_file(file.cid)
+        # Download (uses appropriate gateway based on file.is_public)
+        await client.download_file(file)
 
-        # Delete by file ID
-        await client.delete_file(file.id)
+        # Delete file
+        await client.delete_file(file)
     """
 
     API_BASE = "https://api.pinata.cloud/v3"
@@ -81,6 +95,7 @@ class PinataClient:
         gateway: Optional[str] = None,
         cache_dir: Optional[Path] = None,
         local_only: Optional[bool] = None,
+        public: Optional[bool] = None,
     ):
         """
         Initialize Pinata client.
@@ -91,6 +106,8 @@ class PinataClient:
             cache_dir: Local cache directory for downloads
             local_only: If True, copy files to cache instead of uploading to IPFS
                        (defaults to STARGAZER_LOCAL_ONLY env var)
+            public: If True, upload files to public IPFS network
+                   (defaults to STARGAZER_PUBLIC env var)
         """
         self._jwt = jwt or os.environ.get("PINATA_JWT")
         self.gateway = gateway or os.environ.get(
@@ -107,6 +124,13 @@ class PinataClient:
             self.local_only = local_only_env in ("1", "true", "yes")
         else:
             self.local_only = local_only
+
+        # Check for public mode from env var if not explicitly set
+        if public is None:
+            public_env = os.environ.get("STARGAZER_PUBLIC", "").lower()
+            self.public = public_env in ("1", "true", "yes")
+        else:
+            self.public = public
 
     @property
     def jwt(self) -> str:
@@ -126,21 +150,30 @@ class PinataClient:
         self,
         path: Path,
         keyvalues: Optional[dict[str, str]] = None,
+        public: Optional[bool] = None,
     ) -> IpFile:
         """
-        Upload a file to Pinata or copy to local cache.
+        Upload a file to Pinata.
 
         Behavior depends on self.local_only (set via STARGAZER_LOCAL_ONLY env var):
         - If False (default): Upload to IPFS via Pinata
         - If True: Copy to local cache without uploading
 
+        Visibility depends on public parameter or self.public (STARGAZER_PUBLIC env var):
+        - If True: Upload to public IPFS (accessible via any gateway)
+        - If False (default): Upload to private Pinata (requires JWT to access)
+
         Args:
             path: Local file path
             keyvalues: Metadata key-value pairs for querying
+            public: Override default visibility (None uses self.public)
 
         Returns:
             IpFile with CID and metadata
         """
+        # Determine visibility: explicit param > instance default
+        is_public = public if public is not None else self.public
+
         if self.local_only:
             # Local-only mode: copy to cache without uploading
             local_cid = f"local_{path.name}_{path.stat().st_size}"
@@ -158,32 +191,39 @@ class PinataClient:
                 size=path.stat().st_size,
                 keyvalues=keyvalues or {},
                 created_at=datetime.now(timezone.utc),
+                is_public=is_public,
             )
-        else:
-            # Upload to IPFS via Pinata
-            url = f"{self.UPLOAD_BASE}/files"
 
-            async with aiohttp.ClientSession() as session:
-                data = aiohttp.FormData()
-                data.add_field("file", open(path, "rb"), filename=path.name)
-                data.add_field("name", path.name)
+        # Upload to IPFS via Pinata
+        url = f"{self.UPLOAD_BASE}/files"
 
-                if keyvalues:
-                    data.add_field("keyvalues", json.dumps(keyvalues))
+        async with aiohttp.ClientSession() as session:
+            data = aiohttp.FormData()
+            data.add_field("file", open(path, "rb"), filename=path.name)
+            data.add_field("name", path.name)
+            data.add_field("network", "public" if is_public else "private")
 
-                async with session.post(
-                    url, headers=self._headers(), data=data
-                ) as response:
-                    response.raise_for_status()
-                    result = await response.json()
-                    return IpFile.from_api_response(result.get("data", result))
+            if keyvalues:
+                data.add_field("keyvalues", json.dumps(keyvalues))
+
+            async with session.post(
+                url, headers=self._headers(), data=data
+            ) as response:
+                response.raise_for_status()
+                result = await response.json()
+                print(result)
+                return IpFile.from_api_response(result.get("data", result))
 
     async def download_file(
         self, ipfile: IpFile, dest: Optional[Path] = None
     ) -> IpFile:
         """
-        Download a file using Pinata API and update IpFile with local path.
+        Download a file and update IpFile with local path.
         Uses local cache to avoid re-downloading.
+
+        Download strategy based on file visibility:
+        - Public files: Use ipfs.io gateway (no auth required)
+        - Private files: Use Pinata gateway (requires JWT)
 
         Args:
             ipfile: IpFile object to download
@@ -192,8 +232,6 @@ class PinataClient:
         Returns:
             Updated IpFile with path set to downloaded file location
         """
-        import shutil
-
         cid = ipfile.cid
 
         # Check cache first
@@ -209,52 +247,30 @@ class PinataClient:
                 ipfile.local_path = cache_path
             return ipfile
 
-        # If it's a local CID (from local_only mode), it should already be in cache
+        # Local CIDs must be in cache
         if cid.startswith("local_"):
             raise FileNotFoundError(
                 f"Local file {cid} not found in cache. It may have been deleted."
             )
 
-        # Try multiple IPFS gateways in case of issues
-        # Start with Pinata, then fall back to public gateways
-        gateways = [
-            f"{self.gateway}/ipfs/{cid}",
-            f"https://ipfs.io/ipfs/{cid}",
-            f"https://cloudflare-ipfs.com/ipfs/{cid}",
-            f"https://dweb.link/ipfs/{cid}",
-        ]
-
-        # Set timeout for the request (30 seconds total, 10 seconds for connection)
-        timeout = aiohttp.ClientTimeout(total=30, connect=10)
-
-        last_error = None
-        for gateway_url in gateways:
-            try:
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    # Use auth for Pinata gateway, no auth for public gateways
-                    use_auth = gateway_url.startswith(self.gateway)
-                    headers = self._headers() if (use_auth and self._jwt) else {}
-
-                    async with session.get(gateway_url, headers=headers) as response:
-                        response.raise_for_status()
-
-                        cache_path.parent.mkdir(parents=True, exist_ok=True)
-                        async with aiofiles.open(cache_path, "wb") as f:
-                            async for chunk in response.content.iter_chunked(8192):
-                                await f.write(chunk)
-
-                        # Success! Break out of gateway loop
-                        break
-
-            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                last_error = e
-                # Try next gateway
-                continue
+        # Select gateway based on file visibility
+        if ipfile.is_public:
+            # Public files: use ipfs.io, no auth needed
+            gateway_url = f"https://ipfs.io/ipfs/{cid}"
+            headers = {}
         else:
-            # All gateways failed
-            raise Exception(
-                f"Failed to download file from all IPFS gateways. Last error: {last_error}"
-            )
+            # Private files: use Pinata gateway with auth
+            gateway_url = f"{self.gateway}/ipfs/{cid}"
+            headers = self._headers()
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(gateway_url, headers=headers) as response:
+                response.raise_for_status()
+
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                async with aiofiles.open(cache_path, "wb") as f:
+                    async for chunk in response.content.iter_chunked(8192):
+                        await f.write(chunk)
 
         if dest:
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -265,12 +281,15 @@ class PinataClient:
 
         return ipfile
 
-    async def query_files(self, keyvalues: dict[str, str]) -> list[IpFile]:
+    async def query_files(
+        self, keyvalues: dict[str, str], public: Optional[bool] = None
+    ) -> list[IpFile]:
         """
         Query files by keyvalue metadata.
 
         Args:
             keyvalues: Metadata key-value pairs to filter by
+            public: Query public or private files (None queries based on self.public)
 
         Returns:
             List of matching IpFile objects
@@ -278,7 +297,9 @@ class PinataClient:
         Example:
             files = await client.query_files({"type": "reference", "build": "GRCh38"})
         """
-        url = f"{self.API_BASE}/files/private"
+        is_public = public if public is not None else self.public
+        network = "public" if is_public else "private"
+        url = f"{self.API_BASE}/files/{network}"
         params = {"pageLimit": 1000, "order": "DESC"}
 
         # Add metadata filters using the correct format: metadata[key]=value
@@ -298,14 +319,15 @@ class PinataClient:
                     for f in data.get("data", {}).get("files", [])
                 ]
 
-    async def delete_file(self, file_id: str) -> None:
+    async def delete_file(self, ipfile: IpFile) -> None:
         """
-        Delete a file from Pinata by its file ID.
+        Delete a file from Pinata.
 
         Args:
-            file_id: Pinata file ID (not CID)
+            ipfile: IpFile object to delete
         """
-        url = f"{self.API_BASE}/files/private/{file_id}"
+        network = "public" if ipfile.is_public else "private"
+        url = f"{self.API_BASE}/files/{network}/{ipfile.id}"
 
         async with aiohttp.ClientSession() as session:
             async with session.delete(url, headers=self._headers()) as response:
@@ -314,8 +336,9 @@ class PinataClient:
 
 # Default module-level client instance
 # Configured via environment variables:
-# - PINATA_JWT: Pinata JWT token
+# - PINATA_JWT: Pinata JWT token (required for uploads and private downloads)
 # - PINATA_GATEWAY: IPFS gateway URL (default: https://gateway.pinata.cloud)
 # - STARGAZER_CACHE: Local cache directory (default: ~/.stargazer/cache)
-# - STARGAZER_LOCAL_ONLY: If set to "1", "true", or "yes", copy files locally instead of uploading to IPFS
+# - STARGAZER_LOCAL_ONLY: If "1"/"true"/"yes", copy files locally instead of uploading
+# - STARGAZER_PUBLIC: If "1"/"true"/"yes", upload files to public IPFS (default: private)
 default_client = PinataClient()
