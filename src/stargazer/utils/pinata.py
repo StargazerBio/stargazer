@@ -232,6 +232,10 @@ class PinataClient:
         Returns:
             Updated IpFile with path set to downloaded file location
         """
+        # Skip download if local_path is already set and file exists
+        if ipfile.local_path and ipfile.local_path.exists():
+            return ipfile
+
         cid = ipfile.cid
 
         # Check cache first

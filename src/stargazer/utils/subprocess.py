@@ -40,9 +40,16 @@ async def _run(
 
     # Check return code and raise error if failed
     if process.returncode != 0:
-        raise RuntimeError(
-            f"Command {str_cmd[0]} failed with code {process.returncode}:\n"
-            f"{stderr.decode('utf-8')}"
-        )
+        stdout_str = stdout.decode("utf-8").strip()
+        stderr_str = stderr.decode("utf-8").strip()
+
+        # Build error message with available output
+        error_parts = [f"Command {str_cmd[0]} failed with code {process.returncode}:"]
+        if stderr_str:
+            error_parts.append(f"stderr:\n{stderr_str}")
+        if stdout_str:
+            error_parts.append(f"stdout:\n{stdout_str}")
+
+        raise RuntimeError("\n".join(error_parts))
 
     return stdout.decode("utf-8"), stderr.decode("utf-8")

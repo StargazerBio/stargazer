@@ -10,7 +10,7 @@ from config import TEST_ROOT
 
 from stargazer.tasks.fq2bam import fq2bam
 from stargazer.types import Reference, Reads, Alignment
-from stargazer.utils.pinata import IpFile, default_client
+from stargazer.utils.pinata import IpFile
 
 
 @pytest.mark.asyncio
@@ -21,66 +21,52 @@ async def test_fq2bam_basic():
         pytest.skip("pbrun (Parabricks) not available in environment")
 
     # Setup: Create Reference with FASTA and indices
+    # Use fixture files directly - BWA requires index files to be co-located
+    # with the reference file using standard naming conventions
     ref_fixture = TEST_ROOT / "fixtures" / "GRCh38_TP53.fa"
     fai_fixture = TEST_ROOT / "fixtures" / "GRCh38_TP53.fa.fai"
-    assert ref_fixture.exists()
-    assert fai_fixture.exists()
+    assert ref_fixture.exists(), f"Missing reference: {ref_fixture}"
+    assert fai_fixture.exists(), f"Missing FAI index: {fai_fixture}"
 
-    # Also need BWA indices
+    # Verify BWA indices exist
     bwa_exts = [".amb", ".ann", ".bwt", ".pac", ".sa"]
     for ext in bwa_exts:
-        assert (ref_fixture.parent / f"{ref_fixture.name}{ext}").exists(), (
-            f"Missing BWA index: {ext}"
-        )
+        idx_path = ref_fixture.parent / f"{ref_fixture.name}{ext}"
+        assert idx_path.exists(), f"Missing BWA index: {idx_path}"
 
-    # Pre-populate cache
-    test_cid_ref = "QmTestRefFq2bam"
-    test_cid_fai = "QmTestRefFaiFq2bam"
-    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
-    cached_ref = default_client.cache_dir / test_cid_ref
-    cached_fai = default_client.cache_dir / test_cid_fai
-    shutil.copy(ref_fixture, cached_ref)
-    shutil.copy(fai_fixture, cached_fai)
-
-    # Copy BWA indices
-    cached_indices = []
-    for i, ext in enumerate(bwa_exts):
-        test_cid_idx = f"QmTestRefIdx{i}Fq2bam"
-        cached_idx = default_client.cache_dir / test_cid_idx
-        shutil.copy(ref_fixture.parent / f"{ref_fixture.name}{ext}", cached_idx)
-        cached_indices.append((ext, test_cid_idx, cached_idx))
-
-    # Create Reference with all files
+    # Create IpFile objects pointing directly to fixture files
+    # This preserves the co-location of reference and index files that BWA requires
     ref_file = IpFile(
         id="test-ref-id",
-        cid=test_cid_ref,
+        cid="QmTestRef",
         name="GRCh38_TP53.fa",
-        size=cached_ref.stat().st_size,
+        size=ref_fixture.stat().st_size,
         keyvalues={"type": "reference", "build": "GRCh38"},
         created_at=datetime.now(),
-        local_path=cached_ref,
+        local_path=ref_fixture,
     )
 
     fai_file = IpFile(
         id="test-fai-id",
-        cid=test_cid_fai,
+        cid="QmTestFai",
         name="GRCh38_TP53.fa.fai",
-        size=cached_fai.stat().st_size,
+        size=fai_fixture.stat().st_size,
         keyvalues={"type": "reference", "build": "GRCh38"},
         created_at=datetime.now(),
-        local_path=cached_fai,
+        local_path=fai_fixture,
     )
 
     idx_files = []
-    for ext, cid, path in cached_indices:
+    for i, ext in enumerate(bwa_exts):
+        idx_path = ref_fixture.parent / f"{ref_fixture.name}{ext}"
         idx_file = IpFile(
             id=f"test-idx-{ext}-id",
-            cid=cid,
+            cid=f"QmTestIdx{i}",
             name=f"GRCh38_TP53.fa{ext}",
-            size=path.stat().st_size,
+            size=idx_path.stat().st_size,
             keyvalues={"type": "reference", "build": "GRCh38"},
             created_at=datetime.now(),
-            local_path=path,
+            local_path=idx_path,
         )
         idx_files.append(idx_file)
 
@@ -89,37 +75,30 @@ async def test_fq2bam_basic():
         files=[ref_file, fai_file] + idx_files,
     )
 
-    # Setup: Create Reads with FASTQ files
+    # Setup: Create Reads with FASTQ files (also use fixture files directly)
     r1_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_R1.fq.gz"
     r2_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_R2.fq.gz"
-    assert r1_fixture.exists()
-    assert r2_fixture.exists()
-
-    test_cid_r1 = "QmTestR1Fq2bam"
-    test_cid_r2 = "QmTestR2Fq2bam"
-    cached_r1 = default_client.cache_dir / test_cid_r1
-    cached_r2 = default_client.cache_dir / test_cid_r2
-    shutil.copy(r1_fixture, cached_r1)
-    shutil.copy(r2_fixture, cached_r2)
+    assert r1_fixture.exists(), f"Missing R1: {r1_fixture}"
+    assert r2_fixture.exists(), f"Missing R2: {r2_fixture}"
 
     r1_file = IpFile(
         id="test-r1-id",
-        cid=test_cid_r1,
+        cid="QmTestR1",
         name="NA12829_TP53_R1.fq.gz",
-        size=cached_r1.stat().st_size,
+        size=r1_fixture.stat().st_size,
         keyvalues={"type": "reads", "sample_id": "NA12829"},
         created_at=datetime.now(),
-        local_path=cached_r1,
+        local_path=r1_fixture,
     )
 
     r2_file = IpFile(
         id="test-r2-id",
-        cid=test_cid_r2,
+        cid="QmTestR2",
         name="NA12829_TP53_R2.fq.gz",
-        size=cached_r2.stat().st_size,
+        size=r2_fixture.stat().st_size,
         keyvalues={"type": "reads", "sample_id": "NA12829"},
         created_at=datetime.now(),
-        local_path=cached_r2,
+        local_path=r2_fixture,
     )
 
     reads = Reads(
@@ -127,48 +106,35 @@ async def test_fq2bam_basic():
         files=[r1_file, r2_file],
     )
 
-    try:
-        # Run fq2bam
-        alignment = await fq2bam(reads=reads, ref=ref)
+    # Run fq2bam
+    alignment = await fq2bam(reads=reads, ref=ref)
 
-        # Verify result
-        assert isinstance(alignment, Alignment)
-        assert alignment.sample_id == "NA12829"
-        assert alignment.bam_name.endswith(".bam")
+    # Verify result
+    assert isinstance(alignment, Alignment)
+    assert alignment.sample_id == "NA12829"
+    assert alignment.bam_name is not None
+    assert alignment.bam_name.endswith(".bam")
 
-        # Verify BAM file was created and added to files
-        bam_files = [f for f in alignment.files if f.name.endswith(".bam")]
-        assert len(bam_files) == 1, "Should have exactly one BAM file"
-        assert bam_files[0].size > 0, "BAM file should not be empty"
+    # Verify BAM file was created and added to files
+    bam_files = [f for f in alignment.files if f.name.endswith(".bam")]
+    assert len(bam_files) == 1, "Should have exactly one BAM file"
+    assert bam_files[0].size > 0, "BAM file should not be empty"
 
-        # Verify metadata
-        assert bam_files[0].keyvalues.get("type") == "alignment"
-        assert bam_files[0].keyvalues.get("sample_id") == "NA12829"
-        assert bam_files[0].keyvalues.get("tool") == "fq2bam"
-        assert bam_files[0].keyvalues.get("sorted") == "coordinate"
-        assert bam_files[0].keyvalues.get("duplicates_marked") == "true"
+    # Verify metadata
+    assert bam_files[0].keyvalues.get("type") == "alignment"
+    assert bam_files[0].keyvalues.get("sample_id") == "NA12829"
+    assert bam_files[0].keyvalues.get("tool") == "fq2bam"
+    assert bam_files[0].keyvalues.get("sorted") == "coordinate"
+    assert bam_files[0].keyvalues.get("duplicates_marked") == "true"
 
-        # Verify properties work
-        assert alignment.is_sorted is True
-        assert alignment.has_duplicates_marked is True
+    # Verify properties work
+    assert alignment.is_sorted is True
+    assert alignment.has_duplicates_marked is True
 
-        # Cleanup output BAM
-        for f in alignment.files:
-            if f.local_path and f.local_path.exists():
-                f.local_path.unlink()
-    finally:
-        # Cleanup cached files
-        if cached_ref.exists():
-            cached_ref.unlink()
-        if cached_fai.exists():
-            cached_fai.unlink()
-        for _, _, path in cached_indices:
-            if path.exists():
-                path.unlink()
-        if cached_r1.exists():
-            cached_r1.unlink()
-        if cached_r2.exists():
-            cached_r2.unlink()
+    # Cleanup output BAM
+    for f in alignment.files:
+        if f.local_path and f.local_path.exists():
+            f.local_path.unlink()
 
 
 @pytest.mark.asyncio

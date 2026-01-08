@@ -49,12 +49,17 @@ async def fq2bam(
     r2_path = reads.get_r2_path()
 
     # Build read group string
+    # Required fields: ID, SM, PU (platform unit is required by pbrun fq2bam)
+    # Optional but recommended: LB (library), PL (platform)
     if read_group:
-        rg_parts = [f"{k}:{v}" for k, v in read_group.items()]
+        # Ensure required fields are present
+        rg = {"ID": reads.sample_id, "SM": reads.sample_id, "PU": reads.sample_id}
+        rg.update(read_group)
+        rg_parts = [f"{k}:{v}" for k, v in rg.items()]
         rg_string = "@RG\\t" + "\\t".join(rg_parts)
     else:
-        # Default read group with sample ID
-        rg_string = f"@RG\\tID:{reads.sample_id}\\tSM:{reads.sample_id}"
+        # Default read group with sample ID and required fields
+        rg_string = f"@RG\\tID:{reads.sample_id}\\tSM:{reads.sample_id}\\tPU:{reads.sample_id}\\tLB:lib\\tPL:ILLUMINA"
 
     # Create output BAM path in a temporary directory
     # We'll use the cache directory for temporary outputs
