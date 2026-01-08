@@ -151,7 +151,7 @@ Stargazer grows through collaboration. Whether you're adding support for a new t
 
 ## License
 
-[TBD]
+MIT
 
 ---
 
