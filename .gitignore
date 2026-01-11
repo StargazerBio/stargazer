@@ -176,3 +176,4 @@ Thumbs.db
 # Local configuration
 .claude/settings.local.json
 *.local.*
+.opencode/context/raw

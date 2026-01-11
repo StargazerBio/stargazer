@@ -1,0 +1,9 @@
+# Example commands file for generate_help_docs.sh
+# One command per line
+# Lines starting with # are ignored
+
+# GATK commands
+gatk BaseRecalibrator
+gatk MergeBamAlignment
+gatk MarkDuplicates 
+gatk SortSam
