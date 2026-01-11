@@ -3,7 +3,8 @@
 # Lines starting with # are ignored
 
 # GATK commands
-gatk BaseRecalibrator
-gatk MergeBamAlignment
-gatk MarkDuplicates 
-gatk SortSam
+gatk HaplotypeCaller
+gatk GenomicsDBImport
+gatk GenotypeGVCFs 
+gatk VariantRecalibrator
+gatk ApplyVQSR

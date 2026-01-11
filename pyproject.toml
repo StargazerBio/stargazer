@@ -13,6 +13,7 @@ dependencies = [
     "aiofiles>=24.1.0",
     "flyte>=2.0.0b31",
     "pytest>=9.0.1",
+    "pre-commit>=4.5.1",
 ]
 
 [project.optional-dependencies]
