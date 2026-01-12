@@ -2,8 +2,8 @@
 BWA tasks for reference genome indexing and alignment.
 """
 
-from stargazer.types import Reference
 from stargazer.config import pb_env
+from stargazer.types import Alignment, Reads, Reference
 from stargazer.utils import _run
 
 
@@ -94,3 +94,136 @@ async def bwa_index(ref: Reference) -> Reference:
     await ref.add_files(file_paths=index_file_paths, keyvalues=keyvalues)
 
     return ref
+
+
+@pb_env.task
+async def bwa_mem(
+    reads: Reads,
+    ref: Reference,
+    read_group: dict[str, str] | None = None,
+) -> Alignment:
+    """
+    Align FASTQ reads to reference genome using BWA-MEM.
+
+    Produces an unsorted SAM file that typically needs to be sorted
+    before downstream processing (e.g., with SortSam).
+
+    Args:
+        reads: Input FASTQ files (paired-end or single-end)
+        ref: Reference genome with BWA index and FAI
+        read_group: Optional read group override (ID, SM, LB, PL, PU)
+                   If not provided, defaults to SM=sample_id
+
+    Returns:
+        Alignment object with unsorted BAM file
+
+    Example:
+        ref = await prepare_reference(ref_name="GRCh38.fa")
+        reads = await Reads.pinata_hydrate(sample_id="NA12829")
+        aligned = await bwa_mem(reads=reads, ref=ref)
+        sorted_aligned = await sortsam(alignment=aligned, ref=ref, sort_order="coordinate")
+
+    Reference:
+        https://bio-bwa.sourceforge.net/bwa.shtml
+    """
+    # Fetch all input files to cache
+    await reads.fetch()
+    await ref.fetch()
+
+    # Get paths to input files
+    ref_path = ref.get_ref_path()
+    r1_path = reads.get_r1_path()
+    r2_path = reads.get_r2_path()
+
+    # Build read group string
+    # Required fields: ID, SM
+    # Optional but recommended: LB (library), PL (platform), PU (platform unit)
+    if read_group:
+        # Ensure required fields are present
+        rg = {"ID": reads.sample_id, "SM": reads.sample_id}
+        rg.update(read_group)
+        rg_parts = [f"{k}:{v}" for k, v in rg.items()]
+        rg_string = "@RG\\t" + "\\t".join(rg_parts)
+    else:
+        # Default read group with sample ID
+        rg_string = (
+            f"@RG\\tID:{reads.sample_id}\\tSM:{reads.sample_id}\\tLB:lib\\tPL:ILLUMINA"
+        )
+
+    # Create output BAM path in cache directory
+    output_dir = ref_path.parent
+    output_bam = output_dir / f"{reads.sample_id}_aligned.bam"
+
+    # Build BWA-MEM command
+    # -K for reproducible results (process this many bases regardless of threads)
+    # -R for read group
+    # -t for threads (defaulting to 1, can be adjusted)
+    cmd = [
+        "bwa",
+        "mem",
+        "-K",
+        "10000000",  # For reproducible results
+        "-R",
+        rg_string,
+        "-t",
+        "4",  # Use 4 threads
+        str(ref_path),
+    ]
+
+    # Add FASTQ inputs
+    if r2_path:
+        # Paired-end
+        cmd.extend([str(r1_path), str(r2_path)])
+    else:
+        # Single-end
+        cmd.append(str(r1_path))
+
+    # BWA-MEM outputs SAM to stdout, so we need to pipe to samtools to create BAM
+    # Using bash -c to pipe bwa mem output through samtools view
+    import subprocess
+
+    # Construct full pipeline command
+    bwa_cmd = " ".join([str(c) for c in cmd])
+    samtools_cmd = f"samtools view -bS -o {output_bam} -"
+    full_cmd = f"{bwa_cmd} | {samtools_cmd}"
+
+    # Execute the pipeline
+    proc = await subprocess.create_subprocess_shell(
+        full_cmd,
+        cwd=str(output_dir),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+
+    if proc.returncode != 0:
+        stderr_text = stderr.decode() if stderr else ""
+        stdout_text = stdout.decode() if stdout else ""
+        raise RuntimeError(
+            f"BWA-MEM failed with return code {proc.returncode}.\n"
+            f"stdout: {stdout_text}\nstderr: {stderr_text}"
+        )
+
+    # Verify output BAM was created
+    if not output_bam.exists():
+        raise FileNotFoundError(f"BWA-MEM did not create output BAM at {output_bam}")
+
+    # Create Alignment object
+    alignment = Alignment(
+        sample_id=reads.sample_id,
+        bam_name=output_bam.name,
+    )
+
+    # Build metadata for BAM file
+    keyvalues = {
+        "type": "alignment",
+        "sample_id": reads.sample_id,
+        "tool": "bwa_mem",
+        "file_type": "bam",
+        "sorted": "unsorted",  # BWA-MEM produces unsorted output
+    }
+
+    # Upload BAM file to Pinata and add to alignment
+    await alignment.add_files(file_paths=[output_bam], keyvalues=keyvalues)
+
+    return alignment
