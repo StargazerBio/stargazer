@@ -63,6 +63,22 @@ class Alignment:
                 return f.keyvalues.get("sorted") == "coordinate"
         return False
 
+    @property
+    def has_bqsr_applied(self) -> bool:
+        """
+        Whether Base Quality Score Recalibration has been applied.
+
+        Reads from the BAM file's keyvalues metadata.
+
+        Returns:
+            True if bqsr_applied="true" in BAM file keyvalues, False otherwise
+        """
+        # Find the BAM file and check its metadata
+        for f in self.files:
+            if f.name == self.bam_name:
+                return f.keyvalues.get("bqsr_applied") == "true"
+        return False
+
     async def add_files(
         self,
         file_paths: list[Path],

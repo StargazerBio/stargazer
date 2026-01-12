@@ -158,6 +158,7 @@ cython_debug/
 flyte-*.yaml
 _pb_output/
 *.pb
+.opencode/context/raw/*
 
 # OS-specific
 .DS_Store
@@ -174,6 +175,6 @@ Thumbs.db
 *.bak
 
 # Local configuration
-.claude/settings.local.json
+.claude/
 *.local.*
 .opencode/context/raw

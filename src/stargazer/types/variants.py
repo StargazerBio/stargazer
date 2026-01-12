@@ -63,6 +63,45 @@ class Variants:
                 return f.keyvalues.get("variant_type") == "gvcf"
         return False
 
+    @property
+    def is_multi_sample(self) -> bool:
+        """
+        Whether this is a multi-sample VCF/GVCF (e.g., from CombineGVCFs).
+
+        Reads from the VCF file's keyvalues metadata.
+
+        Returns:
+            True if sample_count > 1 in VCF file keyvalues, False otherwise
+        """
+        for f in self.files:
+            if f.name == self.vcf_name:
+                sample_count = f.keyvalues.get("sample_count", "1")
+                try:
+                    return int(sample_count) > 1
+                except ValueError:
+                    return False
+        return False
+
+    @property
+    def source_samples(self) -> list[str]:
+        """
+        List of source sample IDs for multi-sample VCF/GVCF.
+
+        For single-sample files, returns a list with just sample_id.
+        For multi-sample files (e.g., from CombineGVCFs), returns all
+        source sample IDs.
+
+        Returns:
+            List of sample IDs that contributed to this variant file
+        """
+        for f in self.files:
+            if f.name == self.vcf_name:
+                source = f.keyvalues.get("source_samples", "")
+                if source:
+                    return source.split(",")
+        # Fallback to sample_id
+        return [self.sample_id]
+
     async def add_files(
         self,
         file_paths: list[Path],
