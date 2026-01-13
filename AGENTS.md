@@ -445,6 +445,7 @@ if __name__ == "__main__":
 
 1. **Paths:** Use pathlib.Path for all filesystem operations e.g. joinpath. Use resolve() to get absolute Paths
 whenever appropriate. Only convert to str when absolutely necessary, e.g. immediately before a subprocess call.
+2. **Formatting:** Use `ruff` for formatting and correctness checking
 
 ## Quick Reference Workflow
 
