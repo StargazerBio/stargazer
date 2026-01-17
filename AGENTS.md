@@ -54,10 +54,14 @@ The `.opencode/context` directory contains essential reference materials for dev
   - Existing tasks (see `tasks/` subdirectory)
   - Workflow compositions (see `workflows/` subdirectory)
   - **Note:** Do not copy v1 syntax directly; adapt patterns to v2 API
-  
-## Scratch Directory
 
-The `scratch` directory is intended for one-off testing and hypothesis validation. It contains nothing persistent and will not be committed to git.
+### Specs
+
+- **`.opencode/context/filesystem_spec.md`** - Filesystem specification
+  - Describes the structure and organization of the filesystem
+  - Defines the keyvalue metadata schema for files
+  - Explains how types and components are tied to file metadata values
+
 
 ## Project Structure
 
