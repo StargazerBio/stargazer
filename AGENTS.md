@@ -18,6 +18,9 @@
 - All necessary CLI tools e.g. parabricks, bwa etc, are available in PATH. Use them to generate test assets as needed and
   alert the user if they are not available.
 
+**Documentation Guidelines**
+- No code snippets are to be added to any documents outside of `.opencode/plans/`. Code examples in documentation files like this one become stale as conventions and implementations drift, creating confusion rather than clarity. The codebase itself should be the source of truth for implementation patterns.
+
 ## Context Directory Reference
 
 The `.opencode/context` directory contains essential reference materials for developing Stargazer on Flyte v2:
@@ -67,41 +70,19 @@ The `.opencode/context` directory contains essential reference materials for dev
 
 ### Directory Organization
 
-```
-stargazer/
-├── src/
-│   └── stargazer/
-│       ├── __init__.py
-│       ├── tasks/           # Flyte task definitions
-│       │   ├── __init__.py
-│       │   ├── parabricks.py
-│       │   ├── samtools.py
-│       │   └── ...
-│       ├── workflows/       # Flyte workflow definitions
-│       │   ├── __init__.py
-│       │   ├── parabricks.py
-│       │   └── ...
-│       ├── types/           # Custom Flyte types and dataclasses
-│       │   ├── __init__.py
-│       │   ├── parabricks.py
-│       │   └── ...
-│       └── utils/           # Utility functions
-│           ├── __init__.py
-│           └── ...
-├── tests/
-│   ├── __init__.py
-│   ├── conftest.py
-│   ├── assets/              # Test fixtures and small data files
-│   ├── unit/                # Unit tests
-│   │   └── __init__.py
-│   └── integration/         # Integration tests
-│       └── __init__.py
-├── .opencode/context/       # Reference materials (see above)
-├── scratch/                 # Scratch materials (see above)
-├── Dockerfile
-├── pyproject.toml
-└── README.md
-```
+The project follows this structure:
+- `src/stargazer/` - Main package
+  - `tasks/` - Flyte task definitions (one module per tool/function)
+  - `workflows/` - Flyte workflow definitions (one module per pipeline)
+  - `types/` - Custom Flyte types and dataclasses
+  - `utils/` - Utility functions
+- `tests/` - Test directory
+  - `conftest.py` - Pytest configuration
+  - `assets/` - Test fixtures and small data files
+  - `unit/` - Unit tests
+  - `integration/` - Integration tests
+- `.opencode/context/` - Reference materials
+- `scratch/` - Scratch materials
 
 ### Types Directory (`src/stargazer/types/`)
 
@@ -114,68 +95,12 @@ stargazer/
 - Use Python dataclasses with type annotations
 - Import Flyte I/O types from `flyte.io` (e.g., `File`, `Dir`)
 
-**Example Module Structure:**
-```python
-# src/stargazer/types/reference.py
-from dataclasses import dataclass, field
-from typing import Self
-from pathlib import Path
-
-from stargazer.utils.pinata import default_client, IpFile
-from stargazer.utils.query import generate_query_combinations
-
-
-@dataclass
-class Reference:
-    """
-    A reference genome stored as IPFS files.
-
-    Attributes:
-        ref_name: Name of the main reference file
-        files: List of IpFile objects containing reference data
-    """
-
-    ref_name: str
-    files: list[IpFile] = field(default_factory=list)
-
-    async def add_files(
-        self,
-        file_paths: list[Path],
-        keyvalues: dict[str, str] | None = None,
-    ) -> None:
-        """Upload files and add to reference."""
-        if not file_paths:
-            raise ValueError("No files to add. file_paths is empty.")
-
-        # Validate all paths exist before uploading
-        for path in file_paths:
-            if not path.exists():
-                raise FileNotFoundError(f"File not found: {path}")
-
-        # Upload each file and collect IpFile objects
-        for path in file_paths:
-            ipfile = await default_client.upload_file(path, keyvalues=keyvalues)
-            self.files.append(ipfile)
-
-    async def fetch(self) -> Path:
-        """Fetch all reference files to local cache."""
-        if not self.files:
-            raise ValueError("No files to fetch. Reference is empty.")
-
-        # Download all files to cache
-        for ipfile in self.files:
-            await default_client.download_file(ipfile)
-
-        return default_client.cache_dir
-```
-
 ### Tasks Directory (`src/stargazer/tasks/`)
 
 **Purpose:** Define individual Flyte tasks that perform specific operations.
 
 **Guidelines:**
-- **Modular Organization:** Separate tasks by tool or functional domain
-  - Examples: `bwa_tasks.py`, `samtools_tasks.py`, `deepvariant_tasks.py`
+- **Modular Organization:** Separate tasks by tool or functional domain (e.g., `bwa_tasks.py`, `samtools_tasks.py`)
 - **Naming Convention:** Use descriptive, action-oriented names
   - Task files: `{tool}_tasks.py` or `{function}_tasks.py`
   - Task functions: `{action}_{tool}` (e.g., `align_with_bwa`, `sort_bam`)
@@ -183,115 +108,12 @@ class Reference:
 - **Use Structured I/O:** Leverage dataclasses from `types/` for inputs/outputs
 - **Resource Specification:** Define appropriate resource requests (CPU, memory, GPU)
 
-**Example Task Module:**
-```python
-# src/stargazer/tasks/bwa.py
-"""
-BWA tasks for reference genome indexing and alignment.
-"""
-
-from datetime import datetime
-
-from stargazer.types import Reference
-from stargazer.config import pb_env
-from stargazer.utils import _run
-from stargazer.utils.pinata import IpFile
-
-
-@pb_env.task
-async def bwa_index(ref: Reference) -> Reference:
-    """
-    Create BWA index files for a reference genome using bwa index.
-
-    Creates the following index files:
-    - .amb (FASTA index file)
-    - .ann (FASTA index file)
-    - .bwt (BWT index)
-    - .pac (Packed sequence)
-    - .sa (Suffix array)
-
-    Args:
-        ref: Reference object containing the FASTA file to index
-
-    Returns:
-        Reference object with BWA index files added
-
-    Reference:
-        https://bio-bwa.sourceforge.net/bwa.shtml
-    """
-    # Fetch all reference files to cache
-    await ref.fetch()
-
-    # Get the cached reference file path
-    ref_file_path = ref.get_ref_path()
-
-    # Verify the reference file exists
-    if not ref_file_path.exists():
-        raise FileNotFoundError(f"Reference file {ref.ref_name} not found in cache")
-
-    # BWA index creates 5 files with these extensions
-    index_extensions = [".amb", ".ann", ".bwt", ".pac", ".sa"]
-
-    # Check if we already have all BWA index files in our files list
-    index_file_names = [f"{ref.ref_name}{ext}" for ext in index_extensions]
-    existing_names = {f.name for f in ref.files}
-
-    if all(name in existing_names for name in index_file_names):
-        return ref
-
-    # Run bwa index in the cache directory
-    cmd = ["bwa", "index", str(ref_file_path)]
-    stdout, stderr = await _run(cmd, cwd=str(ref_file_path.parent))
-
-    # Get the reference file's metadata to copy over
-    ref_file = None
-    for f in ref.files:
-        if f.name == ref.ref_name:
-            ref_file = f
-            break
-
-    # Build metadata for index files
-    keyvalues = {"type": "reference", "tool": "bwa_index"}
-    if ref_file and ref_file.keyvalues:
-        if "build" in ref_file.keyvalues:
-            keyvalues["build"] = ref_file.keyvalues["build"]
-
-    # Add each index file to the reference
-    base_name = ref_file_path.name
-
-    for ext in index_extensions:
-        cached_index_path = ref_file_path.parent / f"{base_name}{ext}"
-
-        if not cached_index_path.exists():
-            raise FileNotFoundError(
-                f"BWA index file {cached_index_path.name} was not created"
-            )
-
-        user_facing_name = f"{ref.ref_name}{ext}"
-
-        # Create an IpFile for the index file with metadata
-        index_file = IpFile(
-            id="local",
-            cid="local",
-            name=user_facing_name,
-            size=cached_index_path.stat().st_size,
-            keyvalues=keyvalues,
-            created_at=datetime.now(),
-            local_path=cached_index_path,
-        )
-
-        ref.files.append(index_file)
-
-    return ref
-```
-
 ### Workflows Directory (`src/stargazer/workflows/`)
 
 **Purpose:** Compose tasks into end-to-end workflows.
 
 **Guidelines:**
-- **Modular Organization:** Separate workflows by analysis type or pipeline
-  - Examples: `germline_variant_calling.py`, `somatic_variant_calling.py`, `rna_seq_analysis.py`
+- **Modular Organization:** Separate workflows by analysis type or pipeline (e.g., `germline_variant_calling.py`, `somatic_variant_calling.py`)
 - **Naming Convention:** Use descriptive, pipeline-oriented names
   - Workflow files: `{analysis_type}_workflow.py` or `{pipeline_name}.py`
   - Workflow functions: `{pipeline_description}` (e.g., `germline_variant_calling_pipeline`)
@@ -299,140 +121,14 @@ async def bwa_index(ref: Reference) -> Reference:
 - **Use Structured I/O:** Leverage dataclasses for workflow inputs/outputs
 - **Document Purpose:** Include docstrings explaining the workflow's goal
 
-**Example Workflow Module:**
-```python
-# src/stargazer/workflows/parabricks.py
-"""
-Reference genome indexing workflow.
+### Core Concepts
 
-This workflow chains together:
-1. Setup task to create a Reference object from a FASTA file
-2. samtools faidx to create FASTA index
-3. bwa index to create BWA alignment indices
-"""
-
-import flyte
-
-from stargazer.config import pb_env
-from stargazer.types import Reference
-
-
-@pb_env.task
-async def wgs_call_snv(ref_name: str) -> Reference:
-    """
-    Complete reference genome indexing workflow.
-
-    Chains together:
-    1. Create Reference object
-    2. Run samtools faidx to create .fai index
-    3. Run bwa index to create BWA alignment indices
-
-    Args:
-        ref_name: Name for the reference
-
-    Returns:
-        Reference object with FASTA, .fai, and BWA index files
-
-    Example:
-        flyte.init_from_config()
-        run = flyte.run(
-            wgs_call_snv,
-            ref_name="genome.fa"
-        )
-        print(run.url)
-    """
-    # Step 1: Hydrate Reference object from Pinata
-    ref = await Reference.pinata_hydrate(ref_name=ref_name)
-
-    # # Step 2: Create FASTA index with samtools
-    ref = await samtools_faidx(ref)
-
-    # # Step 3: Create BWA index
-    ref = await bwa_index(ref)
-
-    return ref
-
-
-if __name__ == "__main__":
-    import pprint
-
-    flyte.init_from_config()
-    r = flyte.with_runcontext(mode="local").run(wgs_call_snv, ref_name="GRCh38_TP53.fa")
-    r.wait()
-    pprint.pprint(r.outputs)
-```
-
-### Core Imports
-
-```python
-import flyte                    # Main SDK
-from flyte.io import File, Dir  # I/O types (NOT flytekit!)
-
-env = flyte.TaskEnvironment(name="my_env")
-```
-
-### Task Definition
-
-```python
-# Async tasks (preferred for I/O operations)
-@env.task(
-    requests={"cpu": "4", "mem": "16Gi", "gpu": "1"},
-    limits={"cpu": "8", "mem": "32Gi", "gpu": "1"}
-)
-async def my_task(input_file: File) -> File:
-    # Download inputs
-    local_path = await input_file.download()
-
-    # Process...
-
-    # Upload outputs
-    return await File.from_local("output.txt")
-
-# Sync tasks (for CPU-bound operations)
-@env.task
-def sync_task(x: int) -> int:
-    return x * 2
-```
-
-### Workflows (Tasks Calling Tasks)
-
-In v2, there is **no separate `@workflow` decorator**. Workflows are simply tasks that call other tasks:
-
-```python
-@env.task
-async def my_workflow(input_data: File) -> File:
-    # Call tasks directly with await
-    processed = await task1(input_data)
-    result = await task2(processed)
-    return result
-```
-
-### Parallelism with asyncio
-
-```python
-import asyncio
-
-@env.task
-async def parallel_workflow(files: list[File]) -> list[File]:
-    # Process files in parallel
-    results = await asyncio.gather(*[process_file(f) for f in files])
-    return results
-```
-
-### Running Tasks
-
-```python
-if __name__ == "__main__":
-    # Initialize connection
-    flyte.init_from_config()
-
-    # Run remotely (default)
-    run = flyte.run(my_task, input_file=my_file)
-    print(run.url)
-
-    # Run locally for testing
-    run = flyte.with_runcontext(mode="local").run(my_task, input_file=my_file)
-```
+- Main SDK import: `import flyte`
+- I/O types: `from flyte.io import File, Dir`
+- Task environments: `flyte.TaskEnvironment(name="my_env")`
+- Async tasks are preferred for I/O operations
+- In v2, there is no separate `@workflow` decorator - workflows are tasks that call other tasks
+- Use `asyncio.gather` for parallel execution
 
 ## Development Principles
 
@@ -466,14 +162,4 @@ When implementing a new pipeline component:
 
 ## Import Conventions
 
-All imports should use the `stargazer` package name:
-
-```python
-# Correct
-from stargazer.types.parabricks import Fq2BamOutputs
-from stargazer.tasks.samtools import samtools_env
-
-# Incorrect - don't use relative imports across packages
-from types.parabricks import Fq2BamOutputs
-from ..tasks.samtools import samtools_env
-```
+All imports should use the `stargazer` package name, not relative imports across packages.
