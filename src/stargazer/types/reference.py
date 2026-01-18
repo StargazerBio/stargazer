@@ -1,15 +1,14 @@
 """
 Reference genome type for Stargazer.
 
-A reference is a collection of files stored in IPFS.
+A reference is a collection of component files (FASTA, indices) stored in IPFS.
 """
 
 from dataclasses import dataclass, field
-from typing import Self
+from typing import Optional
 from pathlib import Path
 
 from stargazer.utils.pinata import default_client, IpFile
-from stargazer.utils.query import generate_query_combinations
 
 
 @dataclass
@@ -18,198 +17,123 @@ class Reference:
     A reference genome stored as IPFS files.
 
     Attributes:
-        ref_name: Name of the main reference file
-        files: List of IpFile objects containing reference data
+        build: Reference genome build (e.g., "GRCh38", "T2T-CHM13")
+        fasta: Reference FASTA file
+        faidx: FASTA index (.fai) file
+        aligner_index: Aligner index files (BWA has .amb, .ann, .bwt, .pac, .sa)
     """
 
-    ref_name: str
-    files: list[IpFile] = field(default_factory=list)
+    build: str
+    fasta: Optional[IpFile] = None
+    faidx: Optional[IpFile] = None
+    aligner_index: list[IpFile] = field(default_factory=list)
 
-    async def add_files(
+    async def update_fasta(
         self,
-        file_paths: list[Path],
-        keyvalues: dict[str, str] | None = None,
-    ) -> None:
+        path: Path,
+        build: Optional[str] = None,
+    ) -> IpFile:
         """
-        Upload files and add to reference.
-
-        Uploads files to IPFS (or copies to local cache if STARGAZER_LOCAL_ONLY is set)
-        and adds the resulting IpFile objects to this reference's files list.
+        Upload reference FASTA component.
 
         Args:
-            file_paths: List of local file paths to upload
-            keyvalues: Optional metadata key-value pairs to attach to all files
+            path: Path to file to upload
+            build: Reference build (uses self.build if not provided)
 
-        Raises:
-            FileNotFoundError: If any file path doesn't exist
-            ValueError: If file_paths is empty
-
-        Example:
-            # Upload to IPFS (default)
-            ref = Reference(ref_name="genome.fa")
-            await ref.add_files(
-                file_paths=[Path("genome.fa"), Path("genome.fa.fai")],
-                keyvalues={"type": "reference", "build": "GRCh38", "tool": "fasta"}
-            )
+        Returns:
+            IpFile representing the uploaded file
         """
-        if not file_paths:
-            raise ValueError("No files to add. file_paths is empty.")
+        ipfile = await default_client.upload_file(
+            path,
+            keyvalues={
+                "type": "reference",
+                "component": "fasta",
+                "build": build or self.build,
+            },
+        )
+        self.fasta = ipfile
+        return self.fasta
 
-        # Validate all paths exist before uploading
-        for path in file_paths:
-            if not path.exists():
-                raise FileNotFoundError(f"File not found: {path}")
+    async def update_faidx(
+        self,
+        path: Path,
+        build: Optional[str] = None,
+    ) -> IpFile:
+        """
+        Upload FASTA index (.fai) component.
 
-        # Upload each file (client handles local_only mode) and collect IpFile objects
-        for path in file_paths:
-            ipfile = await default_client.upload_file(path, keyvalues=keyvalues)
-            # Preserve local_path so the file remains accessible without re-downloading
-            ipfile.local_path = path.resolve()
-            self.files.append(ipfile)
+        Args:
+            path: Path to file to upload
+            build: Reference build (uses self.build if not provided)
+
+        Returns:
+            IpFile representing the uploaded file
+        """
+        ipfile = await default_client.upload_file(
+            path,
+            keyvalues={
+                "type": "reference",
+                "component": "faidx",
+                "build": build or self.build,
+            },
+        )
+        self.faidx = ipfile
+        return self.faidx
+
+    async def update_aligner_index(
+        self,
+        path: Path,
+        aligner: str,
+        build: Optional[str] = None,
+    ) -> IpFile:
+        """
+        Upload aligner index component file.
+
+        Call this method for each file in a multi-file index (e.g., BWA has
+        .amb, .ann, .bwt, .pac, .sa files).
+
+        Args:
+            path: Path to index file to upload
+            aligner: Aligner name (e.g., "bwa", "minimap2")
+            build: Reference build (uses self.build if not provided)
+
+        Returns:
+            IpFile representing the uploaded index file
+        """
+        ipfile = await default_client.upload_file(
+            path,
+            keyvalues={
+                "type": "reference",
+                "component": "aligner_index",
+                "aligner": aligner,
+                "build": build or self.build,
+            },
+        )
+        self.aligner_index.append(ipfile)
+        return ipfile
 
     async def fetch(self) -> Path:
         """
-        Fetch all reference files to local cache.
+        Fetch all reference component files to local cache.
 
-        Downloads all files in the reference to the PinataClient cache.
+        Downloads all non-None component files to the PinataClient cache.
         Returns the cache directory containing all files.
 
         Returns:
             Path to cache directory containing all reference files
-
-        Example:
-            ref = await Reference.pinata_hydrate(ref_name="genome.fa", build="GRCh38")
-            cache_dir = await ref.fetch()
-            # All files now in cache_dir
         """
-        if not self.files:
-            raise ValueError("No files to fetch. Reference is empty.")
+        files_to_fetch: list[IpFile] = []
 
-        # Download all files to cache and update their paths
-        for ipfile in self.files:
+        if self.fasta is not None:
+            files_to_fetch.append(self.fasta)
+        if self.faidx is not None:
+            files_to_fetch.append(self.faidx)
+        files_to_fetch.extend(self.aligner_index)
+
+        if not files_to_fetch:
+            raise ValueError("No files to fetch. Reference has no components set.")
+
+        for ipfile in files_to_fetch:
             await default_client.download_file(ipfile)
 
-        # Return the cache directory
-        # All files are cached at client.cache_dir / cid
-        # We'll return a directory that contains all our files
         return default_client.cache_dir
-
-    def get_ref_path(self) -> Path:
-        """
-        Get the local cached path to the reference file.
-
-        The reference must be fetched first using fetch().
-
-        Returns:
-            Absolute path to the cached reference file
-
-        Raises:
-            FileNotFoundError: If file not found in cache (need to fetch first)
-        """
-        # Find the reference file by name
-        ref_file = None
-        for f in self.files:
-            if f.name == self.ref_name:
-                ref_file = f
-                break
-
-        if not ref_file:
-            raise FileNotFoundError(
-                f"Reference file {self.ref_name} not found in files list"
-            )
-
-        # Return the path from the IpFile (set by download_file)
-        if ref_file.local_path and ref_file.local_path.exists():
-            return ref_file.local_path
-
-        raise FileNotFoundError(
-            f"Reference file {self.ref_name} not in cache. "
-            "Call await ref.fetch() first to download files."
-        )
-
-    def get_file_path(self, filename: str) -> Path:
-        """
-        Get the local cached path to any file in the reference.
-
-        Args:
-            filename: Name of the file to get path for
-
-        Returns:
-            Absolute path to the cached file
-
-        Raises:
-            FileNotFoundError: If file not found
-        """
-        # Find the file by name
-        target_file = None
-        for f in self.files:
-            if f.name == filename:
-                target_file = f
-                break
-
-        if not target_file:
-            raise FileNotFoundError(f"File {filename} not found in files list")
-
-        # Return the path from the IpFile (set by download_file)
-        if target_file.local_path and target_file.local_path.exists():
-            return target_file.local_path
-
-        raise FileNotFoundError(
-            f"File {filename} not in cache. "
-            "Call await ref.fetch() first to download files."
-        )
-
-    @classmethod
-    async def pinata_hydrate(
-        cls,
-        ref_name: str,
-        **filters,
-    ) -> Self:
-        """
-        Hydrate Reference from Pinata using multi-dimensional metadata queries.
-
-        Supports cartesian product queries when any filter is a list.
-        Always queries with type="reference" prefix.
-
-        Args:
-            ref_name: Name of the reference file
-            **filters: Metadata filters (e.g., build="GRCh38", tool=["fasta", "bwa"])
-
-        Returns:
-            Reference instance with IpFile objects
-
-        Raises:
-            ValueError: If no files match any of the query combinations
-
-        Example:
-            # Single query
-            ref = await Reference.pinata_hydrate(
-                ref_name="genome.fa",
-                build="GRCh38",
-                tool="fasta"
-            )
-
-            # Multi-dimensional query (produces 3 queries for tool list)
-            ref = await Reference.pinata_hydrate(
-                ref_name="genome.fa",
-                build="GRCh38",
-                tool=["fasta", "faidx", "bwa"]
-            )
-        """
-        # Generate query combinations using cartesian product for list-valued filters
-        query_combinations = generate_query_combinations(
-            base_query={"type": "reference"},
-            filters=filters,
-        )
-
-        # Execute all queries and collect results
-        all_files = []
-        for query in query_combinations:
-            files = await default_client.query_files(query)
-            all_files.extend(files)
-
-        if not all_files:
-            raise ValueError(f"No files found matching queries. Filters: {filters}")
-
-        # Create Reference instance with the files
-        return cls(ref_name=ref_name, files=all_files)

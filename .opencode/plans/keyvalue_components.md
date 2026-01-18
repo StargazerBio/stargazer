@@ -34,8 +34,7 @@ class Reference:
     """Reference genome with various indices."""
     fasta: Optional[IpFile] = None
     faidx: Optional[IpFile] = None
-    bwa_index: Optional[IpFile] = None
-    minimap2_index: Optional[IpFile] = None
+    aligner_index: list[IpFile] = field(default_factory=list)  # Multi-file index
 
     # Metadata
     build: str  # e.g., "GRCh38"
@@ -120,20 +119,25 @@ class Reference:
         self.faidx = ipfile
         return self.faidx
 
-    async def update_bwa_index(
+    async def update_aligner_index(
         self,
         path: Path,
+        aligner: str,
         build: Optional[str] = None,
     ) -> IpFile:
         """
-        Upload BWA index component.
+        Upload aligner index component file.
+
+        Call this method for each file in a multi-file index (e.g., BWA has
+        .amb, .ann, .bwt, .pac, .sa files).
 
         Args:
             path: Path to index file to upload
+            aligner: Aligner name (e.g., "bwa", "minimap2")
             build: Reference build (uses self.build if not provided)
 
         Returns:
-            IpFile representing the uploaded index
+            IpFile representing the uploaded index file
         """
         from stargazer.utils.pinata import default_client
 
@@ -141,40 +145,13 @@ class Reference:
             path,
             keyvalues={
                 "type": "reference",
-                "component": "bwa_index",
+                "component": "aligner_index",
+                "aligner": aligner,
                 "build": build or self.build,
             }
         )
-        self.bwa_index = ipfile
-        return self.bwa_index
-
-    async def update_minimap2_index(
-        self,
-        path: Path,
-        build: Optional[str] = None,
-    ) -> IpFile:
-        """
-        Upload minimap2 index component (.mmi file).
-
-        Args:
-            path: Path to .mmi file to upload
-            build: Reference build (uses self.build if not provided)
-
-        Returns:
-            IpFile representing the uploaded index
-        """
-        from stargazer.utils.pinata import default_client
-
-        ipfile = await default_client.upload_file(
-            path,
-            keyvalues={
-                "type": "reference",
-                "component": "minimap2_index",
-                "build": build or self.build,
-            }
-        )
-        self.minimap2_index = ipfile
-        return self.minimap2_index
+        self.aligner_index.append(ipfile)
+        return ipfile
 ```
 
 #### Alignment Update Methods
@@ -251,16 +228,16 @@ class Alignment:
 A general `hydrate` Flyte task queries IPFS and routes files to the appropriate types based on the `type` and `component` keyvalues. The strong contract between filesystem metadata and Python types allows this generalization.
 
 ```python
-# Type registry maps (type, component) -> (TypeClass, field_name)
-TYPE_REGISTRY: dict[tuple[str, str], tuple[type, str]] = {
-    ("reference", "fasta"): (Reference, "fasta"),
-    ("reference", "faidx"): (Reference, "faidx"),
-    ("reference", "bwa_index"): (Reference, "bwa_index"),
-    ("reference", "minimap2_index"): (Reference, "minimap2_index"),
-    ("alignment", "alignment"): (Alignment, "alignment"),
-    ("alignment", "index"): (Alignment, "index"),
-    ("variants", "vcf"): (Variants, "vcf"),
-    ("variants", "index"): (Variants, "index"),
+# Type registry maps (type, component) -> (TypeClass, field_name, is_list)
+# is_list=True means the field is a list and files should be appended
+TYPE_REGISTRY: dict[tuple[str, str], tuple[type, str, bool]] = {
+    ("reference", "fasta"): (Reference, "fasta", False),
+    ("reference", "faidx"): (Reference, "faidx", False),
+    ("reference", "aligner_index"): (Reference, "aligner_index", True),
+    ("alignment", "alignment"): (Alignment, "alignment", False),
+    ("alignment", "index"): (Alignment, "index", False),
+    ("variants", "vcf"): (Variants, "vcf", False),
+    ("variants", "index"): (Variants, "index", False),
 }
 
 # Identity fields for each type (used to group files into instances)
@@ -340,8 +317,11 @@ async def hydrate(
             registry_key = (file_type, component)
 
             if registry_key in TYPE_REGISTRY:
-                _, field_name = TYPE_REGISTRY[registry_key]
-                setattr(instance, field_name, ipfile)
+                _, field_name, is_list = TYPE_REGISTRY[registry_key]
+                if is_list:
+                    getattr(instance, field_name).append(ipfile)
+                else:
+                    setattr(instance, field_name, ipfile)
 
         results.append(instance)
 
