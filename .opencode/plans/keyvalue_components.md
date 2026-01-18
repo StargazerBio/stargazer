@@ -19,7 +19,7 @@ ipfile = await alignment.update_index(path, sample_id="S123")                   
 
 1. **IpFile is the interface**: All file operations go through IpFile objects
 2. **Named update methods for uploads**: Each component has a specific update method (e.g., `update_alignment()`, `update_index()`) that accepts a Path and named metadata
-3. **Direct assignment for hydration**: When loading from IPFS, IpFiles are directly assigned to component fields
+3. **General hydration task**: A single `hydrate()` task routes IpFiles to types based on `type` and `component` keyvalues
 4. **Explicit metadata via keyvalues**: Update methods accept named arguments that are converted to keyvalues, not dicts or kwargs
 5. **Updates trigger uploads**: Update methods handle upload and return the IpFile
 6. **Path resolution is explicit**: Download files to cache, then access via `ipfile.local_path`
@@ -141,7 +141,7 @@ class Reference:
             path,
             keyvalues={
                 "type": "reference",
-                "component": "bwa",
+                "component": "bwa_index",
                 "build": build or self.build,
             }
         )
@@ -169,7 +169,7 @@ class Reference:
             path,
             keyvalues={
                 "type": "reference",
-                "component": "minimap2",
+                "component": "minimap2_index",
                 "build": build or self.build,
             }
         )
@@ -184,7 +184,7 @@ class Alignment:
     async def update_alignment(
         self,
         path: Path,
-        sample_id: Optional[str] = None,
+        format: Optional[str] = None,
         is_sorted: Optional[bool] = None,
     ) -> IpFile:
         """
@@ -205,7 +205,8 @@ class Alignment:
             keyvalues={
                 "type": "alignment",
                 "component": "alignment",
-                "sample_id": sample_id or self.sample_id,
+                "format": format,
+                "sample_id": self.sample_id,
                 "is_sorted": str(is_sorted if is_sorted is not None else self.is_sorted),
             }
         )
@@ -247,110 +248,127 @@ class Alignment:
 
 ### Hydration from IPFS
 
-The `hydrate()` class method queries IPFS and directly assigns IpFiles to component fields:
+A general `hydrate` Flyte task queries IPFS and routes files to the appropriate types based on the `type` and `component` keyvalues. The strong contract between filesystem metadata and Python types allows this generalization.
 
 ```python
-@classmethod
+# Type registry maps (type, component) -> (TypeClass, field_name)
+TYPE_REGISTRY: dict[tuple[str, str], tuple[type, str]] = {
+    ("reference", "fasta"): (Reference, "fasta"),
+    ("reference", "faidx"): (Reference, "faidx"),
+    ("reference", "bwa_index"): (Reference, "bwa_index"),
+    ("reference", "minimap2_index"): (Reference, "minimap2_index"),
+    ("alignment", "alignment"): (Alignment, "alignment"),
+    ("alignment", "index"): (Alignment, "index"),
+    ("variants", "vcf"): (Variants, "vcf"),
+    ("variants", "index"): (Variants, "index"),
+}
+
+# Identity fields for each type (used to group files into instances)
+TYPE_IDENTITY: dict[str, str] = {
+    "reference": "build",
+    "alignment": "sample_id",
+    "variants": "sample_id",
+}
+
+
+@env.task
 async def hydrate(
-    cls,
-    build: str,
-    components: Optional[list[str]] = None,
-    **filters
-) -> "Reference":
+    filters: dict[str, str | list[str]],
+) -> list[Reference | Alignment | Variants]:
     """
-    Hydrate a Reference from IPFS.
+    Hydrate types from IPFS based on keyvalue filters.
+
+    Uses cartesian product for list-valued filters. Routes each returned
+    IpFile to the appropriate type based on its `type` and `component`
+    keyvalues.
 
     Args:
-        build: Reference build (GRCh38, GRCh37, etc.)
-        components: Optional list of components to fetch
-                   If None, fetches all available
-        **filters: Additional metadata filters
+        filters: Keyvalue filters (e.g., {"type": "alignment", "sample_id": ["S1", "S2"]})
 
     Returns:
-        Hydrated Reference instance
+        List of hydrated type instances
     """
     from stargazer.utils.pinata import default_client
+    from stargazer.utils.query import generate_query_combinations
 
-    ref = cls(build=build)
+    # Generate cartesian product of queries
+    query_combinations = generate_query_combinations(base_query={}, filters=filters)
 
-    # Build query
-    keyvalues = {"type": "reference", "build": build, **filters}
+    # Execute all queries and collect unique files
+    all_files: dict[str, IpFile] = {}
+    for query in query_combinations:
+        ipfiles = await default_client.query_files(query)
+        for ipfile in ipfiles:
+            all_files[ipfile.cid] = ipfile
 
-    # Fetch files from IPFS
-    ipfiles = await default_client.query_files(keyvalues)
-
-    # Directly assign IpFiles to component fields
-    for ipfile in ipfiles:
-        component = ipfile.keyvalues.get("component")
-
-        # Filter by requested components
-        if components and component not in components:
+    # Group files by (type, identity_value)
+    # e.g., ("alignment", "S123") -> [IpFile, IpFile]
+    grouped: dict[tuple[str, str], list[IpFile]] = {}
+    for ipfile in all_files.values():
+        file_type = ipfile.keyvalues.get("type")
+        if not file_type:
             continue
 
-        # Assign to appropriate field
-        if component == "fasta":
-            ref.fasta = ipfile
-        elif component == "faidx":
-            ref.faidx = ipfile
-        elif component == "bwa":
-            ref.bwa_index = ipfile
-        elif component == "minimap2":
-            ref.minimap2_index = ipfile
-        else:
-            import warnings
-            warnings.warn(f"Unknown component '{component}' for Reference type")
-
-    return ref
-
-
-@classmethod
-async def hydrate(
-    cls,
-    sample_id: str,
-    components: Optional[list[str]] = None,
-    **filters
-) -> "Alignment":
-    """
-    Hydrate an Alignment from IPFS.
-
-    Args:
-        sample_id: Sample identifier
-        components: Optional list of components to fetch
-        **filters: Additional metadata filters
-
-    Returns:
-        Hydrated Alignment instance
-    """
-    from stargazer.utils.pinata import default_client
-
-    alignment = cls(sample_id=sample_id)
-
-    # Build query
-    keyvalues = {"type": "alignment", "sample_id": sample_id, **filters}
-
-    # Fetch files from IPFS
-    ipfiles = await default_client.query_files(keyvalues)
-
-    # Directly assign IpFiles to component fields
-    for ipfile in ipfiles:
-        component = ipfile.keyvalues.get("component")
-
-        if components and component not in components:
+        identity_key = TYPE_IDENTITY.get(file_type)
+        if not identity_key:
             continue
 
-        if component == "alignment":
-            alignment.alignment = ipfile
-            # Extract is_sorted from keyvalues
-            is_sorted_str = ipfile.keyvalues.get("is_sorted")
-            if is_sorted_str:
-                alignment.is_sorted = is_sorted_str.lower() == "true"
-        elif component == "index":
-            alignment.index = ipfile
-        else:
-            import warnings
-            warnings.warn(f"Unknown component '{component}' for Alignment type")
+        identity_value = ipfile.keyvalues.get(identity_key)
+        if not identity_value:
+            continue
 
-    return alignment
+        key = (file_type, identity_value)
+        grouped.setdefault(key, []).append(ipfile)
+
+    # Build type instances from grouped files
+    results: list[Reference | Alignment | Variants] = []
+    for (file_type, identity_value), ipfiles in grouped.items():
+        # Create instance with identity field
+        identity_key = TYPE_IDENTITY[file_type]
+        if file_type == "reference":
+            instance = Reference(**{identity_key: identity_value})
+        elif file_type == "alignment":
+            instance = Alignment(**{identity_key: identity_value})
+        elif file_type == "variants":
+            instance = Variants(**{identity_key: identity_value})
+        else:
+            continue
+
+        # Assign files to component fields
+        for ipfile in ipfiles:
+            component = ipfile.keyvalues.get("component")
+            registry_key = (file_type, component)
+
+            if registry_key in TYPE_REGISTRY:
+                _, field_name = TYPE_REGISTRY[registry_key]
+                setattr(instance, field_name, ipfile)
+
+        results.append(instance)
+
+    return results
+```
+
+**Usage examples:**
+
+```python
+# Hydrate all alignments for a sample
+alignments = await hydrate({"type": "alignment", "sample_id": "NA12878"})
+
+# Hydrate reference with specific build
+refs = await hydrate({"type": "reference", "build": "GRCh38"})
+
+# Hydrate multiple samples (cartesian product)
+alignments = await hydrate({
+    "type": "alignment",
+    "sample_id": ["S1", "S2", "S3"],
+})
+
+# Hydrate specific components only
+refs = await hydrate({
+    "type": "reference",
+    "build": "GRCh38",
+    "component": ["fasta", "faidx"],
+})
 ```
 
 ### Workflow Pattern: Version Updates
