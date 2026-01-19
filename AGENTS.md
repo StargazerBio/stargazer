@@ -60,10 +60,10 @@ The `.opencode/context` directory contains essential reference materials for dev
 
 ### Specs
 
-- **`.opencode/context/filesystem_spec.md`** - Filesystem specification
-  - Describes the structure and organization of the filesystem
-  - Defines the keyvalue metadata schema for files
-  - Explains how types and components are tied to file metadata values
+- **`.opencode/context/specs/`** - Concise documentation on the project's design principles
+  - **Critical**: Specs must be updated as the project evolves to stay in sync with the current state
+  - No code in spec docs - these are high-level references supported by docstrings in the actual functions
+  - `filesystem_spec.md` - IpFile metadata system, type/component contracts, task interoperability patterns
 
 
 ## Project Structure
