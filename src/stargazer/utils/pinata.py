@@ -187,13 +187,28 @@ class PinataClient:
         is_public = public if public is not None else self.public
 
         if self.local_only:
-            # Local-only mode: copy to cache without uploading
+            # Local-only mode: copy to local dir and store metadata in TinyDB
             local_cid = f"local_{path.name}_{path.stat().st_size}"
 
             # Copy to local dir
-            cache_path = self.local_dir / local_cid
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, cache_path)
+            local_path = self.local_dir / local_cid
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, local_path)
+
+            # Store metadata in TinyDB (relative path for portability)
+            now = datetime.now(timezone.utc)
+            self.db.insert(
+                {
+                    "id": local_cid,
+                    "cid": local_cid,
+                    "name": path.name,
+                    "size": path.stat().st_size,
+                    "keyvalues": keyvalues or {},
+                    "created_at": now.isoformat(),
+                    "is_public": is_public,
+                    "rel_path": local_cid,
+                }
+            )
 
             # Create IpFile object for local reference
             return IpFile(
@@ -202,8 +217,9 @@ class PinataClient:
                 name=path.name,
                 size=path.stat().st_size,
                 keyvalues=keyvalues or {},
-                created_at=datetime.now(timezone.utc),
+                created_at=now,
                 is_public=is_public,
+                local_path=local_path,
             )
 
         # Upload to IPFS via Pinata
@@ -263,10 +279,24 @@ class PinataClient:
                 ipfile.local_path = cache_path
             return ipfile
 
-        # Local CIDs must be in cache
+        # Local CIDs: look up in TinyDB for path resolution
         if cid.startswith("local_"):
+            from tinydb import Query
+
+            File = Query()
+            record = self.db.get(File.cid == cid)
+            if record:
+                local_path = self.local_dir / record["rel_path"]
+                if local_path.exists():
+                    if dest:
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy(local_path, dest)
+                        ipfile.local_path = dest
+                    else:
+                        ipfile.local_path = local_path
+                    return ipfile
             raise FileNotFoundError(
-                f"Local file {cid} not found in cache. It may have been deleted."
+                f"Local file {cid} not found in local directory or database."
             )
 
         # Select gateway based on file visibility
@@ -297,6 +327,19 @@ class PinataClient:
 
         return ipfile
 
+    def _ipfile_from_db_record(self, record: dict) -> IpFile:
+        """Convert a TinyDB record to an IpFile object."""
+        return IpFile(
+            id=record["id"],
+            cid=record["cid"],
+            name=record.get("name"),
+            size=record["size"],
+            keyvalues=record.get("keyvalues", {}),
+            created_at=datetime.fromisoformat(record["created_at"]),
+            local_path=self.local_dir / record["rel_path"],
+            is_public=record.get("is_public", False),
+        )
+
     async def query_files(
         self, keyvalues: dict[str, str], public: Optional[bool] = None
     ) -> list[IpFile]:
@@ -313,6 +356,16 @@ class PinataClient:
         Example:
             files = await client.query_files({"type": "reference", "build": "GRCh38"})
         """
+        if self.local_only:
+            # Query from TinyDB in local mode
+            results = []
+            for record in self.db.all():
+                record_kv = record.get("keyvalues", {})
+                # Check if all requested keyvalues match
+                if all(record_kv.get(k) == v for k, v in keyvalues.items()):
+                    results.append(self._ipfile_from_db_record(record))
+            return results
+
         is_public = public if public is not None else self.public
         network = "public" if is_public else "private"
         url = f"{self.API_BASE}/files/{network}"
@@ -337,11 +390,29 @@ class PinataClient:
 
     async def delete_file(self, ipfile: IpFile) -> None:
         """
-        Delete a file from Pinata.
+        Delete a file.
+
+        In local mode: removes file from disk and metadata from TinyDB (hard delete).
+        In IPFS mode: deletes from Pinata.
 
         Args:
             ipfile: IpFile object to delete
         """
+        if self.local_only or ipfile.cid.startswith("local_"):
+            # Hard delete: remove from TinyDB and disk
+            from tinydb import Query
+
+            File = Query()
+            record = self.db.get(File.cid == ipfile.cid)
+            if record:
+                # Remove file from disk
+                local_path = self.local_dir / record["rel_path"]
+                if local_path.exists():
+                    local_path.unlink()
+                # Remove from TinyDB
+                self.db.remove(File.cid == ipfile.cid)
+            return
+
         network = "public" if ipfile.is_public else "private"
         url = f"{self.API_BASE}/files/{network}/{ipfile.id}"
 
