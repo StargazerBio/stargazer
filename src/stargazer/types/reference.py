@@ -136,4 +136,4 @@ class Reference:
         for ipfile in files_to_fetch:
             await default_client.download_file(ipfile)
 
-        return default_client.cache_dir
+        return default_client.local_dir

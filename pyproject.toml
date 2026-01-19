@@ -14,6 +14,7 @@ dependencies = [
     "flyte>=2.0.0b31",
     "pytest>=9.0.1",
     "pre-commit>=4.5.1",
+    "tinydb>=4.8.2",
 ]
 
 [project.optional-dependencies]

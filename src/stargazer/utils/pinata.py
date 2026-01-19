@@ -18,6 +18,7 @@ from typing import Optional
 
 import aiohttp
 import aiofiles
+from tinydb import TinyDB
 
 
 @dataclass
@@ -93,7 +94,7 @@ class PinataClient:
         self,
         jwt: Optional[str] = None,
         gateway: Optional[str] = None,
-        cache_dir: Optional[Path] = None,
+        local_dir: Optional[Path] = None,
         local_only: Optional[bool] = None,
         public: Optional[bool] = None,
     ):
@@ -103,8 +104,8 @@ class PinataClient:
         Args:
             jwt: Pinata JWT token (defaults to PINATA_JWT env var)
             gateway: IPFS gateway URL (defaults to gateway.pinata.cloud)
-            cache_dir: Local cache directory for downloads
-            local_only: If True, copy files to cache instead of uploading to IPFS
+            local_dir: Local directory for file storage and caching
+            local_only: If True, copy files to local dir instead of uploading to IPFS
                        (defaults to STARGAZER_LOCAL_ONLY env var)
             public: If True, upload files to public IPFS network
                    (defaults to STARGAZER_PUBLIC env var)
@@ -113,10 +114,10 @@ class PinataClient:
         self.gateway = gateway or os.environ.get(
             "PINATA_GATEWAY", "https://gateway.pinata.cloud"
         )
-        self.cache_dir = cache_dir or Path(
-            os.environ.get("STARGAZER_CACHE", str(Path.home() / ".stargazer" / "cache"))
+        self.local_dir = local_dir or Path(
+            os.environ.get("STARGAZER_LOCAL", str(Path.home() / ".stargazer" / "local"))
         )
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.local_dir.mkdir(parents=True, exist_ok=True)
 
         # Check for local_only mode from env var if not explicitly set
         if local_only is None:
@@ -131,6 +132,17 @@ class PinataClient:
             self.public = public_env in ("1", "true", "yes")
         else:
             self.public = public
+
+        # TinyDB for local metadata storage (lazy initialized)
+        self.local_db_path = self.local_dir / "stargazer_local.json"
+        self._db: Optional[TinyDB] = None
+
+    @property
+    def db(self) -> TinyDB:
+        """Get TinyDB instance for local metadata storage (lazy initialized)."""
+        if self._db is None:
+            self._db = TinyDB(self.local_db_path)
+        return self._db
 
     @property
     def jwt(self) -> str:
@@ -178,8 +190,8 @@ class PinataClient:
             # Local-only mode: copy to cache without uploading
             local_cid = f"local_{path.name}_{path.stat().st_size}"
 
-            # Copy to cache
-            cache_path = self.cache_dir / local_cid
+            # Copy to local dir
+            cache_path = self.local_dir / local_cid
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, cache_path)
 
@@ -238,9 +250,9 @@ class PinataClient:
 
         cid = ipfile.cid
 
-        # Check cache first
+        # Check local dir first
         cache_key = cid.replace("/", "_")
-        cache_path = self.cache_dir / cache_key
+        cache_path = self.local_dir / cache_key
 
         if cache_path.exists():
             if dest:
@@ -342,7 +354,7 @@ class PinataClient:
 # Configured via environment variables:
 # - PINATA_JWT: Pinata JWT token (required for uploads and private downloads)
 # - PINATA_GATEWAY: IPFS gateway URL (default: https://gateway.pinata.cloud)
-# - STARGAZER_CACHE: Local cache directory (default: ~/.stargazer/cache)
+# - STARGAZER_LOCAL: Local directory for files (default: ~/.stargazer/local)
 # - STARGAZER_LOCAL_ONLY: If "1"/"true"/"yes", copy files locally instead of uploading
 # - STARGAZER_PUBLIC: If "1"/"true"/"yes", upload files to public IPFS (default: private)
 default_client = PinataClient()
