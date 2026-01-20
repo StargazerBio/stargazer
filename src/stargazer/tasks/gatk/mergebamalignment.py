@@ -4,12 +4,12 @@ mergebamalignment task for Stargazer.
 Merges aligned BAM with unmapped BAM using GATK MergeBamAlignment.
 """
 
-from stargazer.config import pb_env
+from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
 from stargazer.utils import _run
 
 
-@pb_env.task
+@gatk_env.task
 async def mergebamalignment(
     aligned_bam: Alignment,
     unmapped_bam: Alignment,

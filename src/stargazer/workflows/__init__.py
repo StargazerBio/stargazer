@@ -1,6 +1,5 @@
 """Flyte workflows for genomics pipelines."""
 
-from stargazer.workflows.parabricks import wgs_germline_snv
 from stargazer.workflows.germline_short_variant_discovery import (
     prepare_reference,
     align_sample,
@@ -11,8 +10,6 @@ from stargazer.workflows.germline_short_variant_discovery import (
 )
 
 __all__ = [
-    # Legacy single-sample workflow
-    "wgs_germline_snv",
     # GATK Best Practices data preprocessing workflows (GATK + BWA)
     "preprocess_sample",
     "preprocess_cohort",

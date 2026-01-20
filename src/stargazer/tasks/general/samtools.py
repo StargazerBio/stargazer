@@ -3,11 +3,11 @@ Samtools tasks for reference genome indexing.
 """
 
 from stargazer.types import Reference
-from stargazer.config import pb_env
+from stargazer.config import gatk_env
 from stargazer.utils import _run
 
 
-@pb_env.task
+@gatk_env.task
 async def samtools_faidx(ref: Reference) -> Reference:
     """
     Create a FASTA index (.fai file) using samtools faidx.

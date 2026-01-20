@@ -4,13 +4,13 @@ baserecalibrator task for Stargazer.
 Creates BQSR recalibration table using GATK BaseRecalibrator.
 """
 
-from stargazer.config import pb_env
+from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
 from stargazer.utils import _run
 from stargazer.utils.pinata import IpFile, default_client
 
 
-@pb_env.task
+@gatk_env.task
 async def baserecalibrator(
     alignment: Alignment,
     ref: Reference,

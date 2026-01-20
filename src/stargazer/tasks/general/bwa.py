@@ -2,12 +2,12 @@
 BWA tasks for reference genome indexing and alignment.
 """
 
-from stargazer.config import pb_env
+from stargazer.config import gatk_env
 from stargazer.types import Alignment, Reads, Reference
 from stargazer.utils import _run
 
 
-@pb_env.task
+@gatk_env.task
 async def bwa_index(ref: Reference) -> Reference:
     """
     Create BWA index files for a reference genome using bwa index.
@@ -96,7 +96,7 @@ async def bwa_index(ref: Reference) -> Reference:
     return ref
 
 
-@pb_env.task
+@gatk_env.task
 async def bwa_mem(
     reads: Reads,
     ref: Reference,

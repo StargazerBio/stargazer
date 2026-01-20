@@ -4,13 +4,13 @@ applybqsr task for Stargazer.
 Applies BQSR recalibration to BAM files using GATK ApplyBQSR.
 """
 
-from stargazer.config import pb_env
+from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
 from stargazer.utils import _run
 from stargazer.utils.pinata import IpFile, default_client
 
 
-@pb_env.task
+@gatk_env.task
 async def applybqsr(
     alignment: Alignment,
     ref: Reference,

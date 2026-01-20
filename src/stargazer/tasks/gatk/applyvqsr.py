@@ -6,12 +6,12 @@ Applies a score cutoff to filter variants based on a recalibration table from VQ
 
 from pathlib import Path
 
-from stargazer.config import pb_env
+from stargazer.config import gatk_env
 from stargazer.types import Reference, Variants
 from stargazer.utils import _run
 
 
-@pb_env.task
+@gatk_env.task
 async def applyvqsr(
     vcf: Variants,
     recal_file: Path,

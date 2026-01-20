@@ -10,12 +10,12 @@ workflow when performing cohort analysis.
 
 from pathlib import Path
 
-from stargazer.config import pb_env
+from stargazer.config import gatk_env
 from stargazer.types import Reference, Variants
 from stargazer.utils import _run
 
 
-@pb_env.task
+@gatk_env.task
 async def combinegvcfs(
     gvcfs: list[Variants],
     ref: Reference,

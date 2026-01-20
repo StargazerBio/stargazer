@@ -4,12 +4,12 @@ sortsam task for Stargazer.
 Sorts BAM files using GATK SortSam.
 """
 
-from stargazer.config import pb_env
+from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
 from stargazer.utils import _run
 
 
-@pb_env.task
+@gatk_env.task
 async def sortsam(
     alignment: Alignment,
     ref: Reference,

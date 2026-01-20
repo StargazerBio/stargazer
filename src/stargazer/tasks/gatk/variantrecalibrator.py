@@ -7,7 +7,7 @@ Builds a recalibration model to score variant quality for filtering purposes usi
 from dataclasses import dataclass
 from pathlib import Path
 
-from stargazer.config import pb_env
+from stargazer.config import gatk_env
 from stargazer.types import Reference, Variants
 from stargazer.utils import _run
 
@@ -44,7 +44,7 @@ class VQSRResource:
     prior: str
 
 
-@pb_env.task
+@gatk_env.task
 async def variantrecalibrator(
     vcf: Variants,
     ref: Reference,

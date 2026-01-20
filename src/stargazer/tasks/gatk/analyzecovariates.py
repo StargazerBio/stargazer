@@ -6,11 +6,11 @@ Evaluate and compare base quality score recalibration (BQSR) tables.
 
 from pathlib import Path
 
-from stargazer.config import pb_env
+from stargazer.config import gatk_env
 from stargazer.utils import _run
 
 
-@pb_env.task
+@gatk_env.task
 async def analyzecovariates(
     before_report: Path,
     after_report: Path | None = None,

@@ -27,7 +27,7 @@ import asyncio
 
 import flyte
 
-from stargazer.config import pb_env
+from stargazer.config import gatk_env
 from stargazer.types import Reference, Reads, Alignment, Variants
 from stargazer.tasks import (
     hydrate,
@@ -45,7 +45,7 @@ from stargazer.tasks import (
 )
 
 
-@pb_env.task
+@gatk_env.task
 async def prepare_reference(ref_name: str) -> Reference:
     """
     Prepare reference genome for variant calling.
@@ -69,7 +69,7 @@ async def prepare_reference(ref_name: str) -> Reference:
     return ref
 
 
-@pb_env.task
+@gatk_env.task
 async def align_sample(
     sample_id: str,
     ref: Reference,
@@ -123,7 +123,7 @@ async def align_sample(
     return alignment
 
 
-@pb_env.task
+@gatk_env.task
 async def call_variants_gvcf(
     alignment: Alignment,
     ref: Reference,
@@ -151,7 +151,7 @@ async def call_variants_gvcf(
     return gvcf
 
 
-@pb_env.task
+@gatk_env.task
 async def germline_single_sample(
     sample_id: str,
     ref_name: str,
@@ -220,7 +220,7 @@ async def germline_single_sample(
     return alignment, vcf
 
 
-@pb_env.task
+@gatk_env.task
 async def germline_cohort(
     sample_ids: list[str],
     ref_name: str,
@@ -314,7 +314,7 @@ async def germline_cohort(
     return alignments, gvcfs, joint_vcf
 
 
-@pb_env.task
+@gatk_env.task
 async def germline_from_gvcfs(
     gvcfs: list[Variants],
     ref_name: str,
@@ -360,7 +360,7 @@ async def germline_from_gvcfs(
     return joint_vcf
 
 
-@pb_env.task
+@gatk_env.task
 async def germline_cohort_with_vqsr(
     sample_ids: list[str],
     ref_name: str,

@@ -1,13 +1,12 @@
 import flyte
 
-# Create task environment for Parabricks tools
-# Parabricks requires GPU resources
-pb_env = flyte.TaskEnvironment(
-    name="parabricks",
-    image=flyte.Image.from_base("nvcr.io/nvidia/clara/clara-parabricks:4.6.0-1"),
+# Default task environment for standard bioinformatics tools (CPU-based)
+# Uses base Python image with common bioinformatics tools installed
+default_env = flyte.TaskEnvironment(
+    name="default",
+    image=flyte.Image.from_base("broadinstitute/gatk"),
     resources=flyte.Resources(
-        cpu=8,
-        memory="32Gi",
-        gpu="A100:1",  # Parabricks requires GPU
+        cpu=4,
+        memory="16Gi",
     ),
 )

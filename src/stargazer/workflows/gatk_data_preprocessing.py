@@ -22,7 +22,7 @@ import asyncio
 
 import flyte
 
-from stargazer.config import pb_env
+from stargazer.config import gatk_env
 from stargazer.types import Reference, Reads, Alignment
 from stargazer.tasks import (
     hydrate,
@@ -36,7 +36,7 @@ from stargazer.tasks import (
 )
 
 
-@pb_env.task
+@gatk_env.task
 async def prepare_reference(ref_name: str) -> Reference:
     """
     Prepare reference genome for alignment and variant calling.
@@ -63,7 +63,7 @@ async def prepare_reference(ref_name: str) -> Reference:
     return ref
 
 
-@pb_env.task
+@gatk_env.task
 async def preprocess_sample(
     sample_id: str,
     ref: Reference,
@@ -155,7 +155,7 @@ async def preprocess_sample(
     return alignment
 
 
-@pb_env.task
+@gatk_env.task
 async def preprocess_cohort(
     sample_ids: list[str],
     ref_name: str,
@@ -221,7 +221,7 @@ async def preprocess_cohort(
     return list(alignments)
 
 
-@pb_env.task
+@gatk_env.task
 async def apply_bqsr_to_alignment(
     alignment: Alignment,
     ref: Reference,

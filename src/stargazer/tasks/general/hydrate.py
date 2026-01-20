@@ -5,7 +5,7 @@ Routes IpFiles from IPFS queries to appropriate type instances based on
 the `type` and `component` keyvalues.
 """
 
-from stargazer.config import pb_env
+from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment, Variants, Reads
 from stargazer.utils.pinata import default_client, IpFile
 from stargazer.utils.query import generate_query_combinations
@@ -40,7 +40,7 @@ TYPE_IDENTITY: dict[str, str] = {
 }
 
 
-@pb_env.task
+@gatk_env.task
 async def hydrate(
     filters: dict[str, str | list[str]],
 ) -> list[Reference | Alignment | Variants | Reads]:
