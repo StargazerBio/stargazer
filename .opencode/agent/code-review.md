@@ -82,9 +82,6 @@ class TypeName:
     async def add_files(self, file_paths: list[Path], keyvalues: dict) -> None
     async def fetch(self) -> Path
     def get_*_path(self) -> Path
-
-    @classmethod
-    async def pinata_hydrate(cls, **filters) -> Self
 ```
 
 **Review checklist for types:**

@@ -118,8 +118,12 @@ async def bwa_mem(
         Alignment object with unsorted BAM file
 
     Example:
-        ref = await prepare_reference(ref_name="GRCh38.fa")
-        reads = await Reads.pinata_hydrate(sample_id="NA12829")
+        from stargazer.tasks import hydrate
+
+        ref_list = await hydrate({"type": "reference", "build": "GRCh38.fa"})
+        ref = next((r for r in ref_list if isinstance(r, Reference)), None)
+        reads_list = await hydrate({"type": "reads", "sample_id": "NA12829"})
+        reads = next((r for r in reads_list if isinstance(r, Reads)), None)
         aligned = await bwa_mem(reads=reads, ref=ref)
         sorted_aligned = await sortsam(alignment=aligned, ref=ref, sort_order="coordinate")
 

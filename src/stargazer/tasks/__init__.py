@@ -4,7 +4,7 @@ Stargazer tasks for bioinformatics workflows.
 
 from stargazer.tasks.hydrate import hydrate
 from stargazer.tasks.samtools import samtools_faidx
-from stargazer.tasks.bwa import bwa_index
+from stargazer.tasks.bwa import bwa_index, bwa_mem
 from stargazer.tasks.parabricks.fq2bam import fq2bam
 from stargazer.tasks.parabricks.deepvariant import deepvariant
 from stargazer.tasks.parabricks.haplotypecaller import haplotypecaller
@@ -28,6 +28,7 @@ __all__ = [
     # Reference indexing
     "samtools_faidx",
     "bwa_index",
+    "bwa_mem",
     # Alignment
     "fq2bam",
     # Data preprocessing (GATK)

@@ -211,9 +211,14 @@ from stargazer.tasks.{module} import {tasks}
 
 ### Reference Indexing
 ```python
+from stargazer.tasks import hydrate
+
 @pb_env.task
 async def index_reference_workflow(ref_name: str) -> Reference:
-    ref = await Reference.pinata_hydrate(ref_name=ref_name)
+    refs = await hydrate({"type": "reference", "build": ref_name})
+    ref = next((r for r in refs if isinstance(r, Reference)), None)
+    if not ref:
+        raise ValueError(f"Reference not found for build: {ref_name}")
     ref = await samtools_faidx(ref)
     ref = await bwa_index(ref)
     return ref

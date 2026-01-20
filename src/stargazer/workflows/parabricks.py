@@ -12,6 +12,7 @@ import flyte
 from stargazer.config import pb_env
 from stargazer.types import Reference, Reads, Alignment, Variants
 from stargazer.tasks import (
+    hydrate,
     samtools_faidx,
     bwa_index,
     fq2bam,
@@ -64,12 +65,18 @@ async def wgs_germline_snv(
         alignment, dv_vcf, hc_vcf = run.outputs
     """
     # Step 1-2: Reference preparation
-    ref = await Reference.pinata_hydrate(ref_name=ref_name)
+    refs = await hydrate({"type": "reference", "build": ref_name})
+    ref = next((r for r in refs if isinstance(r, Reference)), None)
+    if not ref:
+        raise ValueError(f"Reference not found for build: {ref_name}")
     ref = await samtools_faidx(ref)
     ref = await bwa_index(ref)
 
     # Step 3: Fetch reads
-    reads = await Reads.pinata_hydrate(sample_id=sample_id)
+    reads_list = await hydrate({"type": "reads", "sample_id": sample_id})
+    reads = next((r for r in reads_list if isinstance(r, Reads)), None)
+    if not reads:
+        raise ValueError(f"Reads not found for sample_id: {sample_id}")
 
     # Step 4: Alignment
     alignment = await fq2bam(reads=reads, ref=ref)

@@ -30,10 +30,14 @@ async def fq2bam(
         Alignment object with sorted, duplicate-marked BAM
 
     Example:
-        ref = await Reference.pinata_hydrate(ref_name="GRCh38.fa")
+        from stargazer.tasks import hydrate, samtools_faidx, bwa_index
+
+        ref_list = await hydrate({"type": "reference", "build": "GRCh38.fa"})
+        ref = next((r for r in ref_list if isinstance(r, Reference)), None)
         ref = await samtools_faidx(ref)
         ref = await bwa_index(ref)
-        reads = await Reads.pinata_hydrate(sample_id="NA12829")
+        reads_list = await hydrate({"type": "reads", "sample_id": "NA12829"})
+        reads = next((r for r in reads_list if isinstance(r, Reads)), None)
         alignment = await fq2bam(reads=reads, ref=ref)
 
     Reference:

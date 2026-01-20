@@ -25,6 +25,7 @@ import flyte
 from stargazer.config import pb_env
 from stargazer.types import Reference, Reads, Alignment
 from stargazer.tasks import (
+    hydrate,
     samtools_faidx,
     bwa_index,
     bwa_mem,
@@ -53,7 +54,10 @@ async def prepare_reference(ref_name: str) -> Reference:
     Example:
         ref = await prepare_reference(ref_name="GRCh38.fa")
     """
-    ref = await Reference.pinata_hydrate(ref_name=ref_name)
+    refs = await hydrate({"type": "reference", "build": ref_name})
+    ref = next((r for r in refs if isinstance(r, Reference)), None)
+    if not ref:
+        raise ValueError(f"Reference not found for build: {ref_name}")
     ref = await samtools_faidx(ref)
     ref = await bwa_index(ref)
     return ref
@@ -118,7 +122,10 @@ async def preprocess_sample(
         )
 
     # Hydrate reads from Pinata
-    reads = await Reads.pinata_hydrate(sample_id=sample_id)
+    reads_list = await hydrate({"type": "reads", "sample_id": sample_id})
+    reads = next((r for r in reads_list if isinstance(r, Reads)), None)
+    if not reads:
+        raise ValueError(f"Reads not found for sample_id: {sample_id}")
 
     # Step 1: Align reads to reference using BWA-MEM
     alignment = await bwa_mem(reads=reads, ref=ref)

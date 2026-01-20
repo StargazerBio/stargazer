@@ -30,11 +30,11 @@ import flyte
 from stargazer.config import pb_env
 from stargazer.types import Reference, Reads, Alignment, Variants
 from stargazer.tasks import (
+    hydrate,
     samtools_faidx,
     bwa_index,
     fq2bam,
     haplotypecaller,
-    indexgvcf,
     genotypegvcf,
     combinegvcfs,
     baserecalibrator,
@@ -60,7 +60,10 @@ async def prepare_reference(ref_name: str) -> Reference:
     Returns:
         Reference object with all indices
     """
-    ref = await Reference.pinata_hydrate(ref_name=ref_name)
+    refs = await hydrate({"type": "reference", "build": ref_name})
+    ref = next((r for r in refs if isinstance(r, Reference)), None)
+    if not ref:
+        raise ValueError(f"Reference not found for build: {ref_name}")
     ref = await samtools_faidx(ref)
     ref = await bwa_index(ref)
     return ref
@@ -98,7 +101,10 @@ async def align_sample(
     if apply_bqsr and not known_sites:
         raise ValueError("known_sites must be provided when apply_bqsr=True")
 
-    reads = await Reads.pinata_hydrate(sample_id=sample_id)
+    reads_list = await hydrate({"type": "reads", "sample_id": sample_id})
+    reads = next((r for r in reads_list if isinstance(r, Reads)), None)
+    if not reads:
+        raise ValueError(f"Reads not found for sample_id: {sample_id}")
     alignment = await fq2bam(reads=reads, ref=ref)
 
     # Apply BQSR if requested
@@ -140,8 +146,8 @@ async def call_variants_gvcf(
         ref=ref,
         output_gvcf=True,
     )
-    # Index the GVCF for downstream processing
-    gvcf = await indexgvcf(gvcf)
+    # Index the GVCF for downstream processing (TODO: implement indexgvcf task)
+    # gvcf = await indexgvcf(gvcf)
     return gvcf
 
 
