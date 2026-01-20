@@ -44,6 +44,7 @@ async def test_variants_fetch():
             size=cached_vcf.stat().st_size,
             keyvalues={
                 "type": "variants",
+                "component": "vcf",
                 "sample_id": "NA12829",
                 "caller": "deepvariant",
                 "variant_type": "vcf",
@@ -56,15 +57,19 @@ async def test_variants_fetch():
             cid=test_cid_tbi,
             name="NA12829_TP53.vcf.tbi",
             size=cached_tbi.stat().st_size,
-            keyvalues={"type": "variants", "sample_id": "NA12829"},
+            keyvalues={
+                "type": "variants",
+                "component": "index",
+                "sample_id": "NA12829",
+            },
             created_at=datetime.now(),
         )
 
-        # Create Variants object
+        # Create Variants object with component fields
         variants = Variants(
             sample_id="NA12829",
-            vcf_name="NA12829_TP53.vcf",
-            files=[vcf_file, tbi_file],
+            vcf=vcf_file,
+            index=tbi_file,
         )
 
         # Run fetch()
@@ -75,10 +80,10 @@ async def test_variants_fetch():
         assert cache_dir.exists()
 
         # Verify both files are in cache (check local_path is set)
-        assert vcf_file.local_path is not None
-        assert vcf_file.local_path.exists()
-        assert tbi_file.local_path is not None
-        assert tbi_file.local_path.exists()
+        assert variants.vcf.local_path is not None
+        assert variants.vcf.local_path.exists()
+        assert variants.index.local_path is not None
+        assert variants.index.local_path.exists()
 
         # Cleanup
         if cached_vcf.exists():
@@ -95,7 +100,7 @@ async def test_variants_fetch():
 
 @pytest.mark.asyncio
 async def test_variants_get_vcf_path():
-    """Test get_vcf_path() returns correct path."""
+    """Test direct access to vcf component returns correct path."""
     # Setup: Create dummy VCF
     vcf_fixture = TEST_ROOT / "fixtures" / "dummy2.vcf"
     vcf_fixture.write_text("##fileformat=VCFv4.2\n")
@@ -112,20 +117,23 @@ async def test_variants_get_vcf_path():
             cid=test_cid_vcf,
             name="test.vcf",
             size=cached_vcf.stat().st_size,
-            keyvalues={"type": "variants", "sample_id": "NA12829"},
+            keyvalues={
+                "type": "variants",
+                "component": "vcf",
+                "sample_id": "NA12829",
+            },
             created_at=datetime.now(),
             local_path=cached_vcf,
         )
 
-        # Create Variants object
+        # Create Variants object with vcf component
         variants = Variants(
             sample_id="NA12829",
-            vcf_name="test.vcf",
-            files=[vcf_file],
+            vcf=vcf_file,
         )
 
-        # Test get_vcf_path()
-        vcf_path = variants.get_vcf_path()
+        # Test direct field access
+        vcf_path = variants.vcf.local_path
         assert vcf_path == cached_vcf
         assert vcf_path.exists()
 
@@ -139,7 +147,7 @@ async def test_variants_get_vcf_path():
 
 @pytest.mark.asyncio
 async def test_variants_get_index_path():
-    """Test get_index_path() returns correct path when present."""
+    """Test direct access to index component returns correct path when present."""
     # Setup: Create dummy VCF and index
     vcf_fixture = TEST_ROOT / "fixtures" / "dummy3.vcf"
     tbi_fixture = TEST_ROOT / "fixtures" / "dummy3.vcf.tbi"
@@ -161,7 +169,11 @@ async def test_variants_get_index_path():
             cid=test_cid_vcf,
             name="test.vcf",
             size=cached_vcf.stat().st_size,
-            keyvalues={"type": "variants", "sample_id": "NA12829"},
+            keyvalues={
+                "type": "variants",
+                "component": "vcf",
+                "sample_id": "NA12829",
+            },
             created_at=datetime.now(),
             local_path=cached_vcf,
         )
@@ -171,20 +183,24 @@ async def test_variants_get_index_path():
             cid=test_cid_tbi,
             name="test.vcf.tbi",
             size=cached_tbi.stat().st_size,
-            keyvalues={"type": "variants", "sample_id": "NA12829"},
+            keyvalues={
+                "type": "variants",
+                "component": "index",
+                "sample_id": "NA12829",
+            },
             created_at=datetime.now(),
             local_path=cached_tbi,
         )
 
-        # Create Variants object
+        # Create Variants object with both components
         variants = Variants(
             sample_id="NA12829",
-            vcf_name="test.vcf",
-            files=[vcf_file, tbi_file],
+            vcf=vcf_file,
+            index=tbi_file,
         )
 
-        # Test get_index_path()
-        index_path = variants.get_index_path()
+        # Test direct field access
+        index_path = variants.index.local_path
         assert index_path == cached_tbi
         assert index_path.exists()
 
@@ -202,7 +218,7 @@ async def test_variants_get_index_path():
 
 @pytest.mark.asyncio
 async def test_variants_get_index_path_none():
-    """Test get_index_path() returns None when index not present."""
+    """Test index component is None when index not present."""
     # Setup: Create dummy VCF only (no index)
     vcf_fixture = TEST_ROOT / "fixtures" / "dummy4.vcf"
     vcf_fixture.write_text("##fileformat=VCFv4.2\n")
@@ -219,7 +235,11 @@ async def test_variants_get_index_path_none():
             cid=test_cid_vcf,
             name="test.vcf",
             size=cached_vcf.stat().st_size,
-            keyvalues={"type": "variants", "sample_id": "NA12829"},
+            keyvalues={
+                "type": "variants",
+                "component": "vcf",
+                "sample_id": "NA12829",
+            },
             created_at=datetime.now(),
             local_path=cached_vcf,
         )
@@ -227,13 +247,11 @@ async def test_variants_get_index_path_none():
         # Create Variants object without index
         variants = Variants(
             sample_id="NA12829",
-            vcf_name="test.vcf",
-            files=[vcf_file],
+            vcf=vcf_file,
         )
 
-        # Test get_index_path() returns None
-        index_path = variants.get_index_path()
-        assert index_path is None
+        # Test index is None
+        assert variants.index is None
 
         # Cleanup
         if cached_vcf.exists():
@@ -244,8 +262,8 @@ async def test_variants_get_index_path_none():
 
 
 @pytest.mark.asyncio
-async def test_variants_add_files():
-    """Test add_files() uploads VCF and index files with metadata."""
+async def test_variants_update_components():
+    """Test update_vcf() and update_index() upload files."""
     # Setup: Create dummy files
     vcf_fixture = TEST_ROOT / "fixtures" / "dummy5.vcf"
     tbi_fixture = TEST_ROOT / "fixtures" / "dummy5.vcf.tbi"
@@ -254,33 +272,41 @@ async def test_variants_add_files():
 
     try:
         # Create empty Variants object
-        variants = Variants(sample_id="NA12829", vcf_name="test.vcf")
+        variants = Variants(sample_id="NA12829")
 
-        # Add files (in local_only mode, this should copy to cache)
-        keyvalues = {
-            "type": "variants",
-            "sample_id": "NA12829",
-            "caller": "deepvariant",
-            "variant_type": "vcf",
-            "build": "GRCh38",
-        }
-        await variants.add_files(
-            file_paths=[vcf_fixture, tbi_fixture],
-            keyvalues=keyvalues,
+        # Update vcf component
+        vcf_ipfile = await variants.update_vcf(
+            vcf_fixture,
+            caller="deepvariant",
+            variant_type="vcf",
+            build="GRCh38",
         )
 
-        # Verify files were added
-        assert len(variants.files) == 2
+        # Update index component
+        tbi_ipfile = await variants.update_index(tbi_fixture)
 
-        # Verify metadata
-        assert all(f.keyvalues.get("type") == "variants" for f in variants.files)
-        assert all(f.keyvalues.get("sample_id") == "NA12829" for f in variants.files)
-        assert all(f.keyvalues.get("caller") == "deepvariant" for f in variants.files)
+        # Verify vcf component was set
+        assert variants.vcf is not None
+        assert variants.vcf == vcf_ipfile
+        assert variants.vcf.keyvalues.get("type") == "variants"
+        assert variants.vcf.keyvalues.get("component") == "vcf"
+        assert variants.vcf.keyvalues.get("sample_id") == "NA12829"
+        assert variants.vcf.keyvalues.get("caller") == "deepvariant"
+        assert variants.vcf.keyvalues.get("variant_type") == "vcf"
+        assert variants.vcf.keyvalues.get("build") == "GRCh38"
+
+        # Verify index component was set
+        assert variants.index is not None
+        assert variants.index == tbi_ipfile
+        assert variants.index.keyvalues.get("type") == "variants"
+        assert variants.index.keyvalues.get("component") == "index"
+        assert variants.index.keyvalues.get("sample_id") == "NA12829"
 
         # Cleanup cache (files may have been copied there)
-        for f in variants.files:
-            if f.local_path and f.local_path.exists():
-                f.local_path.unlink()
+        if variants.vcf.local_path and variants.vcf.local_path.exists():
+            variants.vcf.local_path.unlink()
+        if variants.index.local_path and variants.index.local_path.exists():
+            variants.index.local_path.unlink()
     finally:
         if vcf_fixture.exists():
             vcf_fixture.unlink()
@@ -289,30 +315,9 @@ async def test_variants_add_files():
 
 
 @pytest.mark.asyncio
-async def test_variants_add_files_empty_list():
-    """Test add_files() raises ValueError for empty list."""
-    variants = Variants(sample_id="NA12829", vcf_name="test.vcf")
-
-    with pytest.raises(ValueError, match="No files to add"):
-        await variants.add_files(file_paths=[], keyvalues={})
-
-
-@pytest.mark.asyncio
-async def test_variants_add_files_missing_file():
-    """Test add_files() raises FileNotFoundError for missing files."""
-    variants = Variants(sample_id="NA12829", vcf_name="test.vcf")
-
-    with pytest.raises(FileNotFoundError, match="File not found"):
-        await variants.add_files(
-            file_paths=[TEST_ROOT / "fixtures" / "nonexistent.vcf"],
-            keyvalues={"type": "variants"},
-        )
-
-
-@pytest.mark.asyncio
 async def test_variants_fetch_empty():
     """Test fetch() raises ValueError for empty variants."""
-    variants = Variants(sample_id="NA12829", vcf_name="test.vcf")
+    variants = Variants(sample_id="NA12829")
 
     with pytest.raises(ValueError, match="No files to fetch"):
         await variants.fetch()
@@ -320,36 +325,38 @@ async def test_variants_fetch_empty():
 
 @pytest.mark.asyncio
 async def test_variants_get_vcf_path_not_found():
-    """Test get_vcf_path() raises FileNotFoundError when VCF not in files."""
-    variants = Variants(sample_id="NA12829", vcf_name="test.vcf", files=[])
+    """Test that vcf is None when component not set."""
+    variants = Variants(sample_id="NA12829")
 
-    with pytest.raises(FileNotFoundError, match="VCF file test.vcf not found"):
-        variants.get_vcf_path()
+    assert variants.vcf is None
 
 
 @pytest.mark.asyncio
 async def test_variants_get_vcf_path_not_cached():
-    """Test get_vcf_path() raises error when file not in cache."""
+    """Test that local_path is None when file not fetched yet."""
     # Create IpFile without local_path (not fetched yet)
     vcf_file = IpFile(
         id="test-vcf-id",
         cid="QmTest",
         name="test.vcf",
         size=1000,
-        keyvalues={"type": "variants"},
+        keyvalues={
+            "type": "variants",
+            "component": "vcf",
+        },
         created_at=datetime.now(),
         local_path=None,  # Not downloaded yet
     )
 
-    variants = Variants(sample_id="NA12829", vcf_name="test.vcf", files=[vcf_file])
+    variants = Variants(sample_id="NA12829", vcf=vcf_file)
 
-    with pytest.raises(FileNotFoundError, match="not in cache"):
-        variants.get_vcf_path()
+    # local_path should be None
+    assert variants.vcf.local_path is None
 
 
 @pytest.mark.asyncio
 async def test_variants_properties():
-    """Test Variants properties read from VCF file keyvalues."""
+    """Test Variants properties read from vcf file keyvalues."""
     # Create VCF file with metadata in keyvalues
     vcf_file = IpFile(
         id="test-vcf-id",
@@ -358,6 +365,7 @@ async def test_variants_properties():
         size=1000,
         keyvalues={
             "type": "variants",
+            "component": "vcf",
             "caller": "deepvariant",
             "variant_type": "gvcf",
         },
@@ -366,11 +374,10 @@ async def test_variants_properties():
 
     variants = Variants(
         sample_id="NA12829",
-        vcf_name="test.vcf",
-        files=[vcf_file],
+        vcf=vcf_file,
     )
 
-    # Properties should read from VCF file keyvalues
+    # Properties should read from vcf keyvalues
     assert variants.caller == "deepvariant"
     assert variants.is_gvcf is True
 
@@ -382,13 +389,14 @@ async def test_variants_properties():
         size=1000,
         keyvalues={
             "type": "variants",
+            "component": "vcf",
             "caller": "haplotypecaller",
             "variant_type": "vcf",
         },
         created_at=datetime.now(),
     )
 
-    variants2 = Variants(sample_id="NA12829", vcf_name="test2.vcf", files=[vcf_file2])
+    variants2 = Variants(sample_id="NA12829", vcf=vcf_file2)
 
     assert variants2.caller == "haplotypecaller"
     assert variants2.is_gvcf is False
@@ -399,11 +407,84 @@ async def test_variants_properties():
         cid="QmTest3",
         name="test3.vcf",
         size=1000,
-        keyvalues={"type": "variants"},
+        keyvalues={
+            "type": "variants",
+            "component": "vcf",
+        },
         created_at=datetime.now(),
     )
 
-    variants3 = Variants(sample_id="NA12829", vcf_name="test3.vcf", files=[vcf_file3])
+    variants3 = Variants(sample_id="NA12829", vcf=vcf_file3)
 
     assert variants3.caller == "unknown"
     assert variants3.is_gvcf is False
+
+
+@pytest.mark.asyncio
+async def test_variants_multi_sample():
+    """Test multi-sample VCF properties."""
+    # Create multi-sample VCF
+    vcf_file = IpFile(
+        id="test-vcf-id",
+        cid="QmTest",
+        name="multi.vcf",
+        size=1000,
+        keyvalues={
+            "type": "variants",
+            "component": "vcf",
+            "sample_count": "3",
+            "source_samples": "NA12829,NA12830,NA12831",
+        },
+        created_at=datetime.now(),
+    )
+
+    variants = Variants(
+        sample_id="NA12829",
+        vcf=vcf_file,
+    )
+
+    # Should be multi-sample
+    assert variants.is_multi_sample is True
+    assert variants.source_samples == ["NA12829", "NA12830", "NA12831"]
+
+    # Create single-sample VCF
+    vcf_file2 = IpFile(
+        id="test-vcf-id-2",
+        cid="QmTest2",
+        name="single.vcf",
+        size=1000,
+        keyvalues={
+            "type": "variants",
+            "component": "vcf",
+            "sample_count": "1",
+        },
+        created_at=datetime.now(),
+    )
+
+    variants2 = Variants(sample_id="NA12829", vcf=vcf_file2)
+
+    # Should be single-sample
+    assert variants2.is_multi_sample is False
+    assert variants2.source_samples == ["NA12829"]
+
+
+@pytest.mark.asyncio
+async def test_variants_source_samples_default():
+    """Test source_samples returns sample_id when metadata not set."""
+    # Create VCF without source_samples metadata
+    vcf_file = IpFile(
+        id="test-vcf-id",
+        cid="QmTest",
+        name="test.vcf",
+        size=1000,
+        keyvalues={
+            "type": "variants",
+            "component": "vcf",
+        },
+        created_at=datetime.now(),
+    )
+
+    variants = Variants(sample_id="NA12829", vcf=vcf_file)
+
+    # Should return default list with sample_id
+    assert variants.source_samples == ["NA12829"]

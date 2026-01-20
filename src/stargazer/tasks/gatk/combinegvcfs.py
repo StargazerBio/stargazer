@@ -72,7 +72,7 @@ async def combinegvcfs(
         if not gvcf.is_gvcf:
             raise ValueError(
                 f"combinegvcfs requires GVCF files, but gvcfs[{i}] is VCF. "
-                f"sample_id={gvcf.sample_id}, vcf_name={gvcf.vcf_name}"
+                f"sample_id={gvcf.sample_id}"
             )
 
     # Fetch all input files to cache
@@ -82,11 +82,15 @@ async def combinegvcfs(
 
     for gvcf in gvcfs:
         await gvcf.fetch()
-        gvcf_paths.append(gvcf.get_vcf_path())
+        if not gvcf.vcf or not gvcf.vcf.local_path:
+            raise ValueError(f"GVCF file not available for sample_id={gvcf.sample_id}")
+        gvcf_paths.append(gvcf.vcf.local_path)
         sample_ids.append(gvcf.sample_id)
 
     # Get reference path
-    ref_path = ref.get_ref_path()
+    if not ref.fasta or not ref.fasta.local_path:
+        raise ValueError("Reference FASTA file not available or not fetched")
+    ref_path = ref.fasta.local_path
 
     # Create output GVCF path
     output_dir = ref_path.parent
@@ -122,25 +126,19 @@ async def combinegvcfs(
     # Use cohort_id as sample_id for multi-sample GVCFs
     combined = Variants(
         sample_id=cohort_id,
-        vcf_name=output_gvcf.name,
     )
 
     # Build metadata for combined GVCF
-    keyvalues = {
-        "type": "variants",
-        "sample_id": cohort_id,
-        "caller": "combinegvcfs",
-        "variant_type": "gvcf",
-        "source_samples": ",".join(sample_ids),
-    }
-
-    # Try to get build from reference
-    for f in ref.files:
-        if f.name == ref.ref_name and "build" in f.keyvalues:
-            keyvalues["build"] = f.keyvalues["build"]
-            break
-
-    # Upload combined GVCF to Pinata
-    await combined.add_files(file_paths=[output_gvcf], keyvalues=keyvalues)
+    build = (
+        ref.fasta.keyvalues.get("build") if ref.fasta and ref.fasta.keyvalues else None
+    )
+    await combined.update_vcf(
+        output_gvcf,
+        caller="combinegvcfs",
+        variant_type="gvcf",
+        build=build,
+        sample_count=len(sample_ids),
+        source_samples=sample_ids,
+    )
 
     return combined

@@ -36,7 +36,12 @@ async def test_reads_fetch():
         cid=test_cid_r1,
         name="NA12829_TP53_R1.fq.gz",
         size=cached_r1.stat().st_size,
-        keyvalues={"type": "reads", "sample_id": "NA12829", "read_type": "paired"},
+        keyvalues={
+            "type": "reads",
+            "component": "r1",
+            "sample_id": "NA12829",
+            "read_type": "paired",
+        },
         created_at=datetime.now(),
     )
 
@@ -45,15 +50,20 @@ async def test_reads_fetch():
         cid=test_cid_r2,
         name="NA12829_TP53_R2.fq.gz",
         size=cached_r2.stat().st_size,
-        keyvalues={"type": "reads", "sample_id": "NA12829", "read_type": "paired"},
+        keyvalues={
+            "type": "reads",
+            "component": "r2",
+            "sample_id": "NA12829",
+            "read_type": "paired",
+        },
         created_at=datetime.now(),
     )
 
-    # Create Reads object
+    # Create Reads object with component fields
     reads = Reads(
         sample_id="NA12829",
-        files=[r1_file, r2_file],
-        read_group={"ID": "test", "SM": "NA12829"},
+        r1=r1_file,
+        r2=r2_file,
     )
 
     # Run fetch()
@@ -64,8 +74,10 @@ async def test_reads_fetch():
     assert cache_dir.exists()
 
     # Verify both files are in cache (check local_path is set)
-    assert r1_file.local_path.exists()
-    assert r2_file.local_path.exists()
+    assert reads.r1.local_path is not None
+    assert reads.r1.local_path.exists()
+    assert reads.r2.local_path is not None
+    assert reads.r2.local_path.exists()
 
     # Cleanup
     if cached_r1.exists():
@@ -76,7 +88,7 @@ async def test_reads_fetch():
 
 @pytest.mark.asyncio
 async def test_reads_get_paths():
-    """Test get_r1_path() and get_r2_path() return correct paths."""
+    """Test direct access to r1 and r2 components returns correct paths."""
     # Setup: Pre-populate cache with test FASTQ files
     r1_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_R1.fq.gz"
     r2_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_R2.fq.gz"
@@ -95,7 +107,11 @@ async def test_reads_get_paths():
         cid=test_cid_r1,
         name="NA12829_TP53_R1.fq.gz",
         size=cached_r1.stat().st_size,
-        keyvalues={"type": "reads", "sample_id": "NA12829"},
+        keyvalues={
+            "type": "reads",
+            "component": "r1",
+            "sample_id": "NA12829",
+        },
         created_at=datetime.now(),
         local_path=cached_r1,
     )
@@ -105,24 +121,29 @@ async def test_reads_get_paths():
         cid=test_cid_r2,
         name="NA12829_TP53_R2.fq.gz",
         size=cached_r2.stat().st_size,
-        keyvalues={"type": "reads", "sample_id": "NA12829"},
+        keyvalues={
+            "type": "reads",
+            "component": "r2",
+            "sample_id": "NA12829",
+        },
         created_at=datetime.now(),
         local_path=cached_r2,
     )
 
-    # Create Reads object
+    # Create Reads object with component fields
     reads = Reads(
         sample_id="NA12829",
-        files=[r1_file, r2_file],
+        r1=r1_file,
+        r2=r2_file,
     )
 
-    # Test get_r1_path()
-    r1_path = reads.get_r1_path()
+    # Test direct field access
+    r1_path = reads.r1.local_path
     assert r1_path == cached_r1
     assert r1_path.exists()
 
-    # Test get_r2_path()
-    r2_path = reads.get_r2_path()
+    # Test direct field access
+    r2_path = reads.r2.local_path
     assert r2_path == cached_r2
     assert r2_path.exists()
 
@@ -135,7 +156,7 @@ async def test_reads_get_paths():
 
 @pytest.mark.asyncio
 async def test_reads_get_r2_path_single_end():
-    """Test get_r2_path() returns None for single-end reads."""
+    """Test r2 component is None for single-end reads."""
     # Setup: Single-end read
     r1_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_R1.fq.gz"
 
@@ -149,24 +170,28 @@ async def test_reads_get_r2_path_single_end():
         cid=test_cid_r1,
         name="NA12829_TP53_R1.fq.gz",
         size=cached_r1.stat().st_size,
-        keyvalues={"type": "reads", "sample_id": "NA12829", "read_type": "single"},
+        keyvalues={
+            "type": "reads",
+            "component": "r1",
+            "sample_id": "NA12829",
+            "read_type": "single",
+        },
         created_at=datetime.now(),
         local_path=cached_r1,
     )
 
-    # Create Reads object with only R1
+    # Create Reads object with only r1
     reads = Reads(
         sample_id="NA12829",
-        files=[r1_file],
+        r1=r1_file,
     )
 
-    # Test get_r1_path() works
-    r1_path = reads.get_r1_path()
+    # Test r1 path works
+    r1_path = reads.r1.local_path
     assert r1_path == cached_r1
 
-    # Test get_r2_path() returns None
-    r2_path = reads.get_r2_path()
-    assert r2_path is None
+    # Test r2 is None
+    assert reads.r2 is None
 
     # Cleanup
     if cached_r1.exists():
@@ -174,8 +199,8 @@ async def test_reads_get_r2_path_single_end():
 
 
 @pytest.mark.asyncio
-async def test_reads_add_files():
-    """Test add_files() uploads FASTQ files with metadata."""
+async def test_reads_update_components():
+    """Test update_r1() and update_r2() upload files."""
     # Setup: Copy fixtures to temporary location (will be "uploaded")
     r1_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_R1.fq.gz"
     r2_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_R2.fq.gz"
@@ -185,50 +210,40 @@ async def test_reads_add_files():
     # Create empty Reads object
     reads = Reads(sample_id="NA12829")
 
-    # Add files (in local_only mode, this should copy to cache)
-    keyvalues = {
-        "type": "reads",
-        "sample_id": "NA12829",
-        "read_type": "paired",
-    }
-    await reads.add_files(
-        file_paths=[r1_fixture, r2_fixture],
-        keyvalues=keyvalues,
+    # Update r1 component
+    r1_ipfile = await reads.update_r1(
+        r1_fixture,
+        read_type="paired",
+        sequencing_platform="ILLUMINA",
     )
 
-    # Verify files were added
-    assert len(reads.files) == 2
+    # Update r2 component
+    r2_ipfile = await reads.update_r2(
+        r2_fixture,
+        sequencing_platform="ILLUMINA",
+    )
 
-    # Verify metadata
-    assert all(f.keyvalues.get("type") == "reads" for f in reads.files)
-    assert all(f.keyvalues.get("sample_id") == "NA12829" for f in reads.files)
-    assert all(f.keyvalues.get("read_type") == "paired" for f in reads.files)
+    # Verify r1 component was set
+    assert reads.r1 is not None
+    assert reads.r1 == r1_ipfile
+    assert reads.r1.keyvalues.get("type") == "reads"
+    assert reads.r1.keyvalues.get("component") == "r1"
+    assert reads.r1.keyvalues.get("sample_id") == "NA12829"
+    assert reads.r1.keyvalues.get("sequencing_platform") == "ILLUMINA"
+
+    # Verify r2 component was set
+    assert reads.r2 is not None
+    assert reads.r2 == r2_ipfile
+    assert reads.r2.keyvalues.get("type") == "reads"
+    assert reads.r2.keyvalues.get("component") == "r2"
+    assert reads.r2.keyvalues.get("sample_id") == "NA12829"
+    assert reads.r2.keyvalues.get("sequencing_platform") == "ILLUMINA"
 
     # Cleanup cache (files may have been copied there)
-    for f in reads.files:
-        if f.local_path and f.local_path.exists():
-            f.local_path.unlink()
-
-
-@pytest.mark.asyncio
-async def test_reads_add_files_empty_list():
-    """Test add_files() raises ValueError for empty list."""
-    reads = Reads(sample_id="NA12829")
-
-    with pytest.raises(ValueError, match="No files to add"):
-        await reads.add_files(file_paths=[], keyvalues={})
-
-
-@pytest.mark.asyncio
-async def test_reads_add_files_missing_file():
-    """Test add_files() raises FileNotFoundError for missing files."""
-    reads = Reads(sample_id="NA12829")
-
-    with pytest.raises(FileNotFoundError, match="File not found"):
-        await reads.add_files(
-            file_paths=[TEST_ROOT / "fixtures" / "nonexistent.fq.gz"],
-            keyvalues={"type": "reads"},
-        )
+    if reads.r1.local_path and reads.r1.local_path.exists():
+        reads.r1.local_path.unlink()
+    if reads.r2.local_path and reads.r2.local_path.exists():
+        reads.r2.local_path.unlink()
 
 
 @pytest.mark.asyncio
@@ -242,31 +257,33 @@ async def test_reads_fetch_empty():
 
 @pytest.mark.asyncio
 async def test_reads_get_r1_path_not_found():
-    """Test get_r1_path() raises FileNotFoundError when R1 not in files."""
-    reads = Reads(sample_id="NA12829", files=[])
+    """Test that r1 is None when component not set."""
+    reads = Reads(sample_id="NA12829")
 
-    with pytest.raises(FileNotFoundError, match="R1 file not found"):
-        reads.get_r1_path()
+    assert reads.r1 is None
 
 
 @pytest.mark.asyncio
 async def test_reads_get_r1_path_not_cached():
-    """Test get_r1_path() raises error when file not in cache."""
+    """Test that local_path is None when file not fetched yet."""
     # Create IpFile without local_path (not fetched yet)
     r1_file = IpFile(
         id="test-r1-id",
         cid="QmTest",
         name="NA12829_TP53_R1.fq.gz",
         size=1000,
-        keyvalues={"type": "reads"},
+        keyvalues={
+            "type": "reads",
+            "component": "r1",
+        },
         created_at=datetime.now(),
         local_path=None,  # Not downloaded yet
     )
 
-    reads = Reads(sample_id="NA12829", files=[r1_file])
+    reads = Reads(sample_id="NA12829", r1=r1_file)
 
-    with pytest.raises(FileNotFoundError, match="not in cache"):
-        reads.get_r1_path()
+    # local_path should be None
+    assert reads.r1.local_path is None
 
 
 @pytest.mark.asyncio
@@ -289,3 +306,39 @@ async def test_reads_with_read_group():
     assert reads.read_group["LB"] == "library1"
     assert reads.read_group["PL"] == "ILLUMINA"
     assert reads.read_group["PU"] == "unit1"
+
+
+@pytest.mark.asyncio
+async def test_reads_is_paired():
+    """Test is_paired property."""
+    # Paired-end reads
+    r1_file = IpFile(
+        id="test-r1-id",
+        cid="QmTestR1",
+        name="NA12829_TP53_R1.fq.gz",
+        size=1000,
+        keyvalues={
+            "type": "reads",
+            "component": "r1",
+        },
+        created_at=datetime.now(),
+    )
+
+    r2_file = IpFile(
+        id="test-r2-id",
+        cid="QmTestR2",
+        name="NA12829_TP53_R2.fq.gz",
+        size=1000,
+        keyvalues={
+            "type": "reads",
+            "component": "r2",
+        },
+        created_at=datetime.now(),
+    )
+
+    reads = Reads(sample_id="NA12829", r1=r1_file, r2=r2_file)
+    assert reads.is_paired is True
+
+    # Single-end reads
+    reads_single = Reads(sample_id="NA12829", r1=r1_file)
+    assert reads_single.is_paired is False

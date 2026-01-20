@@ -38,6 +38,7 @@ async def test_alignment_fetch():
         size=cached_bam.stat().st_size,
         keyvalues={
             "type": "alignment",
+            "component": "alignment",
             "sample_id": "NA12829",
             "file_type": "bam",
             "sorted": "coordinate",
@@ -51,15 +52,19 @@ async def test_alignment_fetch():
         cid=test_cid_bai,
         name="NA12829_TP53_paired.bam.bai",
         size=cached_bai.stat().st_size,
-        keyvalues={"type": "alignment", "sample_id": "NA12829"},
+        keyvalues={
+            "type": "alignment",
+            "component": "index",
+            "sample_id": "NA12829",
+        },
         created_at=datetime.now(),
     )
 
-    # Create Alignment object
+    # Create Alignment object with component fields
     alignment = Alignment(
         sample_id="NA12829",
-        bam_name="NA12829_TP53_paired.bam",
-        files=[bam_file, bai_file],
+        alignment=bam_file,
+        index=bai_file,
     )
 
     # Run fetch()
@@ -70,10 +75,10 @@ async def test_alignment_fetch():
     assert cache_dir.exists()
 
     # Verify both files are in cache (check local_path is set)
-    assert bam_file.local_path is not None
-    assert bam_file.local_path.exists()
-    assert bai_file.local_path is not None
-    assert bai_file.local_path.exists()
+    assert alignment.alignment.local_path is not None
+    assert alignment.alignment.local_path.exists()
+    assert alignment.index.local_path is not None
+    assert alignment.index.local_path.exists()
 
     # Cleanup
     if cached_bam.exists():
@@ -84,7 +89,7 @@ async def test_alignment_fetch():
 
 @pytest.mark.asyncio
 async def test_alignment_get_bam_path():
-    """Test get_bam_path() returns correct path."""
+    """Test direct access to alignment component returns correct path."""
     # Setup: Pre-populate cache with test BAM
     bam_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam"
 
@@ -99,20 +104,23 @@ async def test_alignment_get_bam_path():
         cid=test_cid_bam,
         name="NA12829_TP53_paired.bam",
         size=cached_bam.stat().st_size,
-        keyvalues={"type": "alignment", "sample_id": "NA12829"},
+        keyvalues={
+            "type": "alignment",
+            "component": "alignment",
+            "sample_id": "NA12829",
+        },
         created_at=datetime.now(),
         local_path=cached_bam,
     )
 
-    # Create Alignment object
+    # Create Alignment object with alignment component
     alignment = Alignment(
         sample_id="NA12829",
-        bam_name="NA12829_TP53_paired.bam",
-        files=[bam_file],
+        alignment=bam_file,
     )
 
-    # Test get_bam_path()
-    bam_path = alignment.get_bam_path()
+    # Test direct field access
+    bam_path = alignment.alignment.local_path
     assert bam_path == cached_bam
     assert bam_path.exists()
 
@@ -123,7 +131,7 @@ async def test_alignment_get_bam_path():
 
 @pytest.mark.asyncio
 async def test_alignment_get_bai_path():
-    """Test get_bai_path() returns correct path when present."""
+    """Test direct access to index component returns correct path when present."""
     # Setup: Pre-populate cache with test BAM and BAI
     bam_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam"
     bai_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam.bai"
@@ -142,7 +150,11 @@ async def test_alignment_get_bai_path():
         cid=test_cid_bam,
         name="NA12829_TP53_paired.bam",
         size=cached_bam.stat().st_size,
-        keyvalues={"type": "alignment", "sample_id": "NA12829"},
+        keyvalues={
+            "type": "alignment",
+            "component": "alignment",
+            "sample_id": "NA12829",
+        },
         created_at=datetime.now(),
         local_path=cached_bam,
     )
@@ -152,20 +164,24 @@ async def test_alignment_get_bai_path():
         cid=test_cid_bai,
         name="NA12829_TP53_paired.bam.bai",
         size=cached_bai.stat().st_size,
-        keyvalues={"type": "alignment", "sample_id": "NA12829"},
+        keyvalues={
+            "type": "alignment",
+            "component": "index",
+            "sample_id": "NA12829",
+        },
         created_at=datetime.now(),
         local_path=cached_bai,
     )
 
-    # Create Alignment object
+    # Create Alignment object with both components
     alignment = Alignment(
         sample_id="NA12829",
-        bam_name="NA12829_TP53_paired.bam",
-        files=[bam_file, bai_file],
+        alignment=bam_file,
+        index=bai_file,
     )
 
-    # Test get_bai_path()
-    bai_path = alignment.get_bai_path()
+    # Test direct field access
+    bai_path = alignment.index.local_path
     assert bai_path == cached_bai
     assert bai_path.exists()
 
@@ -178,7 +194,7 @@ async def test_alignment_get_bai_path():
 
 @pytest.mark.asyncio
 async def test_alignment_get_bai_path_none():
-    """Test get_bai_path() returns None when BAI not present."""
+    """Test index component is None when BAI not present."""
     # Setup: Pre-populate cache with test BAM only (no BAI)
     bam_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam"
 
@@ -193,21 +209,23 @@ async def test_alignment_get_bai_path_none():
         cid=test_cid_bam,
         name="NA12829_TP53_paired.bam",
         size=cached_bam.stat().st_size,
-        keyvalues={"type": "alignment", "sample_id": "NA12829"},
+        keyvalues={
+            "type": "alignment",
+            "component": "alignment",
+            "sample_id": "NA12829",
+        },
         created_at=datetime.now(),
         local_path=cached_bam,
     )
 
-    # Create Alignment object without BAI
+    # Create Alignment object without index
     alignment = Alignment(
         sample_id="NA12829",
-        bam_name="NA12829_TP53_paired.bam",
-        files=[bam_file],
+        alignment=bam_file,
     )
 
-    # Test get_bai_path() returns None
-    bai_path = alignment.get_bai_path()
-    assert bai_path is None
+    # Test index is None
+    assert alignment.index is None
 
     # Cleanup
     if cached_bam.exists():
@@ -215,8 +233,8 @@ async def test_alignment_get_bai_path_none():
 
 
 @pytest.mark.asyncio
-async def test_alignment_add_files():
-    """Test add_files() uploads BAM and BAI files with metadata."""
+async def test_alignment_update_components():
+    """Test update_alignment() and update_index() upload files."""
     # Setup: Copy fixtures to use for upload
     bam_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam"
     bai_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam.bai"
@@ -224,61 +242,46 @@ async def test_alignment_add_files():
     assert bai_fixture.exists()
 
     # Create empty Alignment object
-    alignment = Alignment(sample_id="NA12829", bam_name="NA12829_TP53_paired.bam")
+    alignment = Alignment(sample_id="NA12829")
 
-    # Add files (in local_only mode, this should copy to cache)
-    keyvalues = {
-        "type": "alignment",
-        "sample_id": "NA12829",
-        "tool": "fq2bam",
-        "file_type": "bam",
-        "sorted": "coordinate",
-        "duplicates_marked": "true",
-    }
-    await alignment.add_files(
-        file_paths=[bam_fixture, bai_fixture],
-        keyvalues=keyvalues,
+    # Update alignment component
+    bam_ipfile = await alignment.update_alignment(
+        bam_fixture,
+        format="bam",
+        is_sorted=True,
+        duplicates_marked=True,
     )
 
-    # Verify files were added
-    assert len(alignment.files) == 2
+    # Update index component
+    bai_ipfile = await alignment.update_index(bai_fixture)
 
-    # Verify metadata
-    assert all(f.keyvalues.get("type") == "alignment" for f in alignment.files)
-    assert all(f.keyvalues.get("sample_id") == "NA12829" for f in alignment.files)
-    assert all(f.keyvalues.get("tool") == "fq2bam" for f in alignment.files)
+    # Verify alignment component was set
+    assert alignment.alignment is not None
+    assert alignment.alignment == bam_ipfile
+    assert alignment.alignment.keyvalues.get("type") == "alignment"
+    assert alignment.alignment.keyvalues.get("component") == "alignment"
+    assert alignment.alignment.keyvalues.get("sample_id") == "NA12829"
+    assert alignment.alignment.keyvalues.get("sorted") == "coordinate"
+    assert alignment.alignment.keyvalues.get("duplicates_marked") == "true"
+
+    # Verify index component was set
+    assert alignment.index is not None
+    assert alignment.index == bai_ipfile
+    assert alignment.index.keyvalues.get("type") == "alignment"
+    assert alignment.index.keyvalues.get("component") == "index"
+    assert alignment.index.keyvalues.get("sample_id") == "NA12829"
 
     # Cleanup cache (files may have been copied there)
-    for f in alignment.files:
-        if f.local_path and f.local_path.exists():
-            f.local_path.unlink()
-
-
-@pytest.mark.asyncio
-async def test_alignment_add_files_empty_list():
-    """Test add_files() raises ValueError for empty list."""
-    alignment = Alignment(sample_id="NA12829", bam_name="test.bam")
-
-    with pytest.raises(ValueError, match="No files to add"):
-        await alignment.add_files(file_paths=[], keyvalues={})
-
-
-@pytest.mark.asyncio
-async def test_alignment_add_files_missing_file():
-    """Test add_files() raises FileNotFoundError for missing files."""
-    alignment = Alignment(sample_id="NA12829", bam_name="test.bam")
-
-    with pytest.raises(FileNotFoundError, match="File not found"):
-        await alignment.add_files(
-            file_paths=[TEST_ROOT / "fixtures" / "nonexistent.bam"],
-            keyvalues={"type": "alignment"},
-        )
+    if alignment.alignment.local_path and alignment.alignment.local_path.exists():
+        alignment.alignment.local_path.unlink()
+    if alignment.index.local_path and alignment.index.local_path.exists():
+        alignment.index.local_path.unlink()
 
 
 @pytest.mark.asyncio
 async def test_alignment_fetch_empty():
     """Test fetch() raises ValueError for empty alignment."""
-    alignment = Alignment(sample_id="NA12829", bam_name="test.bam")
+    alignment = Alignment(sample_id="NA12829")
 
     with pytest.raises(ValueError, match="No files to fetch"):
         await alignment.fetch()
@@ -286,36 +289,38 @@ async def test_alignment_fetch_empty():
 
 @pytest.mark.asyncio
 async def test_alignment_get_bam_path_not_found():
-    """Test get_bam_path() raises FileNotFoundError when BAM not in files."""
-    alignment = Alignment(sample_id="NA12829", bam_name="test.bam", files=[])
+    """Test that alignment is None when component not set."""
+    alignment = Alignment(sample_id="NA12829")
 
-    with pytest.raises(FileNotFoundError, match="BAM file test.bam not found"):
-        alignment.get_bam_path()
+    assert alignment.alignment is None
 
 
 @pytest.mark.asyncio
 async def test_alignment_get_bam_path_not_cached():
-    """Test get_bam_path() raises error when file not in cache."""
+    """Test that local_path is None when file not fetched yet."""
     # Create IpFile without local_path (not fetched yet)
     bam_file = IpFile(
         id="test-bam-id",
         cid="QmTest",
         name="test.bam",
         size=1000,
-        keyvalues={"type": "alignment"},
+        keyvalues={
+            "type": "alignment",
+            "component": "alignment",
+        },
         created_at=datetime.now(),
         local_path=None,  # Not downloaded yet
     )
 
-    alignment = Alignment(sample_id="NA12829", bam_name="test.bam", files=[bam_file])
+    alignment = Alignment(sample_id="NA12829", alignment=bam_file)
 
-    with pytest.raises(FileNotFoundError, match="not in cache"):
-        alignment.get_bam_path()
+    # local_path should be None
+    assert alignment.alignment.local_path is None
 
 
 @pytest.mark.asyncio
 async def test_alignment_metadata_properties():
-    """Test Alignment properties read from BAM file keyvalues."""
+    """Test Alignment properties read from alignment component keyvalues."""
     # Create BAM file with metadata in keyvalues
     bam_file = IpFile(
         id="test-bam-id",
@@ -324,6 +329,7 @@ async def test_alignment_metadata_properties():
         size=1000,
         keyvalues={
             "type": "alignment",
+            "component": "alignment",
             "duplicates_marked": "true",
             "sorted": "coordinate",
         },
@@ -332,11 +338,10 @@ async def test_alignment_metadata_properties():
 
     alignment = Alignment(
         sample_id="NA12829",
-        bam_name="test.bam",
-        files=[bam_file],
+        alignment=bam_file,
     )
 
-    # Properties should read from BAM file keyvalues
+    # Properties should read from alignment keyvalues
     assert alignment.has_duplicates_marked is True
     assert alignment.is_sorted is True
 
@@ -346,12 +351,56 @@ async def test_alignment_metadata_properties():
         cid="QmTest2",
         name="test2.bam",
         size=1000,
-        keyvalues={"type": "alignment"},
+        keyvalues={
+            "type": "alignment",
+            "component": "alignment",
+        },
         created_at=datetime.now(),
     )
 
-    alignment2 = Alignment(sample_id="NA12829", bam_name="test2.bam", files=[bam_file2])
+    alignment2 = Alignment(sample_id="NA12829", alignment=bam_file2)
 
     # Properties should return False when metadata not present
     assert alignment2.has_duplicates_marked is False
     assert alignment2.is_sorted is False
+
+
+@pytest.mark.asyncio
+async def test_alignment_has_bqsr_applied():
+    """Test has_bqsr_applied property reads from alignment keyvalues."""
+    # Create BAM file with BQSR applied
+    bam_file = IpFile(
+        id="test-bam-id",
+        cid="QmTest",
+        name="test.bam",
+        size=1000,
+        keyvalues={
+            "type": "alignment",
+            "component": "alignment",
+            "bqsr_applied": "true",
+        },
+        created_at=datetime.now(),
+    )
+
+    alignment = Alignment(sample_id="NA12829", alignment=bam_file)
+
+    # Property should return True
+    assert alignment.has_bqsr_applied is True
+
+    # Create Alignment without BQSR
+    bam_file2 = IpFile(
+        id="test-bam-id-2",
+        cid="QmTest2",
+        name="test2.bam",
+        size=1000,
+        keyvalues={
+            "type": "alignment",
+            "component": "alignment",
+        },
+        created_at=datetime.now(),
+    )
+
+    alignment2 = Alignment(sample_id="NA12829", alignment=bam_file2)
+
+    # Property should return False
+    assert alignment2.has_bqsr_applied is False

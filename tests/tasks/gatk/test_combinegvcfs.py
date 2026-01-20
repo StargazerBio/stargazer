@@ -49,6 +49,7 @@ chr17	7687551	.	C	T,<NON_REF>	1000	.	.	GT:DP:GQ:PL	0/1:40:99:500,0,800,600,900,1
         size=gvcf_path.stat().st_size,
         keyvalues={
             "type": "variants",
+            "component": "vcf",
             "sample_id": sample_id,
             "caller": "haplotypecaller",
             "variant_type": "gvcf",
@@ -72,8 +73,8 @@ def create_mock_reference(local_dir: Path, test_cid: str) -> tuple[Path, IpFile]
 
     # Create minimal FASTA content
     ref_content = """>chr17
-GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
-GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
+GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
+GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
 """
     ref_path.write_text(ref_content)
 
@@ -84,6 +85,7 @@ GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
         size=ref_path.stat().st_size,
         keyvalues={
             "type": "reference",
+            "component": "fasta",
             "build": "GRCh38",
         },
         created_at=datetime.now(),
@@ -106,18 +108,9 @@ async def test_combinegvcfs_merges_samples():
     ref_path, ref_ipfile = create_mock_reference(default_client.local_dir, test_cid_ref)
 
     ref = Reference(
-        ref_name="test_reference.fa",
-        files=[ref_ipfile],
+        build="GRCh38",
+        fasta=ref_ipfile,
     )
-
-    # Create mock GVCFs for each sample
-    gvcf_paths = []
-    gvcfs = []
-    for i, sample_id in enumerate(sample_ids):
-        test_cid = f"QmTestGVCFCombine{i}"
-        gvcf_path, gvcf_ipfile = create_mock_gvcf(
-            default_client.local_dir, sample_id, test_cid
-        )
 
     # Create mock GVCFs for each sample
     gvcf_paths = []
@@ -131,8 +124,7 @@ async def test_combinegvcfs_merges_samples():
 
         gvcf = Variants(
             sample_id=sample_id,
-            vcf_name=f"{sample_id}.g.vcf",
-            files=[gvcf_ipfile],
+            vcf=gvcf_ipfile,
         )
         gvcfs.append(gvcf)
 
@@ -158,12 +150,7 @@ async def test_combinegvcfs_merges_samples():
         assert set(result.source_samples) == set(sample_ids)
 
         # Verify metadata
-        combined_file = None
-        for f in result.files:
-            if f.name == result.vcf_name:
-                combined_file = f
-                break
-
+        combined_file = result.vcf
         assert combined_file is not None
         assert combined_file.keyvalues.get("caller") == "combinegvcfs"
         assert combined_file.keyvalues.get("sample_count") == "3"
@@ -185,8 +172,7 @@ async def test_combinegvcfs_merges_samples():
 async def test_combinegvcfs_rejects_empty_list():
     """Test that combinegvcfs raises error for empty list."""
     ref = Reference(
-        ref_name="test.fa",
-        files=[],
+        build="test",
     )
 
     with pytest.raises(ValueError, match="cannot be empty"):
@@ -207,6 +193,7 @@ async def test_combinegvcfs_rejects_vcf_input():
         size=1000,
         keyvalues={
             "type": "variants",
+            "component": "vcf",
             "sample_id": sample_id,
             "caller": "haplotypecaller",
             "variant_type": "vcf",  # VCF, not GVCF
@@ -216,13 +203,11 @@ async def test_combinegvcfs_rejects_vcf_input():
 
     variants = Variants(
         sample_id=sample_id,
-        vcf_name=f"{sample_id}.vcf",
-        files=[vcf_ipfile],
+        vcf=vcf_ipfile,
     )
 
     ref = Reference(
-        ref_name="test.fa",
-        files=[],
+        build="test",
     )
 
     # Should raise ValueError for non-GVCF input
@@ -251,13 +236,12 @@ async def test_combinegvcfs_single_sample():
 
     gvcf = Variants(
         sample_id=sample_id,
-        vcf_name=f"{sample_id}.g.vcf",
-        files=[gvcf_ipfile],
+        vcf=gvcf_ipfile,
     )
 
     ref = Reference(
-        ref_name="test_reference.fa",
-        files=[ref_ipfile],
+        build="GRCh38",
+        fasta=ref_ipfile,
     )
 
     try:
@@ -291,7 +275,7 @@ async def test_combinegvcfs_single_sample():
 
 @pytest.mark.asyncio
 async def test_variants_multi_sample_properties():
-    """Test the new multi-sample properties on Variants type."""
+    """Test new multi-sample properties on Variants type."""
     # Test single sample variant
     single_ipfile = IpFile(
         id="test-single",
@@ -300,6 +284,7 @@ async def test_variants_multi_sample_properties():
         size=1000,
         keyvalues={
             "type": "variants",
+            "component": "vcf",
             "sample_id": "NA12878",
             "variant_type": "gvcf",
         },
@@ -308,8 +293,7 @@ async def test_variants_multi_sample_properties():
 
     single_variant = Variants(
         sample_id="NA12878",
-        vcf_name="single.g.vcf",
-        files=[single_ipfile],
+        vcf=single_ipfile,
     )
 
     assert not single_variant.is_multi_sample
@@ -323,6 +307,7 @@ async def test_variants_multi_sample_properties():
         size=5000,
         keyvalues={
             "type": "variants",
+            "component": "vcf",
             "sample_id": "cohort",
             "variant_type": "gvcf",
             "sample_count": "3",
@@ -333,8 +318,7 @@ async def test_variants_multi_sample_properties():
 
     multi_variant = Variants(
         sample_id="cohort",
-        vcf_name="cohort.g.vcf",
-        files=[multi_ipfile],
+        vcf=multi_ipfile,
     )
 
     assert multi_variant.is_multi_sample

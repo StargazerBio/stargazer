@@ -42,8 +42,12 @@ async def markduplicates(
     await ref.fetch()
 
     # Get paths
-    ref_path = ref.get_ref_path()
-    bam_path = alignment.get_bam_path()
+    if not ref.fasta or not ref.fasta.local_path:
+        raise ValueError("Reference FASTA file not available or not fetched")
+    ref_path = ref.fasta.local_path
+    if not alignment.alignment or not alignment.alignment.local_path:
+        raise ValueError("Alignment BAM file not available or not fetched")
+    bam_path = alignment.alignment.local_path
     output_dir = ref_path.parent
 
     # Output BAM and metrics paths
@@ -76,27 +80,22 @@ async def markduplicates(
     # Create new Alignment object for marked BAM
     marked_alignment = Alignment(
         sample_id=alignment.sample_id,
-        bam_name=output_bam.name,
     )
 
-    # Build metadata for marked BAM
-    keyvalues = {
-        "type": "alignment",
-        "sample_id": alignment.sample_id,
-        "tool": "gatk_markduplicates",
-        "file_type": "bam",
-        "sorted": "coordinate",
-        "duplicates_marked": "true",
-    }
+    # Upload marked BAM to Pinata
+    await marked_alignment.update_alignment(
+        output_bam,
+        format="bam",
+        is_sorted=True,
+        duplicates_marked=True,
+        bqsr_applied=alignment.has_bqsr_applied,
+        tool="gatk_markduplicates",
+    )
 
-    # Collect output files (BAM and index)
-    output_files = [output_bam]
+    # Upload index file
     bam_index = output_dir / f"{output_bam.name}.bai"
     if bam_index.exists():
-        output_files.append(bam_index)
-
-    # Upload marked BAM to Pinata
-    await marked_alignment.add_files(file_paths=output_files, keyvalues=keyvalues)
+        await marked_alignment.update_index(bam_index)
 
     # Optionally upload metrics file
     if metrics_file.exists():

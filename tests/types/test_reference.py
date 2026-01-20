@@ -15,26 +15,62 @@ from stargazer.utils.pinata import default_client, PinataClient
 
 
 @pytest.mark.asyncio
-async def test_add_files_empty_list():
-    """Test that add_files raises error when file_paths is empty."""
-    ref = Reference(ref_name="test.fa")
+async def test_update_fasta():
+    """Test update_fasta() uploads FASTA file."""
+    if not os.environ.get("PINATA_JWT"):
+        pytest.skip("PINATA_JWT environment variable not set")
 
-    with pytest.raises(ValueError, match="No files to add"):
-        await ref.add_files(file_paths=[])
+    # Create temporary test file
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+
+        # Create test FASTA file
+        test_fasta = tmpdir_path / "GRCh38.fa"
+        test_fasta.write_text(">chr1\nATCGATCG\n")
+
+        # Create reference and update fasta component
+        ref = Reference(build="GRCh38")
+
+        fasta_ipfile = await ref.update_fasta(test_fasta)
+
+        # Verify FASTA component was set
+        assert ref.fasta is not None
+        assert ref.fasta == fasta_ipfile
+        assert ref.fasta.keyvalues.get("type") == "reference"
+        assert ref.fasta.keyvalues.get("component") == "fasta"
+        assert ref.fasta.keyvalues.get("build") == "GRCh38"
 
 
 @pytest.mark.asyncio
-async def test_add_files_nonexistent_file():
-    """Test that add_files raises error when file doesn't exist."""
-    ref = Reference(ref_name="test.fa")
+async def test_update_faidx():
+    """Test update_faidx() uploads FASTA index file."""
+    if not os.environ.get("PINATA_JWT"):
+        pytest.skip("PINATA_JWT environment variable not set")
 
-    with pytest.raises(FileNotFoundError, match="File not found"):
-        await ref.add_files(file_paths=[Path("/nonexistent/file.fa")])
+    # Create temporary test file
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+
+        # Create test FAIDX file
+        test_faidx = tmpdir_path / "GRCh38.fa.fai"
+        test_faidx.write_text("chr1\t8\t0\t9\t10\n")
+
+        # Create reference and update faidx component
+        ref = Reference(build="GRCh38")
+
+        faidx_ipfile = await ref.update_faidx(test_faidx)
+
+        # Verify FAIDX component was set
+        assert ref.faidx is not None
+        assert ref.faidx == faidx_ipfile
+        assert ref.faidx.keyvalues.get("type") == "reference"
+        assert ref.faidx.keyvalues.get("component") == "faidx"
+        assert ref.faidx.keyvalues.get("build") == "GRCh38"
 
 
 @pytest.mark.asyncio
-async def test_add_files_success():
-    """Test successful file upload to IPFS."""
+async def test_update_aligner_index():
+    """Test update_aligner_index() uploads aligner index files."""
     if not os.environ.get("PINATA_JWT"):
         pytest.skip("PINATA_JWT environment variable not set")
 
@@ -42,82 +78,147 @@ async def test_add_files_success():
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
 
-        # Create test files
-        test_file1 = tmpdir_path / "test1.txt"
-        test_file2 = tmpdir_path / "test2.txt"
+        # Create test aligner index files (BWA)
+        test_bwt = tmpdir_path / "GRCh38.fa.bwt"
+        test_pac = tmpdir_path / "GRCh38.fa.pac"
+        test_bwt.write_bytes(b"BWT_INDEX")
+        test_pac.write_bytes(b"PAC_INDEX")
 
-        test_file1.write_text("Test content 1")
-        test_file2.write_text("Test content 2")
+        # Create reference and update aligner index components
+        ref = Reference(build="GRCh38")
 
-        # Create reference and add files
-        ref = Reference(ref_name="test1.txt")
+        bwt_ipfile = await ref.update_aligner_index(test_bwt, aligner="bwa")
+        pac_ipfile = await ref.update_aligner_index(test_pac, aligner="bwa")
 
-        await ref.add_files(
-            file_paths=[test_file1, test_file2],
-            keyvalues={"type": "test", "purpose": "unit_test", "env": "test"},
+        # Verify aligner index components were appended
+        assert len(ref.aligner_index) == 2
+        assert ref.aligner_index[0] == bwt_ipfile
+        assert ref.aligner_index[1] == pac_ipfile
+        assert all(f.keyvalues.get("type") == "reference" for f in ref.aligner_index)
+        assert all(
+            f.keyvalues.get("component") == "aligner_index" for f in ref.aligner_index
         )
-
-        # Verify files were added to reference
-        assert len(ref.files) == 2
-        assert all(f.cid for f in ref.files)
-        assert all(f.keyvalues.get("type") == "test" for f in ref.files)
-        assert all(f.keyvalues.get("purpose") == "unit_test" for f in ref.files)
-        assert all(f.keyvalues.get("env") == "test" for f in ref.files)
+        assert all(f.keyvalues.get("aligner") == "bwa" for f in ref.aligner_index)
+        assert all(f.keyvalues.get("build") == "GRCh38" for f in ref.aligner_index)
 
 
 @pytest.mark.asyncio
-async def test_add_files_local_only():
-    """Test local-only mode via STARGAZER_LOCAL_ONLY env var."""
+async def test_update_components_local_only():
+    """Test update_*() methods in local-only mode."""
     # Save original local_only state
     original_local_only = default_client.local_only
 
     try:
         # Enable local-only mode on default_client
         default_client.local_only = True
+
         # Create temporary test files
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
 
             # Create test files
-            test_file1 = tmpdir_path / "local_test1.txt"
-            test_file2 = tmpdir_path / "local_test2.txt"
+            test_fasta = tmpdir_path / "GRCh38.fa"
+            test_faidx = tmpdir_path / "GRCh38.fa.fai"
+            test_bwt = tmpdir_path / "GRCh38.fa.bwt"
 
-            test_file1.write_text("Local test content 1")
-            test_file2.write_text("Local test content 2")
+            test_fasta.write_text(">chr1\nATCGATCG\n")
+            test_faidx.write_text("chr1\t8\t0\t9\t10\n")
+            test_bwt.write_bytes(b"BWT_INDEX")
 
-            # Create reference (uses default_client which is now in local_only mode)
-            ref = Reference(ref_name="local_test1.txt")
+            # Create reference and update components
+            ref = Reference(build="GRCh38")
 
-            await ref.add_files(
-                file_paths=[test_file1, test_file2],
-                keyvalues={"type": "test", "mode": "local", "env": "test"},
-            )
+            await ref.update_fasta(test_fasta)
+            await ref.update_faidx(test_faidx)
+            await ref.update_aligner_index(test_bwt, aligner="bwa")
 
-            # Verify files were added to reference
-            assert len(ref.files) == 2
+            # Verify components were set
+            assert ref.fasta is not None
+            assert ref.faidx is not None
+            assert len(ref.aligner_index) == 1
 
             # Verify all files have local CIDs
-            for f in ref.files:
-                assert f.cid.startswith("local_")
-                assert f.keyvalues.get("type") == "test"
-                assert f.keyvalues.get("mode") == "local"
-                assert f.keyvalues.get("env") == "test"
+            assert ref.fasta.cid.startswith("local_")
+            assert ref.faidx.cid.startswith("local_")
+            assert ref.aligner_index[0].cid.startswith("local_")
 
             # Verify files exist in cache
-            for f in ref.files:
-                cache_path = default_client.local_dir / f.cid
-                assert cache_path.exists()
-                assert cache_path.is_file()
+            cache_fasta = default_client.local_dir / ref.fasta.cid
+            cache_faidx = default_client.local_dir / ref.faidx.cid
+            cache_bwt = default_client.local_dir / ref.aligner_index[0].cid
+
+            assert cache_fasta.exists()
+            assert cache_faidx.exists()
+            assert cache_bwt.exists()
 
             # Verify file contents match original
-            cache_file1 = default_client.local_dir / ref.files[0].cid
-            cache_file2 = default_client.local_dir / ref.files[1].cid
-
-            assert cache_file1.read_text() == "Local test content 1"
-            assert cache_file2.read_text() == "Local test content 2"
+            assert cache_fasta.read_text() == ">chr1\nATCGATCG\n"
+            assert cache_faidx.read_text() == "chr1\t8\t0\t9\t10\n"
+            assert cache_bwt.read_bytes() == b"BWT_INDEX"
     finally:
         # Restore original local_only state
         default_client.local_only = original_local_only
+
+
+@pytest.mark.asyncio
+async def test_reference_fetch():
+    """Test fetch() downloads all reference components."""
+    # Save original local_only state
+    original_local_only = default_client.local_only
+
+    try:
+        # Enable local-only mode
+        default_client.local_only = True
+
+        # Create temporary test files
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+
+            # Create test files
+            test_fasta = tmpdir_path / "GRCh38.fa"
+            test_faidx = tmpdir_path / "GRCh38.fa.fai"
+
+            test_fasta.write_text(">chr1\nATCGATCG\n")
+            test_faidx.write_text("chr1\t8\t0\t9\t10\n")
+
+            # Create reference and update components
+            ref = Reference(build="GRCh38")
+            await ref.update_fasta(test_fasta)
+            await ref.update_faidx(test_faidx)
+
+            # Fetch components (in local-only mode, they're already there)
+            cache_dir = await ref.fetch()
+
+            # Verify cache directory returned
+            assert cache_dir == default_client.local_dir
+            assert cache_dir.exists()
+
+            # Verify both files are in cache (check local_path is set)
+            assert ref.fasta.local_path is not None
+            assert ref.fasta.local_path.exists()
+            assert ref.faidx.local_path is not None
+            assert ref.faidx.local_path.exists()
+
+            # Cleanup
+            if ref.fasta.local_path.exists():
+                ref.fasta.local_path.unlink()
+            if ref.faidx.local_path.exists():
+                ref.faidx.local_path.unlink()
+            for idx in ref.aligner_index:
+                if idx.local_path and idx.local_path.exists():
+                    idx.local_path.unlink()
+    finally:
+        # Restore original local_only state
+        default_client.local_only = original_local_only
+
+
+@pytest.mark.asyncio
+async def test_reference_fetch_empty():
+    """Test fetch() raises ValueError for empty reference."""
+    ref = Reference(build="GRCh38")
+
+    with pytest.raises(ValueError, match="No files to fetch"):
+        await ref.fetch()
 
 
 @pytest.mark.asyncio

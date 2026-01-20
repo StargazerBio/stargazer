@@ -4,6 +4,8 @@ BWA tasks for reference genome indexing and alignment.
 
 import asyncio
 
+from pathlib import Path
+
 from stargazer.config import gatk_env
 from stargazer.types import Alignment, Reads, Reference
 from stargazer.utils import _run
@@ -46,17 +48,13 @@ async def bwa_index(ref: Reference) -> Reference:
     index_extensions = [".amb", ".ann", ".bwt", ".pac", ".sa"]
 
     # Check if we already have all BWA index files
-    ref_file_name = ref_file_path.name
-    index_file_names = [f"{ref_file_name}{ext}" for ext in index_extensions]
-    existing_files = []
-    if ref.fasta:
-        existing_files.append(ref.fasta.name)
-    if ref.faidx:
-        existing_files.append(ref.faidx.name)
-    existing_files.extend(f.name for f in ref.aligner_index)
-    existing_names = set(existing_files)
+    # Compare by extension since cached files have CID-based names
+    existing_extensions = set()
+    for f in ref.aligner_index:
+        if f.name:
+            existing_extensions.add(Path(f.name).suffix.lower())
 
-    if all(name in existing_names for name in index_file_names):
+    if all(ext.lower() in existing_extensions for ext in index_extensions):
         return ref
 
     # Run bwa index in the cache directory

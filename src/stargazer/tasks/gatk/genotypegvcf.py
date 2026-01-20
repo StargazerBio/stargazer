@@ -53,7 +53,7 @@ async def genotypegvcf(
     # Validate that this is a GVCF
     if not gvcf.is_gvcf:
         raise ValueError(
-            f"genotypegvcf requires a GVCF file, but got VCF. vcf_name={gvcf.vcf_name}"
+            f"genotypegvcf requires a GVCF file, but got VCF. sample_id={gvcf.sample_id}"
         )
 
     # Fetch all input files to cache
@@ -61,13 +61,17 @@ async def genotypegvcf(
     await ref.fetch()
 
     # Get paths to input files
-    ref_path = ref.get_ref_path()
-    gvcf_path = gvcf.get_vcf_path()
+    if not ref.fasta or not ref.fasta.local_path:
+        raise ValueError("Reference FASTA file not available or not fetched")
+    ref_path = ref.fasta.local_path
+    if not gvcf.vcf or not gvcf.vcf.local_path:
+        raise ValueError("GVCF file not available or not fetched")
+    gvcf_path = gvcf.vcf.local_path
 
     # Create output VCF path
     output_dir = ref_path.parent
     # Replace .g.vcf or .gvcf extension with .vcf
-    vcf_basename = gvcf.vcf_name
+    vcf_basename = gvcf.vcf.name or f"{gvcf.sample_id}.g.vcf"
     if vcf_basename.endswith(".g.vcf.gz"):
         vcf_basename = vcf_basename[:-9] + ".vcf"
     elif vcf_basename.endswith(".g.vcf"):
@@ -106,25 +110,19 @@ async def genotypegvcf(
     # Create Variants object for output
     variants = Variants(
         sample_id=gvcf.sample_id,
-        vcf_name=output_vcf.name,
     )
 
     # Build metadata for VCF file
-    keyvalues = {
-        "type": "variants",
-        "sample_id": gvcf.sample_id,
-        "caller": "genotypegvcf",
-        "variant_type": "vcf",
-        "source_caller": gvcf.caller,
-    }
-
-    # Try to get build from reference
-    for f in ref.files:
-        if f.name == ref.ref_name and "build" in f.keyvalues:
-            keyvalues["build"] = f.keyvalues["build"]
-            break
-
-    # Upload VCF file to Pinata and add to variants
-    await variants.add_files(file_paths=[output_vcf], keyvalues=keyvalues)
+    build = (
+        ref.fasta.keyvalues.get("build") if ref.fasta and ref.fasta.keyvalues else None
+    )
+    await variants.update_vcf(
+        output_vcf,
+        caller="genotypegvcf",
+        variant_type="vcf",
+        build=build,
+        sample_count=len(gvcf.source_samples),
+        source_samples=gvcf.source_samples,
+    )
 
     return variants

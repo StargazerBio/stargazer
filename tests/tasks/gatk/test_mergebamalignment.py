@@ -38,6 +38,7 @@ def create_mock_bam(
         size=bam_path.stat().st_size,
         keyvalues={
             "type": "alignment",
+            "component": "alignment",
             "sample_id": sample_id,
             "tool": "bwa_mem" if bam_type == "aligned" else "picard",
             "sorted": "queryname" if bam_type == "unmapped" else "unsorted",
@@ -59,7 +60,7 @@ def create_mock_reference(local_dir: Path, test_cid: str) -> tuple[Path, IpFile]
     ref_path = local_dir / test_cid
 
     ref_content = """>chr17
-GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
+GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
 """
     ref_path.write_text(ref_content)
 
@@ -70,6 +71,7 @@ GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
         size=ref_path.stat().st_size,
         keyvalues={
             "type": "reference",
+            "component": "fasta",
             "build": "GRCh38",
         },
         created_at=datetime.now(),
@@ -101,19 +103,17 @@ async def test_mergebamalignment_merges_bams():
 
     aligned_bam = Alignment(
         sample_id=sample_id,
-        bam_name=f"{sample_id}_aligned.bam",
-        files=[aligned_ipfile],
+        alignment=aligned_ipfile,
     )
 
     unmapped_bam = Alignment(
         sample_id=sample_id,
-        bam_name=f"{sample_id}_unmapped.bam",
-        files=[unmapped_ipfile],
+        alignment=unmapped_ipfile,
     )
 
     ref = Reference(
-        ref_name="test_reference.fa",
-        files=[ref_ipfile],
+        build="GRCh38",
+        fasta=ref_ipfile,
     )
 
     try:
@@ -128,12 +128,7 @@ async def test_mergebamalignment_merges_bams():
         assert merged.sample_id == sample_id
 
         # Check metadata
-        bam_file = None
-        for f in merged.files:
-            if f.name == merged.bam_name:
-                bam_file = f
-                break
-
+        bam_file = merged.alignment
         assert bam_file is not None
         assert bam_file.keyvalues.get("sorted") == "coordinate"
         assert bam_file.keyvalues.get("tool") == "gatk_mergebamalignment"

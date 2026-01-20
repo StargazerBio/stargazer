@@ -57,8 +57,12 @@ async def applybqsr(
     await default_client.download_file(recal_report)
 
     # Get paths
-    ref_path = ref.get_ref_path()
-    bam_path = alignment.get_bam_path()
+    if not ref.fasta or not ref.fasta.local_path:
+        raise ValueError("Reference FASTA file not available or not fetched")
+    ref_path = ref.fasta.local_path
+    if not alignment.alignment or not alignment.alignment.local_path:
+        raise ValueError("Alignment BAM file not available or not fetched")
+    bam_path = alignment.alignment.local_path
     recal_path = recal_report.local_path
     output_dir = ref_path.parent
 
@@ -95,21 +99,16 @@ async def applybqsr(
     # Create new Alignment object for recalibrated BAM
     recalibrated_alignment = Alignment(
         sample_id=alignment.sample_id,
-        bam_name=output_bam.name,
     )
 
-    # Build metadata for recalibrated BAM
-    keyvalues = {
-        "type": "alignment",
-        "sample_id": alignment.sample_id,
-        "tool": "gatk_applybqsr",
-        "file_type": "bam",
-        "sorted": "coordinate",
-        "duplicates_marked": "true",
-        "bqsr_applied": "true",
-    }
-
     # Upload recalibrated BAM to Pinata
-    await recalibrated_alignment.add_files(file_paths=[output_bam], keyvalues=keyvalues)
+    await recalibrated_alignment.update_alignment(
+        output_bam,
+        format="bam",
+        is_sorted=True,
+        duplicates_marked=True,
+        bqsr_applied=True,
+        tool="gatk_applybqsr",
+    )
 
     return recalibrated_alignment

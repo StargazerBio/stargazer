@@ -52,8 +52,12 @@ async def sortsam(
     await ref.fetch()
 
     # Get paths
-    ref_path = ref.get_ref_path()
-    bam_path = alignment.get_bam_path()
+    if not ref.fasta or not ref.fasta.local_path:
+        raise ValueError("Reference FASTA file not available or not fetched")
+    ref_path = ref.fasta.local_path
+    if not alignment.alignment or not alignment.alignment.local_path:
+        raise ValueError("Alignment BAM file not available or not fetched")
+    bam_path = alignment.alignment.local_path
     output_dir = ref_path.parent
 
     # Output BAM path
@@ -85,26 +89,22 @@ async def sortsam(
     # Create new Alignment object for sorted BAM
     sorted_alignment = Alignment(
         sample_id=alignment.sample_id,
-        bam_name=output_bam.name,
     )
 
-    # Build metadata for sorted BAM
-    keyvalues = {
-        "type": "alignment",
-        "sample_id": alignment.sample_id,
-        "tool": "gatk_sortsam",
-        "file_type": "bam",
-        "sorted": sort_order,
-    }
+    # Upload sorted BAM to Pinata
+    await sorted_alignment.update_alignment(
+        output_bam,
+        format="bam",
+        is_sorted=(sort_order == "coordinate"),
+        duplicates_marked=alignment.has_duplicates_marked,
+        bqsr_applied=alignment.has_bqsr_applied,
+        tool="gatk_sortsam",
+    )
 
-    # Collect output files (BAM and possibly index)
-    output_files = [output_bam]
+    # Upload index file if created
     if sort_order == "coordinate":
         bam_index = output_dir / f"{output_bam.name}.bai"
         if bam_index.exists():
-            output_files.append(bam_index)
-
-    # Upload sorted BAM to Pinata
-    await sorted_alignment.add_files(file_paths=output_files, keyvalues=keyvalues)
+            await sorted_alignment.update_index(bam_index)
 
     return sorted_alignment

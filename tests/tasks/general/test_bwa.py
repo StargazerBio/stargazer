@@ -36,7 +36,12 @@ async def test_bwa_index():
         cid=test_cid,
         name="GRCh38_TP53.fa",
         size=cached_fasta.stat().st_size,
-        keyvalues={"type": "reference", "build": "GRCh38", "env": "test"},
+        keyvalues={
+            "type": "reference",
+            "component": "fasta",
+            "build": "GRCh38",
+            "env": "test",
+        },
         created_at=datetime.now(),
     )
 
@@ -48,7 +53,7 @@ async def test_bwa_index():
     # Run bwa_index - it will call ref.fetch() internally
     result = await bwa_index(ref)
 
-    # Verify the result
+    # Verify result
     assert isinstance(result, Reference)
     assert result.build == "GRCh38"
 
@@ -68,7 +73,7 @@ async def test_bwa_index():
         index_file = index_files[0]
         assert index_file.size > 0, f"Index file {ext} should not be empty"
 
-        # Verify the index file has metadata
+        # Verify index file has metadata
         assert index_files[0].keyvalues.get("aligner") == "bwa_index", (
             f"Index file {ext} should have aligner metadata"
         )
@@ -88,7 +93,7 @@ async def test_bwa_index():
             f"Index file {ext} should copy build metadata from reference"
         )
 
-        # Verify file exists at the local_path
+        # Verify file exists at local_path
         assert index_file.local_path is not None, (
             f"Index file {ext} should have local_path set"
         )
@@ -130,7 +135,11 @@ async def test_bwa_index_idempotent():
             cid=test_cid_fasta,
             name="GRCh38_TP53.fa",
             size=cached_fasta.stat().st_size,
-            keyvalues={"type": "reference", "env": "test"},
+            keyvalues={
+                "type": "reference",
+                "component": "fasta",
+                "env": "test",
+            },
             created_at=datetime.now(),
         )
     ]
@@ -151,7 +160,12 @@ async def test_bwa_index_idempotent():
                     cid=test_cid_index,
                     name=f"GRCh38_TP53.fa{ext}",
                     size=cached_index.stat().st_size,
-                    keyvalues={"type": "reference", "env": "test"},
+                    keyvalues={
+                        "type": "reference",
+                        "component": "aligner_index",
+                        "aligner": "bwa_index",
+                        "env": "test",
+                    },
                     created_at=datetime.now(),
                 )
             )
@@ -165,11 +179,11 @@ async def test_bwa_index_idempotent():
     # Run bwa_index (should not regenerate if all files present)
     result = await bwa_index(ref)
 
-    # Verify the result
+    # Verify result
     assert isinstance(result, Reference)
 
     # Should still have same number of aligner_index files
-    original_index_count = len(files_list) - 1  # Subtract the FASTA file
+    original_index_count = len(files_list) - 1  # Subtract FASTA file
     assert len(result.aligner_index) == original_index_count, (
         "Should not duplicate index files"
     )

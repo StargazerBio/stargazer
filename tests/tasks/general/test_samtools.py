@@ -36,42 +36,48 @@ async def test_samtools_faidx():
         cid=test_cid,
         name="GRCh38_TP53.fa",
         size=cached_fasta.stat().st_size,
-        keyvalues={"type": "reference", "build": "GRCh38", "env": "test"},
+        keyvalues={
+            "type": "reference",
+            "component": "fasta",
+            "build": "GRCh38",
+            "env": "test",
+        },
         created_at=datetime.now(),
     )
 
     ref = Reference(
-        ref_name="GRCh38_TP53.fa",
-        files=[fasta_file],
+        build="GRCh38",
+        fasta=fasta_file,
     )
 
     # Run samtools_faidx - it will call ref.fetch() internally
     result = await samtools_faidx(ref)
 
-    # Verify the result
+    # Verify result
     assert isinstance(result, Reference)
-    assert result.ref_name == "GRCh38_TP53.fa"
+    assert result.build == "GRCh38"
 
-    # Verify .fai file was added to files list
-    fai_files = [f for f in result.files if f.name == "GRCh38_TP53.fa.fai"]
-    assert len(fai_files) == 1, "Should have exactly one .fai file"
-    assert fai_files[0].size > 0, "Index file should not be empty"
+    # Verify .fai file was added to faidx component
+    fai_files = result.faidx
+    assert fai_files is not None, "Should have faidx file"
+    assert fai_files.size > 0, "Index file should not be empty"
 
-    # Verify the .fai file has metadata
-    assert fai_files[0].keyvalues.get("tool") == "samtools_faidx", (
+    # Verify .fai file has metadata
+    assert fai_files.keyvalues.get("tool") == "samtools_faidx", (
         "Should have tool metadata"
     )
-    assert fai_files[0].keyvalues.get("type") == "reference", (
-        "Should have type metadata"
+    assert fai_files.keyvalues.get("type") == "reference", "Should have type metadata"
+    assert fai_files.keyvalues.get("component") == "faidx", (
+        "Should have component metadata"
     )
-    assert fai_files[0].keyvalues.get("build") == "GRCh38", (
+    assert fai_files.keyvalues.get("build") == "GRCh38", (
         "Should copy build metadata from reference"
     )
 
     # Verify .fai file exists at local_path
-    # Samtools creates files with the CID as base name (e.g., QmTestTP53Fasta.fai)
-    assert fai_files[0].local_path is not None, "Should have local_path set"
-    assert fai_files[0].local_path.exists(), "Index file should exist at local_path"
+    # Samtools creates files with CID as base name (e.g., QmTestTP53Fasta.fai)
+    assert fai_files.local_path is not None, "Should have local_path set"
+    assert fai_files.local_path.exists(), "Index file should exist at local_path"
 
     # Cleanup - use actual cached filenames (CID-based)
     if cached_fasta.exists():
@@ -107,7 +113,11 @@ async def test_samtools_faidx_idempotent():
         cid=test_cid_fasta,
         name="GRCh38_TP53.fa",
         size=cached_fasta.stat().st_size,
-        keyvalues={"type": "reference", "env": "test"},
+        keyvalues={
+            "type": "reference",
+            "component": "fasta",
+            "env": "test",
+        },
         created_at=datetime.now(),
     )
 
@@ -116,27 +126,28 @@ async def test_samtools_faidx_idempotent():
         cid=test_cid_fai,
         name="GRCh38_TP53.fa.fai",
         size=cached_fai.stat().st_size,
-        keyvalues={"type": "reference", "env": "test"},
+        keyvalues={
+            "type": "reference",
+            "component": "faidx",
+            "env": "test",
+        },
         created_at=datetime.now(),
     )
 
     ref = Reference(
-        ref_name="GRCh38_TP53.fa",
-        files=[fasta_file, fai_file],
+        build="GRCh38",
+        fasta=fasta_file,
+        faidx=fai_file,
     )
 
     # Run samtools_faidx (should not regenerate)
     result = await samtools_faidx(ref)
 
-    # Verify the result
+    # Verify result
     assert isinstance(result, Reference)
 
-    # Should still have exactly 2 files (not 3)
-    assert len(result.files) == 2, "Should not duplicate .fai file"
-
-    # Verify .fai file exists
-    fai_files = [f for f in result.files if f.name == "GRCh38_TP53.fa.fai"]
-    assert len(fai_files) == 1, "Should have exactly one .fai file"
+    # Should still have faidx component
+    assert result.faidx is not None, "Should have faidx file"
 
     # Cleanup
     if cached_fasta.exists():
@@ -152,10 +163,9 @@ async def test_samtools_faidx_missing_file():
     if shutil.which("samtools") is None:
         pytest.skip("samtools not available in environment")
 
-    # Create a Reference with empty files list
+    # Create a Reference with empty fasta component
     ref = Reference(
-        ref_name="nonexistent.fasta",
-        files=[],
+        build="nonexistent.fasta",
     )
 
     # Should raise ValueError when trying to fetch empty reference

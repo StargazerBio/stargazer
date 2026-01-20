@@ -35,6 +35,7 @@ def create_mock_bam(
         size=bam_path.stat().st_size,
         keyvalues={
             "type": "alignment",
+            "component": "alignment",
             "sample_id": sample_id,
             "tool": "fq2bam",
             "sorted": "coordinate",
@@ -56,8 +57,9 @@ def create_mock_reference(local_dir: Path, test_cid: str) -> tuple[Path, IpFile]
     local_dir.mkdir(parents=True, exist_ok=True)
     ref_path = local_dir / test_cid
 
+    # Create minimal FASTA content
     ref_content = """>chr17
-GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
+GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
 """
     ref_path.write_text(ref_content)
 
@@ -68,6 +70,7 @@ GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
         size=ref_path.stat().st_size,
         keyvalues={
             "type": "reference",
+            "component": "fasta",
             "build": "GRCh38",
         },
         created_at=datetime.now(),
@@ -137,13 +140,12 @@ async def test_applybqsr_recalibrates_bam():
 
     alignment = Alignment(
         sample_id=sample_id,
-        bam_name=f"{sample_id}.bam",
-        files=[bam_ipfile],
+        alignment=bam_ipfile,
     )
 
     ref = Reference(
-        ref_name="test_reference.fa",
-        files=[ref_ipfile],
+        build="GRCh38",
+        fasta=ref_ipfile,
     )
 
     try:
@@ -159,12 +161,7 @@ async def test_applybqsr_recalibrates_bam():
         assert recalibrated.has_bqsr_applied
 
         # Check metadata
-        bam_file = None
-        for f in recalibrated.files:
-            if f.name == recalibrated.bam_name:
-                bam_file = f
-                break
-
+        bam_file = recalibrated.alignment
         assert bam_file is not None
         assert bam_file.keyvalues.get("bqsr_applied") == "true"
         assert bam_file.keyvalues.get("tool") == "gatk_applybqsr"
@@ -188,7 +185,7 @@ async def test_applybqsr_task_is_callable():
 
 @pytest.mark.asyncio
 async def test_alignment_has_bqsr_applied_property():
-    """Test the has_bqsr_applied property on Alignment type."""
+    """Test has_bqsr_applied property on Alignment type."""
     # Test alignment without BQSR
     non_bqsr_ipfile = IpFile(
         id="test-no-bqsr",
@@ -197,6 +194,7 @@ async def test_alignment_has_bqsr_applied_property():
         size=1000,
         keyvalues={
             "type": "alignment",
+            "component": "alignment",
             "sample_id": "test",
             "sorted": "coordinate",
             "duplicates_marked": "true",
@@ -206,8 +204,7 @@ async def test_alignment_has_bqsr_applied_property():
 
     non_bqsr_alignment = Alignment(
         sample_id="test",
-        bam_name="no_bqsr.bam",
-        files=[non_bqsr_ipfile],
+        alignment=non_bqsr_ipfile,
     )
 
     assert not non_bqsr_alignment.has_bqsr_applied
@@ -220,6 +217,7 @@ async def test_alignment_has_bqsr_applied_property():
         size=1000,
         keyvalues={
             "type": "alignment",
+            "component": "alignment",
             "sample_id": "test",
             "sorted": "coordinate",
             "duplicates_marked": "true",
@@ -230,8 +228,7 @@ async def test_alignment_has_bqsr_applied_property():
 
     bqsr_alignment = Alignment(
         sample_id="test",
-        bam_name="with_bqsr.bam",
-        files=[bqsr_ipfile],
+        alignment=bqsr_ipfile,
     )
 
     assert bqsr_alignment.has_bqsr_applied

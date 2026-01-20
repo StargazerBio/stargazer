@@ -48,9 +48,15 @@ async def mergebamalignment(
     await ref.fetch()
 
     # Get paths
-    ref_path = ref.get_ref_path()
-    aligned_path = aligned_bam.get_bam_path()
-    unmapped_path = unmapped_bam.get_bam_path()
+    if not ref.fasta or not ref.fasta.local_path:
+        raise ValueError("Reference FASTA file not available or not fetched")
+    ref_path = ref.fasta.local_path
+    if not aligned_bam.alignment or not aligned_bam.alignment.local_path:
+        raise ValueError("Aligned BAM file not available or not fetched")
+    aligned_path = aligned_bam.alignment.local_path
+    if not unmapped_bam.alignment or not unmapped_bam.alignment.local_path:
+        raise ValueError("Unmapped BAM file not available or not fetched")
+    unmapped_path = unmapped_bam.alignment.local_path
     output_dir = ref_path.parent
 
     # Output BAM path
@@ -96,25 +102,21 @@ async def mergebamalignment(
     # Create new Alignment object for merged BAM
     merged_alignment = Alignment(
         sample_id=aligned_bam.sample_id,
-        bam_name=output_bam.name,
     )
 
-    # Build metadata for merged BAM
-    keyvalues = {
-        "type": "alignment",
-        "sample_id": aligned_bam.sample_id,
-        "tool": "gatk_mergebamalignment",
-        "file_type": "bam",
-        "sorted": "coordinate",
-    }
+    # Upload merged BAM to Pinata
+    await merged_alignment.update_alignment(
+        output_bam,
+        format="bam",
+        is_sorted=True,
+        duplicates_marked=aligned_bam.has_duplicates_marked,
+        bqsr_applied=aligned_bam.has_bqsr_applied,
+        tool="gatk_mergebamalignment",
+    )
 
-    # Collect output files (BAM and index)
-    output_files = [output_bam]
+    # Upload index file
     bam_index = output_dir / f"{output_bam.name}.bai"
     if bam_index.exists():
-        output_files.append(bam_index)
-
-    # Upload merged BAM to Pinata
-    await merged_alignment.add_files(file_paths=output_files, keyvalues=keyvalues)
+        await merged_alignment.update_index(bam_index)
 
     return merged_alignment

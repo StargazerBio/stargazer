@@ -22,15 +22,16 @@ async def samtools_faidx(ref: Reference) -> Reference:
     await ref.fetch()
 
     # Get the cached reference file path
-    ref_file_path = ref.get_ref_path()
+    if not ref.fasta or not ref.fasta.local_path:
+        raise ValueError("Reference FASTA file not available or not fetched")
+    ref_file_path = ref.fasta.local_path
 
     # Verify the reference file exists
     if not ref_file_path.exists():
-        raise FileNotFoundError(f"Reference file {ref.ref_name} not found in cache")
+        raise FileNotFoundError(f"Reference file {ref.build} not found in cache")
 
-    # Check if we already have the .fai in our files list
-    fai_name = f"{ref.ref_name}.fai"
-    if any(f.name == fai_name for f in ref.files):
+    # Check if we already have the .fai
+    if ref.faidx is not None:
         return ref
 
     # Run samtools faidx in the cache directory
@@ -43,21 +44,7 @@ async def samtools_faidx(ref: Reference) -> Reference:
     if not fai_path.exists():
         raise FileNotFoundError(f"FASTA index file {fai_path.name} was not created")
 
-    # Get the reference file's metadata to copy over
-    ref_file = None
-    for f in ref.files:
-        if f.name == ref.ref_name:
-            ref_file = f
-            break
-
-    # Build metadata for index file
-    keyvalues = {"type": "reference", "tool": "samtools_faidx"}
-    if ref_file and ref_file.keyvalues:
-        # Copy over build info if present
-        if "build" in ref_file.keyvalues:
-            keyvalues["build"] = ref_file.keyvalues["build"]
-
-    # Upload .fai file to Pinata and add to reference
-    await ref.add_files(file_paths=[fai_path], keyvalues=keyvalues)
+    # Upload .fai file to Pinata
+    await ref.update_faidx(fai_path, build=ref.build, tool="samtools_faidx")
 
     return ref

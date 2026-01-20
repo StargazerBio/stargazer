@@ -33,8 +33,9 @@ from stargazer.tasks import (
     hydrate,
     samtools_faidx,
     bwa_index,
-    fq2bam,
-    haplotypecaller,
+    bwa_mem,
+    sortsam,
+    markduplicates,
     genotypegvcf,
     combinegvcfs,
     baserecalibrator,
@@ -79,7 +80,7 @@ async def align_sample(
     """
     Align a single sample's reads to reference and optionally apply BQSR.
 
-    Hydrates reads from Pinata and runs fq2bam for alignment,
+    Hydrates reads from Pinata and runs BWA-MEM for alignment,
     sorting, and duplicate marking. Optionally applies Base Quality
     Score Recalibration (BQSR) if known_sites are provided.
 
@@ -105,7 +106,10 @@ async def align_sample(
     reads = next((r for r in reads_list if isinstance(r, Reads)), None)
     if not reads:
         raise ValueError(f"Reads not found for sample_id: {sample_id}")
-    alignment = await fq2bam(reads=reads, ref=ref)
+
+    alignment = await bwa_mem(reads=reads, ref=ref)
+    alignment = await sortsam(alignment=alignment, ref=ref, sort_order="coordinate")
+    alignment = await markduplicates(alignment=alignment, ref=ref)
 
     # Apply BQSR if requested
     if apply_bqsr and known_sites:
@@ -140,15 +144,14 @@ async def call_variants_gvcf(
 
     Returns:
         Variants object with indexed GVCF
+
+    Raises:
+        NotImplementedError: HaplotypeCaller task is not yet implemented
     """
-    gvcf = await haplotypecaller(
-        alignment=alignment,
-        ref=ref,
-        output_gvcf=True,
+    raise NotImplementedError(
+        "haplotypecaller task not yet implemented. "
+        "Please implement the HaplotypeCaller task to enable variant calling."
     )
-    # Index the GVCF for downstream processing (TODO: implement indexgvcf task)
-    # gvcf = await indexgvcf(gvcf)
-    return gvcf
 
 
 @gatk_env.task

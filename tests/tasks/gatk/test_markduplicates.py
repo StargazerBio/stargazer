@@ -35,6 +35,7 @@ def create_mock_bam(
         size=bam_path.stat().st_size,
         keyvalues={
             "type": "alignment",
+            "component": "alignment",
             "sample_id": sample_id,
             "tool": "sortsam",
             "sorted": "coordinate",
@@ -55,8 +56,9 @@ def create_mock_reference(local_dir: Path, test_cid: str) -> tuple[Path, IpFile]
     local_dir.mkdir(parents=True, exist_ok=True)
     ref_path = local_dir / test_cid
 
+    # Create minimal FASTA content
     ref_content = """>chr17
-GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
+GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
 """
     ref_path.write_text(ref_content)
 
@@ -67,6 +69,7 @@ GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
         size=ref_path.stat().st_size,
         keyvalues={
             "type": "reference",
+            "component": "fasta",
             "build": "GRCh38",
         },
         created_at=datetime.now(),
@@ -94,13 +97,12 @@ async def test_markduplicates_marks_duplicates():
 
     alignment = Alignment(
         sample_id=sample_id,
-        bam_name=f"{sample_id}.bam",
-        files=[bam_ipfile],
+        alignment=bam_ipfile,
     )
 
     ref = Reference(
-        ref_name="test_reference.fa",
-        files=[ref_ipfile],
+        build="GRCh38",
+        fasta=ref_ipfile,
     )
 
     try:
@@ -114,12 +116,7 @@ async def test_markduplicates_marks_duplicates():
         assert marked.sample_id == sample_id
 
         # Check metadata
-        bam_file = None
-        for f in marked.files:
-            if f.name == marked.bam_name:
-                bam_file = f
-                break
-
+        bam_file = marked.alignment
         assert bam_file is not None
         assert bam_file.keyvalues.get("duplicates_marked") == "true"
         assert bam_file.keyvalues.get("tool") == "gatk_markduplicates"

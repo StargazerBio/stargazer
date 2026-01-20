@@ -80,6 +80,7 @@ class Alignment:
         is_sorted: Optional[bool] = None,
         duplicates_marked: Optional[bool] = None,
         bqsr_applied: Optional[bool] = None,
+        tool: Optional[str] = None,
     ) -> IpFile:
         """
         Upload alignment (BAM/CRAM) component.
@@ -90,6 +91,7 @@ class Alignment:
             is_sorted: Whether alignment is coordinate sorted
             duplicates_marked: Whether duplicates have been marked
             bqsr_applied: Whether BQSR has been applied
+            tool: Tool that created the alignment (e.g., "gatk_sortsam")
 
         Returns:
             IpFile representing the uploaded file
@@ -108,6 +110,8 @@ class Alignment:
             keyvalues["duplicates_marked"] = "true" if duplicates_marked else "false"
         if bqsr_applied is not None:
             keyvalues["bqsr_applied"] = "true" if bqsr_applied else "false"
+        if tool:
+            keyvalues["tool"] = tool
 
         ipfile = await default_client.upload_file(path, keyvalues=keyvalues)
         self.alignment = ipfile
