@@ -15,8 +15,8 @@
 - Simple tests will be written before implementation and you will pause to ensure they're capturing the right behavior
 - Implementation will be tightly scoped so it can be understood
 - Tests will run until they pass
-- All necessary CLI tools e.g. parabricks, bwa etc, are available in PATH. Use them to generate test assets as needed and
-  alert the user if they are not available.
+- All necessary CLI tools e.g. parabricks, bwa etc, are available in PATH. Use them to generate test assets as needed and alert the user if they are not available.
+- Do not consider backwards compatibility unless explicitly requested
 
 **Documentation Guidelines**
 - No code snippets are to be added to any documents outside of `.opencode/plans/`. Code examples in documentation files like this one become stale as conventions and implementations drift, creating confusion rather than clarity. The codebase itself should be the source of truth for implementation patterns.
