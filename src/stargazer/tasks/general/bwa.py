@@ -2,6 +2,8 @@
 BWA tasks for reference genome indexing and alignment.
 """
 
+import asyncio
+
 from stargazer.config import gatk_env
 from stargazer.types import Alignment, Reads, Reference
 from stargazer.utils import _run
@@ -32,18 +34,27 @@ async def bwa_index(ref: Reference) -> Reference:
     await ref.fetch()
 
     # Get the cached reference file path
-    ref_file_path = ref.get_ref_path()
+    if not ref.fasta or not ref.fasta.local_path:
+        raise ValueError("Reference FASTA file not available or not fetched")
+    ref_file_path = ref.fasta.local_path
 
     # Verify the reference file exists
     if not ref_file_path.exists():
-        raise FileNotFoundError(f"Reference file {ref.ref_name} not found in cache")
+        raise FileNotFoundError(f"Reference file {ref.build} not found in cache")
 
     # BWA index creates 5 files with these extensions
     index_extensions = [".amb", ".ann", ".bwt", ".pac", ".sa"]
 
-    # Check if we already have all BWA index files in our files list
-    index_file_names = [f"{ref.ref_name}{ext}" for ext in index_extensions]
-    existing_names = {f.name for f in ref.files}
+    # Check if we already have all BWA index files
+    ref_file_name = ref_file_path.name
+    index_file_names = [f"{ref_file_name}{ext}" for ext in index_extensions]
+    existing_files = []
+    if ref.fasta:
+        existing_files.append(ref.fasta.name)
+    if ref.faidx:
+        existing_files.append(ref.faidx.name)
+    existing_files.extend(f.name for f in ref.aligner_index)
+    existing_names = set(existing_files)
 
     if all(name in existing_names for name in index_file_names):
         return ref
@@ -60,15 +71,13 @@ async def bwa_index(ref: Reference) -> Reference:
         print(f"BWA stderr: {stderr}")
 
     # Get the reference file's metadata to copy over
-    ref_file = None
-    for f in ref.files:
-        if f.name == ref.ref_name:
-            ref_file = f
-            break
+    ref_file = ref.fasta
+    if not ref_file:
+        raise ValueError("Reference has no FASTA file")
 
     # Build metadata for index files
     keyvalues = {"type": "reference", "tool": "bwa_index"}
-    if ref_file and ref_file.keyvalues:
+    if ref_file.keyvalues:
         # Copy over build info if present
         if "build" in ref_file.keyvalues:
             keyvalues["build"] = ref_file.keyvalues["build"]
@@ -91,7 +100,12 @@ async def bwa_index(ref: Reference) -> Reference:
         index_file_paths.append(cached_index_path)
 
     # Upload all index files to Pinata and add to reference
-    await ref.add_files(file_paths=index_file_paths, keyvalues=keyvalues)
+    for file_path in index_file_paths:
+        ext = file_path.suffix.lower()
+        if ext in [".amb", ".ann", ".bwt", ".pac", ".sa"]:
+            aligner = keyvalues.get("tool", "bwa").lower()
+            build = keyvalues.get("build")
+            await ref.update_aligner_index(file_path, aligner=aligner, build=build)
 
     return ref
 
@@ -135,9 +149,17 @@ async def bwa_mem(
     await ref.fetch()
 
     # Get paths to input files
-    ref_path = ref.get_ref_path()
-    r1_path = reads.get_r1_path()
-    r2_path = reads.get_r2_path()
+    if not ref.fasta or not ref.fasta.local_path:
+        raise ValueError("Reference FASTA file not available or not fetched")
+    ref_path = ref.fasta.local_path
+
+    if not reads.r1 or not reads.r1.local_path:
+        raise ValueError("Reads R1 file not available or not fetched")
+    r1_path = reads.r1.local_path
+
+    r2_path = None
+    if reads.r2 and reads.r2.local_path:
+        r2_path = reads.r2.local_path
 
     # Build read group string
     # Required fields: ID, SM
@@ -184,7 +206,6 @@ async def bwa_mem(
 
     # BWA-MEM outputs SAM to stdout, so we need to pipe to samtools to create BAM
     # Using bash -c to pipe bwa mem output through samtools view
-    import subprocess
 
     # Construct full pipeline command
     bwa_cmd = " ".join([str(c) for c in cmd])
@@ -192,11 +213,11 @@ async def bwa_mem(
     full_cmd = f"{bwa_cmd} | {samtools_cmd}"
 
     # Execute the pipeline
-    proc = await subprocess.create_subprocess_shell(
+    proc = await asyncio.create_subprocess_shell(
         full_cmd,
         cwd=str(output_dir),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
     stdout, stderr = await proc.communicate()
 
@@ -215,19 +236,15 @@ async def bwa_mem(
     # Create Alignment object
     alignment = Alignment(
         sample_id=reads.sample_id,
-        bam_name=output_bam.name,
     )
 
-    # Build metadata for BAM file
-    keyvalues = {
-        "type": "alignment",
-        "sample_id": reads.sample_id,
-        "tool": "bwa_mem",
-        "file_type": "bam",
-        "sorted": "unsorted",  # BWA-MEM produces unsorted output
-    }
-
-    # Upload BAM file to Pinata and add to alignment
-    await alignment.add_files(file_paths=[output_bam], keyvalues=keyvalues)
+    # Upload BAM file to Pinata
+    await alignment.update_alignment(
+        output_bam,
+        format="bam",
+        is_sorted=False,
+        duplicates_marked=False,
+        bqsr_applied=False,
+    )
 
     return alignment

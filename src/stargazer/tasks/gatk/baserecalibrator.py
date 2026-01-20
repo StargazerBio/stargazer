@@ -56,8 +56,14 @@ async def baserecalibrator(
     await ref.fetch()
 
     # Get paths
-    ref_path = ref.get_ref_path()
-    bam_path = alignment.get_bam_path()
+    if not ref.fasta or not ref.fasta.local_path:
+        raise ValueError("Reference FASTA file not available or not fetched")
+    ref_path = ref.fasta.local_path
+
+    if not alignment.alignment or not alignment.alignment.local_path:
+        raise ValueError("Alignment BAM file not available or not fetched")
+    bam_path = alignment.alignment.local_path
+
     output_dir = ref_path.parent
 
     # Fetch known sites VCFs to cache

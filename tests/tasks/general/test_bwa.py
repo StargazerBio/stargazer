@@ -41,8 +41,8 @@ async def test_bwa_index():
     )
 
     ref = Reference(
-        ref_name="GRCh38_TP53.fa",
-        files=[fasta_file],
+        build="GRCh38",
+        fasta=fasta_file,
     )
 
     # Run bwa_index - it will call ref.fetch() internally
@@ -50,38 +50,51 @@ async def test_bwa_index():
 
     # Verify the result
     assert isinstance(result, Reference)
-    assert result.ref_name == "GRCh38_TP53.fa"
+    assert result.build == "GRCh38"
 
     # Verify all 5 BWA index files were added
     index_extensions = [".amb", ".ann", ".bwt", ".pac", ".sa"]
+
+    # Collect all index files from aligner_index
+    assert len(result.aligner_index) == 5, "Should have exactly 5 BWA index files"
+
     for ext in index_extensions:
-        index_name = f"GRCh38_TP53.fa{ext}"
-        index_files = [f for f in result.files if f.name == index_name]
+        # Find index file by checking names in aligner_index
+        index_files = [
+            f for f in result.aligner_index if f and f.name and f.name.endswith(ext)
+        ]
         assert len(index_files) == 1, f"Should have exactly one {ext} file"
-        assert index_files[0].size > 0, f"Index file {ext} should not be empty"
+
+        index_file = index_files[0]
+        assert index_file.size > 0, f"Index file {ext} should not be empty"
 
         # Verify the index file has metadata
-        assert index_files[0].keyvalues.get("tool") == "bwa_index", (
-            f"Index file {ext} should have tool metadata"
+        assert index_files[0].keyvalues.get("aligner") == "bwa_index", (
+            f"Index file {ext} should have aligner metadata"
         )
         assert index_files[0].keyvalues.get("type") == "reference", (
             f"Index file {ext} should have type metadata"
         )
+        assert index_files[0].keyvalues.get("component") == "aligner_index", (
+            f"Index file {ext} should have component metadata"
+        )
         assert index_files[0].keyvalues.get("build") == "GRCh38", (
+            f"Index file {ext} should copy build metadata from reference"
+        )
+        assert index_file.keyvalues.get("type") == "reference", (
+            f"Index file {ext} should have type metadata"
+        )
+        assert index_file.keyvalues.get("build") == "GRCh38", (
             f"Index file {ext} should copy build metadata from reference"
         )
 
         # Verify file exists at the local_path
-        # BWA creates files with the CID as base name (e.g., QmTestTP53Fasta.amb)
-        assert index_files[0].local_path is not None, (
+        assert index_file.local_path is not None, (
             f"Index file {ext} should have local_path set"
         )
-        assert index_files[0].local_path.exists(), (
+        assert index_file.local_path.exists(), (
             f"Index file {ext} should exist at local_path"
         )
-
-    # Total files should be 1 (fasta) + 5 (index files) = 6
-    assert len(result.files) == 6
 
     # Cleanup - use actual cached filenames (CID-based)
     if cached_fasta.exists():
@@ -144,8 +157,9 @@ async def test_bwa_index_idempotent():
             )
 
     ref = Reference(
-        ref_name="GRCh38_TP53.fa",
-        files=files_list,
+        build="GRCh38",
+        fasta=files_list[0] if files_list else None,
+        aligner_index=files_list[1:] if len(files_list) > 1 else [],
     )
 
     # Run bwa_index (should not regenerate if all files present)
@@ -154,8 +168,11 @@ async def test_bwa_index_idempotent():
     # Verify the result
     assert isinstance(result, Reference)
 
-    # Should still have same number of files (not duplicates)
-    assert len(result.files) == len(files_list), "Should not duplicate index files"
+    # Should still have same number of aligner_index files
+    original_index_count = len(files_list) - 1  # Subtract the FASTA file
+    assert len(result.aligner_index) == original_index_count, (
+        "Should not duplicate index files"
+    )
 
     # Cleanup
     if cached_fasta.exists():
@@ -173,11 +190,8 @@ async def test_bwa_index_missing_file():
     if shutil.which("bwa") is None:
         pytest.skip("bwa not available in environment")
 
-    # Create a Reference with empty files list
-    ref = Reference(
-        ref_name="nonexistent.fasta",
-        files=[],
-    )
+    # Create a Reference with no FASTA file
+    ref = Reference(build="nonexistent.fasta")
 
     # Should raise ValueError when trying to fetch empty reference
     with pytest.raises(ValueError, match="No files to fetch"):

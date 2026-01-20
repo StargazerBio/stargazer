@@ -96,11 +96,9 @@ Replace deprecated `pinata_hydrate` class method calls with the general `hydrate
 
 | File | Lines | Current Usage |
 |------|-------|---------------|
-| `src/stargazer/workflows/parabricks.py` | 67, 72 | `Reference.pinata_hydrate()`, `Reads.pinata_hydrate()` |
 | `src/stargazer/workflows/gatk_data_preprocessing.py` | 56, 121 | `Reference.pinata_hydrate()`, `Reads.pinata_hydrate()` |
 | `src/stargazer/workflows/germline_short_variant_discovery.py` | 63, 101 | `Reference.pinata_hydrate()`, `Reads.pinata_hydrate()` |
 | `src/stargazer/tasks/bwa.py` | 122 | `Reads.pinata_hydrate()` (docstring example) |
-| `src/stargazer/tasks/parabricks/fq2bam.py` | 33, 36 | `Reference.pinata_hydrate()`, `Reads.pinata_hydrate()` (docstring example) |
 
 **Change pattern:**
 ```python
@@ -422,11 +420,9 @@ async def test_baserecalibrator_creates_report():
 | `tests/test_sortsam.py` | `cache_dir` → `local_dir` + helper functions |
 | `tests/test_applybqsr.py` | `cache_dir` → `local_dir` + helper functions |
 | `tests/test_markduplicates.py` | `cache_dir` → `local_dir` + helper functions |
-| `src/stargazer/workflows/parabricks.py` | `pinata_hydrate` → `hydrate` |
 | `src/stargazer/workflows/gatk_data_preprocessing.py` | `pinata_hydrate` → `hydrate` |
 | `src/stargazer/workflows/germline_short_variant_discovery.py` | `pinata_hydrate` → `hydrate` |
 | `src/stargazer/tasks/bwa.py` | Update docstring example |
-| `src/stargazer/tasks/parabricks/fq2bam.py` | Update docstring example |
 | `.opencode/plans/keyvalue_components.md` | `cache_dir` → `local_dir` |
 | `.opencode/agent/code-review.md` | `pinata_hydrate` → `hydrate` |
 | `.opencode/agent/workflow.md` | `pinata_hydrate` → `hydrate` |
