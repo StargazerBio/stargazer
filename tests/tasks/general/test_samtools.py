@@ -8,7 +8,7 @@ from datetime import datetime
 import pytest
 from config import TEST_ROOT
 
-from stargazer.tasks.samtools import samtools_faidx
+from stargazer.tasks.general.samtools import samtools_faidx
 from stargazer.types import Reference
 from stargazer.utils.pinata import IpFile, default_client
 

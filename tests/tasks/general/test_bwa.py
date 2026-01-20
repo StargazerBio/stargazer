@@ -8,7 +8,7 @@ from datetime import datetime
 import pytest
 from config import TEST_ROOT
 
-from stargazer.tasks.bwa import bwa_index
+from stargazer.tasks.general.bwa import bwa_index
 from stargazer.types import Reference
 from stargazer.utils.pinata import IpFile, default_client
 

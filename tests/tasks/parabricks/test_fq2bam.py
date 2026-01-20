@@ -8,7 +8,7 @@ from datetime import datetime
 import pytest
 from config import TEST_ROOT
 
-from stargazer.tasks.fq2bam import fq2bam
+from stargazer.tasks.parabricks.fq2bam import fq2bam
 from stargazer.types import Reference, Reads, Alignment
 from stargazer.utils.pinata import IpFile
 

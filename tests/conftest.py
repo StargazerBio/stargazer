@@ -1,7 +1,13 @@
 """Pytest configuration for Flyte v2 tests."""
 
+import sys
+from pathlib import Path
+
 import pytest
 import flyte
+
+# Add tests directory to Python path for config imports
+sys.path.insert(0, str(Path(__file__).parent))
 
 
 @pytest.fixture(scope="session", autouse=True)

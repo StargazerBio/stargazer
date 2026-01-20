@@ -2,9 +2,9 @@
 Stargazer tasks for bioinformatics workflows.
 """
 
-from stargazer.tasks.hydrate import hydrate
-from stargazer.tasks.samtools import samtools_faidx
-from stargazer.tasks.bwa import bwa_index, bwa_mem
+from stargazer.tasks.general.hydrate import hydrate
+from stargazer.tasks.general.samtools import samtools_faidx
+from stargazer.tasks.general.bwa import bwa_index, bwa_mem
 from stargazer.tasks.parabricks.fq2bam import fq2bam
 from stargazer.tasks.parabricks.deepvariant import deepvariant
 from stargazer.tasks.parabricks.haplotypecaller import haplotypecaller
