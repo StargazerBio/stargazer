@@ -29,6 +29,7 @@ The `.opencode/agent/` directory contains specialized agent definitions for [Ope
 
 | Agent | File | Purpose |
 |-------|------|---------|
+| **Architecture** | `architecture.md` | Designs feature plans in `.opencode/plans/` and maintains specs in `.opencode/specs/` |
 | **Task** | `task.md` | Implements individual Flyte v2 tasks for bioinformatics tools |
 | **Test** | `test.md` | Writes unit and integration tests following TDD approach |
 | **Workflow** | `workflow.md` | Composes Flyte v2 tasks into end-to-end pipelines |
@@ -54,6 +55,14 @@ The markdown body contains detailed instructions including:
 - Implementation templates and patterns
 - Project-specific rules (imports, async patterns, types)
 - Checklists and communication guidelines
+
+### When to Use
+
+- **architecture agent**: When designing a new feature or updating system specs
+- **task agent**: When implementing a new bioinformatics tool wrapper
+- **test agent**: When writing tests for tasks or workflows
+- **workflow agent**: When composing tasks into pipelines
+- **code-review agent**: Before merging code, to catch issues early
 
 ## Context Directory Reference
 
