@@ -123,37 +123,13 @@ Before creating a plan:
 2. **Explore Codebase**: Find related implementations
 3. **Check Existing Plans**: Avoid duplicating work
 4. **Identify Dependencies**: What must exist first?
+5. **Ask Clarifying Questions**: What was unclear from the prompt?
 
 Before updating a spec:
 
 1. **Read Current Spec**: Understand what's documented
 2. **Review Implementation**: Verify spec matches reality
 3. **Check Plans**: See if changes are already planned
-
-## Project Context
-
-### Architecture Layers
-```
-Types (dataclasses) → Tasks (single-purpose) → Workflows (composition)
-```
-
-### Key Directories
-- `src/stargazer/types/`: Dataclass definitions
-- `src/stargazer/tasks/`: Flyte v2 task implementations
-- `src/stargazer/workflows/`: Pipeline compositions
-- `src/stargazer/utils/`: Shared utilities (pinata, subprocess, query)
-
-### Metadata System
-Files carry `keyvalues` metadata:
-- `type`: Logical type (reference, reads, alignment, variants)
-- `component`: Role within type (fasta, r1, alignment, vcf)
-- `sample_id`, `build`: Scoping identifiers
-- Domain-specific fields as needed
-
-### Environment Modes
-- `STARGAZER_LOCAL_ONLY=true`: Offline mode with TinyDB
-- `STARGAZER_PUBLIC=true`: Public IPFS uploads
-- Default: Private IPFS via Pinata
 
 ## Communication
 

@@ -133,7 +133,7 @@ The project follows this structure:
 
 **Guidelines:**
 - Create separate modules for different domains (e.g., `reference.py`, `alignment.py`, `variant_calling.py`)
-- Use descriptive dataclass names (e.g., `Alignments`, `VariantCallingOutputs`)
+- Use descriptive dataclass names (e.g., `Alignments`, `Variants`)
 - Group related types in the same module
 - Use Python dataclasses with type annotations
 - Import Flyte I/O types from `flyte.io` (e.g., `File`, `Dir`)
