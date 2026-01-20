@@ -21,6 +21,40 @@
 **Documentation Guidelines**
 - No code snippets are to be added to any documents outside of `.opencode/plans/`. Code examples in documentation files like this one become stale as conventions and implementations drift, creating confusion rather than clarity. The codebase itself should be the source of truth for implementation patterns.
 
+## OpenCode Agent Definitions
+
+The `.opencode/agent/` directory contains specialized agent definitions for [OpenCode](https://github.com/sst/opencode), an AI coding assistant. These markdown files define role-specific personas that can be invoked as subagents, each with tailored instructions, temperature settings, and tool permissions.
+
+### Available Agents
+
+| Agent | File | Purpose |
+|-------|------|---------|
+| **Task** | `task.md` | Implements individual Flyte v2 tasks for bioinformatics tools |
+| **Test** | `test.md` | Writes unit and integration tests following TDD approach |
+| **Workflow** | `workflow.md` | Composes Flyte v2 tasks into end-to-end pipelines |
+| **Code Review** | `code-review.md` | Strict code reviewer that audits for edge cases, UX issues, and data provenance |
+
+### Agent File Format
+
+Each agent file uses YAML frontmatter to configure behavior:
+```yaml
+---
+description: Brief description of the agent's role
+mode: subagent
+temperature: 0.2  # Lower = more deterministic
+tools:
+  write: true
+  edit: true
+  bash: true
+---
+```
+
+The markdown body contains detailed instructions including:
+- Role definition and core principles
+- Implementation templates and patterns
+- Project-specific rules (imports, async patterns, types)
+- Checklists and communication guidelines
+
 ## Context Directory Reference
 
 The `.opencode/context` directory contains essential reference materials for developing Stargazer on Flyte v2:
