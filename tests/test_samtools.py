@@ -26,8 +26,8 @@ async def test_samtools_faidx():
 
     # Pre-populate cache using default_client
     test_cid = "QmTestTP53Fasta"
-    cached_fasta = default_client.cache_dir / test_cid
-    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
+    cached_fasta = default_client.local_dir / test_cid
+    default_client.local_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(ref_fixture, cached_fasta)
 
     # Create a Reference with the cached file
@@ -92,12 +92,12 @@ async def test_samtools_faidx_idempotent():
     fixtures_ref_dir = TEST_ROOT / "fixtures"
 
     # Pre-populate cache using default_client
-    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
+    default_client.local_dir.mkdir(parents=True, exist_ok=True)
 
     test_cid_fasta = "QmTestTP53FastaIdempotent"
     test_cid_fai = "QmTestTP53FAI"
-    cached_fasta = default_client.cache_dir / test_cid_fasta
-    cached_fai = default_client.cache_dir / test_cid_fai
+    cached_fasta = default_client.local_dir / test_cid_fasta
+    cached_fai = default_client.local_dir / test_cid_fai
     shutil.copy(fixtures_ref_dir / "GRCh38_TP53.fa", cached_fasta)
     shutil.copy(fixtures_ref_dir / "GRCh38_TP53.fa.fai", cached_fai)
 

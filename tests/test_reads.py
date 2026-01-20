@@ -24,9 +24,9 @@ async def test_reads_fetch():
     # Pre-populate cache using default_client
     test_cid_r1 = "QmTestR1"
     test_cid_r2 = "QmTestR2"
-    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
-    cached_r1 = default_client.cache_dir / test_cid_r1
-    cached_r2 = default_client.cache_dir / test_cid_r2
+    default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_r1 = default_client.local_dir / test_cid_r1
+    cached_r2 = default_client.local_dir / test_cid_r2
     shutil.copy(r1_fixture, cached_r1)
     shutil.copy(r2_fixture, cached_r2)
 
@@ -60,7 +60,7 @@ async def test_reads_fetch():
     cache_dir = await reads.fetch()
 
     # Verify cache directory returned
-    assert cache_dir == default_client.cache_dir
+    assert cache_dir == default_client.local_dir
     assert cache_dir.exists()
 
     # Verify both files are in cache (check local_path is set)
@@ -83,9 +83,9 @@ async def test_reads_get_paths():
 
     test_cid_r1 = "QmTestR1GetPath"
     test_cid_r2 = "QmTestR2GetPath"
-    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
-    cached_r1 = default_client.cache_dir / test_cid_r1
-    cached_r2 = default_client.cache_dir / test_cid_r2
+    default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_r1 = default_client.local_dir / test_cid_r1
+    cached_r2 = default_client.local_dir / test_cid_r2
     shutil.copy(r1_fixture, cached_r1)
     shutil.copy(r2_fixture, cached_r2)
 
@@ -140,8 +140,8 @@ async def test_reads_get_r2_path_single_end():
     r1_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_R1.fq.gz"
 
     test_cid_r1 = "QmTestR1SingleEnd"
-    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
-    cached_r1 = default_client.cache_dir / test_cid_r1
+    default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_r1 = default_client.local_dir / test_cid_r1
     shutil.copy(r1_fixture, cached_r1)
 
     r1_file = IpFile(

@@ -24,9 +24,9 @@ async def test_alignment_fetch():
     # Pre-populate cache using default_client
     test_cid_bam = "QmTestBam"
     test_cid_bai = "QmTestBai"
-    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
-    cached_bam = default_client.cache_dir / test_cid_bam
-    cached_bai = default_client.cache_dir / test_cid_bai
+    default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_bam = default_client.local_dir / test_cid_bam
+    cached_bai = default_client.local_dir / test_cid_bai
     shutil.copy(bam_fixture, cached_bam)
     shutil.copy(bai_fixture, cached_bai)
 
@@ -66,7 +66,7 @@ async def test_alignment_fetch():
     cache_dir = await alignment.fetch()
 
     # Verify cache directory returned
-    assert cache_dir == default_client.cache_dir
+    assert cache_dir == default_client.local_dir
     assert cache_dir.exists()
 
     # Verify both files are in cache (check local_path is set)
@@ -89,8 +89,8 @@ async def test_alignment_get_bam_path():
     bam_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam"
 
     test_cid_bam = "QmTestBamGetPath"
-    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
-    cached_bam = default_client.cache_dir / test_cid_bam
+    default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_bam = default_client.local_dir / test_cid_bam
     shutil.copy(bam_fixture, cached_bam)
 
     # Create IpFile object with local_path set (as if already downloaded)
@@ -130,9 +130,9 @@ async def test_alignment_get_bai_path():
 
     test_cid_bam = "QmTestBamGetBai"
     test_cid_bai = "QmTestBaiGetBai"
-    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
-    cached_bam = default_client.cache_dir / test_cid_bam
-    cached_bai = default_client.cache_dir / test_cid_bai
+    default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_bam = default_client.local_dir / test_cid_bam
+    cached_bai = default_client.local_dir / test_cid_bai
     shutil.copy(bam_fixture, cached_bam)
     shutil.copy(bai_fixture, cached_bai)
 
@@ -183,8 +183,8 @@ async def test_alignment_get_bai_path_none():
     bam_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam"
 
     test_cid_bam = "QmTestBamNoBai"
-    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
-    cached_bam = default_client.cache_dir / test_cid_bam
+    default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_bam = default_client.local_dir / test_cid_bam
     shutil.copy(bam_fixture, cached_bam)
 
     # Create IpFile object with local_path set

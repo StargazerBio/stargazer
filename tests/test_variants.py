@@ -30,9 +30,9 @@ async def test_variants_fetch():
         # Pre-populate cache using default_client
         test_cid_vcf = "QmTestVcf"
         test_cid_tbi = "QmTestTbi"
-        default_client.cache_dir.mkdir(parents=True, exist_ok=True)
-        cached_vcf = default_client.cache_dir / test_cid_vcf
-        cached_tbi = default_client.cache_dir / test_cid_tbi
+        default_client.local_dir.mkdir(parents=True, exist_ok=True)
+        cached_vcf = default_client.local_dir / test_cid_vcf
+        cached_tbi = default_client.local_dir / test_cid_tbi
         shutil.copy(vcf_fixture, cached_vcf)
         shutil.copy(tbi_fixture, cached_tbi)
 
@@ -71,7 +71,7 @@ async def test_variants_fetch():
         cache_dir = await variants.fetch()
 
         # Verify cache directory returned
-        assert cache_dir == default_client.cache_dir
+        assert cache_dir == default_client.local_dir
         assert cache_dir.exists()
 
         # Verify both files are in cache (check local_path is set)
@@ -102,8 +102,8 @@ async def test_variants_get_vcf_path():
 
     try:
         test_cid_vcf = "QmTestVcfGetPath"
-        default_client.cache_dir.mkdir(parents=True, exist_ok=True)
-        cached_vcf = default_client.cache_dir / test_cid_vcf
+        default_client.local_dir.mkdir(parents=True, exist_ok=True)
+        cached_vcf = default_client.local_dir / test_cid_vcf
         shutil.copy(vcf_fixture, cached_vcf)
 
         # Create IpFile object with local_path set (as if already downloaded)
@@ -149,9 +149,9 @@ async def test_variants_get_index_path():
     try:
         test_cid_vcf = "QmTestVcfGetIndex"
         test_cid_tbi = "QmTestTbiGetIndex"
-        default_client.cache_dir.mkdir(parents=True, exist_ok=True)
-        cached_vcf = default_client.cache_dir / test_cid_vcf
-        cached_tbi = default_client.cache_dir / test_cid_tbi
+        default_client.local_dir.mkdir(parents=True, exist_ok=True)
+        cached_vcf = default_client.local_dir / test_cid_vcf
+        cached_tbi = default_client.local_dir / test_cid_tbi
         shutil.copy(vcf_fixture, cached_vcf)
         shutil.copy(tbi_fixture, cached_tbi)
 
@@ -209,8 +209,8 @@ async def test_variants_get_index_path_none():
 
     try:
         test_cid_vcf = "QmTestVcfNoIndex"
-        default_client.cache_dir.mkdir(parents=True, exist_ok=True)
-        cached_vcf = default_client.cache_dir / test_cid_vcf
+        default_client.local_dir.mkdir(parents=True, exist_ok=True)
+        cached_vcf = default_client.local_dir / test_cid_vcf
         shutil.copy(vcf_fixture, cached_vcf)
 
         # Create IpFile object with local_path set

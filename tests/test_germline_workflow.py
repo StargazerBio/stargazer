@@ -30,8 +30,8 @@ def mock_reference():
         pytest.skip(f"Test fixture not found: {ref_fixture}")
 
     # Copy to cache
-    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
-    cached_ref = default_client.cache_dir / test_cid
+    default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_ref = default_client.local_dir / test_cid
     shutil.copy(ref_fixture, cached_ref)
 
     ref_ipfile = IpFile(
@@ -72,9 +72,9 @@ def mock_alignment():
         pytest.skip(f"Test fixture not found: {bam_fixture}")
 
     # Copy to cache
-    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
-    cached_bam = default_client.cache_dir / test_cid_bam
-    cached_bai = default_client.cache_dir / test_cid_bai
+    default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_bam = default_client.local_dir / test_cid_bam
+    cached_bai = default_client.local_dir / test_cid_bai
     shutil.copy(bam_fixture, cached_bam)
     shutil.copy(bai_fixture, cached_bai)
 
@@ -121,8 +121,8 @@ def mock_alignment():
 
 def create_mock_gvcf(sample_id: str, test_cid: str) -> Variants:
     """Helper to create a mock GVCF for testing."""
-    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
-    gvcf_path = default_client.cache_dir / test_cid
+    default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    gvcf_path = default_client.local_dir / test_cid
 
     gvcf_content = f"""##fileformat=VCFv4.2
 ##source=HaplotypeCaller

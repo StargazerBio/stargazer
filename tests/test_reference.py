@@ -105,13 +105,13 @@ async def test_add_files_local_only():
 
             # Verify files exist in cache
             for f in ref.files:
-                cache_path = default_client.cache_dir / f.cid
+                cache_path = default_client.local_dir / f.cid
                 assert cache_path.exists()
                 assert cache_path.is_file()
 
             # Verify file contents match original
-            cache_file1 = default_client.cache_dir / ref.files[0].cid
-            cache_file2 = default_client.cache_dir / ref.files[1].cid
+            cache_file1 = default_client.local_dir / ref.files[0].cid
+            cache_file2 = default_client.local_dir / ref.files[1].cid
 
             assert cache_file1.read_text() == "Local test content 1"
             assert cache_file2.read_text() == "Local test content 2"

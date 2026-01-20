@@ -26,8 +26,8 @@ async def test_bwa_index():
 
     # Pre-populate cache using default_client
     test_cid = "QmTestTP53Fasta"
-    cached_fasta = default_client.cache_dir / test_cid
-    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
+    cached_fasta = default_client.local_dir / test_cid
+    default_client.local_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(ref_fixture, cached_fasta)
 
     # Create a Reference with the cached file
@@ -104,11 +104,11 @@ async def test_bwa_index_idempotent():
     fixtures_ref_dir = TEST_ROOT / "fixtures"
 
     # Pre-populate cache using default_client
-    default_client.cache_dir.mkdir(parents=True, exist_ok=True)
+    default_client.local_dir.mkdir(parents=True, exist_ok=True)
 
     # Create test CIDs for all files
     test_cid_fasta = "QmTestTP53FastaIdempotent"
-    cached_fasta = default_client.cache_dir / test_cid_fasta
+    cached_fasta = default_client.local_dir / test_cid_fasta
     shutil.copy(fixtures_ref_dir / "GRCh38_TP53.fa", cached_fasta)
 
     files_list = [
@@ -129,7 +129,7 @@ async def test_bwa_index_idempotent():
         index_fixture = fixtures_ref_dir / f"GRCh38_TP53.fa{ext}"
         if index_fixture.exists():
             test_cid_index = f"QmTestTP53{ext_names[i].upper()}"
-            cached_index = default_client.cache_dir / test_cid_index
+            cached_index = default_client.local_dir / test_cid_index
             shutil.copy(index_fixture, cached_index)
 
             files_list.append(
@@ -161,7 +161,7 @@ async def test_bwa_index_idempotent():
     if cached_fasta.exists():
         cached_fasta.unlink()
     for i, ext in enumerate(index_extensions):
-        cached_index = default_client.cache_dir / f"QmTestTP53{ext_names[i].upper()}"
+        cached_index = default_client.local_dir / f"QmTestTP53{ext_names[i].upper()}"
         if cached_index.exists():
             cached_index.unlink()
 

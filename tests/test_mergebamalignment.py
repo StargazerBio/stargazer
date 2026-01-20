@@ -14,7 +14,7 @@ from stargazer.utils.pinata import IpFile, default_client
 
 
 def create_mock_bam(
-    cache_dir: Path, sample_id: str, test_cid: str, bam_type: str = "aligned"
+    local_dir: Path, sample_id: str, test_cid: str, bam_type: str = "aligned"
 ) -> tuple[Path, IpFile]:
     """
     Create a minimal mock BAM file for testing.
@@ -25,8 +25,8 @@ def create_mock_bam(
     Returns:
         Tuple of (bam_path, ipfile)
     """
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    bam_path = cache_dir / test_cid
+    local_dir.mkdir(parents=True, exist_ok=True)
+    bam_path = local_dir / test_cid
 
     # Create minimal BAM-like content
     bam_path.write_bytes(b"BAM\x01mock_bam_content")
@@ -48,15 +48,15 @@ def create_mock_bam(
     return bam_path, ipfile
 
 
-def create_mock_reference(cache_dir: Path, test_cid: str) -> tuple[Path, IpFile]:
+def create_mock_reference(local_dir: Path, test_cid: str) -> tuple[Path, IpFile]:
     """
     Create a minimal valid reference FASTA for testing.
 
     Returns:
         Tuple of (ref_path, ipfile)
     """
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    ref_path = cache_dir / test_cid
+    local_dir.mkdir(parents=True, exist_ok=True)
+    ref_path = local_dir / test_cid
 
     ref_content = """>chr17
 GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
@@ -92,12 +92,12 @@ async def test_mergebamalignment_merges_bams():
 
     # Create mock files
     aligned_path, aligned_ipfile = create_mock_bam(
-        default_client.cache_dir, sample_id, test_cid_aligned, "aligned"
+        default_client.local_dir, sample_id, test_cid_aligned, "aligned"
     )
     unmapped_path, unmapped_ipfile = create_mock_bam(
-        default_client.cache_dir, sample_id, test_cid_unmapped, "unmapped"
+        default_client.local_dir, sample_id, test_cid_unmapped, "unmapped"
     )
-    ref_path, ref_ipfile = create_mock_reference(default_client.cache_dir, test_cid_ref)
+    ref_path, ref_ipfile = create_mock_reference(default_client.local_dir, test_cid_ref)
 
     aligned_bam = Alignment(
         sample_id=sample_id,

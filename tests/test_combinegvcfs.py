@@ -14,7 +14,7 @@ from stargazer.utils.pinata import IpFile, default_client
 
 
 def create_mock_gvcf(
-    cache_dir: Path, sample_id: str, test_cid: str
+    local_dir: Path, sample_id: str, test_cid: str
 ) -> tuple[Path, IpFile]:
     """
     Create a minimal valid GVCF file for testing.
@@ -22,8 +22,8 @@ def create_mock_gvcf(
     Returns:
         Tuple of (gvcf_path, ipfile)
     """
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    gvcf_path = cache_dir / test_cid
+    local_dir.mkdir(parents=True, exist_ok=True)
+    gvcf_path = local_dir / test_cid
 
     # Create a minimal valid GVCF content
     gvcf_content = f"""##fileformat=VCFv4.2
@@ -60,15 +60,15 @@ chr17	7687551	.	C	T,<NON_REF>	1000	.	.	GT:DP:GQ:PL	0/1:40:99:500,0,800,600,900,1
     return gvcf_path, ipfile
 
 
-def create_mock_reference(cache_dir: Path, test_cid: str) -> tuple[Path, IpFile]:
+def create_mock_reference(local_dir: Path, test_cid: str) -> tuple[Path, IpFile]:
     """
     Create a minimal valid reference FASTA for testing.
 
     Returns:
         Tuple of (ref_path, ipfile)
     """
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    ref_path = cache_dir / test_cid
+    local_dir.mkdir(parents=True, exist_ok=True)
+    ref_path = local_dir / test_cid
 
     # Create minimal FASTA content
     ref_content = """>chr17
@@ -103,7 +103,7 @@ async def test_combinegvcfs_merges_samples():
     test_cid_ref = "QmTestRefCombine"
 
     # Create mock reference
-    ref_path, ref_ipfile = create_mock_reference(default_client.cache_dir, test_cid_ref)
+    ref_path, ref_ipfile = create_mock_reference(default_client.local_dir, test_cid_ref)
 
     ref = Reference(
         ref_name="test_reference.fa",
@@ -116,7 +116,16 @@ async def test_combinegvcfs_merges_samples():
     for i, sample_id in enumerate(sample_ids):
         test_cid = f"QmTestGVCFCombine{i}"
         gvcf_path, gvcf_ipfile = create_mock_gvcf(
-            default_client.cache_dir, sample_id, test_cid
+            default_client.local_dir, sample_id, test_cid
+        )
+
+    # Create mock GVCFs for each sample
+    gvcf_paths = []
+    gvcfs = []
+    for i, sample_id in enumerate(sample_ids):
+        test_cid = f"QmTestGVCFCombine{i}"
+        gvcf_path, gvcf_ipfile = create_mock_gvcf(
+            default_client.local_dir, sample_id, test_cid
         )
         gvcf_paths.append(gvcf_path)
 
@@ -234,11 +243,11 @@ async def test_combinegvcfs_single_sample():
 
     # Create mock GVCF
     gvcf_path, gvcf_ipfile = create_mock_gvcf(
-        default_client.cache_dir, sample_id, test_cid_gvcf
+        default_client.local_dir, sample_id, test_cid_gvcf
     )
 
     # Create mock reference
-    ref_path, ref_ipfile = create_mock_reference(default_client.cache_dir, test_cid_ref)
+    ref_path, ref_ipfile = create_mock_reference(default_client.local_dir, test_cid_ref)
 
     gvcf = Variants(
         sample_id=sample_id,
