@@ -132,13 +132,7 @@ Update agent markdown files that contain stale `cache_dir` or `pinata_hydrate` r
 | `.opencode/agent/code-review.md` | `pinata_hydrate` | Update to `hydrate` |
 | `.opencode/agent/workflow.md` | `pinata_hydrate` | Update to `hydrate` |
 
-### Phase 5: Run Tests and Verify (Intermediate)
-
-1. Run `pytest tests/` to identify any remaining issues from Phases 1-4
-2. Fix any test failures related to TinyDB or local mode behavior
-3. Verify tests pass in local-only mode (STARGAZER_LOCAL_ONLY=1)
-
-### Phase 6: Refactor Tests to Use `hydrate` Function
+### Phase 5: Refactor Tests to Use `hydrate` Function
 
 Replace manual `IpFile` and type construction in tests with the proper `upload_file()` + `hydrate()` pattern. This makes tests more realistic and exercises the actual hydration code path.
 
