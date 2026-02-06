@@ -10,7 +10,8 @@ To populate expected CIDs for test files, run:
 import os
 
 import pytest
-from config import CIDS, TEST_ROOT
+from config import CIDS
+from conftest import FIXTURES_DIR
 
 from stargazer.utils.pinata import IpFile, default_client
 
@@ -23,7 +24,7 @@ async def test_upload_and_delete_file():
         pytest.skip("PINATA_JWT environment variable not set")
 
     # Use the smallest reference file for quick testing
-    test_file = TEST_ROOT.joinpath("fixtures", "upload_delete.txt")
+    test_file = FIXTURES_DIR.joinpath("upload_delete.txt")
     assert test_file.exists(), f"Test file not found: {test_file}"
 
     # Upload the file with test metadata
@@ -154,7 +155,7 @@ async def test_download_file():
     print("✓ File content verified - matches expected 'hello worlds\\n'")
 
     # Test downloading to a specific destination
-    dest_path = TEST_ROOT.joinpath("fixtures", "downloaded_test.txt")
+    dest_path = FIXTURES_DIR.joinpath("downloaded_test.txt")
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Downloading to specific destination: {dest_path}")

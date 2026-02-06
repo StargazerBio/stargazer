@@ -7,12 +7,11 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.genotypegvcf import genotypegvcf
 from stargazer.types import Reference, Variants
 from stargazer.utils.pinata import IpFile, default_client
-
-FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures"
 
 
 def setup_fixture_files(local_dir: Path) -> dict[str, Path]:

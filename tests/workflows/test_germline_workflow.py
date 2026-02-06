@@ -8,7 +8,7 @@ import shutil
 from datetime import datetime
 
 import pytest
-from config import TEST_ROOT
+from conftest import FIXTURES_DIR
 
 from stargazer.workflows.germline_short_variant_discovery import (
     germline_single_sample,
@@ -24,7 +24,7 @@ from stargazer.utils.pinata import IpFile, default_client
 def mock_reference():
     """Create a mock reference for testing."""
     test_cid = "QmTestRefWorkflow"
-    ref_fixture = TEST_ROOT / "fixtures" / "GRCh38_TP53.fa"
+    ref_fixture = FIXTURES_DIR / "GRCh38_TP53.fa"
 
     if not ref_fixture.exists():
         pytest.skip(f"Test fixture not found: {ref_fixture}")
@@ -66,8 +66,8 @@ def mock_alignment():
     test_cid_bam = "QmTestBAMWorkflow"
     test_cid_bai = "QmTestBAIWorkflow"
 
-    bam_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam"
-    bai_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam.bai"
+    bam_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam"
+    bai_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam.bai"
 
     if not bam_fixture.exists():
         pytest.skip(f"Test fixture not found: {bam_fixture}")

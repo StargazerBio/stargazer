@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime
 
 import pytest
-from config import TEST_ROOT
+from conftest import FIXTURES_DIR
 
 from stargazer.tasks.general.samtools import samtools_faidx
 from stargazer.types import Reference
@@ -21,7 +21,7 @@ async def test_samtools_faidx():
         pytest.skip("samtools not available in environment")
 
     # Setup: Copy test reference to cache directory
-    ref_fixture = TEST_ROOT / "fixtures" / "GRCh38_TP53.fa"
+    ref_fixture = FIXTURES_DIR / "GRCh38_TP53.fa"
     assert ref_fixture.exists(), f"Test fixture not found: {ref_fixture}"
 
     # Pre-populate cache using default_client
@@ -95,7 +95,7 @@ async def test_samtools_faidx_idempotent():
         pytest.skip("samtools not available in environment")
 
     # Setup: Copy test reference to cache directory
-    fixtures_ref_dir = TEST_ROOT / "fixtures"
+    fixtures_ref_dir = FIXTURES_DIR
 
     # Pre-populate cache using default_client
     default_client.local_dir.mkdir(parents=True, exist_ok=True)

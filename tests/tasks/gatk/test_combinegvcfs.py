@@ -7,12 +7,11 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.combinegvcfs import combinegvcfs
 from stargazer.types import Reference, Variants
 from stargazer.utils.pinata import IpFile, default_client
-
-FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures"
 
 # Sample GVCFs available as fixtures (created from NA12829 TP53 data)
 SAMPLE_GVCFS = {

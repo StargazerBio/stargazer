@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime
 
 import pytest
-from config import TEST_ROOT
+from conftest import FIXTURES_DIR
 
 from stargazer.types import Alignment
 from stargazer.utils.pinata import IpFile, default_client
@@ -16,8 +16,8 @@ from stargazer.utils.pinata import IpFile, default_client
 async def test_alignment_fetch():
     """Test fetch() downloads BAM and BAI files to cache."""
     # Setup: Pre-populate cache with test BAM files
-    bam_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam"
-    bai_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam.bai"
+    bam_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam"
+    bai_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam.bai"
     assert bam_fixture.exists(), f"Test fixture not found: {bam_fixture}"
     assert bai_fixture.exists(), f"Test fixture not found: {bai_fixture}"
 
@@ -91,7 +91,7 @@ async def test_alignment_fetch():
 async def test_alignment_get_bam_path():
     """Test direct access to alignment component returns correct path."""
     # Setup: Pre-populate cache with test BAM
-    bam_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam"
+    bam_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam"
 
     test_cid_bam = "QmTestBamGetPath"
     default_client.local_dir.mkdir(parents=True, exist_ok=True)
@@ -133,8 +133,8 @@ async def test_alignment_get_bam_path():
 async def test_alignment_get_bai_path():
     """Test direct access to index component returns correct path when present."""
     # Setup: Pre-populate cache with test BAM and BAI
-    bam_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam"
-    bai_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam.bai"
+    bam_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam"
+    bai_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam.bai"
 
     test_cid_bam = "QmTestBamGetBai"
     test_cid_bai = "QmTestBaiGetBai"
@@ -196,7 +196,7 @@ async def test_alignment_get_bai_path():
 async def test_alignment_get_bai_path_none():
     """Test index component is None when BAI not present."""
     # Setup: Pre-populate cache with test BAM only (no BAI)
-    bam_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam"
+    bam_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam"
 
     test_cid_bam = "QmTestBamNoBai"
     default_client.local_dir.mkdir(parents=True, exist_ok=True)
@@ -236,8 +236,8 @@ async def test_alignment_get_bai_path_none():
 async def test_alignment_update_components():
     """Test update_alignment() and update_index() upload files."""
     # Setup: Copy fixtures to use for upload
-    bam_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam"
-    bai_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_paired.bam.bai"
+    bam_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam"
+    bai_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam.bai"
     assert bam_fixture.exists()
     assert bai_fixture.exists()
 

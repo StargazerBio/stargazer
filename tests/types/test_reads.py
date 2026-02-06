@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime
 
 import pytest
-from config import TEST_ROOT
+from conftest import FIXTURES_DIR
 
 from stargazer.types import Reads
 from stargazer.utils.pinata import IpFile, default_client
@@ -16,8 +16,8 @@ from stargazer.utils.pinata import IpFile, default_client
 async def test_reads_fetch():
     """Test fetch() downloads all FASTQ files to cache."""
     # Setup: Pre-populate cache with test FASTQ files
-    r1_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_R1.fq.gz"
-    r2_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_R2.fq.gz"
+    r1_fixture = FIXTURES_DIR / "NA12829_TP53_R1.fq.gz"
+    r2_fixture = FIXTURES_DIR / "NA12829_TP53_R2.fq.gz"
     assert r1_fixture.exists(), f"Test fixture not found: {r1_fixture}"
     assert r2_fixture.exists(), f"Test fixture not found: {r2_fixture}"
 
@@ -90,8 +90,8 @@ async def test_reads_fetch():
 async def test_reads_get_paths():
     """Test direct access to r1 and r2 components returns correct paths."""
     # Setup: Pre-populate cache with test FASTQ files
-    r1_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_R1.fq.gz"
-    r2_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_R2.fq.gz"
+    r1_fixture = FIXTURES_DIR / "NA12829_TP53_R1.fq.gz"
+    r2_fixture = FIXTURES_DIR / "NA12829_TP53_R2.fq.gz"
 
     test_cid_r1 = "QmTestR1GetPath"
     test_cid_r2 = "QmTestR2GetPath"
@@ -158,7 +158,7 @@ async def test_reads_get_paths():
 async def test_reads_get_r2_path_single_end():
     """Test r2 component is None for single-end reads."""
     # Setup: Single-end read
-    r1_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_R1.fq.gz"
+    r1_fixture = FIXTURES_DIR / "NA12829_TP53_R1.fq.gz"
 
     test_cid_r1 = "QmTestR1SingleEnd"
     default_client.local_dir.mkdir(parents=True, exist_ok=True)
@@ -202,8 +202,8 @@ async def test_reads_get_r2_path_single_end():
 async def test_reads_update_components():
     """Test update_r1() and update_r2() upload files."""
     # Setup: Copy fixtures to temporary location (will be "uploaded")
-    r1_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_R1.fq.gz"
-    r2_fixture = TEST_ROOT / "fixtures" / "NA12829_TP53_R2.fq.gz"
+    r1_fixture = FIXTURES_DIR / "NA12829_TP53_R1.fq.gz"
+    r2_fixture = FIXTURES_DIR / "NA12829_TP53_R2.fq.gz"
     assert r1_fixture.exists()
     assert r2_fixture.exists()
 
