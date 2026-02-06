@@ -12,63 +12,83 @@ from stargazer.tasks.gatk.mergebamalignment import mergebamalignment
 from stargazer.types import Reference, Alignment
 from stargazer.utils.pinata import IpFile, default_client
 
+FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures"
 
-def create_mock_bam(
-    local_dir: Path, sample_id: str, test_cid: str, bam_type: str = "aligned"
-) -> tuple[Path, IpFile]:
+
+def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
     """
-    Create a minimal mock BAM file for testing.
+    Copy real TP53 fixture files into the test's local directory.
 
-    Args:
-        bam_type: "aligned" or "unmapped"
-
-    Returns:
-        Tuple of (bam_path, ipfile)
+    Returns dict of fixture name to local path.
     """
     local_dir.mkdir(parents=True, exist_ok=True)
-    bam_path = local_dir / test_cid
 
-    # Create minimal BAM-like content
-    bam_path.write_bytes(b"BAM\x01mock_bam_content")
+    files = {
+        "ref_fasta": ("GRCh38_TP53.fa", "GRCh38_TP53.fa"),
+        "ref_fai": ("GRCh38_TP53.fa.fai", "GRCh38_TP53.fa.fai"),
+        "ref_dict": ("GRCh38_TP53.dict", "GRCh38_TP53.dict"),
+        "aligned_bam": ("NA12829_TP53_bwa_aligned.bam", "NA12829_TP53_bwa_aligned.bam"),
+        "unmapped_bam": ("NA12829_TP53_unmapped.bam", "NA12829_TP53_unmapped.bam"),
+    }
 
-    ipfile = IpFile(
-        id=f"test-{sample_id}-{bam_type}",
-        cid=test_cid,
-        name=f"{sample_id}_{bam_type}.bam",
-        size=bam_path.stat().st_size,
+    paths = {}
+    for key, (src_name, dst_name) in files.items():
+        src = FIXTURES_DIR / src_name
+        dst = local_dir / dst_name
+        shutil.copy2(src, dst)
+        paths[key] = dst
+
+    return paths
+
+
+@pytest.mark.asyncio
+async def test_mergebamalignment_merges_bams():
+    """Test that mergebamalignment creates a merged BAM."""
+    if shutil.which("gatk") is None:
+        pytest.skip("gatk not available in environment")
+
+    sample_id = "NA12829_merge"
+    local_dir = default_client.local_dir
+    paths = setup_fixture_files(local_dir)
+
+    # Create IpFile objects with local_path set so fetch() short-circuits
+    aligned_ipfile = IpFile(
+        id="test-aligned-bam",
+        cid="test_aligned_bam",
+        name="NA12829_TP53_bwa_aligned.bam",
+        size=paths["aligned_bam"].stat().st_size,
         keyvalues={
             "type": "alignment",
             "component": "alignment",
             "sample_id": sample_id,
-            "tool": "bwa_mem" if bam_type == "aligned" else "picard",
-            "sorted": "queryname" if bam_type == "unmapped" else "unsorted",
+            "tool": "bwa_mem",
+            "sorted": "unsorted",
         },
         created_at=datetime.now(),
     )
+    aligned_ipfile.local_path = paths["aligned_bam"]
 
-    return bam_path, ipfile
+    unmapped_ipfile = IpFile(
+        id="test-unmapped-bam",
+        cid="test_unmapped_bam",
+        name="NA12829_TP53_unmapped.bam",
+        size=paths["unmapped_bam"].stat().st_size,
+        keyvalues={
+            "type": "alignment",
+            "component": "alignment",
+            "sample_id": sample_id,
+            "tool": "picard",
+            "sorted": "queryname",
+        },
+        created_at=datetime.now(),
+    )
+    unmapped_ipfile.local_path = paths["unmapped_bam"]
 
-
-def create_mock_reference(local_dir: Path, test_cid: str) -> tuple[Path, IpFile]:
-    """
-    Create a minimal valid reference FASTA for testing.
-
-    Returns:
-        Tuple of (ref_path, ipfile)
-    """
-    local_dir.mkdir(parents=True, exist_ok=True)
-    ref_path = local_dir / test_cid
-
-    ref_content = """>chr17
-GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
-"""
-    ref_path.write_text(ref_content)
-
-    ipfile = IpFile(
-        id="test-ref",
-        cid=test_cid,
-        name="test_reference.fa",
-        size=ref_path.stat().st_size,
+    ref_ipfile = IpFile(
+        id="test-ref-fasta",
+        cid="test_ref_fasta",
+        name="GRCh38_TP53.fa",
+        size=paths["ref_fasta"].stat().st_size,
         keyvalues={
             "type": "reference",
             "component": "fasta",
@@ -76,30 +96,7 @@ GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
         },
         created_at=datetime.now(),
     )
-
-    return ref_path, ipfile
-
-
-@pytest.mark.asyncio
-async def test_mergebamalignment_merges_bams():
-    """Test that mergebamalignment creates a merged BAM."""
-    # Check if gatk is available (skip if not)
-    if shutil.which("gatk") is None:
-        pytest.skip("gatk not available in environment")
-
-    sample_id = "NA12878_merge"
-    test_cid_aligned = "QmTestBAMAligned"
-    test_cid_unmapped = "QmTestBAMUnmapped"
-    test_cid_ref = "QmTestRefMerge"
-
-    # Create mock files
-    aligned_path, aligned_ipfile = create_mock_bam(
-        default_client.local_dir, sample_id, test_cid_aligned, "aligned"
-    )
-    unmapped_path, unmapped_ipfile = create_mock_bam(
-        default_client.local_dir, sample_id, test_cid_unmapped, "unmapped"
-    )
-    ref_path, ref_ipfile = create_mock_reference(default_client.local_dir, test_cid_ref)
+    ref_ipfile.local_path = paths["ref_fasta"]
 
     aligned_bam = Alignment(
         sample_id=sample_id,
@@ -116,31 +113,21 @@ async def test_mergebamalignment_merges_bams():
         fasta=ref_ipfile,
     )
 
-    try:
-        merged = await mergebamalignment(
-            aligned_bam=aligned_bam,
-            unmapped_bam=unmapped_bam,
-            ref=ref,
-        )
+    merged = await mergebamalignment(
+        aligned_bam=aligned_bam,
+        unmapped_bam=unmapped_bam,
+        ref=ref,
+    )
 
-        # Verify result
-        assert isinstance(merged, Alignment)
-        assert merged.sample_id == sample_id
+    # Verify result
+    assert isinstance(merged, Alignment)
+    assert merged.sample_id == sample_id
 
-        # Check metadata
-        bam_file = merged.alignment
-        assert bam_file is not None
-        assert bam_file.keyvalues.get("sorted") == "coordinate"
-        assert bam_file.keyvalues.get("tool") == "gatk_mergebamalignment"
-
-    finally:
-        # Cleanup
-        if aligned_path.exists():
-            aligned_path.unlink()
-        if unmapped_path.exists():
-            unmapped_path.unlink()
-        if ref_path.exists():
-            ref_path.unlink()
+    # Check metadata
+    bam_file = merged.alignment
+    assert bam_file is not None
+    assert bam_file.keyvalues.get("sorted") == "coordinate"
+    assert bam_file.keyvalues.get("tool") == "gatk_mergebamalignment"
 
 
 @pytest.mark.asyncio

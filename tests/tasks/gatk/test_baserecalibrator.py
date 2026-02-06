@@ -3,118 +3,130 @@ Tests for baserecalibrator task.
 """
 
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
-from stargazer.tasks import hydrate
 from stargazer.tasks.gatk.baserecalibrator import baserecalibrator
 from stargazer.types import Reference, Alignment
-from stargazer.utils.pinata import default_client, IpFile
+from stargazer.utils.pinata import IpFile, default_client
+
+FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures"
 
 
-async def create_mock_bam(local_dir: Path, sample_id: str) -> Path:
+def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
     """
-    Create a minimal mock BAM file for testing and upload it.
+    Copy real TP53 fixture files into the test's local directory.
 
-    Returns:
-        Path to the created BAM file
-    """
-    local_dir.mkdir(parents=True, exist_ok=True)
-    bam_path = local_dir / f"{sample_id}.bam"
-
-    # Create minimal BAM-like content (not valid BAM, just for testing)
-    bam_path.write_bytes(b"BAM\x01mock_bam_content")
-
-    await default_client.upload_file(
-        bam_path,
-        keyvalues={
-            "type": "alignment",
-            "component": "alignment",
-            "sample_id": sample_id,
-            "tool": "fq2bam",
-            "sorted": "coordinate",
-            "duplicates_marked": "true",
-        },
-    )
-
-    return bam_path
-
-
-async def create_mock_reference(local_dir: Path) -> Path:
-    """
-    Create a minimal valid reference FASTA for testing and upload it.
-
-    Returns:
-        Path to the created reference file
+    Returns dict of fixture name to local path.
     """
     local_dir.mkdir(parents=True, exist_ok=True)
-    ref_path = local_dir / "test_reference.fa"
 
-    ref_content = """>chr17
-GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
-"""
-    ref_path.write_text(ref_content)
+    files = {
+        "ref_fasta": ("GRCh38_TP53.fa", "GRCh38_TP53.fa"),
+        "ref_fai": ("GRCh38_TP53.fa.fai", "GRCh38_TP53.fa.fai"),
+        "ref_dict": ("GRCh38_TP53.dict", "GRCh38_TP53.dict"),
+        "bam": ("NA12829_TP53_markdup.bam", "NA12829_TP53_markdup.bam"),
+        "bam_bai": ("NA12829_TP53_markdup.bai", "NA12829_TP53_markdup.bai"),
+        "known_sites": ("known_sites_TP53.vcf", "known_sites_TP53.vcf"),
+        "known_sites_idx": ("known_sites_TP53.vcf.idx", "known_sites_TP53.vcf.idx"),
+    }
 
-    await default_client.upload_file(
-        ref_path,
-        keyvalues={
-            "type": "reference",
-            "component": "fasta",
-            "build": "GRCh38",
-        },
+    paths = {}
+    for key, (src_name, dst_name) in files.items():
+        src = FIXTURES_DIR / src_name
+        dst = local_dir / dst_name
+        shutil.copy2(src, dst)
+        paths[key] = dst
+
+    return paths
+
+
+def register_known_sites_in_db(local_dir: Path, paths: dict[str, Path]):
+    """
+    Insert known sites VCF record directly into TinyDB so query_files() can find it.
+    Uses a rel_path that preserves the .vcf extension for GATK compatibility.
+    """
+    default_client.db.insert(
+        {
+            "id": "test-known-sites",
+            "cid": "test_known_sites",
+            "name": "known_sites_TP53.vcf",
+            "size": paths["known_sites"].stat().st_size,
+            "keyvalues": {
+                "type": "known_sites",
+                "name": "known_sites_TP53.vcf",
+            },
+            "created_at": datetime.now().isoformat(),
+            "is_public": False,
+            "rel_path": "known_sites_TP53.vcf",
+        }
     )
-
-    return ref_path
 
 
 @pytest.mark.asyncio
 async def test_baserecalibrator_creates_report():
     """Test that baserecalibrator creates a recalibration report."""
-    # Check if gatk is available (skip if not)
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
-    sample_id = "NA12878_bqsr"
+    sample_id = "NA12829_bqsr"
+    local_dir = default_client.local_dir
+    paths = setup_fixture_files(local_dir)
+    register_known_sites_in_db(local_dir, paths)
 
-    # Create mock files using upload/hydrate pattern
-    await create_mock_bam(default_client.local_dir, sample_id)
-    await create_mock_reference(default_client.local_dir)
+    bam_ipfile = IpFile(
+        id="test-markdup-bam",
+        cid="test_markdup_bam",
+        name="NA12829_TP53_markdup.bam",
+        size=paths["bam"].stat().st_size,
+        keyvalues={
+            "type": "alignment",
+            "component": "alignment",
+            "sample_id": sample_id,
+            "tool": "gatk_markduplicates",
+            "sorted": "coordinate",
+            "duplicates_marked": "true",
+        },
+        created_at=datetime.now(),
+    )
+    bam_ipfile.local_path = paths["bam"]
 
-    # Create mock known sites VCF files
-    known_sites_vcf = default_client.local_dir / "dbsnp_146.hg38.vcf.gz"
-    known_sites_vcf.write_bytes(b"\x1f\x8b")  # gzip magic bytes
-    await default_client.upload_file(
-        known_sites_vcf,
-        keyvalues={"type": "known_sites", "name": "dbsnp_146.hg38.vcf.gz"},
+    ref_ipfile = IpFile(
+        id="test-ref-fasta",
+        cid="test_ref_fasta",
+        name="GRCh38_TP53.fa",
+        size=paths["ref_fasta"].stat().st_size,
+        keyvalues={
+            "type": "reference",
+            "component": "fasta",
+            "build": "GRCh38",
+        },
+        created_at=datetime.now(),
+    )
+    ref_ipfile.local_path = paths["ref_fasta"]
+
+    alignment = Alignment(
+        sample_id=sample_id,
+        alignment=bam_ipfile,
     )
 
-    # Use hydrate to get populated types
-    from stargazer.types import Alignment as AlignmentType
-    from stargazer.types import Reference as ReferenceType
+    ref = Reference(
+        build="GRCh38",
+        fasta=ref_ipfile,
+    )
 
-    alignments = await hydrate({"type": "alignment", "sample_id": sample_id})
-    alignment = next((a for a in alignments if isinstance(a, AlignmentType)), None)
-    assert alignment is not None, "Alignment not found after hydrate"
+    recal_report = await baserecalibrator(
+        alignment=alignment,
+        ref=ref,
+        known_sites=["known_sites_TP53.vcf"],
+    )
 
-    refs = await hydrate({"type": "reference", "build": "GRCh38"})
-    ref = next((r for r in refs if isinstance(r, ReferenceType)), None)
-    assert ref is not None, "Reference not found after hydrate"
-
-    try:
-        recal_report = await baserecalibrator(
-            alignment=alignment,
-            ref=ref,
-            known_sites=["dbsnp_146.hg38.vcf.gz"],
-        )
-
-        # Verify result
-        assert isinstance(recal_report, IpFile)
-        assert recal_report.keyvalues.get("type") == "bqsr_report"
-        assert recal_report.keyvalues.get("sample_id") == sample_id
-
-    finally:
-        pass
+    # Verify result
+    assert isinstance(recal_report, IpFile)
+    assert recal_report.keyvalues.get("type") == "bqsr_report"
+    assert recal_report.keyvalues.get("sample_id") == sample_id
 
 
 @pytest.mark.asyncio

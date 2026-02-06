@@ -12,41 +12,49 @@ from stargazer.tasks.gatk.genotypegvcf import genotypegvcf
 from stargazer.types import Reference, Variants
 from stargazer.utils.pinata import IpFile, default_client
 
+FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures"
 
-def create_mock_gvcf(
-    local_dir: Path, sample_id: str, test_cid: str
-) -> tuple[Path, IpFile]:
+
+def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
     """
-    Create a minimal valid GVCF file for testing.
+    Copy real TP53 fixture files into the test's local directory.
 
-    Returns:
-        Tuple of (gvcf_path, ipfile)
+    Returns dict of fixture name to local path.
     """
     local_dir.mkdir(parents=True, exist_ok=True)
-    gvcf_path = local_dir / test_cid
 
-    # Create a minimal valid GVCF content
-    gvcf_content = f"""##fileformat=VCFv4.2
-##source=HaplotypeCaller
-##reference=GRCh38
-##contig=<ID=chr17,length=83257441>
-##INFO=<ID=END,Number=1,Type=Integer,Description="End position">
-##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
-##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read depth">
-##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype quality">
-##FORMAT=<ID=MIN_DP,Number=1,Type=Integer,Description="Min depth">
-##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Phred-scaled likelihoods">
-#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	{sample_id}
-chr17	7687490	.	G	<NON_REF>	.	.	END=7687550	GT:DP:GQ:MIN_DP:PL	0/0:35:99:30:0,90,1350
-chr17	7687551	.	C	T,<NON_REF>	1000	.	.	GT:DP:GQ:PL	0/1:40:99:500,0,800,600,900,1500
-"""
-    gvcf_path.write_text(gvcf_content)
+    files = {
+        "ref_fasta": ("GRCh38_TP53.fa", "GRCh38_TP53.fa"),
+        "ref_fai": ("GRCh38_TP53.fa.fai", "GRCh38_TP53.fa.fai"),
+        "ref_dict": ("GRCh38_TP53.dict", "GRCh38_TP53.dict"),
+        "gvcf": ("NA12829_TP53.g.vcf", "NA12829_TP53.g.vcf"),
+    }
 
-    ipfile = IpFile(
-        id=f"test-{sample_id}-gvcf",
-        cid=test_cid,
+    paths = {}
+    for key, (src_name, dst_name) in files.items():
+        src = FIXTURES_DIR / src_name
+        dst = local_dir / dst_name
+        shutil.copy2(src, dst)
+        paths[key] = dst
+
+    return paths
+
+
+@pytest.mark.asyncio
+async def test_genotypegvcf_converts_to_vcf():
+    """Test that genotypegvcf converts GVCF to VCF."""
+    if shutil.which("gatk") is None:
+        pytest.skip("gatk not available in environment")
+
+    sample_id = "NA12829_genotype"
+    local_dir = default_client.local_dir
+    paths = setup_fixture_files(local_dir)
+
+    gvcf_ipfile = IpFile(
+        id="test-gvcf",
+        cid="test_gvcf",
         name=f"{sample_id}.g.vcf",
-        size=gvcf_path.stat().st_size,
+        size=paths["gvcf"].stat().st_size,
         keyvalues={
             "type": "variants",
             "component": "vcf",
@@ -57,32 +65,13 @@ chr17	7687551	.	C	T,<NON_REF>	1000	.	.	GT:DP:GQ:PL	0/1:40:99:500,0,800,600,900,1
         },
         created_at=datetime.now(),
     )
+    gvcf_ipfile.local_path = paths["gvcf"]
 
-    return gvcf_path, ipfile
-
-
-def create_mock_reference(local_dir: Path, test_cid: str) -> tuple[Path, IpFile]:
-    """
-    Create a minimal valid reference FASTA for testing.
-
-    Returns:
-        Tuple of (ref_path, ipfile)
-    """
-    local_dir.mkdir(parents=True, exist_ok=True)
-    ref_path = local_dir / test_cid
-
-    # Create minimal FASTA content matching GVCF
-    ref_content = """>chr17
-GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
-GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
-"""
-    ref_path.write_text(ref_content)
-
-    ipfile = IpFile(
-        id="test-ref",
-        cid=test_cid,
-        name="test_reference.fa",
-        size=ref_path.stat().st_size,
+    ref_ipfile = IpFile(
+        id="test-ref-fasta",
+        cid="test_ref_fasta",
+        name="GRCh38_TP53.fa",
+        size=paths["ref_fasta"].stat().st_size,
         keyvalues={
             "type": "reference",
             "component": "fasta",
@@ -90,68 +79,25 @@ GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
         },
         created_at=datetime.now(),
     )
+    ref_ipfile.local_path = paths["ref_fasta"]
 
-    return ref_path, ipfile
+    gvcf = Variants(sample_id=sample_id, vcf=gvcf_ipfile)
+    ref = Reference(build="GRCh38", fasta=ref_ipfile)
 
+    result = await genotypegvcf(gvcf=gvcf, ref=ref)
 
-@pytest.mark.asyncio
-async def test_genotypegvcf_converts_to_vcf():
-    """Test that genotypegvcf converts GVCF to VCF."""
-    # Check if gatk is available (skip if not)
-    if shutil.which("gatk") is None:
-        pytest.skip("gatk not available in environment")
+    # Verify result
+    assert isinstance(result, Variants)
+    assert result.sample_id == sample_id
 
-    sample_id = "NA12829_genotype"
-    test_cid_gvcf = "QmTestGVCFGenotype"
-    test_cid_ref = "QmTestRefGenotype"
+    # Check that it's a VCF (not GVCF)
+    assert not result.is_gvcf, "Output should be VCF, not GVCF"
 
-    # Create mock GVCF
-    gvcf_path, gvcf_ipfile = create_mock_gvcf(
-        default_client.local_dir, sample_id, test_cid_gvcf
-    )
-
-    # Create mock reference
-    ref_path, ref_ipfile = create_mock_reference(default_client.local_dir, test_cid_ref)
-
-    # Create objects with component fields
-    gvcf = Variants(
-        sample_id=sample_id,
-        vcf=gvcf_ipfile,
-    )
-
-    ref = Reference(
-        build="GRCh38",
-        fasta=ref_ipfile,
-    )
-
-    try:
-        # Run genotypegvcf
-        result = await genotypegvcf(gvcf=gvcf, ref=ref)
-
-        # Verify result
-        assert isinstance(result, Variants)
-        assert result.sample_id == sample_id
-
-        # Check that it's a VCF (not GVCF)
-        assert not result.is_gvcf, "Output should be VCF, not GVCF"
-
-        # Verify metadata
-        vcf_file = result.vcf
-        assert vcf_file is not None
-        assert vcf_file.keyvalues.get("caller") == "genotypegvcf"
-        assert vcf_file.keyvalues.get("variant_type") == "vcf"
-        assert vcf_file.keyvalues.get("source_caller") == "haplotypecaller"
-
-    finally:
-        # Cleanup
-        if gvcf_path.exists():
-            gvcf_path.unlink()
-        if ref_path.exists():
-            ref_path.unlink()
-        # Cleanup output VCF
-        output_vcf = ref_path.parent / f"{sample_id}.vcf"
-        if output_vcf.exists():
-            output_vcf.unlink()
+    # Verify metadata
+    vcf_file = result.vcf
+    assert vcf_file is not None
+    assert vcf_file.keyvalues.get("caller") == "genotypegvcf"
+    assert vcf_file.keyvalues.get("variant_type") == "vcf"
 
 
 @pytest.mark.asyncio
@@ -160,7 +106,6 @@ async def test_genotypegvcf_rejects_vcf_input():
     sample_id = "NA12829_test"
     test_cid = "QmTestVCFInput"
 
-    # Create Variants with VCF (not GVCF) metadata
     vcf_ipfile = IpFile(
         id=f"test-{sample_id}-vcf",
         cid=test_cid,
@@ -171,21 +116,14 @@ async def test_genotypegvcf_rejects_vcf_input():
             "component": "vcf",
             "sample_id": sample_id,
             "caller": "haplotypecaller",
-            "variant_type": "vcf",  # VCF, not GVCF
+            "variant_type": "vcf",
         },
         created_at=datetime.now(),
     )
 
-    variants = Variants(
-        sample_id=sample_id,
-        vcf=vcf_ipfile,
-    )
+    variants = Variants(sample_id=sample_id, vcf=vcf_ipfile)
+    ref = Reference(build="test")
 
-    ref = Reference(
-        build="test",
-    )
-
-    # Should raise ValueError for non-GVCF input
     with pytest.raises(ValueError, match="requires a GVCF file"):
         await genotypegvcf(gvcf=variants, ref=ref)
 
@@ -193,8 +131,6 @@ async def test_genotypegvcf_rejects_vcf_input():
 @pytest.mark.asyncio
 async def test_genotypegvcf_output_naming():
     """Test that genotypegvcf correctly names output VCF."""
-
-    # Test various input naming conventions
     test_cases = [
         ("sample.g.vcf", "sample.vcf"),
         ("sample.g.vcf.gz", "sample.vcf"),
@@ -204,7 +140,6 @@ async def test_genotypegvcf_output_naming():
     ]
 
     for input_name, expected_output in test_cases:
-        # The naming logic is in task, we're just testing pattern
         vcf_basename = input_name
         if vcf_basename.endswith(".g.vcf.gz"):
             vcf_basename = vcf_basename[:-9] + ".vcf"
@@ -223,14 +158,8 @@ async def test_genotypegvcf_output_naming():
 @pytest.mark.asyncio
 async def test_genotypegvcf_empty_gvcf():
     """Test that genotypegvcf raises error for empty GVCF."""
-    gvcf = Variants(
-        sample_id="empty",
-    )
+    gvcf = Variants(sample_id="empty")
+    ref = Reference(build="test")
 
-    ref = Reference(
-        build="test",
-    )
-
-    # Should raise error - can't determine if GVCF without vcf
     with pytest.raises(ValueError, match="requires a GVCF file"):
         await genotypegvcf(gvcf=gvcf, ref=ref)

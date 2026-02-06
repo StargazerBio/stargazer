@@ -12,62 +12,68 @@ from stargazer.tasks.gatk.applybqsr import applybqsr
 from stargazer.types import Reference, Alignment
 from stargazer.utils.pinata import IpFile, default_client
 
+FIXTURES_DIR = Path(__file__).parent.parent.parent / "fixtures"
 
-def create_mock_bam(
-    local_dir: Path, sample_id: str, test_cid: str
-) -> tuple[Path, IpFile]:
+
+def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
     """
-    Create a minimal mock BAM file for testing.
+    Copy real TP53 fixture files into the test's local directory.
 
-    Returns:
-        Tuple of (bam_path, ipfile)
+    Returns dict of fixture name to local path.
     """
     local_dir.mkdir(parents=True, exist_ok=True)
-    bam_path = local_dir / test_cid
 
-    # Create minimal BAM-like content
-    bam_path.write_bytes(b"BAM\x01mock_bam_content")
+    files = {
+        "ref_fasta": ("GRCh38_TP53.fa", "GRCh38_TP53.fa"),
+        "ref_fai": ("GRCh38_TP53.fa.fai", "GRCh38_TP53.fa.fai"),
+        "ref_dict": ("GRCh38_TP53.dict", "GRCh38_TP53.dict"),
+        "bam": ("NA12829_TP53_markdup.bam", "NA12829_TP53_markdup.bam"),
+        "bam_bai": ("NA12829_TP53_markdup.bai", "NA12829_TP53_markdup.bai"),
+        "recal_table": ("NA12829_TP53_bqsr.table", "NA12829_TP53_bqsr.table"),
+    }
 
-    ipfile = IpFile(
-        id=f"test-{sample_id}-bam",
-        cid=test_cid,
-        name=f"{sample_id}.bam",
-        size=bam_path.stat().st_size,
+    paths = {}
+    for key, (src_name, dst_name) in files.items():
+        src = FIXTURES_DIR / src_name
+        dst = local_dir / dst_name
+        shutil.copy2(src, dst)
+        paths[key] = dst
+
+    return paths
+
+
+@pytest.mark.asyncio
+async def test_applybqsr_recalibrates_bam():
+    """Test that applybqsr creates a recalibrated BAM."""
+    if shutil.which("gatk") is None:
+        pytest.skip("gatk not available in environment")
+
+    sample_id = "NA12829_applybqsr"
+    local_dir = default_client.local_dir
+    paths = setup_fixture_files(local_dir)
+
+    bam_ipfile = IpFile(
+        id="test-markdup-bam",
+        cid="test_markdup_bam",
+        name="NA12829_TP53_markdup.bam",
+        size=paths["bam"].stat().st_size,
         keyvalues={
             "type": "alignment",
             "component": "alignment",
             "sample_id": sample_id,
-            "tool": "fq2bam",
+            "tool": "gatk_markduplicates",
             "sorted": "coordinate",
             "duplicates_marked": "true",
         },
         created_at=datetime.now(),
     )
+    bam_ipfile.local_path = paths["bam"]
 
-    return bam_path, ipfile
-
-
-def create_mock_reference(local_dir: Path, test_cid: str) -> tuple[Path, IpFile]:
-    """
-    Create a minimal valid reference FASTA for testing.
-
-    Returns:
-        Tuple of (ref_path, ipfile)
-    """
-    local_dir.mkdir(parents=True, exist_ok=True)
-    ref_path = local_dir / test_cid
-
-    # Create minimal FASTA content
-    ref_content = """>chr17
-GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
-"""
-    ref_path.write_text(ref_content)
-
-    ipfile = IpFile(
-        id="test-ref",
-        cid=test_cid,
-        name="test_reference.fa",
-        size=ref_path.stat().st_size,
+    ref_ipfile = IpFile(
+        id="test-ref-fasta",
+        cid="test_ref_fasta",
+        name="GRCh38_TP53.fa",
+        size=paths["ref_fasta"].stat().st_size,
         keyvalues={
             "type": "reference",
             "component": "fasta",
@@ -75,36 +81,13 @@ GATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATC
         },
         created_at=datetime.now(),
     )
+    ref_ipfile.local_path = paths["ref_fasta"]
 
-    return ref_path, ipfile
-
-
-def create_mock_recal_report(
-    local_dir: Path, sample_id: str, test_cid: str
-) -> tuple[Path, IpFile]:
-    """
-    Create a mock BQSR recalibration report for testing.
-
-    Returns:
-        Tuple of (report_path, ipfile)
-    """
-    local_dir.mkdir(parents=True, exist_ok=True)
-    report_path = local_dir / test_cid
-
-    # Create mock recalibration table content
-    report_content = """#:GATKReport.v1.1:5
-#:GATKTable:2:17:%s:%s:;
-#:GATKTable:Arguments:Recalibration argument collection values used in this run
-Argument                    Value
-covariate                   ReadGroupCovariate,QualityScoreCovariate,ContextCovariate,CycleCovariate
-"""
-    report_path.write_text(report_content)
-
-    ipfile = IpFile(
-        id=f"test-{sample_id}-recal",
-        cid=test_cid,
-        name=f"{sample_id}_bqsr.table",
-        size=report_path.stat().st_size,
+    recal_ipfile = IpFile(
+        id="test-recal-table",
+        cid="test_recal_table",
+        name="NA12829_TP53_bqsr.table",
+        size=paths["recal_table"].stat().st_size,
         keyvalues={
             "type": "bqsr_report",
             "sample_id": sample_id,
@@ -112,31 +95,7 @@ covariate                   ReadGroupCovariate,QualityScoreCovariate,ContextCova
         },
         created_at=datetime.now(),
     )
-    ipfile.local_path = report_path
-
-    return report_path, ipfile
-
-
-@pytest.mark.asyncio
-async def test_applybqsr_recalibrates_bam():
-    """Test that applybqsr creates a recalibrated BAM."""
-    # Check if gatk is available (skip if not)
-    if shutil.which("gatk") is None:
-        pytest.skip("gatk not available in environment")
-
-    sample_id = "NA12878_applybqsr"
-    test_cid_bam = "QmTestBAMApplyBQSR"
-    test_cid_ref = "QmTestRefApplyBQSR"
-    test_cid_recal = "QmTestRecalApplyBQSR"
-
-    # Create mock files
-    bam_path, bam_ipfile = create_mock_bam(
-        default_client.local_dir, sample_id, test_cid_bam
-    )
-    ref_path, ref_ipfile = create_mock_reference(default_client.local_dir, test_cid_ref)
-    recal_path, recal_ipfile = create_mock_recal_report(
-        default_client.local_dir, sample_id, test_cid_recal
-    )
+    recal_ipfile.local_path = paths["recal_table"]
 
     alignment = Alignment(
         sample_id=sample_id,
@@ -148,32 +107,22 @@ async def test_applybqsr_recalibrates_bam():
         fasta=ref_ipfile,
     )
 
-    try:
-        recalibrated = await applybqsr(
-            alignment=alignment,
-            ref=ref,
-            recal_report=recal_ipfile,
-        )
+    recalibrated = await applybqsr(
+        alignment=alignment,
+        ref=ref,
+        recal_report=recal_ipfile,
+    )
 
-        # Verify result
-        assert isinstance(recalibrated, Alignment)
-        assert recalibrated.sample_id == sample_id
-        assert recalibrated.has_bqsr_applied
+    # Verify result
+    assert isinstance(recalibrated, Alignment)
+    assert recalibrated.sample_id == sample_id
+    assert recalibrated.has_bqsr_applied
 
-        # Check metadata
-        bam_file = recalibrated.alignment
-        assert bam_file is not None
-        assert bam_file.keyvalues.get("bqsr_applied") == "true"
-        assert bam_file.keyvalues.get("tool") == "gatk_applybqsr"
-
-    finally:
-        # Cleanup
-        if bam_path.exists():
-            bam_path.unlink()
-        if ref_path.exists():
-            ref_path.unlink()
-        if recal_path.exists():
-            recal_path.unlink()
+    # Check metadata
+    bam_file = recalibrated.alignment
+    assert bam_file is not None
+    assert bam_file.keyvalues.get("bqsr_applied") == "true"
+    assert bam_file.keyvalues.get("tool") == "gatk_applybqsr"
 
 
 @pytest.mark.asyncio
