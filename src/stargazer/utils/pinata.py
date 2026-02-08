@@ -158,6 +158,46 @@ class PinataClient:
         """Get authorization headers."""
         return {"Authorization": f"Bearer {self.jwt}"}
 
+    async def _get_gateway_domain(self) -> str:
+        """Fetch the dedicated gateway domain from Pinata API."""
+        if not hasattr(self, "_gateway_domain") or self._gateway_domain is None:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self.API_BASE}/ipfs/gateways", headers=self._headers()
+                ) as response:
+                    response.raise_for_status()
+                    data = await response.json()
+                    rows = data["data"]["rows"]
+                    if not rows:
+                        raise ValueError(
+                            "No gateway configured in Pinata account. "
+                            "Create one at https://app.pinata.cloud/gateway"
+                        )
+                    domain = rows[0]["domain"]
+                    self._gateway_domain = f"https://{domain}.mypinata.cloud"
+        return self._gateway_domain
+
+    async def _get_signed_url(self, cid: str, expires: int = 300) -> str:
+        """Get a signed download URL for a private file."""
+        import time
+
+        gateway = await self._get_gateway_domain()
+        payload = {
+            "url": f"{gateway}/files/{cid}",
+            "expires": expires,
+            "date": int(time.time()),
+            "method": "GET",
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.API_BASE}/files/sign",
+                headers=self._headers(),
+                json=payload,
+            ) as response:
+                response.raise_for_status()
+                data = await response.json()
+                return data["data"]
+
     async def upload_file(
         self,
         path: Path,
@@ -299,18 +339,16 @@ class PinataClient:
                 f"Local file {cid} not found in local directory or database."
             )
 
-        # Select gateway based on file visibility
+        # Select download strategy based on file visibility
         if ipfile.is_public:
-            # Public files: use ipfs.io, no auth needed
-            gateway_url = f"https://ipfs.io/ipfs/{cid}"
-            headers = {}
+            # Public files: use ipfs.io gateway, no auth needed
+            download_url = f"https://ipfs.io/ipfs/{cid}"
         else:
-            # Private files: use Pinata gateway with auth
-            gateway_url = f"{self.gateway}/ipfs/{cid}"
-            headers = self._headers()
+            # Private files: get a signed URL via Pinata API
+            download_url = await self._get_signed_url(cid)
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(gateway_url, headers=headers) as response:
+            async with session.get(download_url) as response:
                 response.raise_for_status()
 
                 cache_path.parent.mkdir(parents=True, exist_ok=True)

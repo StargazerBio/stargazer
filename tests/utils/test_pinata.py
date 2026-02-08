@@ -23,6 +23,8 @@ async def test_upload_and_delete_file():
     if not os.environ.get("PINATA_JWT"):
         pytest.skip("PINATA_JWT environment variable not set")
 
+    default_client.local_only = False
+
     # Use the smallest reference file for quick testing
     test_file = FIXTURES_DIR.joinpath("upload_delete.txt")
     assert test_file.exists(), f"Test file not found: {test_file}"
@@ -55,6 +57,7 @@ async def test_upload_and_delete_file():
         # time.sleep(20)
         # await default_client.delete_file(test_file)
         # print("✓ File deleted successfully")
+        default_client.local_only = True
 
 
 @pytest.mark.asyncio
@@ -63,6 +66,8 @@ async def test_query():
     # Check for API key
     if not os.environ.get("PINATA_JWT"):
         pytest.skip("PINATA_JWT environment variable not set")
+
+    default_client.local_only = False
 
     # Files to upload (TP53 reference files)
     test_files = [
@@ -98,41 +103,34 @@ async def test_query():
 
 
 @pytest.mark.asyncio
-async def test_download_file():
-    """Test downloading a file from IPFS gateways."""
-    # This test uses a well-known IPFS CID that should be available on public gateways
-    # We can't test immediate download of newly uploaded files because IPFS
-    # propagation to public gateways takes time
+async def test_download_file(tmp_path):
+    """Test downloading a file from Pinata gateway."""
+    if not os.environ.get("PINATA_JWT"):
+        pytest.skip("PINATA_JWT environment variable not set")
 
-    # Use a well-known small IPFS file
-    # This is a simple "hello world" file that's widely available
-    test_cid = "QmZ4tDuvesekSs4qM5ZBKpXiZGun7S2CYtEZRB3DYXkjGx"
-    expected_content = "hello worlds\n"
+    default_client.local_only = False
 
-    # Create a mock IpFile for testing (public file on IPFS)
+    # Use GRCh38_TP53.fa.fai - a small reference file known to be on Pinata
+    test_file = "GRCh38_TP53.fa.fai"
+    test_cid = CIDS.get(test_file)
+    assert test_cid, f"CID for {test_file} not found in config"
+
+    expected_content = FIXTURES_DIR.joinpath(test_file).read_text()
+
     from datetime import datetime, timezone
 
     test_ipfile = IpFile(
         id="test-download-id",
         cid=test_cid,
-        name="hello.txt",
-        size=13,
-        keyvalues={},
+        name=test_file,
+        size=len(expected_content.encode()),
+        keyvalues={"type": "reference"},
         created_at=datetime.now(timezone.utc),
-        is_public=True,
+        is_public=False,
     )
 
-    print(f"\nDownloading well-known IPFS file with CID: {test_cid}")
-
-    try:
-        # Download the file using IPFS gateways
-        downloaded_ipfile = await default_client.download_file(test_ipfile)
-    except Exception as e:
-        # If file is not accessible, skip the test
-        pytest.skip(
-            f"Well-known IPFS CID {test_cid} not accessible. "
-            f"This may indicate IPFS gateway issues. Error: {e}"
-        )
+    print(f"\nDownloading file with CID: {test_cid}")
+    downloaded_ipfile = await default_client.download_file(test_ipfile)
 
     # Verify the file was downloaded
     assert downloaded_ipfile.local_path is not None, (
@@ -145,27 +143,25 @@ async def test_download_file():
 
     # Verify IpFile metadata is preserved
     assert downloaded_ipfile.cid == test_cid, "CID should match"
-    assert downloaded_ipfile.name == "hello.txt", "Name should match"
+    assert downloaded_ipfile.name == test_file, "Name should match"
 
     # Read and verify content
     content = downloaded_ipfile.local_path.read_text()
     assert content == expected_content, (
         f"Content mismatch: expected '{expected_content}', got '{content}'"
     )
-    print("✓ File content verified - matches expected 'hello worlds\\n'")
+    print("✓ File content verified")
 
     # Test downloading to a specific destination
-    dest_path = FIXTURES_DIR.joinpath("downloaded_test.txt")
-    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    dest_path = tmp_path / "downloaded_test.txt"
+
+    # Reset local_path so download_file doesn't short-circuit
+    test_ipfile.local_path = None
 
     print(f"Downloading to specific destination: {dest_path}")
     result_ipfile = await default_client.download_file(test_ipfile, dest=dest_path)
 
     assert result_ipfile.local_path == dest_path, "Destination path should match"
     assert dest_path.exists(), "File should exist at destination"
-    assert dest_path.read_text() == content, "Content should match original"
+    assert dest_path.read_text() == expected_content, "Content should match original"
     print("✓ Download to specific destination successful")
-
-    # Clean up the destination file (keep cache)
-    dest_path.unlink()
-    print("✓ Test cleanup complete")
