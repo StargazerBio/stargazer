@@ -1,5 +1,5 @@
 """
-Tests for mergebamalignment task.
+Tests for merge_bam_alignment task.
 """
 
 import shutil
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURES_DIR
 
-from stargazer.tasks.gatk.merge_bam_alignment import mergebamalignment
+from stargazer.tasks.gatk.merge_bam_alignment import merge_bam_alignment
 from stargazer.types import Reference, Alignment
 from stargazer.utils.pinata import IpFile, default_client
 
@@ -41,8 +41,8 @@ def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
 
 
 @pytest.mark.asyncio
-async def test_mergebamalignment_merges_bams():
-    """Test that mergebamalignment creates a merged BAM."""
+async def test_merge_bam_alignment_merges_bams():
+    """Test that merge_bam_alignment creates a merged BAM."""
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
@@ -112,7 +112,7 @@ async def test_mergebamalignment_merges_bams():
         fasta=ref_ipfile,
     )
 
-    merged = await mergebamalignment(
+    merged = await merge_bam_alignment(
         aligned_bam=aligned_bam,
         unmapped_bam=unmapped_bam,
         ref=ref,
@@ -126,21 +126,21 @@ async def test_mergebamalignment_merges_bams():
     bam_file = merged.alignment
     assert bam_file is not None
     assert bam_file.keyvalues.get("sorted") == "coordinate"
-    assert bam_file.keyvalues.get("tool") == "gatk_mergebamalignment"
+    assert bam_file.keyvalues.get("tool") == "gatk_merge_bam_alignment"
 
 
 @pytest.mark.asyncio
-async def test_mergebamalignment_task_is_callable():
-    """Test that mergebamalignment is a callable task."""
-    assert callable(mergebamalignment)
-    assert "mergebamalignment" in str(mergebamalignment)
+async def test_merge_bam_alignment_task_is_callable():
+    """Test that merge_bam_alignment is a callable task."""
+    assert callable(merge_bam_alignment)
+    assert "merge_bam_alignment" in str(merge_bam_alignment)
 
 
 class TestMergeBamAlignmentExports:
-    """Test that mergebamalignment task is properly exported."""
+    """Test that merge_bam_alignment task is properly exported."""
 
-    def test_mergebamalignment_exported_from_package(self):
-        """Test that mergebamalignment is accessible from stargazer.tasks."""
-        from stargazer.tasks import mergebamalignment
+    def test_merge_bam_alignment_exported_from_package(self):
+        """Test that merge_bam_alignment is accessible from stargazer.tasks."""
+        from stargazer.tasks import merge_bam_alignment
 
-        assert callable(mergebamalignment)
+        assert callable(merge_bam_alignment)

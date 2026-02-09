@@ -1,5 +1,5 @@
 """
-Tests for sortsam task.
+Tests for sort_sam task.
 """
 
 import shutil
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURES_DIR
 
-from stargazer.tasks.gatk.sort_sam import sortsam
+from stargazer.tasks.gatk.sort_sam import sort_sam
 from stargazer.types import Reference, Alignment
 from stargazer.utils.pinata import IpFile, default_client
 
@@ -40,8 +40,8 @@ def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
 
 
 @pytest.mark.asyncio
-async def test_sortsam_sorts_bam():
-    """Test that sortsam creates a sorted BAM."""
+async def test_sort_sam_sorts_bam():
+    """Test that sort_sam creates a sorted BAM."""
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
@@ -88,7 +88,7 @@ async def test_sortsam_sorts_bam():
         fasta=ref_ipfile,
     )
 
-    sorted_bam = await sortsam(
+    sorted_bam = await sort_sam(
         alignment=alignment,
         ref=ref,
         sort_order="coordinate",
@@ -102,12 +102,12 @@ async def test_sortsam_sorts_bam():
     bam_file = sorted_bam.alignment
     assert bam_file is not None
     assert bam_file.keyvalues.get("sorted") == "coordinate"
-    assert bam_file.keyvalues.get("tool") == "gatk_sortsam"
+    assert bam_file.keyvalues.get("tool") == "gatk_sort_sam"
 
 
 @pytest.mark.asyncio
-async def test_sortsam_validates_sort_order():
-    """Test that sortsam rejects invalid sort orders."""
+async def test_sort_sam_validates_sort_order():
+    """Test that sort_sam rejects invalid sort orders."""
     alignment = Alignment(
         sample_id="test",
     )
@@ -117,7 +117,7 @@ async def test_sortsam_validates_sort_order():
     )
 
     with pytest.raises(ValueError, match="Invalid sort_order"):
-        await sortsam(
+        await sort_sam(
             alignment=alignment,
             ref=ref,
             sort_order="invalid_order",
@@ -125,17 +125,17 @@ async def test_sortsam_validates_sort_order():
 
 
 @pytest.mark.asyncio
-async def test_sortsam_task_is_callable():
-    """Test that sortsam is a callable task."""
-    assert callable(sortsam)
-    assert "sortsam" in str(sortsam)
+async def test_sort_sam_task_is_callable():
+    """Test that sort_sam is a callable task."""
+    assert callable(sort_sam)
+    assert "sort_sam" in str(sort_sam)
 
 
 class TestSortSamExports:
-    """Test that sortsam task is properly exported."""
+    """Test that sort_sam task is properly exported."""
 
-    def test_sortsam_exported_from_package(self):
-        """Test that sortsam is accessible from stargazer.tasks."""
-        from stargazer.tasks import sortsam
+    def test_sort_sam_exported_from_package(self):
+        """Test that sort_sam is accessible from stargazer.tasks."""
+        from stargazer.tasks import sort_sam
 
-        assert callable(sortsam)
+        assert callable(sort_sam)

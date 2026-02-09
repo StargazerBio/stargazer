@@ -1,5 +1,5 @@
 """
-applybqsr task for Stargazer.
+apply_bqsr task for Stargazer.
 
 Applies BQSR recalibration to BAM files using GATK ApplyBQSR.
 """
@@ -11,7 +11,7 @@ from stargazer.utils.pinata import IpFile, default_client
 
 
 @gatk_env.task
-async def applybqsr(
+async def apply_bqsr(
     alignment: Alignment,
     ref: Reference,
     recal_report: IpFile,
@@ -20,7 +20,7 @@ async def applybqsr(
     Apply Base Quality Score Recalibration to a BAM file.
 
     Uses GATK ApplyBQSR to recalibrate base quality scores using the
-    recalibration table from baserecalibrator.
+    recalibration table from base_recalibrator.
 
     This is the final step in GATK Best Practices data pre-processing before
     variant calling.
@@ -28,7 +28,7 @@ async def applybqsr(
     Args:
         alignment: Input BAM file (sorted, duplicates marked)
         ref: Reference genome with FASTA index
-        recal_report: BQSR recalibration report from baserecalibrator
+        recal_report: BQSR recalibration report from base_recalibrator
 
     Returns:
         Alignment object with recalibrated BAM file
@@ -36,12 +36,12 @@ async def applybqsr(
     Example:
         ref = await prepare_reference(ref_name="GRCh38.fa")
         alignment = await mark_duplicates(alignment=alignment, ref=ref)
-        recal_report = await baserecalibrator(
+        recal_report = await base_recalibrator(
             alignment=alignment,
             ref=ref,
             known_sites=["dbsnp_146.hg38.vcf.gz"],
         )
-        recalibrated_bam = await applybqsr(
+        recalibrated_bam = await apply_bqsr(
             alignment=alignment,
             ref=ref,
             recal_report=recal_report,
@@ -69,7 +69,7 @@ async def applybqsr(
     if not recal_path or not recal_path.exists():
         raise FileNotFoundError(
             "BQSR recalibration report not found in cache. "
-            "Ensure recal_report was created by baserecalibrator."
+            "Ensure recal_report was created by base_recalibrator."
         )
 
     # Output BAM path
@@ -108,7 +108,7 @@ async def applybqsr(
         is_sorted=True,
         duplicates_marked=True,
         bqsr_applied=True,
-        tool="gatk_applybqsr",
+        tool="gatk_apply_bqsr",
     )
 
     return recalibrated_alignment

@@ -8,17 +8,17 @@ from stargazer.tasks.general.bwa import bwa_index, bwa_mem
 from stargazer.tasks.gatk.create_sequence_dictionary import create_sequence_dictionary
 
 # GATK tasks
-from stargazer.tasks.gatk.base_recalibrator import baserecalibrator
-from stargazer.tasks.gatk.apply_bqsr import applybqsr
-from stargazer.tasks.gatk.analyze_covariates import analyzecovariates
-from stargazer.tasks.gatk.mark_duplicates import markduplicates
-from stargazer.tasks.gatk.sort_sam import sortsam
-from stargazer.tasks.gatk.merge_bam_alignment import mergebamalignment
-from stargazer.tasks.gatk.genotype_gvcf import genotypegvcf
-from stargazer.tasks.gatk.combine_gvcfs import combinegvcfs
-from stargazer.tasks.gatk.genomics_db_import import genomicsdbimport
-from stargazer.tasks.gatk.variant_recalibrator import variantrecalibrator, VQSRResource
-from stargazer.tasks.gatk.apply_vqsr import applyvqsr
+from stargazer.tasks.gatk.base_recalibrator import base_recalibrator
+from stargazer.tasks.gatk.apply_bqsr import apply_bqsr
+from stargazer.tasks.gatk.analyze_covariates import analyze_covariates
+from stargazer.tasks.gatk.mark_duplicates import mark_duplicates
+from stargazer.tasks.gatk.sort_sam import sort_sam
+from stargazer.tasks.gatk.merge_bam_alignment import merge_bam_alignment
+from stargazer.tasks.gatk.genotype_gvcf import genotype_gvcf
+from stargazer.tasks.gatk.combine_gvcfs import combine_gvcfs
+from stargazer.tasks.gatk.genomics_db_import import genomics_db_import
+from stargazer.tasks.gatk.variant_recalibrator import variant_recalibrator, VQSRResource
+from stargazer.tasks.gatk.apply_vqsr import apply_vqsr
 
 __all__ = [
     # Hydration
@@ -29,19 +29,19 @@ __all__ = [
     "bwa_index",
     "bwa_mem",
     # Data preprocessing (GATK)
-    "sortsam",
-    "markduplicates",
-    "mergebamalignment",
+    "sort_sam",
+    "mark_duplicates",
+    "merge_bam_alignment",
     # BQSR (Base Quality Score Recalibration)
-    "baserecalibrator",
-    "applybqsr",
-    "analyzecovariates",
+    "base_recalibrator",
+    "apply_bqsr",
+    "analyze_covariates",
     # GVCF processing
-    "genotypegvcf",
-    "combinegvcfs",
-    "genomicsdbimport",
+    "genotype_gvcf",
+    "combine_gvcfs",
+    "genomics_db_import",
     # Variant filtering (VQSR)
-    "variantrecalibrator",
+    "variant_recalibrator",
     "VQSRResource",
-    "applyvqsr",
+    "apply_vqsr",
 ]

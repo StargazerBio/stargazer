@@ -1,5 +1,5 @@
 """
-markduplicates task for Stargazer.
+mark_duplicates task for Stargazer.
 
 Marks duplicate reads in BAM files using GATK MarkDuplicates.
 """
@@ -11,7 +11,7 @@ from stargazer.utils.pinata import default_client
 
 
 @gatk_env.task
-async def markduplicates(
+async def mark_duplicates(
     alignment: Alignment,
     ref: Reference,
 ) -> Alignment:
@@ -31,8 +31,8 @@ async def markduplicates(
 
     Example:
         ref = await prepare_reference(ref_name="GRCh38.fa")
-        sorted_bam = await sortsam(alignment=alignment, ref=ref, sort_order="coordinate")
-        marked_bam = await markduplicates(alignment=sorted_bam, ref=ref)
+        sorted_bam = await sort_sam(alignment=alignment, ref=ref, sort_order="coordinate")
+        marked_bam = await mark_duplicates(alignment=sorted_bam, ref=ref)
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037052812-MarkDuplicates-Picard
@@ -89,7 +89,7 @@ async def markduplicates(
         is_sorted=True,
         duplicates_marked=True,
         bqsr_applied=alignment.has_bqsr_applied,
-        tool="gatk_markduplicates",
+        tool="gatk_mark_duplicates",
     )
 
     # Upload index file
@@ -102,7 +102,7 @@ async def markduplicates(
         metrics_keyvalues = {
             "type": "duplicate_metrics",
             "sample_id": alignment.sample_id,
-            "tool": "gatk_markduplicates",
+            "tool": "gatk_mark_duplicates",
         }
         await default_client.upload_file(metrics_file, keyvalues=metrics_keyvalues)
 

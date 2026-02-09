@@ -1,5 +1,5 @@
 """
-Tests for genotypegvcf task.
+Tests for genotype_gvcf task.
 """
 
 import shutil
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURES_DIR
 
-from stargazer.tasks.gatk.genotype_gvcf import genotypegvcf
+from stargazer.tasks.gatk.genotype_gvcf import genotype_gvcf
 from stargazer.types import Reference, Variants
 from stargazer.utils.pinata import IpFile, default_client
 
@@ -40,8 +40,8 @@ def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
 
 
 @pytest.mark.asyncio
-async def test_genotypegvcf_converts_to_vcf():
-    """Test that genotypegvcf converts GVCF to VCF."""
+async def test_genotype_gvcf_converts_to_vcf():
+    """Test that genotype_gvcf converts GVCF to VCF."""
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
@@ -83,7 +83,7 @@ async def test_genotypegvcf_converts_to_vcf():
     gvcf = Variants(sample_id=sample_id, vcf=gvcf_ipfile)
     ref = Reference(build="GRCh38", fasta=ref_ipfile)
 
-    result = await genotypegvcf(gvcf=gvcf, ref=ref)
+    result = await genotype_gvcf(gvcf=gvcf, ref=ref)
 
     # Verify result
     assert isinstance(result, Variants)
@@ -95,13 +95,13 @@ async def test_genotypegvcf_converts_to_vcf():
     # Verify metadata
     vcf_file = result.vcf
     assert vcf_file is not None
-    assert vcf_file.keyvalues.get("caller") == "genotypegvcf"
+    assert vcf_file.keyvalues.get("caller") == "genotype_gvcf"
     assert vcf_file.keyvalues.get("variant_type") == "vcf"
 
 
 @pytest.mark.asyncio
-async def test_genotypegvcf_rejects_vcf_input():
-    """Test that genotypegvcf raises error for VCF input (expects GVCF)."""
+async def test_genotype_gvcf_rejects_vcf_input():
+    """Test that genotype_gvcf raises error for VCF input (expects GVCF)."""
     sample_id = "NA12829_test"
     test_cid = "QmTestVCFInput"
 
@@ -124,12 +124,12 @@ async def test_genotypegvcf_rejects_vcf_input():
     ref = Reference(build="test")
 
     with pytest.raises(ValueError, match="requires a GVCF file"):
-        await genotypegvcf(gvcf=variants, ref=ref)
+        await genotype_gvcf(gvcf=variants, ref=ref)
 
 
 @pytest.mark.asyncio
-async def test_genotypegvcf_output_naming():
-    """Test that genotypegvcf correctly names output VCF."""
+async def test_genotype_gvcf_output_naming():
+    """Test that genotype_gvcf correctly names output VCF."""
     test_cases = [
         ("sample.g.vcf", "sample.vcf"),
         ("sample.g.vcf.gz", "sample.vcf"),
@@ -155,10 +155,10 @@ async def test_genotypegvcf_output_naming():
 
 
 @pytest.mark.asyncio
-async def test_genotypegvcf_empty_gvcf():
-    """Test that genotypegvcf raises error for empty GVCF."""
+async def test_genotype_gvcf_empty_gvcf():
+    """Test that genotype_gvcf raises error for empty GVCF."""
     gvcf = Variants(sample_id="empty")
     ref = Reference(build="test")
 
     with pytest.raises(ValueError, match="requires a GVCF file"):
-        await genotypegvcf(gvcf=gvcf, ref=ref)
+        await genotype_gvcf(gvcf=gvcf, ref=ref)

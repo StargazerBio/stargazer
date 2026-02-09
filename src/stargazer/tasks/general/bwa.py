@@ -138,7 +138,7 @@ async def bwa_mem(
         reads_list = await hydrate({"type": "reads", "sample_id": "NA12829"})
         reads = next((r for r in reads_list if isinstance(r, Reads)), None)
         aligned = await bwa_mem(reads=reads, ref=ref)
-        sorted_aligned = await sortsam(alignment=aligned, ref=ref, sort_order="coordinate")
+        sorted_aligned = await sort_sam(alignment=aligned, ref=ref, sort_order="coordinate")
 
     Reference:
         https://bio-bwa.sourceforge.net/bwa.shtml

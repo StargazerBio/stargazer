@@ -1,5 +1,5 @@
 """
-Tests for markduplicates task.
+Tests for mark_duplicates task.
 """
 
 import shutil
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURES_DIR
 
-from stargazer.tasks.gatk.mark_duplicates import markduplicates
+from stargazer.tasks.gatk.mark_duplicates import mark_duplicates
 from stargazer.types import Reference, Alignment
 from stargazer.utils.pinata import IpFile, default_client
 
@@ -40,8 +40,8 @@ def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
 
 
 @pytest.mark.asyncio
-async def test_markduplicates_marks_duplicates():
-    """Test that markduplicates creates a marked BAM."""
+async def test_mark_duplicates_marks_duplicates():
+    """Test that mark_duplicates creates a marked BAM."""
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
@@ -58,7 +58,7 @@ async def test_markduplicates_marks_duplicates():
             "type": "alignment",
             "component": "alignment",
             "sample_id": sample_id,
-            "tool": "gatk_mergebamalignment",
+            "tool": "gatk_merge_bam_alignment",
             "sorted": "coordinate",
         },
         created_at=datetime.now(),
@@ -89,7 +89,7 @@ async def test_markduplicates_marks_duplicates():
         fasta=ref_ipfile,
     )
 
-    marked = await markduplicates(
+    marked = await mark_duplicates(
         alignment=alignment,
         ref=ref,
     )
@@ -102,21 +102,21 @@ async def test_markduplicates_marks_duplicates():
     bam_file = marked.alignment
     assert bam_file is not None
     assert bam_file.keyvalues.get("duplicates_marked") == "true"
-    assert bam_file.keyvalues.get("tool") == "gatk_markduplicates"
+    assert bam_file.keyvalues.get("tool") == "gatk_mark_duplicates"
 
 
 @pytest.mark.asyncio
-async def test_markduplicates_task_is_callable():
-    """Test that markduplicates is a callable task."""
-    assert callable(markduplicates)
-    assert "markduplicates" in str(markduplicates)
+async def test_mark_duplicates_task_is_callable():
+    """Test that mark_duplicates is a callable task."""
+    assert callable(mark_duplicates)
+    assert "mark_duplicates" in str(mark_duplicates)
 
 
 class TestMarkDuplicatesExports:
-    """Test that markduplicates task is properly exported."""
+    """Test that mark_duplicates task is properly exported."""
 
-    def test_markduplicates_exported_from_package(self):
-        """Test that markduplicates is accessible from stargazer.tasks."""
-        from stargazer.tasks import markduplicates
+    def test_mark_duplicates_exported_from_package(self):
+        """Test that mark_duplicates is accessible from stargazer.tasks."""
+        from stargazer.tasks import mark_duplicates
 
-        assert callable(markduplicates)
+        assert callable(mark_duplicates)

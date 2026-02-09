@@ -29,10 +29,10 @@ from stargazer.tasks import (
     create_sequence_dictionary,
     bwa_index,
     bwa_mem,
-    sortsam,
-    markduplicates,
-    baserecalibrator,
-    applybqsr,
+    sort_sam,
+    mark_duplicates,
+    base_recalibrator,
+    apply_bqsr,
 )
 from stargazer.utils.pinata import default_client
 
@@ -72,7 +72,7 @@ async def preprocess_sample(
     sample_id: str,
     ref: Reference,
     known_sites: list[str] | None = None,
-    apply_bqsr: bool = True,
+    run_bqsr: bool = True,
 ) -> Alignment:
     """
     Pre-process a single sample's reads for variant calling.
@@ -90,16 +90,16 @@ async def preprocess_sample(
         ref: Prepared reference genome (with indices)
         known_sites: List of known variant VCF filenames for BQSR
                     (e.g., ["dbsnp_146.hg38.vcf.gz", "Mills_and_1000G_gold_standard.indels.hg38.vcf.gz"])
-                    Required if apply_bqsr=True
-        apply_bqsr: Whether to apply BQSR (default: True)
-                   If True, known_sites must be provided
+                    Required if run_bqsr=True
+        run_bqsr: Whether to apply BQSR (default: True)
+                  If True, known_sites must be provided
 
     Returns:
         Alignment object with sorted, duplicate-marked BAM
-        (and optionally BQSR-recalibrated if apply_bqsr=True)
+        (and optionally BQSR-recalibrated if run_bqsr=True)
 
     Raises:
-        ValueError: If apply_bqsr=True but known_sites is empty/None
+        ValueError: If run_bqsr=True but known_sites is empty/None
 
     Example:
         ref = await prepare_reference(ref_name="GRCh38.fa")
@@ -109,20 +109,20 @@ async def preprocess_sample(
             sample_id="NA12878",
             ref=ref,
             known_sites=["dbsnp_146.hg38.vcf.gz", "Mills_and_1000G_gold_standard.indels.hg38.vcf.gz"],
-            apply_bqsr=True,
+            run_bqsr=True,
         )
 
         # Without BQSR (faster, but less accurate)
         alignment = await preprocess_sample(
             sample_id="NA12878",
             ref=ref,
-            apply_bqsr=False,
+            run_bqsr=False,
         )
     """
-    if apply_bqsr and not known_sites:
+    if run_bqsr and not known_sites:
         raise ValueError(
-            "known_sites must be provided when apply_bqsr=True. "
-            "Provide VCF files like dbSNP, Mills indels, or set apply_bqsr=False."
+            "known_sites must be provided when run_bqsr=True. "
+            "Provide VCF files like dbSNP, Mills indels, or set run_bqsr=False."
         )
 
     # Query reads from Pinata
@@ -144,22 +144,22 @@ async def preprocess_sample(
     alignment = await bwa_mem(reads=reads, ref=ref)
 
     # Step 2: Sort by coordinate
-    alignment = await sortsam(alignment=alignment, ref=ref, sort_order="coordinate")
+    alignment = await sort_sam(alignment=alignment, ref=ref, sort_order="coordinate")
 
     # Step 3: Mark duplicates
-    alignment = await markduplicates(alignment=alignment, ref=ref)
+    alignment = await mark_duplicates(alignment=alignment, ref=ref)
 
     # Step 4: BQSR (optional but recommended)
-    if apply_bqsr and known_sites:
+    if run_bqsr and known_sites:
         # Generate recalibration table
-        recal_report = await baserecalibrator(
+        recal_report = await base_recalibrator(
             alignment=alignment,
             ref=ref,
             known_sites=known_sites,
         )
 
         # Apply recalibration
-        alignment = await applybqsr(
+        alignment = await apply_bqsr(
             alignment=alignment,
             ref=ref,
             recal_report=recal_report,
@@ -173,7 +173,7 @@ async def preprocess_cohort(
     sample_ids: list[str],
     ref_name: str,
     known_sites: list[str] | None = None,
-    apply_bqsr: bool = True,
+    run_bqsr: bool = True,
 ) -> list[Alignment]:
     """
     Pre-process multiple samples in parallel for variant calling.
@@ -190,29 +190,29 @@ async def preprocess_cohort(
         sample_ids: List of sample identifiers
         ref_name: Reference genome name
         known_sites: List of known variant VCF filenames for BQSR
-        apply_bqsr: Whether to apply BQSR (default: True)
+        run_bqsr: Whether to apply BQSR (default: True)
 
     Returns:
         List of Alignment objects (one per sample), ready for variant calling
 
     Raises:
-        ValueError: If sample_ids is empty or if apply_bqsr=True but known_sites is empty
+        ValueError: If sample_ids is empty or if run_bqsr=True but known_sites is empty
 
     Example:
         alignments = await preprocess_cohort(
             sample_ids=["NA12878", "NA12891", "NA12892"],
             ref_name="GRCh38.fa",
             known_sites=["dbsnp_146.hg38.vcf.gz"],
-            apply_bqsr=True,
+            run_bqsr=True,
         )
     """
     if not sample_ids:
         raise ValueError("sample_ids list cannot be empty")
 
-    if apply_bqsr and not known_sites:
+    if run_bqsr and not known_sites:
         raise ValueError(
-            "known_sites must be provided when apply_bqsr=True. "
-            "Provide VCF files like dbSNP, Mills indels, or set apply_bqsr=False."
+            "known_sites must be provided when run_bqsr=True. "
+            "Provide VCF files like dbSNP, Mills indels, or set run_bqsr=False."
         )
 
     # Prepare reference (shared across all samples)
@@ -225,7 +225,7 @@ async def preprocess_cohort(
                 sample_id=sample_id,
                 ref=ref,
                 known_sites=known_sites,
-                apply_bqsr=apply_bqsr,
+                run_bqsr=run_bqsr,
             )
             for sample_id in sample_ids
         ]
@@ -266,14 +266,14 @@ async def apply_bqsr_to_alignment(
         raise ValueError("known_sites list cannot be empty for BQSR")
 
     # Generate recalibration table
-    recal_report = await baserecalibrator(
+    recal_report = await base_recalibrator(
         alignment=alignment,
         ref=ref,
         known_sites=known_sites,
     )
 
     # Apply recalibration
-    recalibrated_alignment = await applybqsr(
+    recalibrated_alignment = await apply_bqsr(
         alignment=alignment,
         ref=ref,
         recal_report=recal_report,

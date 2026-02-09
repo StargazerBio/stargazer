@@ -16,7 +16,7 @@ from stargazer.utils import _run
 
 
 @gatk_env.task
-async def combinegvcfs(
+async def combine_gvcfs(
     gvcfs: list[Variants],
     ref: Reference,
     cohort_id: str = "cohort",
@@ -50,14 +50,14 @@ async def combinegvcfs(
         gvcf3 = await haplotypecaller(alignment3, ref, output_gvcf=True)
 
         # Combine GVCFs
-        combined = await combinegvcfs(
+        combined = await combine_gvcfs(
             gvcfs=[gvcf1, gvcf2, gvcf3],
             ref=ref,
             cohort_id="family_study"
         )
 
         # Joint genotyping
-        joint_vcf = await genotypegvcf(gvcf=combined, ref=ref)
+        joint_vcf = await genotype_gvcf(gvcf=combined, ref=ref)
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360035535932-Germline-short-variant-discovery-SNPs-Indels
@@ -71,7 +71,7 @@ async def combinegvcfs(
     for i, gvcf in enumerate(gvcfs):
         if not gvcf.is_gvcf:
             raise ValueError(
-                f"combinegvcfs requires GVCF files, but gvcfs[{i}] is VCF. "
+                f"combine_gvcfs requires GVCF files, but gvcfs[{i}] is VCF. "
                 f"sample_id={gvcf.sample_id}"
             )
 
@@ -134,7 +134,7 @@ async def combinegvcfs(
     )
     await combined.update_vcf(
         output_gvcf,
-        caller="combinegvcfs",
+        caller="combine_gvcfs",
         variant_type="gvcf",
         build=build,
         sample_count=len(sample_ids),

@@ -12,7 +12,7 @@ from stargazer.utils import _run
 
 
 @gatk_env.task
-async def genomicsdbimport(
+async def genomics_db_import(
     gvcfs: list[Variants],
     workspace_path: Path,
     intervals: list[str] | None = None,
@@ -40,7 +40,7 @@ async def genomicsdbimport(
 
     Example:
         # Import GVCFs for large cohort
-        workspace = await genomicsdbimport(
+        workspace = await genomics_db_import(
             gvcfs=all_gvcfs,  # List of 1000+ GVCF objects
             workspace_path=Path("/data/cohort_db"),
             intervals=["chr1", "chr2"],

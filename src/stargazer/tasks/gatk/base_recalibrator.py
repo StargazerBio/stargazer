@@ -1,5 +1,5 @@
 """
-baserecalibrator task for Stargazer.
+base_recalibrator task for Stargazer.
 
 Creates BQSR recalibration table using GATK BaseRecalibrator.
 """
@@ -11,7 +11,7 @@ from stargazer.utils.pinata import IpFile, default_client
 
 
 @gatk_env.task
-async def baserecalibrator(
+async def base_recalibrator(
     alignment: Alignment,
     ref: Reference,
     known_sites: list[str],
@@ -34,7 +34,7 @@ async def baserecalibrator(
     Example:
         ref = await prepare_reference(ref_name="GRCh38.fa")
         alignment = await mark_duplicates(alignment=alignment, ref=ref)
-        recal_report = await baserecalibrator(
+        recal_report = await base_recalibrator(
             alignment=alignment,
             ref=ref,
             known_sites=["dbsnp_146.hg38.vcf.gz", "Mills_and_1000G_gold_standard.indels.hg38.vcf.gz"],
@@ -121,7 +121,7 @@ async def baserecalibrator(
     keyvalues = {
         "type": "bqsr_report",
         "sample_id": alignment.sample_id,
-        "tool": "gatk_baserecalibrator",
+        "tool": "gatk_base_recalibrator",
     }
 
     recal_ipfile = await default_client.upload_file(output_recal, keyvalues=keyvalues)

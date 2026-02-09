@@ -11,7 +11,7 @@ from stargazer.utils import _run
 
 
 @gatk_env.task
-async def analyzecovariates(
+async def analyze_covariates(
     before_report: Path,
     after_report: Path | None = None,
 ) -> Path:
@@ -34,40 +34,40 @@ async def analyzecovariates(
 
     Example:
         # Basic usage (single report)
-        recal_report = await baserecalibrator(
+        recal_report = await base_recalibrator(
             alignment=alignment,
             ref=ref,
             known_sites=known_sites,
         )
 
-        plots = await analyzecovariates(
+        plots = await analyze_covariates(
             before_report=recal_report,
         )
 
         # Advanced usage (before/after comparison)
         # First pass
-        recal_before = await baserecalibrator(
+        recal_before = await base_recalibrator(
             alignment=raw_bam,
             ref=ref,
             known_sites=known_sites,
         )
 
         # Apply BQSR
-        recal_bam = await applybqsr(
+        recal_bam = await apply_bqsr(
             alignment=raw_bam,
             ref=ref,
             recal_report=recal_before,
         )
 
         # Second pass (optional, for QC)
-        recal_after = await baserecalibrator(
+        recal_after = await base_recalibrator(
             alignment=recal_bam,
             ref=ref,
             known_sites=known_sites,
         )
 
         # Generate comparison plots
-        plots = await analyzecovariates(
+        plots = await analyze_covariates(
             before_report=recal_before,
             after_report=recal_after,
         )

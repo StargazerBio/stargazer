@@ -1,5 +1,5 @@
 """
-Tests for applybqsr task.
+Tests for apply_bqsr task.
 """
 
 import shutil
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURES_DIR
 
-from stargazer.tasks.gatk.apply_bqsr import applybqsr
+from stargazer.tasks.gatk.apply_bqsr import apply_bqsr
 from stargazer.types import Reference, Alignment
 from stargazer.utils.pinata import IpFile, default_client
 
@@ -42,12 +42,12 @@ def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
 
 
 @pytest.mark.asyncio
-async def test_applybqsr_recalibrates_bam():
-    """Test that applybqsr creates a recalibrated BAM."""
+async def test_apply_bqsr_recalibrates_bam():
+    """Test that apply_bqsr creates a recalibrated BAM."""
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
-    sample_id = "NA12829_applybqsr"
+    sample_id = "NA12829_apply_bqsr"
     local_dir = default_client.local_dir
     paths = setup_fixture_files(local_dir)
 
@@ -60,7 +60,7 @@ async def test_applybqsr_recalibrates_bam():
             "type": "alignment",
             "component": "alignment",
             "sample_id": sample_id,
-            "tool": "gatk_markduplicates",
+            "tool": "gatk_mark_duplicates",
             "sorted": "coordinate",
             "duplicates_marked": "true",
         },
@@ -106,7 +106,7 @@ async def test_applybqsr_recalibrates_bam():
         fasta=ref_ipfile,
     )
 
-    recalibrated = await applybqsr(
+    recalibrated = await apply_bqsr(
         alignment=alignment,
         ref=ref,
         recal_report=recal_ipfile,
@@ -121,14 +121,14 @@ async def test_applybqsr_recalibrates_bam():
     bam_file = recalibrated.alignment
     assert bam_file is not None
     assert bam_file.keyvalues.get("bqsr_applied") == "true"
-    assert bam_file.keyvalues.get("tool") == "gatk_applybqsr"
+    assert bam_file.keyvalues.get("tool") == "gatk_apply_bqsr"
 
 
 @pytest.mark.asyncio
-async def test_applybqsr_task_is_callable():
-    """Test that applybqsr is a callable task."""
-    assert callable(applybqsr)
-    assert "applybqsr" in str(applybqsr)
+async def test_apply_bqsr_task_is_callable():
+    """Test that apply_bqsr is a callable task."""
+    assert callable(apply_bqsr)
+    assert "apply_bqsr" in str(apply_bqsr)
 
 
 @pytest.mark.asyncio
@@ -185,8 +185,8 @@ async def test_alignment_has_bqsr_applied_property():
 class TestBQSRExports:
     """Test that BQSR tasks are properly exported."""
 
-    def test_applybqsr_exported_from_package(self):
-        """Test that applybqsr is accessible from stargazer.tasks."""
-        from stargazer.tasks import applybqsr
+    def test_apply_bqsr_exported_from_package(self):
+        """Test that apply_bqsr is accessible from stargazer.tasks."""
+        from stargazer.tasks import apply_bqsr
 
-        assert callable(applybqsr)
+        assert callable(apply_bqsr)

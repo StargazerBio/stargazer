@@ -1,5 +1,5 @@
 """
-Tests for baserecalibrator task.
+Tests for base_recalibrator task.
 """
 
 import shutil
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURES_DIR
 
-from stargazer.tasks.gatk.base_recalibrator import baserecalibrator
+from stargazer.tasks.gatk.base_recalibrator import base_recalibrator
 from stargazer.types import Reference, Alignment
 from stargazer.utils.pinata import IpFile, default_client
 
@@ -71,8 +71,8 @@ def register_known_sites_in_db(local_dir: Path, paths: dict[str, Path]):
 
 
 @pytest.mark.asyncio
-async def test_baserecalibrator_creates_report():
-    """Test that baserecalibrator creates a recalibration report."""
+async def test_base_recalibrator_creates_report():
+    """Test that base_recalibrator creates a recalibration report."""
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
@@ -90,7 +90,7 @@ async def test_baserecalibrator_creates_report():
             "type": "alignment",
             "component": "alignment",
             "sample_id": sample_id,
-            "tool": "gatk_markduplicates",
+            "tool": "gatk_mark_duplicates",
             "sorted": "coordinate",
             "duplicates_marked": "true",
         },
@@ -122,7 +122,7 @@ async def test_baserecalibrator_creates_report():
         fasta=ref_ipfile,
     )
 
-    recal_report = await baserecalibrator(
+    recal_report = await base_recalibrator(
         alignment=alignment,
         ref=ref,
         known_sites=["Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf"],
@@ -135,14 +135,14 @@ async def test_baserecalibrator_creates_report():
 
 
 @pytest.mark.asyncio
-async def test_baserecalibrator_rejects_empty_known_sites():
-    """Test that baserecalibrator raises error for empty known_sites."""
+async def test_base_recalibrator_rejects_empty_known_sites():
+    """Test that base_recalibrator raises error for empty known_sites."""
     alignment = Alignment(sample_id="test")
 
     ref = Reference(build="test")
 
     with pytest.raises(ValueError, match="known_sites list cannot be empty"):
-        await baserecalibrator(
+        await base_recalibrator(
             alignment=alignment,
             ref=ref,
             known_sites=[],
@@ -150,17 +150,17 @@ async def test_baserecalibrator_rejects_empty_known_sites():
 
 
 @pytest.mark.asyncio
-async def test_baserecalibrator_task_is_callable():
-    """Test that baserecalibrator is a callable task."""
-    assert callable(baserecalibrator)
-    assert "baserecalibrator" in str(baserecalibrator)
+async def test_base_recalibrator_task_is_callable():
+    """Test that base_recalibrator is a callable task."""
+    assert callable(base_recalibrator)
+    assert "base_recalibrator" in str(base_recalibrator)
 
 
 class TestBQSRExports:
     """Test that BQSR tasks are properly exported."""
 
-    def test_baserecalibrator_exported_from_package(self):
-        """Test that baserecalibrator is accessible from stargazer.tasks."""
-        from stargazer.tasks import baserecalibrator
+    def test_base_recalibrator_exported_from_package(self):
+        """Test that base_recalibrator is accessible from stargazer.tasks."""
+        from stargazer.tasks import base_recalibrator
 
-        assert callable(baserecalibrator)
+        assert callable(base_recalibrator)

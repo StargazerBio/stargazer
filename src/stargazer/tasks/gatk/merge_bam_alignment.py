@@ -1,5 +1,5 @@
 """
-mergebamalignment task for Stargazer.
+merge_bam_alignment task for Stargazer.
 
 Merges aligned BAM with unmapped BAM using GATK MergeBamAlignment.
 """
@@ -10,7 +10,7 @@ from stargazer.utils import _run
 
 
 @gatk_env.task
-async def mergebamalignment(
+async def merge_bam_alignment(
     aligned_bam: Alignment,
     unmapped_bam: Alignment,
     ref: Reference,
@@ -33,7 +33,7 @@ async def mergebamalignment(
 
     Example:
         ref = await prepare_reference(ref_name="GRCh38.fa")
-        merged_bam = await mergebamalignment(
+        merged_bam = await merge_bam_alignment(
             aligned_bam=aligned,
             unmapped_bam=unmapped,
             ref=ref
@@ -111,7 +111,7 @@ async def mergebamalignment(
         is_sorted=True,
         duplicates_marked=aligned_bam.has_duplicates_marked,
         bqsr_applied=aligned_bam.has_bqsr_applied,
-        tool="gatk_mergebamalignment",
+        tool="gatk_merge_bam_alignment",
     )
 
     # Upload index file

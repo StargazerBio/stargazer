@@ -45,7 +45,7 @@ class VQSRResource:
 
 
 @gatk_env.task
-async def variantrecalibrator(
+async def variant_recalibrator(
     vcf: Variants,
     ref: Reference,
     resources: list[VQSRResource],
@@ -59,7 +59,7 @@ async def variantrecalibrator(
 
     Uses machine learning to build a model that distinguishes true variants
     from artifacts based on variant annotations. This is the first step of
-    VQSR filtering; use applyvqsr to apply the model.
+    VQSR filtering; use apply_vqsr to apply the model.
 
     Args:
         vcf: Input VCF with variants to recalibrate
@@ -104,7 +104,7 @@ async def variantrecalibrator(
 
         annotations = ["QD", "MQRankSum", "ReadPosRankSum", "FS", "MQ", "SOR"]
 
-        recal, tranches = await variantrecalibrator(
+        recal, tranches = await variant_recalibrator(
             vcf=joint_vcf,
             ref=ref,
             resources=resources,

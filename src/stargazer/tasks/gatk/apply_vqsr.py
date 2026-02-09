@@ -12,7 +12,7 @@ from stargazer.utils import _run
 
 
 @gatk_env.task
-async def applyvqsr(
+async def apply_vqsr(
     vcf: Variants,
     recal_file: Path,
     tranches_file: Path,
@@ -45,7 +45,7 @@ async def applyvqsr(
 
     Example:
         # After running VariantRecalibrator
-        recal, tranches = await variantrecalibrator(
+        recal, tranches = await variant_recalibrator(
             vcf=joint_vcf,
             ref=ref,
             resources=snp_resources,
@@ -54,7 +54,7 @@ async def applyvqsr(
         )
 
         # Apply the recalibration
-        filtered_vcf = await applyvqsr(
+        filtered_vcf = await apply_vqsr(
             vcf=joint_vcf,
             recal_file=recal,
             tranches_file=tranches,

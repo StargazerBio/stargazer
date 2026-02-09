@@ -34,15 +34,15 @@ from stargazer.tasks import (
     samtools_faidx,
     bwa_index,
     bwa_mem,
-    sortsam,
-    markduplicates,
-    genotypegvcf,
-    combinegvcfs,
-    baserecalibrator,
-    applybqsr,
-    variantrecalibrator,
+    sort_sam,
+    mark_duplicates,
+    genotype_gvcf,
+    combine_gvcfs,
+    base_recalibrator,
+    apply_bqsr,
+    variant_recalibrator,
     VQSRResource,
-    applyvqsr,
+    apply_vqsr,
 )
 
 
@@ -75,7 +75,7 @@ async def align_sample(
     sample_id: str,
     ref: Reference,
     known_sites: list[str] | None = None,
-    apply_bqsr: bool = False,
+    run_bqsr: bool = False,
 ) -> Alignment:
     """
     Align a single sample's reads to reference and optionally apply BQSR.
@@ -89,18 +89,18 @@ async def align_sample(
         ref: Prepared reference genome
         known_sites: List of known variant VCF filenames for BQSR
                     (e.g., ["dbsnp_146.hg38.vcf.gz"])
-        apply_bqsr: Whether to apply BQSR (default: False)
-                   If True, known_sites must be provided
+        run_bqsr: Whether to apply BQSR (default: False)
+                  If True, known_sites must be provided
 
     Returns:
         Alignment object with sorted, duplicate-marked BAM
         (optionally BQSR-recalibrated)
 
     Raises:
-        ValueError: If apply_bqsr=True but known_sites is empty
+        ValueError: If run_bqsr=True but known_sites is empty
     """
-    if apply_bqsr and not known_sites:
-        raise ValueError("known_sites must be provided when apply_bqsr=True")
+    if run_bqsr and not known_sites:
+        raise ValueError("known_sites must be provided when run_bqsr=True")
 
     reads_list = await hydrate({"type": "reads", "sample_id": sample_id})
     reads = next((r for r in reads_list if isinstance(r, Reads)), None)
@@ -108,17 +108,17 @@ async def align_sample(
         raise ValueError(f"Reads not found for sample_id: {sample_id}")
 
     alignment = await bwa_mem(reads=reads, ref=ref)
-    alignment = await sortsam(alignment=alignment, ref=ref, sort_order="coordinate")
-    alignment = await markduplicates(alignment=alignment, ref=ref)
+    alignment = await sort_sam(alignment=alignment, ref=ref, sort_order="coordinate")
+    alignment = await mark_duplicates(alignment=alignment, ref=ref)
 
     # Apply BQSR if requested
-    if apply_bqsr and known_sites:
-        recal_report = await baserecalibrator(
+    if run_bqsr and known_sites:
+        recal_report = await base_recalibrator(
             alignment=alignment,
             ref=ref,
             known_sites=known_sites,
         )
-        alignment = await applybqsr(
+        alignment = await apply_bqsr(
             alignment=alignment,
             ref=ref,
             recal_report=recal_report,
@@ -159,7 +159,7 @@ async def germline_single_sample(
     sample_id: str,
     ref_name: str,
     known_sites: list[str] | None = None,
-    apply_bqsr: bool = False,
+    run_bqsr: bool = False,
 ) -> tuple[Alignment, Variants]:
     """
     Single-sample germline short variant discovery workflow.
@@ -175,8 +175,8 @@ async def germline_single_sample(
         ref_name: Reference genome name
         known_sites: List of known variant VCF filenames for BQSR
                     (e.g., ["dbsnp_146.hg38.vcf.gz"])
-        apply_bqsr: Whether to apply BQSR (default: False)
-                   Recommended for production use
+        run_bqsr: Whether to apply BQSR (default: False)
+                  Recommended for production use
 
     Returns:
         Tuple of (alignment, final_vcf)
@@ -199,7 +199,7 @@ async def germline_single_sample(
             sample_id="NA12878",
             ref_name="GRCh38.fa",
             known_sites=["dbsnp_146.hg38.vcf.gz"],
-            apply_bqsr=True,
+            run_bqsr=True,
         )
         alignment, vcf = run.wait().outputs
     """
@@ -211,14 +211,14 @@ async def germline_single_sample(
         sample_id=sample_id,
         ref=ref,
         known_sites=known_sites,
-        apply_bqsr=apply_bqsr,
+        run_bqsr=run_bqsr,
     )
 
     # Step 3: Call variants (GVCF mode)
     gvcf = await call_variants_gvcf(alignment=alignment, ref=ref)
 
     # Step 4: Joint genotyping (single sample)
-    vcf = await genotypegvcf(gvcf=gvcf, ref=ref)
+    vcf = await genotype_gvcf(gvcf=gvcf, ref=ref)
 
     return alignment, vcf
 
@@ -229,7 +229,7 @@ async def germline_cohort(
     ref_name: str,
     cohort_id: str = "cohort",
     known_sites: list[str] | None = None,
-    apply_bqsr: bool = False,
+    run_bqsr: bool = False,
 ) -> tuple[list[Alignment], list[Variants], Variants]:
     """
     Multi-sample (cohort) germline short variant discovery workflow.
@@ -251,7 +251,7 @@ async def germline_cohort(
         ref_name: Reference genome name
         cohort_id: Identifier for the cohort (default: "cohort")
         known_sites: List of known variant VCF filenames for BQSR
-        apply_bqsr: Whether to apply BQSR (default: False)
+        run_bqsr: Whether to apply BQSR (default: False)
 
     Returns:
         Tuple of (alignments, gvcfs, joint_vcf)
@@ -277,7 +277,7 @@ async def germline_cohort(
             ref_name="GRCh38.fa",
             cohort_id="family_trio",
             known_sites=["dbsnp_146.hg38.vcf.gz"],
-            apply_bqsr=True,
+            run_bqsr=True,
         )
         alignments, gvcfs, joint_vcf = run.wait().outputs
 
@@ -296,7 +296,7 @@ async def germline_cohort(
             sample_id=sample_id,
             ref=ref,
             known_sites=known_sites,
-            apply_bqsr=apply_bqsr,
+            run_bqsr=run_bqsr,
         )
         gvcf = await call_variants_gvcf(alignment=alignment, ref=ref)
         return alignment, gvcf
@@ -309,10 +309,10 @@ async def germline_cohort(
     gvcfs = [r[1] for r in results]
 
     # Step 3: Consolidate GVCFs
-    combined_gvcf = await combinegvcfs(gvcfs=gvcfs, ref=ref, cohort_id=cohort_id)
+    combined_gvcf = await combine_gvcfs(gvcfs=gvcfs, ref=ref, cohort_id=cohort_id)
 
     # Step 4: Joint genotyping
-    joint_vcf = await genotypegvcf(gvcf=combined_gvcf, ref=ref)
+    joint_vcf = await genotype_gvcf(gvcf=combined_gvcf, ref=ref)
 
     return alignments, gvcfs, joint_vcf
 
@@ -355,10 +355,10 @@ async def germline_from_gvcfs(
     ref = await prepare_reference(ref_name=ref_name)
 
     # Consolidate GVCFs
-    combined_gvcf = await combinegvcfs(gvcfs=gvcfs, ref=ref, cohort_id=cohort_id)
+    combined_gvcf = await combine_gvcfs(gvcfs=gvcfs, ref=ref, cohort_id=cohort_id)
 
     # Joint genotyping
-    joint_vcf = await genotypegvcf(gvcf=combined_gvcf, ref=ref)
+    joint_vcf = await genotype_gvcf(gvcf=combined_gvcf, ref=ref)
 
     return joint_vcf
 
@@ -369,7 +369,7 @@ async def germline_cohort_with_vqsr(
     ref_name: str,
     cohort_id: str = "cohort",
     known_sites: list[str] | None = None,
-    apply_bqsr: bool = False,
+    run_bqsr: bool = False,
     vqsr_snp_resources: list[VQSRResource] | None = None,
     vqsr_indel_resources: list[VQSRResource] | None = None,
     snp_truth_sensitivity: float = 99.0,
@@ -393,7 +393,7 @@ async def germline_cohort_with_vqsr(
         ref_name: Reference genome name
         cohort_id: Identifier for the cohort (default: "cohort")
         known_sites: List of known variant VCF filenames for BQSR
-        apply_bqsr: Whether to apply BQSR (default: False)
+        run_bqsr: Whether to apply BQSR (default: False)
         vqsr_snp_resources: VQSR resources for SNP recalibration (required for VQSR)
         vqsr_indel_resources: VQSR resources for INDEL recalibration (required for VQSR)
         snp_truth_sensitivity: SNP filtering sensitivity threshold (default: 99.0)
@@ -449,7 +449,7 @@ async def germline_cohort_with_vqsr(
             ref_name="GRCh38.fa",
             cohort_id="family_trio",
             known_sites=["dbsnp_146.hg38.vcf.gz"],
-            apply_bqsr=True,
+            run_bqsr=True,
             vqsr_snp_resources=snp_resources,
             vqsr_indel_resources=indel_resources,
         )
@@ -464,7 +464,7 @@ async def germline_cohort_with_vqsr(
         ref_name=ref_name,
         cohort_id=cohort_id,
         known_sites=known_sites,
-        apply_bqsr=apply_bqsr,
+        run_bqsr=run_bqsr,
     )
 
     # Prepare reference for VQSR
@@ -474,7 +474,7 @@ async def germline_cohort_with_vqsr(
     if vqsr_snp_resources and vqsr_indel_resources:
         # SNP recalibration
 
-        snp_recal, snp_tranches = await variantrecalibrator(
+        snp_recal, snp_tranches = await variant_recalibrator(
             vcf=joint_vcf,
             ref=ref,
             resources=vqsr_snp_resources,
@@ -483,7 +483,7 @@ async def germline_cohort_with_vqsr(
         )
 
         # Apply SNP filtering
-        snp_filtered_vcf = await applyvqsr(
+        snp_filtered_vcf = await apply_vqsr(
             vcf=joint_vcf,
             recal_file=snp_recal,
             tranches_file=snp_tranches,
@@ -493,7 +493,7 @@ async def germline_cohort_with_vqsr(
         )
 
         # INDEL recalibration
-        indel_recal, indel_tranches = await variantrecalibrator(
+        indel_recal, indel_tranches = await variant_recalibrator(
             vcf=snp_filtered_vcf,
             ref=ref,
             resources=vqsr_indel_resources,
@@ -502,7 +502,7 @@ async def germline_cohort_with_vqsr(
         )
 
         # Apply INDEL filtering
-        final_filtered_vcf = await applyvqsr(
+        final_filtered_vcf = await apply_vqsr(
             vcf=snp_filtered_vcf,
             recal_file=indel_recal,
             tranches_file=indel_tranches,

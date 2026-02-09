@@ -11,7 +11,7 @@ from stargazer.utils import _run
 
 
 @gatk_env.task
-async def genotypegvcf(
+async def genotype_gvcf(
     gvcf: Variants,
     ref: Reference,
 ) -> Variants:
@@ -23,8 +23,8 @@ async def genotypegvcf(
     HaplotypeCaller genotype likelihoods to produce final variant calls.
 
     For single-sample calling, this converts a sample's GVCF to final VCF.
-    For multi-sample calling, first combine GVCFs using combinegvcfs, then
-    run genotypegvcf on the combined GVCF.
+    For multi-sample calling, first combine GVCFs using combine_gvcfs, then
+    run genotype_gvcf on the combined GVCF.
 
     Args:
         gvcf: Variants object containing a GVCF file (from HaplotypeCaller or CombineGVCFs)
@@ -40,11 +40,11 @@ async def genotypegvcf(
     Example:
         # Single sample genotyping
         gvcf = await haplotypecaller(alignment=alignment, ref=ref, output_gvcf=True)
-        vcf = await genotypegvcf(gvcf=gvcf, ref=ref)
+        vcf = await genotype_gvcf(gvcf=gvcf, ref=ref)
 
         # Multi-sample genotyping
-        combined = await combinegvcfs(gvcfs=[gvcf1, gvcf2, gvcf3], ref=ref)
-        joint_vcf = await genotypegvcf(gvcf=combined, ref=ref)
+        combined = await combine_gvcfs(gvcfs=[gvcf1, gvcf2, gvcf3], ref=ref)
+        joint_vcf = await genotype_gvcf(gvcf=combined, ref=ref)
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037057852-GenotypeGVCFs
@@ -53,7 +53,7 @@ async def genotypegvcf(
     # Validate that this is a GVCF
     if not gvcf.is_gvcf:
         raise ValueError(
-            f"genotypegvcf requires a GVCF file, but got VCF. sample_id={gvcf.sample_id}"
+            f"genotype_gvcf requires a GVCF file, but got VCF. sample_id={gvcf.sample_id}"
         )
 
     # Fetch all input files to cache
@@ -118,7 +118,7 @@ async def genotypegvcf(
     )
     await variants.update_vcf(
         output_vcf,
-        caller="genotypegvcf",
+        caller="genotype_gvcf",
         variant_type="vcf",
         build=build,
         sample_count=len(gvcf.source_samples),

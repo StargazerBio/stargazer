@@ -1,5 +1,5 @@
 """
-Tests for combinegvcfs task.
+Tests for combine_gvcfs task.
 """
 
 import shutil
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURES_DIR
 
-from stargazer.tasks.gatk.combine_gvcfs import combinegvcfs
+from stargazer.tasks.gatk.combine_gvcfs import combine_gvcfs
 from stargazer.types import Reference, Variants
 from stargazer.utils.pinata import IpFile, default_client
 
@@ -96,8 +96,8 @@ def make_gvcf(sample_id: str, paths: dict[str, Path]) -> Variants:
 
 
 @pytest.mark.asyncio
-async def test_combinegvcfs_merges_samples():
-    """Test that combinegvcfs merges multiple GVCFs."""
+async def test_combine_gvcfs_merges_samples():
+    """Test that combine_gvcfs merges multiple GVCFs."""
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
@@ -108,7 +108,7 @@ async def test_combinegvcfs_merges_samples():
     ref = make_ref(paths)
     gvcfs = [make_gvcf(sid, paths) for sid in sample_ids]
 
-    result = await combinegvcfs(
+    result = await combine_gvcfs(
         gvcfs=gvcfs,
         ref=ref,
         cohort_id="test_family",
@@ -130,22 +130,22 @@ async def test_combinegvcfs_merges_samples():
     # Verify metadata
     combined_file = result.vcf
     assert combined_file is not None
-    assert combined_file.keyvalues.get("caller") == "combinegvcfs"
+    assert combined_file.keyvalues.get("caller") == "combine_gvcfs"
     assert combined_file.keyvalues.get("sample_count") == "3"
 
 
 @pytest.mark.asyncio
-async def test_combinegvcfs_rejects_empty_list():
-    """Test that combinegvcfs raises error for empty list."""
+async def test_combine_gvcfs_rejects_empty_list():
+    """Test that combine_gvcfs raises error for empty list."""
     ref = Reference(build="test")
 
     with pytest.raises(ValueError, match="cannot be empty"):
-        await combinegvcfs(gvcfs=[], ref=ref)
+        await combine_gvcfs(gvcfs=[], ref=ref)
 
 
 @pytest.mark.asyncio
-async def test_combinegvcfs_rejects_vcf_input():
-    """Test that combinegvcfs raises error when any input is VCF (not GVCF)."""
+async def test_combine_gvcfs_rejects_vcf_input():
+    """Test that combine_gvcfs raises error when any input is VCF (not GVCF)."""
     sample_id = "NA12878_vcf"
     test_cid = "QmTestVCFCombine"
 
@@ -168,12 +168,12 @@ async def test_combinegvcfs_rejects_vcf_input():
     ref = Reference(build="test")
 
     with pytest.raises(ValueError, match="requires GVCF files"):
-        await combinegvcfs(gvcfs=[variants], ref=ref)
+        await combine_gvcfs(gvcfs=[variants], ref=ref)
 
 
 @pytest.mark.asyncio
-async def test_combinegvcfs_single_sample():
-    """Test that combinegvcfs works with a single sample (edge case)."""
+async def test_combine_gvcfs_single_sample():
+    """Test that combine_gvcfs works with a single sample (edge case)."""
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
@@ -184,7 +184,7 @@ async def test_combinegvcfs_single_sample():
     ref = make_ref(paths)
     gvcf = make_gvcf(sample_id, paths)
 
-    result = await combinegvcfs(
+    result = await combine_gvcfs(
         gvcfs=[gvcf],
         ref=ref,
         cohort_id="single_sample_cohort",

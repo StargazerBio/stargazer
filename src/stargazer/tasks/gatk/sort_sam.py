@@ -1,5 +1,5 @@
 """
-sortsam task for Stargazer.
+sort_sam task for Stargazer.
 
 Sorts BAM files using GATK SortSam.
 """
@@ -10,7 +10,7 @@ from stargazer.utils import _run
 
 
 @gatk_env.task
-async def sortsam(
+async def sort_sam(
     alignment: Alignment,
     ref: Reference,
     sort_order: str = "coordinate",
@@ -32,7 +32,7 @@ async def sortsam(
 
     Example:
         ref = await prepare_reference(ref_name="GRCh38.fa")
-        sorted_bam = await sortsam(
+        sorted_bam = await sort_sam(
             alignment=alignment,
             ref=ref,
             sort_order="coordinate"
@@ -98,7 +98,7 @@ async def sortsam(
         is_sorted=(sort_order == "coordinate"),
         duplicates_marked=alignment.has_duplicates_marked,
         bqsr_applied=alignment.has_bqsr_applied,
-        tool="gatk_sortsam",
+        tool="gatk_sort_sam",
     )
 
     # Upload index file if created

@@ -91,7 +91,7 @@ class Alignment:
             is_sorted: Whether alignment is coordinate sorted
             duplicates_marked: Whether duplicates have been marked
             bqsr_applied: Whether BQSR has been applied
-            tool: Tool that created the alignment (e.g., "gatk_sortsam")
+            tool: Tool that created the alignment (e.g., "gatk_sort_sam")
 
         Returns:
             IpFile representing the uploaded file
