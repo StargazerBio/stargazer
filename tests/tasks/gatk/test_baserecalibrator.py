@@ -28,8 +28,14 @@ def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
         "ref_dict": ("GRCh38_TP53.dict", "GRCh38_TP53.dict"),
         "bam": ("NA12829_TP53_markdup.bam", "NA12829_TP53_markdup.bam"),
         "bam_bai": ("NA12829_TP53_markdup.bai", "NA12829_TP53_markdup.bai"),
-        "known_sites": ("known_sites_TP53.vcf", "known_sites_TP53.vcf"),
-        "known_sites_idx": ("known_sites_TP53.vcf.idx", "known_sites_TP53.vcf.idx"),
+        "known_sites": (
+            "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf",
+            "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf",
+        ),
+        "known_sites_idx": (
+            "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf.idx",
+            "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf.idx",
+        ),
     }
 
     paths = {}
@@ -51,15 +57,15 @@ def register_known_sites_in_db(local_dir: Path, paths: dict[str, Path]):
         {
             "id": "test-known-sites",
             "cid": "test_known_sites",
-            "name": "known_sites_TP53.vcf",
+            "name": "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf",
             "size": paths["known_sites"].stat().st_size,
             "keyvalues": {
                 "type": "known_sites",
-                "name": "known_sites_TP53.vcf",
+                "name": "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf",
             },
             "created_at": datetime.now().isoformat(),
             "is_public": False,
-            "rel_path": "known_sites_TP53.vcf",
+            "rel_path": "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf",
         }
     )
 
@@ -119,7 +125,7 @@ async def test_baserecalibrator_creates_report():
     recal_report = await baserecalibrator(
         alignment=alignment,
         ref=ref,
-        known_sites=["known_sites_TP53.vcf"],
+        known_sites=["Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf"],
     )
 
     # Verify result

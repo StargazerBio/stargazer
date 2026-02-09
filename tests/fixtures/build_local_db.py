@@ -174,14 +174,14 @@ FIXTURE_METADATA: dict[str, dict[str, str]] = {
         "sample_id": "NA12829",
     },
     # Known sites
-    "known_sites_TP53.vcf": {
+    "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf": {
         "type": "known_sites",
-        "name": "known_sites_TP53.vcf",
+        "name": "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf",
     },
-    "known_sites_TP53.vcf.idx": {
+    "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf.idx": {
         "type": "known_sites",
         "component": "index",
-        "name": "known_sites_TP53.vcf.idx",
+        "name": "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf.idx",
     },
     # Variants: GVCFs
     "NA12829_TP53.g.vcf": {
