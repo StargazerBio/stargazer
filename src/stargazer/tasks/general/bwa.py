@@ -3,6 +3,7 @@ BWA tasks for reference genome indexing and alignment.
 """
 
 import asyncio
+import shlex
 
 from pathlib import Path
 
@@ -206,7 +207,7 @@ async def bwa_mem(
     # Using bash -c to pipe bwa mem output through samtools view
 
     # Construct full pipeline command
-    bwa_cmd = " ".join([str(c) for c in cmd])
+    bwa_cmd = " ".join(shlex.quote(str(c)) for c in cmd)
     samtools_cmd = f"samtools view -bS -o {output_bam} -"
     full_cmd = f"{bwa_cmd} | {samtools_cmd}"
 

@@ -26,6 +26,7 @@ class Reference:
     build: str
     fasta: Optional[IpFile] = None
     faidx: Optional[IpFile] = None
+    sequence_dictionary: Optional[IpFile] = None
     aligner_index: list[IpFile] = field(default_factory=list)
 
     async def update_fasta(
@@ -83,6 +84,35 @@ class Reference:
         self.faidx = ipfile
         return self.faidx
 
+    async def update_sequence_dictionary(
+        self,
+        path: Path,
+        build: Optional[str] = None,
+        tool: Optional[str] = None,
+    ) -> IpFile:
+        """
+        Upload sequence dictionary (.dict) component.
+
+        Args:
+            path: Path to file to upload
+            build: Reference build (uses self.build if not provided)
+            tool: Tool that created the dictionary (e.g., "gatk_CreateSequenceDictionary")
+
+        Returns:
+            IpFile representing the uploaded file
+        """
+        keyvalues = {
+            "type": "reference",
+            "component": "sequence_dictionary",
+            "build": build or self.build,
+        }
+        if tool:
+            keyvalues["tool"] = tool
+
+        ipfile = await default_client.upload_file(path, keyvalues=keyvalues)
+        self.sequence_dictionary = ipfile
+        return self.sequence_dictionary
+
     async def update_aligner_index(
         self,
         path: Path,
@@ -131,6 +161,8 @@ class Reference:
             files_to_fetch.append(self.fasta)
         if self.faidx is not None:
             files_to_fetch.append(self.faidx)
+        if self.sequence_dictionary is not None:
+            files_to_fetch.append(self.sequence_dictionary)
         files_to_fetch.extend(self.aligner_index)
 
         if not files_to_fetch:

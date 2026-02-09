@@ -5,6 +5,7 @@ Stargazer tasks for bioinformatics workflows.
 from stargazer.tasks.general.hydrate import hydrate
 from stargazer.tasks.general.samtools import samtools_faidx
 from stargazer.tasks.general.bwa import bwa_index, bwa_mem
+from stargazer.tasks.gatk.create_sequence_dictionary import create_sequence_dictionary
 
 # GATK tasks
 from stargazer.tasks.gatk.baserecalibrator import baserecalibrator
@@ -24,6 +25,7 @@ __all__ = [
     "hydrate",
     # Reference indexing
     "samtools_faidx",
+    "create_sequence_dictionary",
     "bwa_index",
     "bwa_mem",
     # Data preprocessing (GATK)

@@ -18,6 +18,7 @@ TYPE_REGISTRY: dict[tuple[str, str], tuple[type, str, bool]] = {
     # Reference components
     ("reference", "fasta"): (Reference, "fasta", False),
     ("reference", "faidx"): (Reference, "faidx", False),
+    ("reference", "sequence_dictionary"): (Reference, "sequence_dictionary", False),
     ("reference", "aligner_index"): (Reference, "aligner_index", True),
     # Alignment components
     ("alignment", "alignment"): (Alignment, "alignment", False),

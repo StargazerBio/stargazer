@@ -25,8 +25,8 @@ import flyte
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Reads, Alignment
 from stargazer.tasks import (
-    hydrate,
     samtools_faidx,
+    create_sequence_dictionary,
     bwa_index,
     bwa_mem,
     sortsam,
@@ -34,6 +34,7 @@ from stargazer.tasks import (
     baserecalibrator,
     applybqsr,
 )
+from stargazer.utils.pinata import default_client
 
 
 @gatk_env.task
@@ -54,11 +55,14 @@ async def prepare_reference(ref_name: str) -> Reference:
     Example:
         ref = await prepare_reference(ref_name="GRCh38.fa")
     """
-    refs = await hydrate({"type": "reference", "build": ref_name})
-    ref = next((r for r in refs if isinstance(r, Reference)), None)
-    if not ref:
+    fasta_files = await default_client.query_files(
+        {"type": "reference", "component": "fasta", "build": ref_name}
+    )
+    if not fasta_files:
         raise ValueError(f"Reference not found for build: {ref_name}")
+    ref = Reference(build=ref_name, fasta=fasta_files[0])
     ref = await samtools_faidx(ref)
+    ref = await create_sequence_dictionary(ref)
     ref = await bwa_index(ref)
     return ref
 
@@ -121,11 +125,20 @@ async def preprocess_sample(
             "Provide VCF files like dbSNP, Mills indels, or set apply_bqsr=False."
         )
 
-    # Hydrate reads from Pinata
-    reads_list = await hydrate({"type": "reads", "sample_id": sample_id})
-    reads = next((r for r in reads_list if isinstance(r, Reads)), None)
-    if not reads:
+    # Query reads from Pinata
+    r1_files = await default_client.query_files(
+        {"type": "reads", "component": "r1", "sample_id": sample_id}
+    )
+    if not r1_files:
         raise ValueError(f"Reads not found for sample_id: {sample_id}")
+    r2_files = await default_client.query_files(
+        {"type": "reads", "component": "r2", "sample_id": sample_id}
+    )
+    reads = Reads(
+        sample_id=sample_id,
+        r1=r1_files[0],
+        r2=r2_files[0] if r2_files else None,
+    )
 
     # Step 1: Align reads to reference using BWA-MEM
     alignment = await bwa_mem(reads=reads, ref=ref)
@@ -277,10 +290,10 @@ if __name__ == "__main__":
     # Example: Single sample preprocessing with BQSR
     print("Running single-sample data preprocessing...")
     run = flyte.with_runcontext(mode="local").run(
-        preprocess_sample,
-        sample_id="NA12829",
+        preprocess_cohort,
+        sample_ids=["NA12829_TP53"],
         ref_name="GRCh38_TP53.fa",
-        known_sites=["dbsnp_146.hg38.vcf.gz"],
+        known_sites=["Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf"],
         apply_bqsr=True,
     )
     run.wait()
