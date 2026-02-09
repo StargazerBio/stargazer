@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURES_DIR
 
-from stargazer.tasks.gatk.markduplicates import markduplicates
+from stargazer.tasks.gatk.mark_duplicates import markduplicates
 from stargazer.types import Reference, Alignment
 from stargazer.utils.pinata import IpFile, default_client
 

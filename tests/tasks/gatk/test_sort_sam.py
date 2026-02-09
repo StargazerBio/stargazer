@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURES_DIR
 
-from stargazer.tasks.gatk.sortsam import sortsam
+from stargazer.tasks.gatk.sort_sam import sortsam
 from stargazer.types import Reference, Alignment
 from stargazer.utils.pinata import IpFile, default_client
 

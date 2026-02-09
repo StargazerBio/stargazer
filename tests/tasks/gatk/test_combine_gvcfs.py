@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURES_DIR
 
-from stargazer.tasks.gatk.combinegvcfs import combinegvcfs
+from stargazer.tasks.gatk.combine_gvcfs import combinegvcfs
 from stargazer.types import Reference, Variants
 from stargazer.utils.pinata import IpFile, default_client
 

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURES_DIR
 
-from stargazer.tasks.gatk.baserecalibrator import baserecalibrator
+from stargazer.tasks.gatk.base_recalibrator import baserecalibrator
 from stargazer.types import Reference, Alignment
 from stargazer.utils.pinata import IpFile, default_client
 

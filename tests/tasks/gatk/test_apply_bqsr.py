@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURES_DIR
 
-from stargazer.tasks.gatk.applybqsr import applybqsr
+from stargazer.tasks.gatk.apply_bqsr import applybqsr
 from stargazer.types import Reference, Alignment
 from stargazer.utils.pinata import IpFile, default_client
 

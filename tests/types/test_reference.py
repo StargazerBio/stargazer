@@ -224,29 +224,36 @@ async def test_reference_fetch_empty():
 @pytest.mark.asyncio
 async def test_pinata_client_local_only_env_var():
     """Test that PinataClient respects STARGAZER_LOCAL_ONLY env var."""
-    # Test default (not set)
-    client = PinataClient()
-    assert client.local_only is False
+    # Save original value so we can restore it
+    original = os.environ.pop("STARGAZER_LOCAL_ONLY", None)
 
-    # Test with env var set to "1"
-    os.environ["STARGAZER_LOCAL_ONLY"] = "1"
-    client = PinataClient()
-    assert client.local_only is True
+    try:
+        # Test default (not set)
+        client = PinataClient()
+        assert client.local_only is False
 
-    # Test with env var set to "true"
-    os.environ["STARGAZER_LOCAL_ONLY"] = "true"
-    client = PinataClient()
-    assert client.local_only is True
+        # Test with env var set to "1"
+        os.environ["STARGAZER_LOCAL_ONLY"] = "1"
+        client = PinataClient()
+        assert client.local_only is True
 
-    # Test with env var set to "0"
-    os.environ["STARGAZER_LOCAL_ONLY"] = "0"
-    client = PinataClient()
-    assert client.local_only is False
+        # Test with env var set to "true"
+        os.environ["STARGAZER_LOCAL_ONLY"] = "true"
+        client = PinataClient()
+        assert client.local_only is True
 
-    # Test explicit parameter overrides env var
-    os.environ["STARGAZER_LOCAL_ONLY"] = "1"
-    client = PinataClient(local_only=False)
-    assert client.local_only is False
+        # Test with env var set to "0"
+        os.environ["STARGAZER_LOCAL_ONLY"] = "0"
+        client = PinataClient()
+        assert client.local_only is False
 
-    # Clean up
-    os.environ.pop("STARGAZER_LOCAL_ONLY", None)
+        # Test explicit parameter overrides env var
+        os.environ["STARGAZER_LOCAL_ONLY"] = "1"
+        client = PinataClient(local_only=False)
+        assert client.local_only is False
+    finally:
+        # Restore original value
+        if original is not None:
+            os.environ["STARGAZER_LOCAL_ONLY"] = original
+        else:
+            os.environ.pop("STARGAZER_LOCAL_ONLY", None)

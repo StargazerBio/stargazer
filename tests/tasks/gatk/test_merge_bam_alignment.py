@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURES_DIR
 
-from stargazer.tasks.gatk.mergebamalignment import mergebamalignment
+from stargazer.tasks.gatk.merge_bam_alignment import mergebamalignment
 from stargazer.types import Reference, Alignment
 from stargazer.utils.pinata import IpFile, default_client
 
