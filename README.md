@@ -24,7 +24,9 @@ OR
 
 ## Why Stargazer?
 
-Many researchers are experts in their specific niche, and have then become proficient bioinformaticians through necessity. On the other side of the spectrum, well-resourced organizations with their own bioinformatics and devops teams will each have their _specific_ way of running Nextflow pipelines on their Slurm cluster and organizing the filesystem. The backdrop to this fragmentation is the constant deluge of new data. Most of it is lucky to be analyzed in a meaningful way, let alone be re-analyzed in the context of new publications. While authors do their best to maintain access to the methods and data that produced their results, tools tend to go unmaintained and download links tend to grow stale. 
+Many researchers are experts in their specific niche; they have then become proficient bioinformaticians through necessity. On the other side of the spectrum, well-resourced organizations with their own bioinformatics and devops teams will each have their _specific_ way of running Nextflow pipelines on their Slurm cluster and organizing the filesystem. 
+
+The backdrop to this fragmentation is the constant deluge of new data. Most of it is lucky to be analyzed in a meaningful way, let alone be re-analyzed in the context of new publications. While authors do their best to maintain access to the methods and data that produced their results, tools tend to go unmaintained and download links tend to grow stale. 
 
 ## Our Approach
 
