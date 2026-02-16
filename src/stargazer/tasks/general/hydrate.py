@@ -7,7 +7,8 @@ the `type` and `component` keyvalues.
 
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment, Variants, Reads
-from stargazer.utils.pinata import default_client, IpFile
+from stargazer.utils.storage import default_client
+from stargazer.utils.ipfile import IpFile
 from stargazer.utils.query import generate_query_combinations
 
 

@@ -34,7 +34,7 @@ from stargazer.tasks import (
     base_recalibrator,
     apply_bqsr,
 )
-from stargazer.utils.pinata import default_client
+from stargazer.utils.storage import default_client
 
 
 @gatk_env.task

@@ -11,7 +11,7 @@ import tempfile
 import pytest
 from pathlib import Path
 from stargazer.types import Reference
-from stargazer.utils.pinata import default_client, PinataClient
+from stargazer.utils.storage import default_client
 
 
 @pytest.mark.asyncio
@@ -105,13 +105,7 @@ async def test_update_aligner_index():
 @pytest.mark.asyncio
 async def test_update_components_local_only():
     """Test update_*() methods in local-only mode."""
-    # Save original local_only state
-    original_local_only = default_client.local_only
-
     try:
-        # Enable local-only mode on default_client
-        default_client.local_only = True
-
         # Create temporary test files
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
@@ -156,20 +150,13 @@ async def test_update_components_local_only():
             assert cache_faidx.read_text() == "chr1\t8\t0\t9\t10\n"
             assert cache_bwt.read_bytes() == b"BWT_INDEX"
     finally:
-        # Restore original local_only state
-        default_client.local_only = original_local_only
+        pass
 
 
 @pytest.mark.asyncio
 async def test_reference_fetch():
     """Test fetch() downloads all reference components."""
-    # Save original local_only state
-    original_local_only = default_client.local_only
-
     try:
-        # Enable local-only mode
-        default_client.local_only = True
-
         # Create temporary test files
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
@@ -208,8 +195,7 @@ async def test_reference_fetch():
                 if idx.local_path and idx.local_path.exists():
                     idx.local_path.unlink()
     finally:
-        # Restore original local_only state
-        default_client.local_only = original_local_only
+        pass
 
 
 @pytest.mark.asyncio
@@ -221,39 +207,35 @@ async def test_reference_fetch_empty():
         await ref.fetch()
 
 
-@pytest.mark.asyncio
-async def test_pinata_client_local_only_env_var():
-    """Test that PinataClient respects STARGAZER_LOCAL_ONLY env var."""
-    # Save original value so we can restore it
-    original = os.environ.pop("STARGAZER_LOCAL_ONLY", None)
+def test_stargazer_mode_resolution():
+    """Test that resolve_mode() correctly parses STARGAZER_MODE env var."""
+    from stargazer.utils.storage import resolve_mode, StargazerMode
+
+    original = os.environ.pop("STARGAZER_MODE", None)
 
     try:
-        # Test default (not set)
-        client = PinataClient()
-        assert client.local_only is False
+        # Default is local
+        os.environ.pop("STARGAZER_MODE", None)
+        assert resolve_mode() == StargazerMode.LOCAL
 
-        # Test with env var set to "1"
-        os.environ["STARGAZER_LOCAL_ONLY"] = "1"
-        client = PinataClient()
-        assert client.local_only is True
+        # Explicit local
+        os.environ["STARGAZER_MODE"] = "local"
+        assert resolve_mode() == StargazerMode.LOCAL
 
-        # Test with env var set to "true"
-        os.environ["STARGAZER_LOCAL_ONLY"] = "true"
-        client = PinataClient()
-        assert client.local_only is True
+        # Cloud mode
+        os.environ["STARGAZER_MODE"] = "cloud"
+        assert resolve_mode() == StargazerMode.CLOUD
 
-        # Test with env var set to "0"
-        os.environ["STARGAZER_LOCAL_ONLY"] = "0"
-        client = PinataClient()
-        assert client.local_only is False
+        # Case insensitive
+        os.environ["STARGAZER_MODE"] = "CLOUD"
+        assert resolve_mode() == StargazerMode.CLOUD
 
-        # Test explicit parameter overrides env var
-        os.environ["STARGAZER_LOCAL_ONLY"] = "1"
-        client = PinataClient(local_only=False)
-        assert client.local_only is False
+        # Invalid value raises
+        os.environ["STARGAZER_MODE"] = "invalid"
+        with pytest.raises(ValueError, match="Invalid STARGAZER_MODE"):
+            resolve_mode()
     finally:
-        # Restore original value
         if original is not None:
-            os.environ["STARGAZER_LOCAL_ONLY"] = original
+            os.environ["STARGAZER_MODE"] = original
         else:
-            os.environ.pop("STARGAZER_LOCAL_ONLY", None)
+            os.environ.pop("STARGAZER_MODE", None)

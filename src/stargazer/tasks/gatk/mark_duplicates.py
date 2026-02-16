@@ -7,7 +7,7 @@ Marks duplicate reads in BAM files using GATK MarkDuplicates.
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
 from stargazer.utils import _run
-from stargazer.utils.pinata import default_client
+from stargazer.utils.storage import default_client
 
 
 @gatk_env.task

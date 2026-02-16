@@ -11,7 +11,8 @@ from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.apply_bqsr import apply_bqsr
 from stargazer.types import Reference, Alignment
-from stargazer.utils.pinata import IpFile, default_client
+from stargazer.utils.storage import default_client
+from stargazer.utils.ipfile import IpFile
 
 
 def setup_fixture_files(local_dir: Path) -> dict[str, Path]:

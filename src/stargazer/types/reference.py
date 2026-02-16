@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 from pathlib import Path
 
-from stargazer.utils.pinata import default_client, IpFile
+from stargazer.utils.storage import default_client
+from stargazer.utils.ipfile import IpFile
 
 
 @dataclass

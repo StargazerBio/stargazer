@@ -11,7 +11,8 @@ from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.combine_gvcfs import combine_gvcfs
 from stargazer.types import Reference, Variants
-from stargazer.utils.pinata import IpFile, default_client
+from stargazer.utils.storage import default_client
+from stargazer.utils.ipfile import IpFile
 
 # Sample GVCFs available as fixtures (created from NA12829 TP53 data)
 SAMPLE_GVCFS = {
