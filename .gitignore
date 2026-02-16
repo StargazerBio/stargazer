@@ -1,6 +1,3 @@
-# Context directory (reference materials)
-context/*
-
 # Scratch directory for one of testing
 scratch/*
 
@@ -158,7 +155,7 @@ cython_debug/
 flyte-*.yaml
 _pb_output/
 *.pb
-.opencode/context/raw/*
+.opencode/reference/raw/*
 
 # OS-specific
 .DS_Store
@@ -177,5 +174,4 @@ Thumbs.db
 # Local configuration
 .claude/
 *.local.*
-.opencode/context/raw
 wt/
