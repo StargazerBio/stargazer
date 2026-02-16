@@ -178,3 +178,4 @@ Thumbs.db
 .claude/
 *.local.*
 .opencode/context/raw
+wt/

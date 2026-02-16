@@ -7,6 +7,10 @@
 - If something is changed that you didn't change, it's not a typo, it's a manual change. I do still write code occassionally..
 - Don't use the "if TYPE_CHECKING:" pattern anywhere, Flyte will always check types
 
+**Git Worktrees**
+- All git worktrees must be created in the project's `wt/` directory (e.g., `git worktree add wt/my-feature -b wt/my-feature`)
+- The `wt/` directory is gitignored
+
 **Dev Process**
 - You will implement features piece by piece in a sequential fashion
 - Handle a single case well at first instead of trying to anticipate every way the app will be used
