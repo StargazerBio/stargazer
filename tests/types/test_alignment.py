@@ -9,7 +9,8 @@ import pytest
 from conftest import FIXTURES_DIR
 
 from stargazer.types import Alignment
-from stargazer.utils.pinata import IpFile, default_client
+from stargazer.utils.storage import default_client
+from stargazer.utils.ipfile import IpFile
 
 
 @pytest.mark.asyncio

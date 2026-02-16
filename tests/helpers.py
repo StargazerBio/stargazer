@@ -2,7 +2,7 @@
 
 from stargazer.tasks import hydrate
 from stargazer.types import Reference, Alignment, Variants, Reads
-from stargazer.utils.pinata import default_client
+from stargazer.utils.storage import default_client
 
 
 async def create_test_reference(build: str = "GRCh38") -> Reference:

@@ -229,8 +229,8 @@ def build_db():
             continue
 
         record = {
-            "id": f"fixture_{filename}",
-            "cid": f"fixture_{filename}",
+            "id": f"local_{filename}",
+            "cid": f"local_{filename}",
             "name": filename,
             "size": filepath.stat().st_size,
             "keyvalues": keyvalues,

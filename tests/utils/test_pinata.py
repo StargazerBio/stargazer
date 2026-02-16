@@ -13,17 +13,17 @@ import pytest
 from config import CIDS
 from conftest import FIXTURES_DIR
 
-from stargazer.utils.pinata import IpFile, default_client
+from stargazer.utils.ipfile import IpFile
+from stargazer.utils.pinata import PinataClient
 
 
 @pytest.mark.asyncio
 async def test_upload_and_delete_file():
     """Test uploading a file to Pinata and then deleting it."""
-    # Check for API key
     if not os.environ.get("PINATA_JWT"):
         pytest.skip("PINATA_JWT environment variable not set")
 
-    default_client.local_only = False
+    client = PinataClient()
 
     # Use the smallest reference file for quick testing
     test_file = FIXTURES_DIR.joinpath("upload_delete.txt")
@@ -31,14 +31,14 @@ async def test_upload_and_delete_file():
 
     # Upload the file with test metadata
     print(f"\nUploading test file: {test_file.name}")
-    test_file = await default_client.upload_file(test_file, keyvalues={"test": "true"})
+    test_file = await client.upload_file(test_file, keyvalues={"test": "true"})
 
     try:
         # Verify upload succeeded
         assert test_file.id is not None, "Upload should return a file ID"
         assert test_file.cid is not None, "Upload should return a CID"
         assert test_file.keyvalues.get("test") == "true", "Metadata should be preserved"
-        print(f"✓ Upload successful - ID: {test_file.id}, CID: {test_file.cid}")
+        print(f"Upload successful - ID: {test_file.id}, CID: {test_file.cid}")
 
         # If we have an expected CID, verify it matches (CIDs are deterministic)
         expected_cid = CIDS.get("upload_delete.txt")
@@ -46,28 +46,21 @@ async def test_upload_and_delete_file():
             assert test_file.cid == expected_cid, (
                 f"CID mismatch: expected {expected_cid}, got {test_file.cid}"
             )
-            print("✓ CID matches expected value")
+            print("CID matches expected value")
         else:
             print(f"  Note: Add to CIDS: 'upload_delete.txt': '{test_file.cid}'")
 
     finally:
         pass  # Pinata API issue with delay after upload
-        # Clean up: delete the file
-        # print(f"Deleting test file {test_file.id} after 20 sec cooldown")
-        # time.sleep(20)
-        # await default_client.delete_file(test_file)
-        # print("✓ File deleted successfully")
-        default_client.local_only = True
 
 
 @pytest.mark.asyncio
 async def test_query():
     """Upload all reference files, query by CID, and verify they match expected CIDs."""
-    # Check for API key
     if not os.environ.get("PINATA_JWT"):
         pytest.skip("PINATA_JWT environment variable not set")
 
-    default_client.local_only = False
+    client = PinataClient()
 
     # Files to upload (TP53 reference files)
     test_files = [
@@ -84,14 +77,14 @@ async def test_query():
 
     # Query by keyvalue to find all reference files
     print("\nQuerying files by keyvalue (type=reference)...")
-    found_files = await default_client.query_files({"type": "reference"})
+    found_files = await client.query_files({"type": "reference"})
     print(found_files)
 
     # Should find at least our uploaded files
     assert len(found_files) >= len(test_files), (
         f"Should find at least {len(test_files)} files, found {len(found_files)}"
     )
-    print(f"✓ Found {len(found_files)} reference test files")
+    print(f"Found {len(found_files)} reference test files")
 
     # Verify our uploaded files are in the results
     found_cids = {f.cid for f in found_files}
@@ -99,7 +92,7 @@ async def test_query():
         assert CIDS.get(test_file) in found_cids, (
             f"Uploaded file {test_file} (CID: {CIDS.get(test_file)}) not found in query results"
         )
-        print(f"✓ Verified {test_file} in query results")
+        print(f"Verified {test_file} in query results")
 
 
 @pytest.mark.asyncio
@@ -108,7 +101,7 @@ async def test_download_file(tmp_path):
     if not os.environ.get("PINATA_JWT"):
         pytest.skip("PINATA_JWT environment variable not set")
 
-    default_client.local_only = False
+    client = PinataClient()
 
     # Use GRCh38_TP53.fa.fai - a small reference file known to be on Pinata
     test_file = "GRCh38_TP53.fa.fai"
@@ -130,7 +123,7 @@ async def test_download_file(tmp_path):
     )
 
     print(f"\nDownloading file with CID: {test_cid}")
-    downloaded_ipfile = await default_client.download_file(test_ipfile)
+    downloaded_ipfile = await client.download_file(test_ipfile)
 
     # Verify the file was downloaded
     assert downloaded_ipfile.local_path is not None, (
@@ -139,7 +132,7 @@ async def test_download_file(tmp_path):
     assert downloaded_ipfile.local_path.exists(), (
         f"Downloaded file not found at: {downloaded_ipfile.local_path}"
     )
-    print(f"✓ File downloaded successfully to: {downloaded_ipfile.local_path}")
+    print(f"File downloaded successfully to: {downloaded_ipfile.local_path}")
 
     # Verify IpFile metadata is preserved
     assert downloaded_ipfile.cid == test_cid, "CID should match"
@@ -150,7 +143,7 @@ async def test_download_file(tmp_path):
     assert content == expected_content, (
         f"Content mismatch: expected '{expected_content}', got '{content}'"
     )
-    print("✓ File content verified")
+    print("File content verified")
 
     # Test downloading to a specific destination
     dest_path = tmp_path / "downloaded_test.txt"
@@ -159,9 +152,9 @@ async def test_download_file(tmp_path):
     test_ipfile.local_path = None
 
     print(f"Downloading to specific destination: {dest_path}")
-    result_ipfile = await default_client.download_file(test_ipfile, dest=dest_path)
+    result_ipfile = await client.download_file(test_ipfile, dest=dest_path)
 
     assert result_ipfile.local_path == dest_path, "Destination path should match"
     assert dest_path.exists(), "File should exist at destination"
     assert dest_path.read_text() == expected_content, "Content should match original"
-    print("✓ Download to specific destination successful")
+    print("Download to specific destination successful")

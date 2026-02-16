@@ -9,16 +9,26 @@ hydration for bioinformatics-specific types.
 
 __version__ = "0.1.0"
 
-# IPFS client (via Pinata)
-from stargazer.utils.pinata import (
-    PinataClient,
-    IpFile,
+# Storage
+from stargazer.utils.ipfile import IpFile
+from stargazer.utils.storage import (
+    StorageClient,
+    StargazerMode,
+    default_client,
+    get_client,
+    resolve_mode,
 )
+from stargazer.utils.pinata import PinataClient
 
 __all__ = [
     # Version
     "__version__",
-    # IPFS
-    "PinataClient",
+    # Storage
     "IpFile",
+    "StorageClient",
+    "StargazerMode",
+    "default_client",
+    "get_client",
+    "resolve_mode",
+    "PinataClient",
 ]
