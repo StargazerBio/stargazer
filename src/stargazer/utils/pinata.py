@@ -54,6 +54,31 @@ class IpFile:
             is_public=is_public,
         )
 
+    def to_dict(self) -> dict:
+        """Serialize to a JSON-friendly dict."""
+        return {
+            "id": self.id,
+            "cid": self.cid,
+            "name": self.name,
+            "size": self.size,
+            "keyvalues": self.keyvalues,
+            "created_at": self.created_at.isoformat(),
+            "is_public": self.is_public,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "IpFile":
+        """Reconstruct from a serialized dict."""
+        return cls(
+            id=data["id"],
+            cid=data["cid"],
+            name=data.get("name"),
+            size=data.get("size", 0),
+            keyvalues=data.get("keyvalues", {}),
+            created_at=datetime.fromisoformat(data["created_at"]),
+            is_public=data.get("is_public", False),
+        )
+
     def public_url(self, gateway: str = "https://ipfs.io") -> Optional[str]:
         """Get public gateway URL. Returns None if file is private."""
         if self.is_public:

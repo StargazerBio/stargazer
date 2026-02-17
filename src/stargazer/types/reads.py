@@ -28,6 +28,32 @@ class Reads:
     r2: Optional[IpFile] = None
     read_group: dict[str, str] | None = None
 
+    def to_dict(self) -> dict:
+        """Serialize to a JSON-friendly dict."""
+        result: dict = {
+            "sample_id": self.sample_id,
+            "is_paired": self.is_paired,
+        }
+        if self.r1:
+            result["r1"] = self.r1.to_dict()
+        if self.r2:
+            result["r2"] = self.r2.to_dict()
+        if self.read_group:
+            result["read_group"] = self.read_group
+        return result
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Reads":
+        """Reconstruct from a serialized dict."""
+        reads = cls(sample_id=data["sample_id"])
+        if "r1" in data:
+            reads.r1 = IpFile.from_dict(data["r1"])
+        if "r2" in data:
+            reads.r2 = IpFile.from_dict(data["r2"])
+        if "read_group" in data:
+            reads.read_group = data["read_group"]
+        return reads
+
     @property
     def is_paired(self) -> bool:
         """Whether this is paired-end reads (has both R1 and R2)."""

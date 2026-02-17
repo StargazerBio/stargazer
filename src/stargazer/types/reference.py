@@ -29,6 +29,33 @@ class Reference:
     sequence_dictionary: Optional[IpFile] = None
     aligner_index: list[IpFile] = field(default_factory=list)
 
+    def to_dict(self) -> dict:
+        """Serialize to a JSON-friendly dict."""
+        result: dict = {"build": self.build}
+        if self.fasta:
+            result["fasta"] = self.fasta.to_dict()
+        if self.faidx:
+            result["faidx"] = self.faidx.to_dict()
+        if self.sequence_dictionary:
+            result["sequence_dictionary"] = self.sequence_dictionary.to_dict()
+        if self.aligner_index:
+            result["aligner_index"] = [f.to_dict() for f in self.aligner_index]
+        return result
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Reference":
+        """Reconstruct from a serialized dict."""
+        ref = cls(build=data["build"])
+        if "fasta" in data:
+            ref.fasta = IpFile.from_dict(data["fasta"])
+        if "faidx" in data:
+            ref.faidx = IpFile.from_dict(data["faidx"])
+        if "sequence_dictionary" in data:
+            ref.sequence_dictionary = IpFile.from_dict(data["sequence_dictionary"])
+        if "aligner_index" in data:
+            ref.aligner_index = [IpFile.from_dict(f) for f in data["aligner_index"]]
+        return ref
+
     async def update_fasta(
         self,
         path: Path,

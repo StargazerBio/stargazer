@@ -31,6 +31,30 @@ class Alignment:
     alignment: Optional[IpFile] = None
     index: Optional[IpFile] = None
 
+    def to_dict(self) -> dict:
+        """Serialize to a JSON-friendly dict."""
+        result: dict = {
+            "sample_id": self.sample_id,
+            "is_sorted": self.is_sorted,
+            "has_duplicates_marked": self.has_duplicates_marked,
+            "has_bqsr_applied": self.has_bqsr_applied,
+        }
+        if self.alignment:
+            result["alignment"] = self.alignment.to_dict()
+        if self.index:
+            result["index"] = self.index.to_dict()
+        return result
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Alignment":
+        """Reconstruct from a serialized dict."""
+        aln = cls(sample_id=data["sample_id"])
+        if "alignment" in data:
+            aln.alignment = IpFile.from_dict(data["alignment"])
+        if "index" in data:
+            aln.index = IpFile.from_dict(data["index"])
+        return aln
+
     @property
     def has_duplicates_marked(self) -> bool:
         """
