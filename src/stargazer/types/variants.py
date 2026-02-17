@@ -33,6 +33,31 @@ class Variants:
     vcf: Optional[IpFile] = None
     index: Optional[IpFile] = None
 
+    def to_dict(self) -> dict:
+        """Serialize to a JSON-friendly dict."""
+        result: dict = {
+            "sample_id": self.sample_id,
+            "caller": self.caller,
+            "is_gvcf": self.is_gvcf,
+            "is_multi_sample": self.is_multi_sample,
+            "source_samples": self.source_samples,
+        }
+        if self.vcf:
+            result["vcf"] = self.vcf.to_dict()
+        if self.index:
+            result["index"] = self.index.to_dict()
+        return result
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Variants":
+        """Reconstruct from a serialized dict."""
+        v = cls(sample_id=data["sample_id"])
+        if "vcf" in data:
+            v.vcf = IpFile.from_dict(data["vcf"])
+        if "index" in data:
+            v.index = IpFile.from_dict(data["index"])
+        return v
+
     @property
     def caller(self) -> str:
         """

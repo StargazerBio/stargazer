@@ -12,10 +12,14 @@ dependencies = [
     "aiohttp>=3.9.0",
     "aiofiles>=24.1.0",
     "flyte>=2.0.0b31",
+    "mcp[cli]>=1.0.0",
     "pytest>=9.0.1",
     "pre-commit>=4.5.1",
     "tinydb>=4.8.2",
 ]
+
+[project.scripts]
+stargazer = "stargazer.server:main"
 
 [project.optional-dependencies]
 dev = [
