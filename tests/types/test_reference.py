@@ -14,6 +14,7 @@ from stargazer.types import Reference
 from stargazer.utils.storage import default_client
 
 
+@pytest.mark.pinata
 @pytest.mark.asyncio
 async def test_update_fasta():
     """Test update_fasta() uploads FASTA file."""
@@ -41,6 +42,7 @@ async def test_update_fasta():
         assert ref.fasta.keyvalues.get("build") == "GRCh38"
 
 
+@pytest.mark.pinata
 @pytest.mark.asyncio
 async def test_update_faidx():
     """Test update_faidx() uploads FASTA index file."""
@@ -68,6 +70,7 @@ async def test_update_faidx():
         assert ref.faidx.keyvalues.get("build") == "GRCh38"
 
 
+@pytest.mark.pinata
 @pytest.mark.asyncio
 async def test_update_aligner_index():
     """Test update_aligner_index() uploads aligner index files."""

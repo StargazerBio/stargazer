@@ -4,9 +4,8 @@ import os
 import sys
 from pathlib import Path
 
-# Force local storage mode for tests before any stargazer imports
-os.environ.pop("PINATA_JWT", None)
-os.environ["STARGAZER_MODE"] = "local"
+# Default to local storage mode for tests
+os.environ.setdefault("STARGAZER_MODE", "local")
 
 import pytest
 import flyte
@@ -28,8 +27,15 @@ def init_flyte_context():
 
 
 @pytest.fixture(autouse=True)
-def setup_local_mode(tmp_path):
-    """Configure tests to run in local mode with isolated storage."""
+def setup_local_mode(request, tmp_path):
+    """Configure tests to run in local mode with isolated storage.
+
+    Skipped for tests marked with @pytest.mark.pinata so they can
+    use the real Pinata client.
+    """
+    if request.node.get_closest_marker("pinata"):
+        yield
+        return
     # Store original settings
     original_local_dir = default_client.local_dir
     original_db = default_client._db

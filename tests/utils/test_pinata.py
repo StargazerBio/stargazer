@@ -17,6 +17,7 @@ from stargazer.utils.ipfile import IpFile
 from stargazer.utils.pinata import PinataClient
 
 
+@pytest.mark.pinata
 @pytest.mark.asyncio
 async def test_upload_and_delete_file():
     """Test uploading a file to Pinata and then deleting it."""
@@ -54,6 +55,7 @@ async def test_upload_and_delete_file():
         pass  # Pinata API issue with delay after upload
 
 
+@pytest.mark.pinata
 @pytest.mark.asyncio
 async def test_query():
     """Upload all reference files, query by CID, and verify they match expected CIDs."""
@@ -95,6 +97,7 @@ async def test_query():
         print(f"Verified {test_file} in query results")
 
 
+@pytest.mark.pinata
 @pytest.mark.asyncio
 async def test_download_file(tmp_path):
     """Test downloading a file from Pinata gateway."""
