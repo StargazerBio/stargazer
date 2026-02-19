@@ -10,17 +10,15 @@
 
 Stargazer is an open-science initiative to broaden access to bioinformatics tools, foster collaboration, and align incentives in service of biomedical progress.
 
-## Status: Alpha
-Expect breaking changes and bugs. **DO NOT** use with production data or data containing PHI/PII.
-
-> ⚠️ AI Use Disclaimer: If you're going to take the time to README, I'm going to take the time to WRITEIT. Every word of this README was typed out by a human. Additionally, every line of code was reviewed by a human and will continue to be. However, Stargazer is an AI-native project and we intend to leverage these impressive models where they shine while relying on human oversight and expertise to guide them.
+## Status: Under Construction 🏗️
+Collecting early feedback on direction and architecture. There's still work to do to get the quickstart going.
 
 ## Quickstart
-- Head to stargazer.bio
 
-OR
-
-- `git clone`
+- `git clone https://github.com/pryce-turner/stargazer.git`
+- `cd stargazer`
+- `opencode` or `claude`
+- "Run the GATK preprocessing workflow"
 
 ## Why Stargazer?
 
@@ -58,3 +56,5 @@ Stargazer has a few execution modes to control exactly where data is processed a
 
 ## (Over)engineered for an Open-Future
 I've been thinking about and building this before agentic-development for [some time now](https://www.youtube.com/watch?v=F7UUm78iito), and I acknowledge that some of the foundational patterns may be appear rather heavy. Stargazer aims to accomodate as many computational approaches, tools, and lines-of-inquiry as possible and has therefore made every attempt to be flexible and [open](LICENSE) with an opinionated core. Within this framework, every user naturally becomes a contributor. My hope is that anyone who derives value from Stargazer will kindly let their reasoning, workflows, and results flow into the public domain. In doing so, they will add momentum to the flywheel of perpetual progress.
+
+> ⚠️ AI Use Disclaimer: If you're going to take the time to README, I'm going to take the time to WRITEIT. Every word of this README was typed out by a human. Additionally, every line of code was reviewed by a human and will continue to be. However, Stargazer is an AI-native project and we intend to leverage these impressive models where they shine while relying on human oversight and expertise to guide them.
