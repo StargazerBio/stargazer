@@ -2,285 +2,368 @@
 
 ## Overview
 
-Build a React web SPA that connects to a hosted Stargazer MCP server over Streamable HTTP. The LLM client runs server-side to protect API keys. The browser shares the `frontend/core/` library with the TUI for chat state and hooks.
+Build a Chainlit-based browser interface that provides a frictionless chat experience with a server-hosted LLM. Chainlit acts as an MCP client connecting to `stargazer serve` over stdio for tool discovery and execution. LiteLLM handles LLM inference with provider flexibility.
 
 ## Prerequisites
 
 - MCP server (`mcp_server.md`) — completed
-- TUI (`tui.md`) — completed (establishes `frontend/core/`)
 - Storage client refactor (`storage_client_refactor.md`) — completed
 - STARGAZER_MODE configuration (`stargazer_mode_config.md`) — completed
 
 ## Current State
 
-- MCP server exists at `src/stargazer/server.py`, supports stdio and HTTP transports
-- `frontend/core/` exists with MCP client, chat engine, React hooks
-- `frontend/tui/` exists and works
+- MCP server exists at `src/stargazer/server.py` with all tools, resources, prompts
+- All bioinformatics tasks and workflows exist in Python
 - No browser frontend
 
 ## Target State
 
 ```
-frontend/
-├── core/                     # Already exists (shared with TUI)
-├── tui/                      # Already exists
-└── web/
-    ├── package.json
-    ├── vite.config.ts
-    ├── index.html
-    └── src/
-        ├── index.tsx         # Entry point: connect to MCP server, render app
-        ├── app.tsx           # Root component with useChat
-        └── components/
-            ├── message-list.tsx   # Scrollable message history
-            ├── message.tsx        # Message bubble with markdown
-            ├── tool-call.tsx      # Expandable tool call card
-            ├── input.tsx          # Text input with send button
-            ├── sidebar.tsx        # File browser, run history
-            └── file-upload.tsx    # Drag-and-drop file upload
-```
-
-Additionally, the Python server needs a chat endpoint for server-side LLM orchestration:
-
-```
 src/stargazer/
-├── server.py                 # MCP server (already exists)
-└── chat_endpoint.py          # Chat proxy: receives messages, runs LLM + tool loop, streams response
+├── server.py              # MCP server (unchanged — single source of truth for tools)
+├── app.py                 # Chainlit application entry point
+├── tasks/                 # Unchanged
+├── workflows/             # Unchanged
+├── types/                 # Unchanged
+└── utils/                 # Unchanged
+
+.chainlit/
+└── config.toml            # Chainlit configuration (MCP, auth, features)
 ```
 
 ## Implementation Plan
 
-### Phase 1: Server-Side Chat Endpoint
+### Phase 1: Chainlit + MCP Connection
 
-The browser cannot hold LLM API keys. Build a thin server-side endpoint that:
+1. Add dependencies to `pyproject.toml`:
 
-1. Receives user messages via HTTP POST
-2. Runs the LLM ↔ MCP tool loop server-side
-3. Streams the response back via SSE
+```toml
+[project.optional-dependencies]
+browser = ["chainlit", "litellm"]
+```
 
-Create `src/stargazer/chat_endpoint.py`:
+2. Configure Chainlit MCP in `.chainlit/config.toml`:
+
+```toml
+[features.mcp.stdio]
+    enabled = true
+    allowed_executables = ["stargazer"]
+```
+
+3. Create `src/stargazer/app.py` — Chainlit entry point with MCP connection:
 
 ```python
-from starlette.applications import Starlette
-from starlette.responses import StreamingResponse
-from starlette.routing import Route
-import anthropic
+import json
+import chainlit as cl
+from mcp import ClientSession
+from litellm import acompletion
 
-async def chat(request):
-    body = await request.json()
-    user_message = body["message"]
-    history = body.get("history", [])
+@cl.on_mcp_connect
+async def on_mcp_connect(connection, session: ClientSession):
+    """Discover tools from stargazer MCP server on connection."""
+    result = await session.list_tools()
+    tools = [{
+        "type": "function",
+        "function": {
+            "name": t.name,
+            "description": t.description,
+            "parameters": t.inputSchema,
+        }
+    } for t in result.tools]
 
-    client = anthropic.AsyncAnthropic()
-    # Get available tools from MCP server
-    tools = get_registered_tools()
+    mcp_tools = cl.user_session.get("mcp_tools", {})
+    mcp_tools[connection.name] = tools
+    cl.user_session.set("mcp_tools", mcp_tools)
 
-    async def stream():
-        # Run LLM tool loop
-        messages = history + [{"role": "user", "content": user_message}]
-        while True:
-            response = await client.messages.create(
-                model="claude-sonnet-4-5-20250929",
-                messages=messages,
-                tools=tools,
-                stream=True,
-            )
-            # Stream text tokens as SSE events
-            # Execute tool calls, yield tool results as SSE events
-            # If no more tool calls, break
-            ...
-
-    return StreamingResponse(stream(), media_type="text/event-stream")
-
-app = Starlette(routes=[Route("/chat", chat, methods=["POST"])])
+@cl.on_mcp_disconnect
+async def on_mcp_disconnect(name: str, session: ClientSession):
+    """Clean up tools on MCP disconnect."""
+    mcp_tools = cl.user_session.get("mcp_tools", {})
+    mcp_tools.pop(name, None)
+    cl.user_session.set("mcp_tools", mcp_tools)
 ```
 
-2. Integrate with MCP server startup — when `--http` is passed, also mount the chat endpoint
+4. Verify MCP connection works: `chainlit run src/stargazer/app.py`
 
-3. Test: `curl -X POST localhost:8000/chat -d '{"message": "list available references"}'`
+### Phase 2: LiteLLM Integration + Tool Loop
 
-### Phase 2: Web App Setup
-
-1. Add `web` to the frontend workspace:
+1. Configure LiteLLM model via environment variable:
 
 ```bash
-cd frontend
-npm init -w web -y
+LITELLM_MODEL=provider/model-name  # e.g. anthropic/claude-haiku-4-5-20251001
 ```
 
-2. Install dependencies:
-   - `react`, `react-dom`
-   - `@modelcontextprotocol/sdk`
-   - `vite`, `@vitejs/plugin-react`
-   - Workspace dependency: `"@stargazer/core": "workspace:*"`
+2. Implement the chat message handler with LLM tool loop:
 
-3. Create `vite.config.ts`:
+```python
+import os
 
-```typescript
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+MODEL = os.environ.get("LITELLM_MODEL", "anthropic/claude-haiku-4-5-20251001")
 
-export default defineConfig({
-    plugins: [react()],
-});
+@cl.on_message
+async def on_message(message: cl.Message):
+    """Handle user message — run LLM ↔ MCP tool loop."""
+    history = cl.user_session.get("history", [])
+    mcp_tools = cl.user_session.get("mcp_tools", {})
+
+    # Flatten all MCP tools into a single list for the LLM
+    all_tools = [tool for tools in mcp_tools.values() for tool in tools]
+
+    history.append({"role": "user", "content": message.content})
+
+    while True:
+        response = await acompletion(
+            model=MODEL,
+            messages=history,
+            tools=all_tools if all_tools else None,
+            stream=True,
+        )
+
+        assistant_msg, tool_calls = await stream_response(response)
+        history.append(assistant_msg)
+
+        if not tool_calls:
+            break
+
+        # Execute each tool call via MCP
+        for tc in tool_calls:
+            result = await execute_tool_via_mcp(tc)
+            history.append({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "name": tc.function.name,
+                "content": result,
+            })
+
+    cl.user_session.set("history", history)
 ```
 
-4. Create `index.html` with React mount point
+3. Implement streaming response handler:
 
-### Phase 3: Core Integration
+```python
+async def stream_response(response) -> tuple[dict, list]:
+    """Stream LLM response to browser, collect tool calls."""
+    msg = cl.Message(content="")
+    full_content = ""
+    tool_calls = []
+    tool_call_chunks = {}
 
-The browser uses `frontend/core/` differently than the TUI:
+    async for chunk in response:
+        delta = chunk.choices[0].delta
 
-1. MCP client connects via HTTP instead of stdio:
+        # Stream text tokens
+        if delta.content:
+            full_content += delta.content
+            await msg.stream_token(delta.content)
 
-```typescript
-import { connectHttp } from "@stargazer/core";
+        # Accumulate tool call chunks
+        if delta.tool_calls:
+            for tc_chunk in delta.tool_calls:
+                idx = tc_chunk.index
+                if idx not in tool_call_chunks:
+                    tool_call_chunks[idx] = {
+                        "id": tc_chunk.id,
+                        "function": {"name": "", "arguments": ""},
+                    }
+                if tc_chunk.id:
+                    tool_call_chunks[idx]["id"] = tc_chunk.id
+                if tc_chunk.function:
+                    if tc_chunk.function.name:
+                        tool_call_chunks[idx]["function"]["name"] += tc_chunk.function.name
+                    if tc_chunk.function.arguments:
+                        tool_call_chunks[idx]["function"]["arguments"] += tc_chunk.function.arguments
 
-const mcpClient = await connectHttp("https://stargazer.example.com/mcp");
+    await msg.send()
+
+    # Build assistant message for history
+    assistant_msg = {"role": "assistant", "content": full_content}
+    if tool_call_chunks:
+        assistant_msg["tool_calls"] = [
+            {
+                "id": tc["id"],
+                "type": "function",
+                "function": tc["function"],
+            }
+            for tc in tool_call_chunks.values()
+        ]
+        tool_calls = assistant_msg["tool_calls"]
+
+    return assistant_msg, tool_calls
 ```
 
-2. Chat does NOT use the core `useChat` hook's LLM integration directly — instead it calls the server-side chat endpoint. Create a browser-specific chat adapter:
+### Phase 3: MCP Tool Execution
 
-```typescript
-// web/src/hooks/use-browser-chat.ts
-export function useBrowserChat(serverUrl: string) {
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [isStreaming, setIsStreaming] = useState(false);
+1. Implement tool execution via MCP session with Chainlit step rendering:
 
-    async function sendMessage(text: string) {
-        setMessages(prev => [...prev, { role: "user", content: text }]);
-        setIsStreaming(true);
+```python
+def find_mcp_for_tool(tool_name: str) -> str | None:
+    """Find which MCP connection provides a given tool."""
+    mcp_tools = cl.user_session.get("mcp_tools", {})
+    for mcp_name, tools in mcp_tools.items():
+        for tool in tools:
+            if tool["function"]["name"] == tool_name:
+                return mcp_name
+    return None
 
-        const response = await fetch(`${serverUrl}/chat`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: text, history: messages }),
-        });
+@cl.step(type="tool")
+async def execute_tool_via_mcp(tool_call) -> str:
+    """Execute a tool call against the MCP server, render as Chainlit step."""
+    name = tool_call["function"]["name"]
+    args = json.loads(tool_call["function"]["arguments"])
 
-        // Read SSE stream, dispatch messages/tool calls
-        const reader = response.body.getReader();
-        // ... parse SSE events, update state
-        setIsStreaming(false);
-    }
+    mcp_name = find_mcp_for_tool(name)
+    if not mcp_name:
+        return json.dumps({"error": f"No MCP server provides tool: {name}"})
 
-    return { messages, isStreaming, sendMessage };
-}
+    mcp_session, _ = cl.context.session.mcp_sessions.get(mcp_name)
+    result = await mcp_session.call_tool(name, args)
+
+    # Render in Chainlit step
+    cl.context.current_step.input = json.dumps(args, indent=2)
+    cl.context.current_step.output = str(result.content)
+
+    return str(result.content)
 ```
 
-3. The core hooks `useTools` and `useResources` still work directly — the browser connects to the MCP server over HTTP for resource/tool discovery
+### Phase 4: File Handling
 
-### Phase 4: Web Components
+1. **Upload**: Use Chainlit's built-in file upload. Files attached to messages are available as `message.elements`. The LLM is informed of uploads and can use the `upload_file` MCP tool to store them on Pinata:
 
-1. `<App>` — root component:
+```python
+@cl.on_message
+async def on_message(message: cl.Message):
+    # Handle file attachments
+    if message.elements:
+        file_descriptions = []
+        for element in message.elements:
+            file_descriptions.append(f"User uploaded file: {element.name} (path: {element.path})")
+        # Prepend file info to the user message for the LLM
+        message.content = "\n".join(file_descriptions) + "\n" + message.content
 
-```tsx
-export function App({ serverUrl }: { serverUrl: string }) {
-    const { messages, isStreaming, sendMessage } = useBrowserChat(serverUrl);
-    const mcpClient = useMcpClient(serverUrl);
-
-    return (
-        <div className="app">
-            <Sidebar mcpClient={mcpClient} />
-            <div className="chat">
-                <MessageList messages={messages} />
-                <Input onSubmit={sendMessage} disabled={isStreaming} />
-            </div>
-        </div>
-    );
-}
+    # ... rest of chat handler
 ```
 
-2. `<MessageList>` — scrollable div, auto-scrolls to bottom on new messages
+2. **Download**: Output files stored on Pinata have gateway URLs. The MCP server returns these URLs in tool results. The LLM includes them in responses as clickable links.
 
-3. `<Message>` — styled message with:
-   - Role indicator (user/assistant)
-   - Markdown rendering for assistant messages
-   - Nested `<ToolCall>` components for tool invocations
+### Phase 5: GitHub OAuth Authentication
 
-4. `<ToolCall>` — expandable card:
-   - Header: tool name + status icon (spinner, checkmark, error)
-   - Expandable body: input args (JSON) + result
+1. Register a GitHub OAuth App at https://github.com/settings/apps
+   - Set callback URL to `CHAINLIT_URL/auth/oauth/github/callback`
+   - For local dev: `http://localhost:8000/auth/oauth/github/callback`
 
-5. `<Input>` — text input with send button, Enter to submit, Shift+Enter for newline
-
-6. `<Sidebar>` — panels for:
-   - File browser (reads `stargazer://references`, `stargazer://samples` resources)
-   - Run history (reads `stargazer://runs` resource)
-   - Config display (reads `stargazer://config` resource)
-
-7. `<FileUpload>` — drag-and-drop zone:
-   - Accepts files, uploads via the server
-   - Shows upload progress
-   - After upload, displays file metadata
-
-### Phase 5: File Handling
-
-Browser-specific file operations:
-
-1. **Upload**: Drag-and-drop or file picker → multipart POST to server → server calls `upload_file` MCP tool → returns file metadata to browser
-
-2. **Download**: Output files have Pinata gateway URLs (public or signed). Browser renders download links directly. No MCP tool needed for the actual download — just the URL.
-
-3. **File browser**: Sidebar queries `stargazer://references` and `stargazer://samples` resources to show available data
-
-### Phase 6: Build + Deployment
-
-1. Build static SPA:
+2. Add environment variables:
 
 ```bash
-cd frontend/web
-npm run build  # vite build → dist/
+OAUTH_GITHUB_CLIENT_ID=...
+OAUTH_GITHUB_CLIENT_SECRET=...
+CHAINLIT_URL=https://stargazer.example.com  # required for production behind reverse proxy
 ```
 
-2. Deployment options:
-   - Serve `dist/` from the same server running the MCP server
-   - Or deploy to a CDN with the MCP server URL configured via env var
+3. Implement OAuth callback in `app.py`:
 
-3. The hosted server runs:
-   - `stargazer serve --http` (MCP server + chat endpoint)
-   - Static file serving for the SPA (or separate CDN)
+```python
+from typing import Optional
+
+@cl.oauth_callback
+def oauth_callback(
+    provider_id: str,
+    token: str,
+    raw_user_data: dict[str, str],
+    default_user: cl.User,
+) -> Optional[cl.User]:
+    # Allow all authenticated GitHub users (or restrict by org/username)
+    return default_user
+```
+
+4. Optionally restrict to specific GitHub org members:
+
+```python
+@cl.oauth_callback
+def oauth_callback(
+    provider_id: str,
+    token: str,
+    raw_user_data: dict[str, str],
+    default_user: cl.User,
+) -> Optional[cl.User]:
+    # Example: restrict to org members
+    # if raw_user_data.get("login") not in ALLOWED_USERS:
+    #     return None
+    return default_user
+```
+
+### Phase 6: Launch Configuration
+
+1. Add CLI entry point for the browser:
+
+```bash
+stargazer ui  # launches Chainlit app
+```
+
+2. Or run directly:
+
+```bash
+chainlit run src/stargazer/app.py --port 8080
+```
+
+3. Required environment variables for the hosted server:
+
+```bash
+# LLM
+LITELLM_MODEL=provider/model-name    # LLM model identifier
+PROVIDER_API_KEY=...                  # API key for the LLM provider (var name depends on provider)
+
+# Auth
+OAUTH_GITHUB_CLIENT_ID=...           # GitHub OAuth app client ID
+OAUTH_GITHUB_CLIENT_SECRET=...       # GitHub OAuth app client secret
+CHAINLIT_URL=https://stargazer.example.com  # Public URL (for OAuth callback)
+
+# Infrastructure
+PINATA_JWT=...                        # Pinata storage
+STARGAZER_MODE=cloud                  # Union execution mode
+```
+
+4. For production, run behind a reverse proxy (nginx, Caddy) with TLS
 
 ### Phase 7: Testing
 
-1. **Component tests**:
-   - Message renders with correct role styling
-   - Tool call card expands/collapses
-   - Input submits on Enter, supports Shift+Enter
+1. **Unit tests**:
+   - MCP tool definitions are correctly converted to OpenAI function calling format
+   - `stream_response()` correctly accumulates tool call chunks
+   - `find_mcp_for_tool()` returns correct MCP connection name
 
 2. **Integration tests**:
-   - Chat endpoint receives message, returns streamed response
-   - File upload flow works end-to-end
-   - MCP resource queries populate sidebar
+   - Chainlit connects to `stargazer serve` over stdio
+   - Tool discovery returns all expected tools
+   - Tool execution round-trips through MCP correctly
 
-3. **E2E tests** (Playwright):
-   - Full chat flow: type message → see response → tool calls render
-   - File upload drag-and-drop
-   - Sidebar shows available data
+3. **Manual / E2E**:
+   - Full chat flow in browser
+   - LLM calls tools, results render as steps
+   - File upload works
+   - GitHub OAuth blocks unauthenticated access
 
 ## File Changes
 
 | File | Change |
 |------|--------|
-| `src/stargazer/chat_endpoint.py` | **New** — server-side LLM proxy with SSE streaming |
-| `src/stargazer/server.py` | **Modified** — mount chat endpoint when running in HTTP mode |
-| `frontend/web/package.json` | **New** — web app |
-| `frontend/web/vite.config.ts` | **New** — Vite config |
-| `frontend/web/index.html` | **New** — HTML shell |
-| `frontend/web/src/index.tsx` | **New** — entry point |
-| `frontend/web/src/app.tsx` | **New** — root component |
-| `frontend/web/src/hooks/use-browser-chat.ts` | **New** — server-side chat adapter |
-| `frontend/web/src/components/*.tsx` | **New** — UI components |
+| `src/stargazer/app.py` | **New** — Chainlit application (MCP client + LiteLLM chat loop) |
+| `.chainlit/config.toml` | **New** — Chainlit configuration (MCP stdio, auth) |
+| `pyproject.toml` | **Modified** — add `chainlit`, `litellm` optional deps |
 
 ## Design Decisions
 
-1. **Server-side LLM is the key asymmetry**: The browser cannot hold API keys. The chat endpoint runs the same LLM ↔ tool loop that the TUI runs locally, but on the server. This is the one place where TUI and browser architectures diverge.
+1. **MCP wire protocol, not direct imports**: Chainlit's native MCP integration only supports wire protocols (stdio, SSE, streamable HTTP). The Chainlit app connects to `stargazer serve` over stdio. This keeps `server.py` as the single source of truth for tool definitions — tools are defined once and consumed by both CLI users (via their MCP client) and browser users (via Chainlit's MCP client).
 
-2. **Browser-specific chat hook**: The browser uses `useBrowserChat` instead of the core `useChat` hook. The core hook calls the LLM directly (for TUI). The browser hook calls the server-side chat endpoint. Both produce the same `{ messages, isStreaming, sendMessage }` interface, so components don't care which one is used.
+2. **LiteLLM for provider abstraction**: LiteLLM normalizes 100+ LLM providers to the OpenAI-compatible format. The model is specified as `provider/model-name`. Key capabilities used:
+   - `acompletion(stream=True)` for async streaming with tool calls
+   - `supports_function_calling(model)` to verify provider capability
+   - Token usage tracking for cost monitoring
+   - Provider swap by changing one environment variable, no code changes
 
-3. **MCP resources still direct**: The browser connects to the MCP server over HTTP for tool/resource discovery. Only the LLM interaction is proxied — resource reads and tool listings go directly to the MCP server.
+3. **Chainlit over custom React SPA**: Chainlit provides the full chat UI, streaming, step rendering, file upload, MCP client, and auth out of the box. No TypeScript, no Vite, no separate build pipeline. One Python file.
 
-4. **Vite for simplicity**: Vite provides fast dev server, HMR, and optimized production builds with minimal config. No need for Next.js since this is a pure SPA with no SSR requirements.
+4. **No `frontend/` directory**: The entire browser frontend is `app.py` plus Chainlit's built-in UI and `.chainlit/config.toml`. No separate frontend codebase.
 
-5. **File upload goes through the server**: The browser cannot call `upload_file` MCP tool directly with a local path (the file is on the user's machine, not the server). File uploads use a multipart HTTP endpoint on the server, which then calls the MCP tool.
+5. **GitHub OAuth for auth**: Since the server pays for LLM inference, unauthenticated access is not an option. Chainlit's built-in GitHub OAuth handles this — no separate auth service needed. The `@cl.oauth_callback` handler can optionally restrict access to specific users or org members.
 
-6. **Static SPA deployment**: The browser app is a static bundle. It can be served from the same server or a CDN. The only dynamic dependency is the MCP server URL, configured at build time or via runtime config.
+6. **Union for all task execution**: The Chainlit server never runs bioinformatics tools locally. All tool calls go through MCP to `stargazer serve`, which submits work to Union. This keeps the web server fit for purpose — it handles chat, not compute.

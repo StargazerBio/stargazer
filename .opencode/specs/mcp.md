@@ -2,18 +2,18 @@
 
 ## Design Goals
 
-Stargazer exposes its bioinformatics capabilities through a Model Context Protocol (MCP) server. This provides a standardized interface that any MCP-compatible client can consume — the Stargazer TUI, a browser-based chat UI, Claude Desktop, or any other MCP host.
+Stargazer exposes its bioinformatics capabilities through a Model Context Protocol (MCP) server. This provides a standardized interface that any MCP-compatible client can consume — Claude Code, OpenCode, Claude Desktop, or any other MCP host.
 
-The MCP server is the single point of contact between frontends and the Python backend. Frontends never call Pinata, Flyte, or bioinformatics tools directly.
+The MCP server is the primary interface for CLI users who bring their own MCP-compatible client. The browser frontend (Chainlit) calls tasks directly via Python imports and does not use the MCP wire protocol internally.
 
 ## Transport Modes
 
 | Transport | Client | Use Case |
 |-----------|--------|----------|
-| **stdio** | TUI binary, Claude Desktop | Local-only mode. TUI spawns `stargazer serve` as a subprocess. |
-| **Streamable HTTP** | Browser SPA | Remote mode. Browser connects to a hosted MCP server over HTTP/SSE. |
+| **stdio** | Claude Code, OpenCode, Claude Desktop | Local mode. Client spawns `stargazer serve` as a subprocess. |
+| **Streamable HTTP** | Remote MCP clients, MCP Inspector | Remote mode. Client connects to a hosted MCP server over HTTP/SSE. |
 
-The same MCP server implementation supports both transports. The transport is selected at startup, not compiled in.
+The same MCP server implementation supports both transports. The transport is selected at startup, not compiled in. The browser frontend (Chainlit) does not use either transport — it calls tasks directly.
 
 ## Server Capabilities
 

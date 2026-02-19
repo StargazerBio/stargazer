@@ -2,107 +2,145 @@
 
 ## Design Goals
 
-The browser interface lets researchers try Stargazer without installing anything. It is a hosted web application that connects to a remote Stargazer MCP server over Streamable HTTP. All execution happens on the server (Union/Flyte) and all storage is remote (Pinata/IPFS).
+The browser interface lets researchers try Stargazer without installing anything. It is a hosted web application powered by Chainlit that provides a frictionless chat experience with a server-provided LLM. No API keys required from the user — the hosted server provides everything.
 
 ## Architecture
 
-The browser is an MCP host with one key difference from the TUI: the LLM client runs server-side to protect API keys. The browser sends user messages to a chat endpoint, which orchestrates LLM calls and MCP tool execution, then streams results back.
+The browser frontend is a Chainlit application that acts as an MCP client. Chainlit connects to `stargazer serve` over stdio, discovers available tools, and executes them through the MCP wire protocol. LLM inference is handled by LiteLLM, which provides a unified interface across providers.
 
 ```
-┌──────────────────────────────────┐
-│  Browser SPA (React)             │
-│  ┌────────────────────────────┐  │
-│  │ Chat UI (React components) │  │
-│  └────────────┬───────────────┘  │
-│               │ HTTP/SSE         │
-└───────────────┼──────────────────┘
+┌──────────────────────────────────────┐
+│  Browser (Chainlit-provided UI)      │
+│  ┌────────────────────────────────┐  │
+│  │ Chat UI (React, served by      │  │
+│  │ Chainlit)                      │  │
+│  └────────────┬───────────────────┘  │
+│               │ WebSocket            │
+└───────────────┼──────────────────────┘
                 │
-┌───────────────▼──────────────────┐
-│  Hosted Server                   │
-│  ┌──────────────┐  ┌──────────┐  │
-│  │ Chat Endpoint│  │ MCP      │  │
-│  │ (LLM client, │──│ Server   │  │
-│  │  tool loop)  │  │ (HTTP)   │  │
-│  └──────────────┘  └──────────┘  │
-└──────────────────────────────────┘
+┌───────────────▼──────────────────────┐
+│  Hosted Server                       │
+│  ┌──────────────┐                    │
+│  │ Chainlit App │                    │
+│  │ (MCP client) │                    │
+│  │      │       │                    │
+│  │      ├──→ LLM Provider (LiteLLM) │
+│  │      │                            │
+│  │      └──→ stargazer serve (stdio) │
+│  │               ├──→ Union (exec)   │
+│  │               └──→ Pinata (store) │
+│  └──────────────┘                    │
+└──────────────────────────────────────┘
 ```
 
-### Why LLM is Server-Side
+### Key Architectural Decisions
 
-The browser cannot hold API keys. In the TUI, the user provides their own `ANTHROPIC_API_KEY` and the LLM client runs locally. In the browser, the hosted server holds the key and proxies LLM interactions. This is the one structural asymmetry between TUI and browser.
+**Chainlit as MCP client**: Chainlit's native MCP integration connects to MCP servers over stdio, SSE, or streamable HTTP. It discovers tools via `session.list_tools()` and executes them via `session.call_tool()`. This means `server.py` remains the single source of truth for tool definitions — no duplication, no drift.
 
-The chat endpoint:
+**LiteLLM for LLM inference**: LiteLLM provides a unified OpenAI-compatible interface across 100+ providers. The model is specified as `provider/model-name` (e.g., `anthropic/claude-haiku-4-5-20251001`). Swapping providers requires changing one string, no code changes. LiteLLM also provides:
+- `litellm.supports_function_calling(model)` — verify provider supports tool use
+- `litellm.utils.function_to_dict()` — generate schemas from Python functions
+- Token usage tracking for cost monitoring
+- Fallback support for models without native tool calling
 
-1. Receives user message from the browser
-2. Sends it to the LLM with available MCP tools
-3. Executes any tool calls against the MCP server
-4. Streams the LLM's response back to the browser via SSE
+**stdio transport**: Chainlit spawns `stargazer serve` as a subprocess and communicates over stdin/stdout. This keeps both processes on the same machine with negligible overhead. The MCP server handles submitting work to Union and storing files on Pinata.
 
-## Technology
+### Why Chainlit
 
-- **Framework**: React
-- **Build**: Vite (static SPA)
-- **Shared code**: Imports `frontend/core/` for chat state, React hooks, types
-- **Styling**: TBD (CSS modules, Tailwind, etc.)
+- Python-native — fits the existing stack, no second language or build pipeline
+- Native MCP client support — discovers and executes tools via the standard protocol
+- Provides the full chat UI out of the box (streaming, tool steps, file upload, auth)
+- Tool calls render as collapsible step cards with input/output details
+- Active development and community
+
+### Why a Hosted LLM
+
+Browser users should not need an API key. The server provides the LLM, likely a cheaper inference provider to keep costs manageable. This makes the experience frictionless — visit the URL, start chatting.
+
+Requirements for the hosted LLM provider:
+- OpenAI-compatible function/tool calling (required for agentic workflows)
+- Streaming support with tool calls
+- Sufficient context window for bioinformatics tool outputs
 
 ## User Interaction
 
 ### Chat Flow
 
-Same logical flow as TUI, but the LLM loop runs server-side:
-
-1. User types a message
-2. Message is sent to the chat endpoint via HTTP POST
-3. Server runs the LLM ↔ MCP tool loop
-4. Response streams back via SSE
-5. Browser renders messages, tool calls, and results
-
-### UI Layout
-
-The browser has more screen real estate than a terminal and can show richer UI:
-
-- **Chat panel**: Messages, tool calls, streaming responses
-- **Sidebar**: File browser (via MCP resources), run history, workflow status
-- **File upload**: Drag-and-drop to upload files (calls `upload_file` tool)
-- **Download links**: Output files are downloadable via Pinata gateway URLs
+1. User types a message in the Chainlit input
+2. Message is sent to the Chainlit backend over WebSocket
+3. Chainlit sends the message to the LLM via LiteLLM with MCP tool definitions
+4. LLM responds with text and/or tool calls
+5. Tool calls are executed via `mcp_session.call_tool()` against `stargazer serve`
+6. `stargazer serve` submits work to Union, stores results on Pinata
+7. Results are rendered as Chainlit steps (collapsible tool call cards)
+8. Tool results are fed back to the LLM for the next iteration
+9. Final text response streams back to the browser
 
 ### Key Behaviors
 
-- Streaming: responses arrive via SSE, rendered incrementally
-- Tool calls render as expandable cards with input/output details
-- File upload via drag-and-drop triggers `upload_file` MCP tool
-- Download links for output files (public Pinata gateway or signed URLs)
-- Workflow progress visualization (polls `get_run_status`)
-- Responsive layout for different screen sizes
+- Streaming: responses arrive token-by-token via WebSocket
+- Tool calls render as Chainlit steps with input/output details
+- File upload via Chainlit's built-in upload mechanism
+- Long-running tasks (Union execution) show progress indicators
+- Auth required (GitHub OAuth via Chainlit)
 
 ## Hosting
 
-The browser deployment requires a hosted server that runs:
+The deployment runs:
 
-1. The Python MCP server (`stargazer serve --http`)
-2. The chat endpoint (LLM proxy)
-3. Static file serving for the SPA
+1. **Chainlit process** — serves the browser UI, manages LLM interaction, acts as MCP client
+2. **`stargazer serve` subprocess** — spawned by Chainlit over stdio, handles tool execution, Union submission, Pinata storage
 
-This can be a single process or split across services. The MCP server and chat endpoint share the same Python process for simplicity.
+Both are managed as a single deployment unit. Chainlit spawns and manages the `stargazer serve` lifecycle.
+
+## Multi-Tenancy (Initial)
+
+For the initial implementation:
+- All browser users share a single Pinata account (public files)
+- All browser users share a single Union namespace
+- No user isolation — this is acceptable for early adoption
+- Session state (conversation history) is persisted per-user by the web server
 
 ## Authentication
 
-Browser users do not provide their own API keys. The hosted server holds:
+Two separate concerns:
 
-- `ANTHROPIC_API_KEY` (or equivalent LLM provider key)
-- `PINATA_JWT`
-- Union/Flyte configuration
+### User Auth — GitHub OAuth
 
-User authentication (who can access the hosted instance) is a separate concern. Options include session tokens, OAuth, or API keys issued to users. This is not part of the MCP spec — it's a deployment concern.
+Users authenticate via GitHub OAuth. This gates access to the chat interface and ensures only authorized users can consume LLM inference.
 
-## Relationship to TUI
+Setup:
+1. Register a GitHub OAuth App at https://github.com/settings/apps
+2. Set callback URL to `CHAINLIT_URL/auth/oauth/github/callback`
+3. Provide `OAUTH_GITHUB_CLIENT_ID` and `OAUTH_GITHUB_CLIENT_SECRET` as environment variables
 
-The browser and TUI share the `frontend/core/` TypeScript library — chat state management, React hooks (`useChat`, `useTools`, `useResources`), and TypeScript types. The differences:
+The Chainlit app implements an `@cl.oauth_callback` handler that receives the authenticated GitHub user data and returns a `cl.User` to allow access or `None` to deny. This allows restricting access to specific GitHub users or org members if needed.
 
-| Concern | TUI | Browser |
-|---------|-----|---------|
-| Rendering | Ink (`<Box>`, `<Text>`) | DOM (`<div>`, `<span>`) |
-| MCP transport | stdio (child process) | Streamable HTTP (remote) |
-| LLM client | Local (user's API key) | Server-side (hosted key) |
-| File access | Local filesystem | Upload/download via Pinata |
-| Distribution | Compiled binary | Hosted SPA |
+### Infrastructure Auth
+
+Server-side credentials, not exposed to users:
+- LLM provider API key (consumed by LiteLLM)
+- `PINATA_JWT` for storage
+- Union/Flyte configuration for workflow execution
+
+## Cost Controls
+
+Since the server provides the LLM:
+- Auth prevents anonymous access
+- Per-user rate limiting or token budgets may be needed for public-facing deployments
+- LiteLLM provides token usage tracking out of the box
+- Choice of cheaper inference provider keeps per-request cost low
+
+## Relationship to CLI
+
+The browser and CLI are fully independent frontends. They share the same MCP server (`stargazer serve`) as the tool interface, but consume it differently.
+
+| Concern | CLI (Bring Your Own) | Browser (Chainlit) |
+|---------|---------------------|-------------------|
+| Rendering | User's MCP client | Chainlit (React, served by Python) |
+| MCP transport | stdio (user spawns server) | stdio (Chainlit spawns server) |
+| LLM client | User-provided (their API key, their client) | Server-provided (LiteLLM, hosted key) |
+| Task execution | Local or Union (user's config) | Union (server's config) |
+| Storage | Local or Pinata (user's choice) | Pinata public (server's account) |
+| Auth | None needed | Required (Chainlit built-in) |
+| Distribution | `stargazer serve` + any MCP client | Hosted URL |
