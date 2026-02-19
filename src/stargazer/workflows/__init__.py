@@ -1,28 +1,32 @@
 """Flyte workflows for genomics pipelines."""
 
-from stargazer.workflows.germline_short_variant_discovery import (
+from stargazer.workflows.gatk_data_preprocessing import (
     prepare_reference,
+    preprocess_sample,
+    preprocess_cohort,
+    apply_bqsr_to_alignment,
+)
+
+from stargazer.workflows.germline_short_variant_discovery import (
     align_sample,
     call_variants_gvcf,
     germline_single_sample,
     germline_cohort,
     germline_from_gvcfs,
+    germline_cohort_with_vqsr,
 )
 
 __all__ = [
-    # GATK Best Practices data preprocessing workflows (GATK + BWA)
+    # GATK Best Practices data preprocessing workflows
+    "prepare_reference",
     "preprocess_sample",
     "preprocess_cohort",
     "apply_bqsr_to_alignment",
-    # GATK Best Practices data preprocessing workflows (Native GATK for mapped reads)
-    "preprocess_mapped_sample_gatk",
-    "preprocess_cohort_gatk",
-    "gatk_apply_bqsr_to_alignment",
     # GATK Best Practices germline workflows
-    "prepare_reference",
     "align_sample",
     "call_variants_gvcf",
     "germline_single_sample",
     "germline_cohort",
     "germline_from_gvcfs",
+    "germline_cohort_with_vqsr",
 ]
