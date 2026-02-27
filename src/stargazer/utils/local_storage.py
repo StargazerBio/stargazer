@@ -12,7 +12,7 @@ from typing import Optional
 
 from tinydb import TinyDB, Query
 
-from stargazer.utils.ipfile import IpFile
+from stargazer.utils.component import ComponentFile
 
 
 class LocalStorageClient:
@@ -24,9 +24,10 @@ class LocalStorageClient:
 
     Usage:
         client = LocalStorageClient()
-        file = await client.upload_file(Path("data.bam"), keyvalues={"type": "alignment"})
-        files = await client.query_files({"type": "alignment"})
-        await client.download_file(file)
+        comp = ComponentFile(path=Path("data.bam"), keyvalues={"type": "alignment"})
+        await client.upload(comp)
+        files = await client.query({"type": "alignment"})
+        await client.download(comp)
     """
 
     def __init__(
@@ -56,29 +57,21 @@ class LocalStorageClient:
             self._db = TinyDB(self.local_db_path)
         return self._db
 
-    async def upload_file(
-        self,
-        path: Path,
-        keyvalues: Optional[dict[str, str]] = None,
-        public: Optional[bool] = None,
-    ) -> IpFile:
+    async def upload(self, component: ComponentFile) -> None:
         """
-        Copy a file to local storage and index metadata in TinyDB.
+        Copy a file to local storage, index metadata in TinyDB, and set component.cid.
 
         Args:
-            path: Local file path to store
-            keyvalues: Metadata key-value pairs for querying
-            public: Visibility flag (stored in metadata but no functional difference locally)
-
-        Returns:
-            IpFile with local CID and metadata
+            component: ComponentFile with path and keyvalues set
         """
-        is_public = public if public is not None else False
+        path = component.path
+        if path is None:
+            raise ValueError("component.path must be set before uploading")
 
-        local_cid = f"local_{path.name}_{path.stat().st_size}"
+        cid = f"local_{path.name}_{path.stat().st_size}"
 
         # Copy to local dir
-        local_path = self.local_dir / local_cid
+        local_path = self.local_dir / cid
         local_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, local_path)
 
@@ -86,46 +79,31 @@ class LocalStorageClient:
         now = datetime.now(timezone.utc)
         self.db.insert(
             {
-                "id": local_cid,
-                "cid": local_cid,
-                "name": path.name,
-                "size": path.stat().st_size,
-                "keyvalues": keyvalues or {},
+                "cid": cid,
+                "keyvalues": component.keyvalues,
                 "created_at": now.isoformat(),
-                "is_public": is_public,
-                "rel_path": local_cid,
+                "rel_path": cid,
             }
         )
 
-        return IpFile(
-            id=local_cid,
-            cid=local_cid,
-            name=path.name,
-            size=path.stat().st_size,
-            keyvalues=keyvalues or {},
-            created_at=now,
-            is_public=is_public,
-            local_path=local_path,
-        )
+        component.cid = cid
 
-    async def download_file(
-        self, ipfile: IpFile, dest: Optional[Path] = None
-    ) -> IpFile:
+    async def download(
+        self, component: ComponentFile, dest: Optional[Path] = None
+    ) -> None:
         """
-        Resolve a local file path. For local storage, files are already on disk.
+        Resolve a local file path and set component.path. For local storage, files are
+        already on disk.
 
         Args:
-            ipfile: IpFile object to resolve
+            component: ComponentFile with cid set
             dest: Optional destination path (copies file there)
-
-        Returns:
-            Updated IpFile with local_path set
         """
-        # Skip if local_path is already set and file exists
-        if ipfile.local_path and ipfile.local_path.exists():
-            return ipfile
+        # Skip if path is already set and file exists
+        if component.path and component.path.exists():
+            return
 
-        cid = ipfile.cid
+        cid = component.cid
 
         # Check local dir first (cache key)
         cache_key = cid.replace("/", "_")
@@ -135,14 +113,13 @@ class LocalStorageClient:
             if dest:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(cache_path, dest)
-                ipfile.local_path = dest
+                component.path = dest
             else:
-                ipfile.local_path = cache_path
-            return ipfile
+                component.path = cache_path
+            return
 
         # Look up in TinyDB for path resolution
         if cid.startswith("local_"):
-
             File = Query()
             record = self.db.get(File.cid == cid)
             if record:
@@ -151,10 +128,10 @@ class LocalStorageClient:
                     if dest:
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy(local_path, dest)
-                        ipfile.local_path = dest
+                        component.path = dest
                     else:
-                        ipfile.local_path = local_path
-                    return ipfile
+                        component.path = local_path
+                    return
             raise FileNotFoundError(
                 f"Local file {cid} not found in local directory or database."
             )
@@ -164,51 +141,41 @@ class LocalStorageClient:
             "Use a PinataClient for remote files."
         )
 
-    async def query_files(
-        self, keyvalues: dict[str, str], public: Optional[bool] = None
-    ) -> list[IpFile]:
+    async def query(self, keyvalues: dict[str, str]) -> list[ComponentFile]:
         """
         Query files by keyvalue metadata from TinyDB.
 
         Args:
             keyvalues: Metadata key-value pairs to filter by
-            public: Ignored for local storage
 
         Returns:
-            List of matching IpFile objects
+            List of matching ComponentFile objects
         """
         results = []
         for record in self.db.all():
             record_kv = record.get("keyvalues", {})
             if all(record_kv.get(k) == v for k, v in keyvalues.items()):
-                results.append(self._ipfile_from_db_record(record))
+                cid = record["cid"]
+                results.append(
+                    ComponentFile(
+                        cid=cid,
+                        path=self.local_dir / record["rel_path"],
+                        keyvalues=record.get("keyvalues", {}),
+                    )
+                )
         return results
 
-    async def delete_file(self, ipfile: IpFile) -> None:
+    async def delete(self, component: ComponentFile) -> None:
         """
         Delete a file from local storage and TinyDB.
 
         Args:
-            ipfile: IpFile object to delete
+            component: ComponentFile with cid set
         """
-
         File = Query()
-        record = self.db.get(File.cid == ipfile.cid)
+        record = self.db.get(File.cid == component.cid)
         if record:
             local_path = self.local_dir / record["rel_path"]
             if local_path.exists():
                 local_path.unlink()
-            self.db.remove(File.cid == ipfile.cid)
-
-    def _ipfile_from_db_record(self, record: dict) -> IpFile:
-        """Convert a TinyDB record to an IpFile object."""
-        return IpFile(
-            id=record["id"],
-            cid=record["cid"],
-            name=record.get("name"),
-            size=record["size"],
-            keyvalues=record.get("keyvalues", {}),
-            created_at=datetime.fromisoformat(record["created_at"]),
-            local_path=self.local_dir / record["rel_path"],
-            is_public=record.get("is_public", False),
-        )
+            self.db.remove(File.cid == component.cid)

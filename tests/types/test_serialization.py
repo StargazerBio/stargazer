@@ -1,48 +1,40 @@
 """Roundtrip serialization tests for to_dict() / from_dict() on all types."""
 
-from datetime import datetime, timezone
-
-from stargazer.utils.ipfile import IpFile
-from stargazer.types import Reference, Alignment, Reads, Variants
-
-
-def _make_ipfile(**overrides) -> IpFile:
-    defaults = {
-        "id": "file-001",
-        "cid": "Qm" + "a" * 44,
-        "name": "test.fa",
-        "size": 1024,
-        "keyvalues": {"type": "reference", "component": "fasta"},
-        "created_at": datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc),
-        "is_public": False,
-    }
-    defaults.update(overrides)
-    return IpFile(**defaults)
+from stargazer.utils.component import ComponentFile
+from stargazer.types.reference import (
+    Reference,
+    ReferenceFile,
+    ReferenceIndex,
+    SequenceDict,
+    AlignerIndex,
+)
+from stargazer.types.alignment import Alignment, AlignmentFile, AlignmentIndex
+from stargazer.types.reads import Reads, R1File, R2File
+from stargazer.types.variants import Variants, VariantsFile, VariantsIndex
 
 
-class TestIpFileRoundtrip:
+class TestComponentFileRoundtrip:
     def test_roundtrip(self):
-        original = _make_ipfile()
+        original = ComponentFile(
+            cid="Qm" + "a" * 44,
+            keyvalues={"type": "reference", "component": "fasta"},
+        )
         data = original.to_dict()
-        restored = IpFile.from_dict(data)
+        restored = ComponentFile.from_dict(data)
 
-        assert restored.id == original.id
         assert restored.cid == original.cid
-        assert restored.name == original.name
-        assert restored.size == original.size
+        assert restored.path is None
         assert restored.keyvalues == original.keyvalues
-        assert restored.created_at == original.created_at
-        assert restored.is_public == original.is_public
 
     def test_roundtrip_public(self):
-        original = _make_ipfile(is_public=True)
-        restored = IpFile.from_dict(original.to_dict())
-        assert restored.is_public is True
+        original = ComponentFile(cid="abc", keyvalues={"public": "true"})
+        restored = ComponentFile.from_dict(original.to_dict())
+        assert restored.keyvalues.get("public") == "true"
 
-    def test_roundtrip_none_name(self):
-        original = _make_ipfile(name=None)
-        restored = IpFile.from_dict(original.to_dict())
-        assert restored.name is None
+    def test_roundtrip_none_path(self):
+        original = ComponentFile(cid="xyz")
+        restored = ComponentFile.from_dict(original.to_dict())
+        assert restored.path is None
 
 
 class TestReferenceRoundtrip:
@@ -58,22 +50,28 @@ class TestReferenceRoundtrip:
     def test_full(self):
         original = Reference(
             build="GRCh38",
-            fasta=_make_ipfile(id="fasta-1", name="ref.fa"),
-            faidx=_make_ipfile(id="faidx-1", name="ref.fa.fai"),
-            sequence_dictionary=_make_ipfile(id="dict-1", name="ref.dict"),
+            fasta=ReferenceFile(cid="fasta-1", keyvalues={"build": "GRCh38"}),
+            faidx=ReferenceIndex(cid="faidx-1", keyvalues={"build": "GRCh38"}),
+            sequence_dictionary=SequenceDict(
+                cid="dict-1", keyvalues={"build": "GRCh38"}
+            ),
             aligner_index=[
-                _make_ipfile(id=f"idx-{i}", name=f"ref.{ext}")
-                for i, ext in enumerate(["amb", "ann", "bwt", "pac", "sa"])
+                AlignerIndex(
+                    cid=f"idx-{i}", keyvalues={"build": "GRCh38", "aligner": "bwa"}
+                )
+                for i in range(5)
             ],
         )
         restored = Reference.from_dict(original.to_dict())
 
         assert restored.build == original.build
-        assert restored.fasta.id == "fasta-1"
-        assert restored.faidx.id == "faidx-1"
-        assert restored.sequence_dictionary.id == "dict-1"
+        assert restored.fasta.cid == "fasta-1"
+        assert restored.fasta.build == "GRCh38"
+        assert restored.faidx.cid == "faidx-1"
+        assert restored.sequence_dictionary.cid == "dict-1"
         assert len(restored.aligner_index) == 5
-        assert restored.aligner_index[2].name == "ref.bwt"
+        assert restored.aligner_index[2].cid == "idx-2"
+        assert restored.aligner_index[0].aligner == "bwa"
 
 
 class TestAlignmentRoundtrip:
@@ -87,36 +85,38 @@ class TestAlignmentRoundtrip:
     def test_full(self):
         original = Alignment(
             sample_id="NA12878",
-            alignment=_make_ipfile(
-                id="aln-1",
-                name="sorted.bam",
+            alignment=AlignmentFile(
+                cid="aln-1",
                 keyvalues={
                     "sorted": "coordinate",
                     "duplicates_marked": "true",
                     "bqsr_applied": "true",
                 },
             ),
-            index=_make_ipfile(id="idx-1", name="sorted.bam.bai"),
+            index=AlignmentIndex(cid="idx-1"),
         )
         data = original.to_dict()
         restored = Alignment.from_dict(data)
 
         assert restored.sample_id == "NA12878"
-        assert restored.alignment.id == "aln-1"
-        assert restored.index.id == "idx-1"
-        assert restored.is_sorted is True
-        assert restored.has_duplicates_marked is True
-        assert restored.has_bqsr_applied is True
+        assert restored.alignment.cid == "aln-1"
+        assert restored.index.cid == "idx-1"
+        assert restored.alignment.sorted == "coordinate"
+        assert restored.alignment.duplicates_marked is True
+        assert restored.alignment.bqsr_applied is True
 
-    def test_derived_fields_in_dict(self):
+    def test_component_metadata_in_dict(self):
+        """Alignment metadata is now inside the component's keyvalues."""
         original = Alignment(
             sample_id="S1",
-            alignment=_make_ipfile(keyvalues={"sorted": "coordinate"}),
+            alignment=AlignmentFile(keyvalues={"sorted": "coordinate"}),
         )
         data = original.to_dict()
-        assert data["is_sorted"] is True
-        assert data["has_duplicates_marked"] is False
-        assert data["has_bqsr_applied"] is False
+        # Metadata lives in the component dict's keyvalues
+        assert data["alignment"]["keyvalues"]["sorted"] == "coordinate"
+        # Not at the top level anymore
+        assert "is_sorted" not in data
+        assert "has_duplicates_marked" not in data
 
 
 class TestReadsRoundtrip:
@@ -131,8 +131,8 @@ class TestReadsRoundtrip:
     def test_paired(self):
         original = Reads(
             sample_id="NA12878",
-            r1=_make_ipfile(id="r1-1", name="R1.fastq.gz"),
-            r2=_make_ipfile(id="r2-1", name="R2.fastq.gz"),
+            r1=R1File(cid="r1-1", keyvalues={"sequencing_platform": "ILLUMINA"}),
+            r2=R2File(cid="r2-1"),
             read_group={"ID": "rg1", "SM": "NA12878", "PL": "ILLUMINA"},
         )
         data = original.to_dict()
@@ -140,21 +140,19 @@ class TestReadsRoundtrip:
 
         restored = Reads.from_dict(data)
         assert restored.sample_id == "NA12878"
-        assert restored.r1.id == "r1-1"
-        assert restored.r2.id == "r2-1"
+        assert restored.r1.cid == "r1-1"
+        assert restored.r2.cid == "r2-1"
         assert restored.read_group == {"ID": "rg1", "SM": "NA12878", "PL": "ILLUMINA"}
         assert restored.is_paired is True
+        assert restored.r1.sequencing_platform == "ILLUMINA"
 
     def test_single_end(self):
-        original = Reads(
-            sample_id="S1",
-            r1=_make_ipfile(id="r1-only"),
-        )
+        original = Reads(sample_id="S1", r1=R1File(cid="r1-only"))
         data = original.to_dict()
         assert data["is_paired"] is False
 
         restored = Reads.from_dict(data)
-        assert restored.r1.id == "r1-only"
+        assert restored.r1.cid == "r1-only"
         assert restored.r2 is None
         assert restored.is_paired is False
 
@@ -170,33 +168,45 @@ class TestVariantsRoundtrip:
     def test_full(self):
         original = Variants(
             sample_id="NA12878",
-            vcf=_make_ipfile(
-                id="vcf-1",
-                name="variants.g.vcf.gz",
+            vcf=VariantsFile(
+                cid="vcf-1",
                 keyvalues={
                     "caller": "haplotypecaller",
                     "variant_type": "gvcf",
                     "sample_count": "1",
                 },
             ),
-            index=_make_ipfile(id="tbi-1", name="variants.g.vcf.gz.tbi"),
+            index=VariantsIndex(cid="tbi-1"),
         )
         data = original.to_dict()
-        assert data["caller"] == "haplotypecaller"
-        assert data["is_gvcf"] is True
-        assert data["is_multi_sample"] is False
 
         restored = Variants.from_dict(data)
         assert restored.sample_id == "NA12878"
-        assert restored.vcf.id == "vcf-1"
-        assert restored.index.id == "tbi-1"
-        assert restored.caller == "haplotypecaller"
-        assert restored.is_gvcf is True
+        assert restored.vcf.cid == "vcf-1"
+        assert restored.index.cid == "tbi-1"
+        assert restored.vcf.caller == "haplotypecaller"
+        assert restored.vcf.variant_type == "gvcf"
+        assert restored.vcf.sample_count == 1
+
+    def test_component_metadata_in_dict(self):
+        """Variants metadata is now inside the component's keyvalues."""
+        original = Variants(
+            sample_id="S1",
+            vcf=VariantsFile(
+                keyvalues={"caller": "deepvariant", "variant_type": "gvcf"}
+            ),
+        )
+        data = original.to_dict()
+        # Metadata lives in the component dict's keyvalues
+        assert data["vcf"]["keyvalues"]["caller"] == "deepvariant"
+        # Not at the top level anymore
+        assert "caller" not in data
+        assert "is_gvcf" not in data
 
     def test_multi_sample(self):
         original = Variants(
             sample_id="cohort",
-            vcf=_make_ipfile(
+            vcf=VariantsFile(
                 keyvalues={
                     "sample_count": "3",
                     "source_samples": "S1,S2,S3",
@@ -204,9 +214,6 @@ class TestVariantsRoundtrip:
             ),
         )
         data = original.to_dict()
-        assert data["is_multi_sample"] is True
-        assert data["source_samples"] == ["S1", "S2", "S3"]
-
         restored = Variants.from_dict(data)
-        assert restored.is_multi_sample is True
-        assert restored.source_samples == ["S1", "S2", "S3"]
+        assert restored.vcf.sample_count == 3
+        assert restored.vcf.source_samples == ["S1", "S2", "S3"]

@@ -17,7 +17,7 @@ from typing import Optional
 import aiohttp
 import aiofiles
 
-from stargazer.utils.ipfile import IpFile
+from stargazer.utils.component import ComponentFile
 
 
 class PinataClient:
@@ -32,22 +32,17 @@ class PinataClient:
         client = PinataClient()
 
         # Upload with metadata
-        file = await client.upload_file(
-            Path("data.bam"),
-            keyvalues={"type": "alignment", "sample": "NA12878"}
-        )
-
-        # Upload explicitly as public
-        file = await client.upload_file(Path("data.bam"), public=True)
+        comp = ComponentFile(path=Path("data.bam"), keyvalues={"type": "alignment"})
+        await client.upload(comp)  # sets comp.cid
 
         # Query by keyvalues
-        files = await client.query_files({"type": "alignment", "sample": "NA12878"})
+        files = await client.query({"type": "alignment", "sample": "NA12878"})
 
-        # Download (uses appropriate gateway based on file.is_public)
-        await client.download_file(file)
+        # Download
+        await client.download(comp)  # sets comp.path
 
         # Delete file
-        await client.delete_file(file)
+        await client.delete(comp)
     """
 
     API_BASE = "https://api.pinata.cloud/v3"
@@ -130,24 +125,16 @@ class PinataClient:
                 data = await response.json()
                 return data["data"]
 
-    async def upload_file(
-        self,
-        path: Path,
-        keyvalues: Optional[dict[str, str]] = None,
-        public: Optional[bool] = None,
-    ) -> IpFile:
+    async def upload(self, component: ComponentFile) -> None:
         """
-        Upload a file to IPFS via Pinata.
+        Upload a file to IPFS via Pinata. Sets component.cid.
 
         Args:
-            path: Local file path
-            keyvalues: Metadata key-value pairs for querying
-            public: If True, upload to public IPFS. If False/None, upload as private.
-
-        Returns:
-            IpFile with CID and metadata
+            component: ComponentFile with path and keyvalues set
         """
-        is_public = public if public is not None else False
+        path = component.path
+        if path is None:
+            raise ValueError("component.path must be set before uploading")
 
         url = f"{self.UPLOAD_BASE}/files"
 
@@ -155,42 +142,35 @@ class PinataClient:
             data = aiohttp.FormData()
             data.add_field("file", open(path, "rb"), filename=path.name)
             data.add_field("name", path.name)
-            data.add_field("network", "public" if is_public else "private")
+            data.add_field("network", "private")
 
-            if keyvalues:
-                data.add_field("keyvalues", json.dumps(keyvalues))
+            if component.keyvalues:
+                data.add_field("keyvalues", json.dumps(component.keyvalues))
 
             async with session.post(
                 url, headers=self._headers(), data=data
             ) as response:
                 response.raise_for_status()
                 result = await response.json()
-                print(result)
-                return IpFile.from_api_response(result.get("data", result))
+                data_obj = result.get("data", result)
+                component.cid = data_obj["cid"]
 
-    async def download_file(
-        self, ipfile: IpFile, dest: Optional[Path] = None
-    ) -> IpFile:
+    async def download(
+        self, component: ComponentFile, dest: Optional[Path] = None
+    ) -> None:
         """
-        Download a file from IPFS and update IpFile with local path.
+        Download a file from IPFS and set component.path.
         Uses local cache to avoid re-downloading.
 
-        Download strategy based on file visibility:
-        - Public files: Use ipfs.io gateway (no auth required)
-        - Private files: Use Pinata gateway (requires JWT)
-
         Args:
-            ipfile: IpFile object to download
+            component: ComponentFile with cid set
             dest: Optional destination path (otherwise uses cache)
-
-        Returns:
-            Updated IpFile with path set to downloaded file location
         """
-        # Skip download if local_path is already set and file exists
-        if ipfile.local_path and ipfile.local_path.exists():
-            return ipfile
+        # Skip download if path is already set and file exists
+        if component.path and component.path.exists():
+            return
 
-        cid = ipfile.cid
+        cid = component.cid
 
         # Check local dir first
         cache_key = cid.replace("/", "_")
@@ -200,18 +180,13 @@ class PinataClient:
             if dest:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy(cache_path, dest)
-                ipfile.local_path = dest
+                component.path = dest
             else:
-                ipfile.local_path = cache_path
-            return ipfile
+                component.path = cache_path
+            return
 
-        # Select download strategy based on file visibility
-        if ipfile.is_public:
-            # Public files: use ipfs.io gateway, no auth needed
-            download_url = f"https://ipfs.io/ipfs/{cid}"
-        else:
-            # Private files: get a signed URL via Pinata API
-            download_url = await self._get_signed_url(cid)
+        # Private files: get a signed URL via Pinata API
+        download_url = await self._get_signed_url(cid)
 
         async with aiohttp.ClientSession() as session:
             async with session.get(download_url) as response:
@@ -225,29 +200,22 @@ class PinataClient:
         if dest:
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(cache_path, dest)
-            ipfile.local_path = dest
+            component.path = dest
         else:
-            ipfile.local_path = cache_path
+            component.path = cache_path
 
-        return ipfile
-
-    async def query_files(
-        self, keyvalues: dict[str, str], public: Optional[bool] = None
-    ) -> list[IpFile]:
+    async def query(self, keyvalues: dict[str, str]) -> list[ComponentFile]:
         """
         Query files by keyvalue metadata from Pinata API.
 
         Args:
             keyvalues: Metadata key-value pairs to filter by
-            public: Query public or private files (defaults to private)
 
         Returns:
-            List of matching IpFile objects
+            List of matching ComponentFile objects
         """
-        is_public = public if public is not None else False
-        network = "public" if is_public else "private"
-        url = f"{self.API_BASE}/files/{network}"
-        params = {"pageLimit": 1000, "order": "DESC"}
+        url = f"{self.API_BASE}/files/private"
+        params: dict = {"pageLimit": 1000, "order": "DESC"}
 
         # Add metadata filters using the correct format: metadata[key]=value
         if keyvalues:
@@ -262,20 +230,36 @@ class PinataClient:
                 data = await response.json()
 
                 return [
-                    IpFile.from_api_response(f)
+                    ComponentFile(
+                        cid=f["cid"],
+                        keyvalues=f.get("keyvalues", {}),
+                    )
                     for f in data.get("data", {}).get("files", [])
                 ]
 
-    async def delete_file(self, ipfile: IpFile) -> None:
+    async def delete(self, component: ComponentFile) -> None:
         """
-        Delete a file from Pinata.
+        Delete a file from Pinata by querying for its internal ID first.
 
         Args:
-            ipfile: IpFile object to delete
+            component: ComponentFile with cid set
         """
-        network = "public" if ipfile.is_public else "private"
-        url = f"{self.API_BASE}/files/{network}/{ipfile.id}"
+        url = f"{self.API_BASE}/files/private"
+        params = {"cid": component.cid}
 
         async with aiohttp.ClientSession() as session:
-            async with session.delete(url, headers=self._headers()) as response:
+            async with session.get(
+                url, headers=self._headers(), params=params
+            ) as response:
+                response.raise_for_status()
+                data = await response.json()
+                files = data.get("data", {}).get("files", [])
+                if not files:
+                    return
+                file_id = files[0]["id"]
+
+            async with session.delete(
+                f"{self.API_BASE}/files/private/{file_id}",
+                headers=self._headers(),
+            ) as response:
                 response.raise_for_status()

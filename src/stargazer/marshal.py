@@ -9,11 +9,11 @@ from pathlib import Path
 from typing import Any, Union, get_args, get_origin
 
 from stargazer.types import Alignment, Reads, Reference, Variants
-from stargazer.utils.ipfile import IpFile
+from stargazer.utils.component import ComponentFile
 from stargazer.tasks.gatk.variant_recalibrator import VQSRResource
 
 # Types that support from_dict()
-_FROM_DICT_TYPES = {Reference, Alignment, Reads, Variants, IpFile}
+_FROM_DICT_TYPES = {Reference, Alignment, Reads, Variants, ComponentFile}
 
 
 def marshal_input(value: Any, hint: Any) -> Any:

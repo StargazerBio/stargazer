@@ -6,16 +6,17 @@ Applies BQSR recalibration to BAM files using GATK ApplyBQSR.
 
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
+from stargazer.types.alignment import AlignmentFile
+from stargazer.utils.component import ComponentFile
 from stargazer.utils import _run
 from stargazer.utils.storage import default_client
-from stargazer.utils.ipfile import IpFile
 
 
 @gatk_env.task
 async def apply_bqsr(
     alignment: Alignment,
     ref: Reference,
-    recal_report: IpFile,
+    recal_report: ComponentFile,
 ) -> Alignment:
     """
     Apply Base Quality Score Recalibration to a BAM file.
@@ -55,16 +56,16 @@ async def apply_bqsr(
     # Fetch all inputs to cache
     await alignment.fetch()
     await ref.fetch()
-    await default_client.download_file(recal_report)
+    await default_client.download(recal_report)
 
     # Get paths
-    if not ref.fasta or not ref.fasta.local_path:
+    if not ref.fasta or not ref.fasta.path:
         raise ValueError("Reference FASTA file not available or not fetched")
-    ref_path = ref.fasta.local_path
-    if not alignment.alignment or not alignment.alignment.local_path:
+    ref_path = ref.fasta.path
+    if not alignment.alignment or not alignment.alignment.path:
         raise ValueError("Alignment BAM file not available or not fetched")
-    bam_path = alignment.alignment.local_path
-    recal_path = recal_report.local_path
+    bam_path = alignment.alignment.path
+    recal_path = recal_report.path
     output_dir = ref_path.parent
 
     if not recal_path or not recal_path.exists():
@@ -97,19 +98,16 @@ async def apply_bqsr(
     if not output_bam.exists():
         raise FileNotFoundError(f"ApplyBQSR did not create output BAM at {output_bam}")
 
-    # Create new Alignment object for recalibrated BAM
-    recalibrated_alignment = Alignment(
-        sample_id=alignment.sample_id,
-    )
-
-    # Upload recalibrated BAM to Pinata
-    await recalibrated_alignment.update_alignment(
+    # Create new component and upload
+    bam = AlignmentFile()
+    await bam.update(
         output_bam,
+        sample_id=alignment.sample_id,
         format="bam",
-        is_sorted=True,
-        duplicates_marked=True,
+        sorted="coordinate",
+        duplicates_marked=alignment.alignment.duplicates_marked,
         bqsr_applied=True,
         tool="gatk_apply_bqsr",
     )
 
-    return recalibrated_alignment
+    return Alignment(sample_id=alignment.sample_id, alignment=bam)

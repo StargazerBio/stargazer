@@ -1,34 +1,177 @@
 """
-Reference genome type for Stargazer.
+Reference genome types for Stargazer.
 
-A reference is a collection of component files (FASTA, indices) stored in IPFS.
+Defines ComponentFile subclasses for reference genome files and the
+Reference container that composes them.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 from pathlib import Path
 
+from stargazer.utils.component import ComponentFile
 from stargazer.utils.storage import default_client
-from stargazer.utils.ipfile import IpFile
+
+
+# ---------------------------------------------------------------------------
+# Component file types
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ReferenceFile(ComponentFile):
+    """Reference FASTA file component."""
+
+    def __post_init__(self):
+        self.keyvalues.setdefault("type", "reference")
+        self.keyvalues.setdefault("component", "fasta")
+
+    @property
+    def build(self) -> str:
+        return self.keyvalues.get("build", "")
+
+    @build.setter
+    def build(self, value: str) -> None:
+        self.keyvalues["build"] = value
+
+    async def update(self, path: Path, *, build: str | None = None) -> None:
+        """Upload FASTA file and set cid."""
+        if build is not None:
+            self.keyvalues["build"] = build
+        self.path = path
+        await default_client.upload(self)
+
+
+@dataclass
+class ReferenceIndex(ComponentFile):
+    """FASTA index (.fai) file component."""
+
+    def __post_init__(self):
+        self.keyvalues.setdefault("type", "reference")
+        self.keyvalues.setdefault("component", "faidx")
+
+    @property
+    def build(self) -> str:
+        return self.keyvalues.get("build", "")
+
+    @build.setter
+    def build(self, value: str) -> None:
+        self.keyvalues["build"] = value
+
+    @property
+    def tool(self) -> str | None:
+        return self.keyvalues.get("tool")
+
+    @tool.setter
+    def tool(self, value: str) -> None:
+        self.keyvalues["tool"] = value
+
+    async def update(
+        self, path: Path, *, build: str | None = None, tool: str | None = None
+    ) -> None:
+        """Upload FASTA index file and set cid."""
+        if build is not None:
+            self.keyvalues["build"] = build
+        if tool is not None:
+            self.keyvalues["tool"] = tool
+        self.path = path
+        await default_client.upload(self)
+
+
+@dataclass
+class SequenceDict(ComponentFile):
+    """Sequence dictionary (.dict) file component."""
+
+    def __post_init__(self):
+        self.keyvalues.setdefault("type", "reference")
+        self.keyvalues.setdefault("component", "sequence_dictionary")
+
+    @property
+    def build(self) -> str:
+        return self.keyvalues.get("build", "")
+
+    @build.setter
+    def build(self, value: str) -> None:
+        self.keyvalues["build"] = value
+
+    @property
+    def tool(self) -> str | None:
+        return self.keyvalues.get("tool")
+
+    @tool.setter
+    def tool(self, value: str) -> None:
+        self.keyvalues["tool"] = value
+
+    async def update(
+        self, path: Path, *, build: str | None = None, tool: str | None = None
+    ) -> None:
+        """Upload sequence dictionary file and set cid."""
+        if build is not None:
+            self.keyvalues["build"] = build
+        if tool is not None:
+            self.keyvalues["tool"] = tool
+        self.path = path
+        await default_client.upload(self)
+
+
+@dataclass
+class AlignerIndex(ComponentFile):
+    """Aligner index file component (one file per index file for multi-file indices)."""
+
+    def __post_init__(self):
+        self.keyvalues.setdefault("type", "reference")
+        self.keyvalues.setdefault("component", "aligner_index")
+
+    @property
+    def build(self) -> str:
+        return self.keyvalues.get("build", "")
+
+    @build.setter
+    def build(self, value: str) -> None:
+        self.keyvalues["build"] = value
+
+    @property
+    def aligner(self) -> str:
+        return self.keyvalues.get("aligner", "")
+
+    @aligner.setter
+    def aligner(self, value: str) -> None:
+        self.keyvalues["aligner"] = value
+
+    async def update(
+        self, path: Path, *, build: str | None = None, aligner: str | None = None
+    ) -> None:
+        """Upload aligner index file and set cid."""
+        if build is not None:
+            self.keyvalues["build"] = build
+        if aligner is not None:
+            self.keyvalues["aligner"] = aligner
+        self.path = path
+        await default_client.upload(self)
+
+
+# ---------------------------------------------------------------------------
+# Container
+# ---------------------------------------------------------------------------
 
 
 @dataclass
 class Reference:
     """
-    A reference genome stored as IPFS files.
+    A reference genome stored as typed component files.
 
     Attributes:
         build: Reference genome build (e.g., "GRCh38", "T2T-CHM13")
         fasta: Reference FASTA file
         faidx: FASTA index (.fai) file
-        aligner_index: Aligner index files (BWA has .amb, .ann, .bwt, .pac, .sa)
+        sequence_dictionary: Sequence dictionary (.dict) file
+        aligner_index: Aligner index files (one per file in multi-file index)
     """
 
     build: str
-    fasta: Optional[IpFile] = None
-    faidx: Optional[IpFile] = None
-    sequence_dictionary: Optional[IpFile] = None
-    aligner_index: list[IpFile] = field(default_factory=list)
+    fasta: ReferenceFile | None = None
+    faidx: ReferenceIndex | None = None
+    sequence_dictionary: SequenceDict | None = None
+    aligner_index: list[AlignerIndex] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """Serialize to a JSON-friendly dict."""
@@ -48,155 +191,38 @@ class Reference:
         """Reconstruct from a serialized dict."""
         ref = cls(build=data["build"])
         if "fasta" in data:
-            ref.fasta = IpFile.from_dict(data["fasta"])
+            ref.fasta = ReferenceFile.from_dict(data["fasta"])
         if "faidx" in data:
-            ref.faidx = IpFile.from_dict(data["faidx"])
+            ref.faidx = ReferenceIndex.from_dict(data["faidx"])
         if "sequence_dictionary" in data:
-            ref.sequence_dictionary = IpFile.from_dict(data["sequence_dictionary"])
+            ref.sequence_dictionary = SequenceDict.from_dict(
+                data["sequence_dictionary"]
+            )
         if "aligner_index" in data:
-            ref.aligner_index = [IpFile.from_dict(f) for f in data["aligner_index"]]
+            ref.aligner_index = [
+                AlignerIndex.from_dict(f) for f in data["aligner_index"]
+            ]
         return ref
-
-    async def update_fasta(
-        self,
-        path: Path,
-        build: Optional[str] = None,
-    ) -> IpFile:
-        """
-        Upload reference FASTA component.
-
-        Args:
-            path: Path to file to upload
-            build: Reference build (uses self.build if not provided)
-
-        Returns:
-            IpFile representing the uploaded file
-        """
-        ipfile = await default_client.upload_file(
-            path,
-            keyvalues={
-                "type": "reference",
-                "component": "fasta",
-                "build": build or self.build,
-            },
-        )
-        self.fasta = ipfile
-        return self.fasta
-
-    async def update_faidx(
-        self,
-        path: Path,
-        build: Optional[str] = None,
-        tool: Optional[str] = None,
-    ) -> IpFile:
-        """
-        Upload FASTA index (.fai) component.
-
-        Args:
-            path: Path to file to upload
-            build: Reference build (uses self.build if not provided)
-            tool: Tool that created the index (e.g., "samtools_faidx")
-
-        Returns:
-            IpFile representing the uploaded file
-        """
-        keyvalues = {
-            "type": "reference",
-            "component": "faidx",
-            "build": build or self.build,
-        }
-        if tool:
-            keyvalues["tool"] = tool
-
-        ipfile = await default_client.upload_file(path, keyvalues=keyvalues)
-        self.faidx = ipfile
-        return self.faidx
-
-    async def update_sequence_dictionary(
-        self,
-        path: Path,
-        build: Optional[str] = None,
-        tool: Optional[str] = None,
-    ) -> IpFile:
-        """
-        Upload sequence dictionary (.dict) component.
-
-        Args:
-            path: Path to file to upload
-            build: Reference build (uses self.build if not provided)
-            tool: Tool that created the dictionary (e.g., "gatk_CreateSequenceDictionary")
-
-        Returns:
-            IpFile representing the uploaded file
-        """
-        keyvalues = {
-            "type": "reference",
-            "component": "sequence_dictionary",
-            "build": build or self.build,
-        }
-        if tool:
-            keyvalues["tool"] = tool
-
-        ipfile = await default_client.upload_file(path, keyvalues=keyvalues)
-        self.sequence_dictionary = ipfile
-        return self.sequence_dictionary
-
-    async def update_aligner_index(
-        self,
-        path: Path,
-        aligner: str,
-        build: Optional[str] = None,
-    ) -> IpFile:
-        """
-        Upload aligner index component file.
-
-        Call this method for each file in a multi-file index (e.g., BWA has
-        .amb, .ann, .bwt, .pac, .sa files).
-
-        Args:
-            path: Path to index file to upload
-            aligner: Aligner name (e.g., "bwa", "minimap2")
-            build: Reference build (uses self.build if not provided)
-
-        Returns:
-            IpFile representing the uploaded index file
-        """
-        ipfile = await default_client.upload_file(
-            path,
-            keyvalues={
-                "type": "reference",
-                "component": "aligner_index",
-                "aligner": aligner,
-                "build": build or self.build,
-            },
-        )
-        self.aligner_index.append(ipfile)
-        return ipfile
 
     async def fetch(self) -> Path:
         """
         Fetch all reference component files to local cache.
 
-        Downloads all non-None component files to the PinataClient cache.
-        Returns the cache directory containing all files.
-
-        Returns:
-            Path to cache directory containing all reference files
+        Downloads all non-None component files. Returns the cache directory.
         """
-        files_to_fetch: list[IpFile] = []
-
+        components: list[ComponentFile] = []
         if self.fasta is not None:
-            files_to_fetch.append(self.fasta)
+            components.append(self.fasta)
         if self.faidx is not None:
-            files_to_fetch.append(self.faidx)
+            components.append(self.faidx)
         if self.sequence_dictionary is not None:
-            files_to_fetch.append(self.sequence_dictionary)
-        files_to_fetch.extend(self.aligner_index)
+            components.append(self.sequence_dictionary)
+        components.extend(self.aligner_index)
 
-        if not files_to_fetch:
+        if not components:
             raise ValueError("No files to fetch. Reference has no components set.")
 
-        for ipfile in files_to_fetch:
-            await default_client.download_file(ipfile)
+        for c in components:
+            await default_client.download(c)
 
         return default_client.local_dir

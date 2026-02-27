@@ -14,7 +14,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional, Protocol
 
-from stargazer.utils.ipfile import IpFile
+from stargazer.utils.component import ComponentFile
 
 
 class StorageClient(Protocol):
@@ -25,26 +25,28 @@ class StorageClient(Protocol):
 
     local_dir: Path
 
-    async def upload_file(
-        self,
-        path: Path,
-        keyvalues: Optional[dict[str, str]] = None,
-        public: Optional[bool] = None,
-    ) -> IpFile: ...
+    async def upload(self, component: ComponentFile) -> None:
+        """Upload a file from component.path; sets component.cid."""
+        ...
 
-    async def download_file(
+    async def download(
         self,
-        ipfile: IpFile,
+        component: ComponentFile,
         dest: Optional[Path] = None,
-    ) -> IpFile: ...
+    ) -> None:
+        """Download a file by cid; sets component.path."""
+        ...
 
-    async def query_files(
+    async def query(
         self,
         keyvalues: dict[str, str],
-        public: Optional[bool] = None,
-    ) -> list[IpFile]: ...
+    ) -> list[ComponentFile]:
+        """Query files by keyvalue metadata; returns ComponentFile list."""
+        ...
 
-    async def delete_file(self, ipfile: IpFile) -> None: ...
+    async def delete(self, component: ComponentFile) -> None:
+        """Delete a file from storage."""
+        ...
 
 
 class StargazerMode(Enum):
@@ -88,9 +90,7 @@ def get_client() -> StorageClient:
 
     if mode == StargazerMode.CLOUD:
         if not pinata_jwt:
-            raise ValueError(
-                "PINATA_JWT is required when STARGAZER_MODE=cloud."
-            )
+            raise ValueError("PINATA_JWT is required when STARGAZER_MODE=cloud.")
         from stargazer.utils.pinata import PinataClient
 
         return PinataClient()

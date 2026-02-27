@@ -1,45 +1,155 @@
 """
-Alignment type for Stargazer.
+Alignment types for Stargazer.
 
-Represents aligned BAM/CRAM files stored in IPFS.
+Defines ComponentFile subclasses for BAM/CRAM alignment files and the
+Alignment container that composes them.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 from pathlib import Path
 
+from stargazer.utils.component import ComponentFile
 from stargazer.utils.storage import default_client
-from stargazer.utils.ipfile import IpFile
+
+
+# ---------------------------------------------------------------------------
+# Component file types
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class AlignmentFile(ComponentFile):
+    """BAM/CRAM alignment file component."""
+
+    def __post_init__(self):
+        self.keyvalues.setdefault("type", "alignment")
+        self.keyvalues.setdefault("component", "alignment")
+
+    @property
+    def sample_id(self) -> str:
+        return self.keyvalues.get("sample_id", "")
+
+    @sample_id.setter
+    def sample_id(self, value: str) -> None:
+        self.keyvalues["sample_id"] = value
+
+    @property
+    def format(self) -> str | None:
+        return self.keyvalues.get("format")
+
+    @format.setter
+    def format(self, value: str) -> None:
+        self.keyvalues["format"] = value
+
+    @property
+    def sorted(self) -> str | None:
+        return self.keyvalues.get("sorted")
+
+    @sorted.setter
+    def sorted(self, value: str) -> None:
+        self.keyvalues["sorted"] = value
+
+    @property
+    def duplicates_marked(self) -> bool:
+        return self.keyvalues.get("duplicates_marked") == "true"
+
+    @duplicates_marked.setter
+    def duplicates_marked(self, value: bool) -> None:
+        self.keyvalues["duplicates_marked"] = "true" if value else "false"
+
+    @property
+    def bqsr_applied(self) -> bool:
+        return self.keyvalues.get("bqsr_applied") == "true"
+
+    @bqsr_applied.setter
+    def bqsr_applied(self, value: bool) -> None:
+        self.keyvalues["bqsr_applied"] = "true" if value else "false"
+
+    @property
+    def tool(self) -> str | None:
+        return self.keyvalues.get("tool")
+
+    @tool.setter
+    def tool(self, value: str) -> None:
+        self.keyvalues["tool"] = value
+
+    async def update(
+        self,
+        path: Path,
+        *,
+        sample_id: str | None = None,
+        format: str | None = None,
+        sorted: str | None = None,
+        duplicates_marked: bool | None = None,
+        bqsr_applied: bool | None = None,
+        tool: str | None = None,
+    ) -> None:
+        """Upload alignment file and set cid."""
+        if sample_id is not None:
+            self.keyvalues["sample_id"] = sample_id
+        if format is not None:
+            self.keyvalues["format"] = format
+        if sorted is not None:
+            self.keyvalues["sorted"] = sorted
+        if duplicates_marked is not None:
+            self.keyvalues["duplicates_marked"] = (
+                "true" if duplicates_marked else "false"
+            )
+        if bqsr_applied is not None:
+            self.keyvalues["bqsr_applied"] = "true" if bqsr_applied else "false"
+        if tool is not None:
+            self.keyvalues["tool"] = tool
+        self.path = path
+        await default_client.upload(self)
+
+
+@dataclass
+class AlignmentIndex(ComponentFile):
+    """BAI/CRAI alignment index file component."""
+
+    def __post_init__(self):
+        self.keyvalues.setdefault("type", "alignment")
+        self.keyvalues.setdefault("component", "index")
+
+    @property
+    def sample_id(self) -> str:
+        return self.keyvalues.get("sample_id", "")
+
+    @sample_id.setter
+    def sample_id(self, value: str) -> None:
+        self.keyvalues["sample_id"] = value
+
+    async def update(self, path: Path, *, sample_id: str | None = None) -> None:
+        """Upload alignment index file and set cid."""
+        if sample_id is not None:
+            self.keyvalues["sample_id"] = sample_id
+        self.path = path
+        await default_client.upload(self)
+
+
+# ---------------------------------------------------------------------------
+# Container
+# ---------------------------------------------------------------------------
 
 
 @dataclass
 class Alignment:
     """
-    Aligned BAM/CRAM files stored as IPFS files.
+    Aligned BAM/CRAM files stored as typed component files.
 
     Attributes:
         sample_id: Sample identifier
         alignment: BAM/CRAM alignment file
         index: BAI/CRAI index file
-
-    Properties:
-        has_duplicates_marked: Whether duplicates are marked (read from alignment keyvalues)
-        is_sorted: Whether reads are coordinate sorted (read from alignment keyvalues)
-        has_bqsr_applied: Whether BQSR has been applied (read from alignment keyvalues)
     """
 
     sample_id: str
-    alignment: Optional[IpFile] = None
-    index: Optional[IpFile] = None
+    alignment: AlignmentFile | None = None
+    index: AlignmentIndex | None = None
 
     def to_dict(self) -> dict:
         """Serialize to a JSON-friendly dict."""
-        result: dict = {
-            "sample_id": self.sample_id,
-            "is_sorted": self.is_sorted,
-            "has_duplicates_marked": self.has_duplicates_marked,
-            "has_bqsr_applied": self.has_bqsr_applied,
-        }
+        result: dict = {"sample_id": self.sample_id}
         if self.alignment:
             result["alignment"] = self.alignment.to_dict()
         if self.index:
@@ -51,138 +161,23 @@ class Alignment:
         """Reconstruct from a serialized dict."""
         aln = cls(sample_id=data["sample_id"])
         if "alignment" in data:
-            aln.alignment = IpFile.from_dict(data["alignment"])
+            aln.alignment = AlignmentFile.from_dict(data["alignment"])
         if "index" in data:
-            aln.index = IpFile.from_dict(data["index"])
+            aln.index = AlignmentIndex.from_dict(data["index"])
         return aln
-
-    @property
-    def has_duplicates_marked(self) -> bool:
-        """
-        Whether duplicates are marked in the BAM file.
-
-        Reads from the alignment file's keyvalues metadata.
-
-        Returns:
-            True if duplicates_marked="true" in alignment keyvalues, False otherwise
-        """
-        if self.alignment:
-            return self.alignment.keyvalues.get("duplicates_marked") == "true"
-        return False
-
-    @property
-    def is_sorted(self) -> bool:
-        """
-        Whether the BAM file is coordinate sorted.
-
-        Reads from the alignment file's keyvalues metadata.
-
-        Returns:
-            True if sorted="coordinate" in alignment keyvalues, False otherwise
-        """
-        if self.alignment:
-            return self.alignment.keyvalues.get("sorted") == "coordinate"
-        return False
-
-    @property
-    def has_bqsr_applied(self) -> bool:
-        """
-        Whether Base Quality Score Recalibration has been applied.
-
-        Reads from the alignment file's keyvalues metadata.
-
-        Returns:
-            True if bqsr_applied="true" in alignment keyvalues, False otherwise
-        """
-        if self.alignment:
-            return self.alignment.keyvalues.get("bqsr_applied") == "true"
-        return False
-
-    async def update_alignment(
-        self,
-        path: Path,
-        format: Optional[str] = None,
-        is_sorted: Optional[bool] = None,
-        duplicates_marked: Optional[bool] = None,
-        bqsr_applied: Optional[bool] = None,
-        tool: Optional[str] = None,
-    ) -> IpFile:
-        """
-        Upload alignment (BAM/CRAM) component.
-
-        Args:
-            path: Path to file to upload
-            format: File format ("bam" or "cram")
-            is_sorted: Whether alignment is coordinate sorted
-            duplicates_marked: Whether duplicates have been marked
-            bqsr_applied: Whether BQSR has been applied
-            tool: Tool that created the alignment (e.g., "gatk_sort_sam")
-
-        Returns:
-            IpFile representing the uploaded file
-        """
-        keyvalues = {
-            "type": "alignment",
-            "component": "alignment",
-            "sample_id": self.sample_id,
-        }
-
-        if format:
-            keyvalues["format"] = format
-        if is_sorted is not None:
-            keyvalues["sorted"] = "coordinate" if is_sorted else "unsorted"
-        if duplicates_marked is not None:
-            keyvalues["duplicates_marked"] = "true" if duplicates_marked else "false"
-        if bqsr_applied is not None:
-            keyvalues["bqsr_applied"] = "true" if bqsr_applied else "false"
-        if tool:
-            keyvalues["tool"] = tool
-
-        ipfile = await default_client.upload_file(path, keyvalues=keyvalues)
-        self.alignment = ipfile
-        return self.alignment
-
-    async def update_index(
-        self,
-        path: Path,
-    ) -> IpFile:
-        """
-        Upload alignment index (BAI/CRAI) component.
-
-        Args:
-            path: Path to file to upload
-
-        Returns:
-            IpFile representing the uploaded file
-        """
-        ipfile = await default_client.upload_file(
-            path,
-            keyvalues={
-                "type": "alignment",
-                "component": "index",
-                "sample_id": self.sample_id,
-            },
-        )
-        self.index = ipfile
-        return self.index
 
     async def fetch(self) -> Path:
         """
         Fetch all alignment component files to local cache.
 
-        Downloads all non-None component files to the PinataClient cache.
-        Returns the cache directory containing all files.
-
-        Returns:
-            Path to cache directory containing all alignment files
+        Downloads all non-None component files. Returns the cache directory.
         """
-        components = [self.alignment, self.index]
-        files_to_fetch = [f for f in components if f is not None]
+        components = [c for c in [self.alignment, self.index] if c is not None]
 
-        if not files_to_fetch:
+        if not components:
             raise ValueError("No files to fetch. Alignment has no components set.")
 
-        for ipfile in files_to_fetch:
-            await default_client.download_file(ipfile)
+        for c in components:
+            await default_client.download(c)
 
         return default_client.local_dir

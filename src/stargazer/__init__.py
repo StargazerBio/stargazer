@@ -10,7 +10,6 @@ hydration for bioinformatics-specific types.
 __version__ = "0.1.0"
 
 # Storage
-from stargazer.utils.ipfile import IpFile
 from stargazer.utils.storage import (
     StorageClient,
     StargazerMode,
@@ -24,7 +23,6 @@ __all__ = [
     # Version
     "__version__",
     # Storage
-    "IpFile",
     "StorageClient",
     "StargazerMode",
     "default_client",

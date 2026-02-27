@@ -19,7 +19,7 @@ from mcp.server.fastmcp import FastMCP
 
 from stargazer.marshal import marshal_input, marshal_output
 from stargazer.registry import TaskRegistry
-from stargazer.utils.ipfile import IpFile
+from stargazer.utils.component import ComponentFile
 from stargazer.utils.storage import default_client
 
 # ---------------------------------------------------------------------------
@@ -40,54 +40,32 @@ _run_ctx = flyte.with_runcontext(mode="local")
 @mcp.tool()
 async def query_files(keyvalues: dict[str, str]) -> list[dict]:
     """Query files by metadata key-value pairs. Returns matching files."""
-    files = await default_client.query_files(keyvalues)
+    files = await default_client.query(keyvalues)
     return [f.to_dict() for f in files]
 
 
 @mcp.tool()
 async def upload_file(path: str, keyvalues: dict[str, str]) -> dict:
     """Upload a file with metadata key-value pairs."""
-    ipfile = await default_client.upload_file(Path(path), keyvalues=keyvalues)
-    return ipfile.to_dict()
+    comp = ComponentFile(path=Path(path), keyvalues=keyvalues)
+    await default_client.upload(comp)
+    return comp.to_dict()
 
 
 @mcp.tool()
-async def download_file(file_id: str) -> str:
-    """Download a file by ID to local cache. Returns the local path."""
-    from tinydb import Query
-
-    File = Query()
-    record = default_client.db.get(File.id == file_id)
-    if record:
-        ipfile = default_client._ipfile_from_db_record(record)
-    else:
-        from datetime import datetime, timezone
-
-        ipfile = IpFile(
-            id=file_id,
-            cid=file_id,
-            name=None,
-            size=0,
-            keyvalues={},
-            created_at=datetime.now(timezone.utc),
-        )
-    ipfile = await default_client.download_file(ipfile)
-    return str(ipfile.local_path)
+async def download_file(cid: str) -> str:
+    """Download a file by CID to local cache. Returns the local path."""
+    comp = ComponentFile(cid=cid)
+    await default_client.download(comp)
+    return str(comp.path)
 
 
 @mcp.tool()
-async def delete_file(file_id: str) -> str:
-    """Delete a file by ID."""
-    from tinydb import Query
-
-    File = Query()
-    record = default_client.db.get(File.id == file_id)
-    if record:
-        ipfile = default_client._ipfile_from_db_record(record)
-        await default_client.delete_file(ipfile)
-        return f"Deleted file {file_id}"
-    else:
-        return f"File {file_id} not found"
+async def delete_file(cid: str) -> str:
+    """Delete a file by CID."""
+    comp = ComponentFile(cid=cid)
+    await default_client.delete(comp)
+    return f"Deleted file {cid}"
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +96,7 @@ def run_task(task_name: str, inputs: dict) -> dict:
     Args:
         task_name: Name of the task or workflow (from list_tasks).
         inputs: Keyword arguments as a JSON dict. Domain types (Reference,
-                Alignment, Reads, Variants, IpFile) should be passed as
+                Alignment, Reads, Variants, ComponentFile) should be passed as
                 dicts matching their to_dict() format.
 
     Returns:

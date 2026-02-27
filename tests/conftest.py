@@ -36,6 +36,19 @@ def setup_local_mode(request, tmp_path):
     if request.node.get_closest_marker("pinata"):
         yield
         return
+
+    from stargazer.utils.local_storage import LocalStorageClient
+
+    if not isinstance(default_client, LocalStorageClient):
+        # Not a LocalStorageClient (e.g., PinataClient) — only isolate local_dir
+        original_local_dir = default_client.local_dir
+        test_local_dir = tmp_path / "stargazer_test"
+        test_local_dir.mkdir(parents=True, exist_ok=True)
+        default_client.local_dir = test_local_dir
+        yield
+        default_client.local_dir = original_local_dir
+        return
+
     # Store original settings
     original_local_dir = default_client.local_dir
     original_db = default_client._db
@@ -61,6 +74,11 @@ def setup_local_mode(request, tmp_path):
 @pytest.fixture
 def fixtures_db(tmp_path):
     """Two-phase fixture: query inputs from fixtures, run tasks in clean tmp."""
+    from stargazer.utils.local_storage import LocalStorageClient
+
+    if not isinstance(default_client, LocalStorageClient):
+        raise RuntimeError("fixtures_db fixture requires LocalStorageClient")
+
     # Phase 1: point at fixtures for querying
     default_client.local_dir = FIXTURES_DIR
     default_client.local_db_path = FIXTURES_DB

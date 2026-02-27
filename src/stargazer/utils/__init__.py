@@ -1,6 +1,5 @@
 """Utility functions for genomics workflows."""
 
-from stargazer.utils.ipfile import IpFile
 from stargazer.utils.storage import (
     StorageClient,
     StargazerMode,
@@ -13,7 +12,6 @@ from stargazer.utils.local_storage import LocalStorageClient
 from stargazer.utils.subprocess import _run
 
 __all__ = [
-    "IpFile",
     "StorageClient",
     "StargazerMode",
     "default_client",

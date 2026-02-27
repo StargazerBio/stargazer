@@ -6,9 +6,9 @@ Creates BQSR recalibration table using GATK BaseRecalibrator.
 
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
+from stargazer.utils.component import ComponentFile
 from stargazer.utils import _run
 from stargazer.utils.storage import default_client
-from stargazer.utils.ipfile import IpFile
 
 
 @gatk_env.task
@@ -16,7 +16,7 @@ async def base_recalibrator(
     alignment: Alignment,
     ref: Reference,
     known_sites: list[str],
-) -> IpFile:
+) -> ComponentFile:
     """
     Generate a Base Quality Score Recalibration report.
 
@@ -27,10 +27,10 @@ async def base_recalibrator(
         alignment: Input BAM file (should be sorted and have duplicates marked)
         ref: Reference genome with FASTA index
         known_sites: List of known variant VCF files (dbSNP, known indels, etc.)
-                    These should be filenames stored in Pinata with type="known_sites"
+                    These should be filenames stored in storage with type="known_sites"
 
     Returns:
-        IpFile containing the BQSR recalibration report
+        ComponentFile containing the BQSR recalibration report
 
     Example:
         ref = await prepare_reference(ref_name="GRCh38.fa")
@@ -56,14 +56,14 @@ async def base_recalibrator(
     await alignment.fetch()
     await ref.fetch()
 
-    # Get paths
-    if not ref.fasta or not ref.fasta.local_path:
+    # Get paths (phase 4 will update these to use .path)
+    if not ref.fasta or not ref.fasta.path:
         raise ValueError("Reference FASTA file not available or not fetched")
-    ref_path = ref.fasta.local_path
+    ref_path = ref.fasta.path
 
-    if not alignment.alignment or not alignment.alignment.local_path:
+    if not alignment.alignment or not alignment.alignment.path:
         raise ValueError("Alignment BAM file not available or not fetched")
-    bam_path = alignment.alignment.local_path
+    bam_path = alignment.alignment.path
 
     output_dir = ref_path.parent
 
@@ -71,7 +71,7 @@ async def base_recalibrator(
     known_sites_paths = []
     for site_name in known_sites:
         # Query for the known sites VCF file
-        files = await default_client.query_files(
+        files = await default_client.query(
             {
                 "type": "known_sites",
                 "name": site_name,
@@ -80,15 +80,15 @@ async def base_recalibrator(
 
         if not files:
             # Try alternate query with just the name
-            files = await default_client.query_files({"name": site_name})
+            files = await default_client.query({"name": site_name})
 
         if not files:
             raise ValueError(f"Known sites file not found: {site_name}")
 
         # Download the file
         site_file = files[0]
-        await default_client.download_file(site_file)
-        known_sites_paths.append(site_file.local_path)
+        await default_client.download(site_file)
+        known_sites_paths.append(site_file.path)
 
     # Output recalibration report path
     output_recal = output_dir / f"{alignment.sample_id}_bqsr.table"
@@ -118,14 +118,15 @@ async def base_recalibrator(
             f"BaseRecalibrator did not create recalibration report at {output_recal}"
         )
 
-    # Upload recalibration report to Pinata
-    keyvalues = {
-        "type": "bqsr_report",
-        "sample_id": alignment.sample_id,
-        "tool": "gatk_base_recalibrator",
-    }
+    # Upload recalibration report
+    recal_comp = ComponentFile(
+        path=output_recal,
+        keyvalues={
+            "type": "bqsr_report",
+            "sample_id": alignment.sample_id,
+            "tool": "gatk_base_recalibrator",
+        },
+    )
+    await default_client.upload(recal_comp)
 
-    recal_ipfile = await default_client.upload_file(output_recal, keyvalues=keyvalues)
-    recal_ipfile.local_path = output_recal
-
-    return recal_ipfile
+    return recal_comp
