@@ -21,84 +21,18 @@ from stargazer.utils.storage import default_client
 class VariantsFile(ComponentFile):
     """VCF/GVCF variant call file component."""
 
+    _field_types = {"sample_count": int, "source_samples": list}
+    _field_defaults = {"sample_id": ""}
+
     def __post_init__(self):
         self.keyvalues.setdefault("type", "variants")
         self.keyvalues.setdefault("component", "vcf")
 
-    @property
-    def sample_id(self) -> str:
-        return self.keyvalues.get("sample_id", "")
-
-    @sample_id.setter
-    def sample_id(self, value: str) -> None:
-        self.keyvalues["sample_id"] = value
-
-    @property
-    def caller(self) -> str | None:
-        return self.keyvalues.get("caller")
-
-    @caller.setter
-    def caller(self, value: str) -> None:
-        self.keyvalues["caller"] = value
-
-    @property
-    def variant_type(self) -> str | None:
-        return self.keyvalues.get("variant_type")
-
-    @variant_type.setter
-    def variant_type(self, value: str) -> None:
-        self.keyvalues["variant_type"] = value
-
-    @property
-    def build(self) -> str | None:
-        return self.keyvalues.get("build")
-
-    @build.setter
-    def build(self, value: str) -> None:
-        self.keyvalues["build"] = value
-
-    @property
-    def sample_count(self) -> int | None:
-        val = self.keyvalues.get("sample_count")
-        return int(val) if val is not None else None
-
-    @sample_count.setter
-    def sample_count(self, value: int) -> None:
-        self.keyvalues["sample_count"] = str(value)
-
-    @property
-    def source_samples(self) -> list[str] | None:
-        val = self.keyvalues.get("source_samples")
-        return val.split(",") if val else None
-
-    @source_samples.setter
-    def source_samples(self, value: list[str]) -> None:
-        self.keyvalues["source_samples"] = ",".join(value)
-
-    async def update(
-        self,
-        path: Path,
-        *,
-        sample_id: str | None = None,
-        caller: str | None = None,
-        variant_type: str | None = None,
-        build: str | None = None,
-        sample_count: int | None = None,
-        source_samples: list[str] | None = None,
-    ) -> None:
+    async def update(self, path: Path, **kwargs) -> None:
         """Upload VCF/GVCF file and set cid."""
-        if sample_id is not None:
-            self.keyvalues["sample_id"] = sample_id
-        if caller is not None:
-            self.keyvalues["caller"] = caller
-        if variant_type is not None:
-            self.keyvalues["variant_type"] = variant_type
-        if build is not None:
-            self.keyvalues["build"] = build
-        if sample_count is not None:
-            self.keyvalues["sample_count"] = str(sample_count)
-        if source_samples is not None:
-            self.keyvalues["source_samples"] = ",".join(source_samples)
+        for key, value in kwargs.items():
+            if value is not None:
+                setattr(self, key, value)
         self.path = path
         await default_client.upload(self)
 
@@ -107,22 +41,17 @@ class VariantsFile(ComponentFile):
 class VariantsIndex(ComponentFile):
     """VCF index (.tbi) file component."""
 
+    _field_defaults = {"sample_id": ""}
+
     def __post_init__(self):
         self.keyvalues.setdefault("type", "variants")
         self.keyvalues.setdefault("component", "index")
 
-    @property
-    def sample_id(self) -> str:
-        return self.keyvalues.get("sample_id", "")
-
-    @sample_id.setter
-    def sample_id(self, value: str) -> None:
-        self.keyvalues["sample_id"] = value
-
-    async def update(self, path: Path, *, sample_id: str | None = None) -> None:
+    async def update(self, path: Path, **kwargs) -> None:
         """Upload VCF index file and set cid."""
-        if sample_id is not None:
-            self.keyvalues["sample_id"] = sample_id
+        for key, value in kwargs.items():
+            if value is not None:
+                setattr(self, key, value)
         self.path = path
         await default_client.upload(self)
 

@@ -21,84 +21,18 @@ from stargazer.utils.storage import default_client
 class AlignmentFile(ComponentFile):
     """BAM/CRAM alignment file component."""
 
+    _field_types = {"duplicates_marked": bool, "bqsr_applied": bool}
+    _field_defaults = {"sample_id": ""}
+
     def __post_init__(self):
         self.keyvalues.setdefault("type", "alignment")
         self.keyvalues.setdefault("component", "alignment")
 
-    @property
-    def sample_id(self) -> str:
-        return self.keyvalues.get("sample_id", "")
-
-    @sample_id.setter
-    def sample_id(self, value: str) -> None:
-        self.keyvalues["sample_id"] = value
-
-    @property
-    def format(self) -> str | None:
-        return self.keyvalues.get("format")
-
-    @format.setter
-    def format(self, value: str) -> None:
-        self.keyvalues["format"] = value
-
-    @property
-    def sorted(self) -> str | None:
-        return self.keyvalues.get("sorted")
-
-    @sorted.setter
-    def sorted(self, value: str) -> None:
-        self.keyvalues["sorted"] = value
-
-    @property
-    def duplicates_marked(self) -> bool:
-        return self.keyvalues.get("duplicates_marked") == "true"
-
-    @duplicates_marked.setter
-    def duplicates_marked(self, value: bool) -> None:
-        self.keyvalues["duplicates_marked"] = "true" if value else "false"
-
-    @property
-    def bqsr_applied(self) -> bool:
-        return self.keyvalues.get("bqsr_applied") == "true"
-
-    @bqsr_applied.setter
-    def bqsr_applied(self, value: bool) -> None:
-        self.keyvalues["bqsr_applied"] = "true" if value else "false"
-
-    @property
-    def tool(self) -> str | None:
-        return self.keyvalues.get("tool")
-
-    @tool.setter
-    def tool(self, value: str) -> None:
-        self.keyvalues["tool"] = value
-
-    async def update(
-        self,
-        path: Path,
-        *,
-        sample_id: str | None = None,
-        format: str | None = None,
-        sorted: str | None = None,
-        duplicates_marked: bool | None = None,
-        bqsr_applied: bool | None = None,
-        tool: str | None = None,
-    ) -> None:
+    async def update(self, path: Path, **kwargs) -> None:
         """Upload alignment file and set cid."""
-        if sample_id is not None:
-            self.keyvalues["sample_id"] = sample_id
-        if format is not None:
-            self.keyvalues["format"] = format
-        if sorted is not None:
-            self.keyvalues["sorted"] = sorted
-        if duplicates_marked is not None:
-            self.keyvalues["duplicates_marked"] = (
-                "true" if duplicates_marked else "false"
-            )
-        if bqsr_applied is not None:
-            self.keyvalues["bqsr_applied"] = "true" if bqsr_applied else "false"
-        if tool is not None:
-            self.keyvalues["tool"] = tool
+        for key, value in kwargs.items():
+            if value is not None:
+                setattr(self, key, value)
         self.path = path
         await default_client.upload(self)
 
@@ -107,22 +41,17 @@ class AlignmentFile(ComponentFile):
 class AlignmentIndex(ComponentFile):
     """BAI/CRAI alignment index file component."""
 
+    _field_defaults = {"sample_id": ""}
+
     def __post_init__(self):
         self.keyvalues.setdefault("type", "alignment")
         self.keyvalues.setdefault("component", "index")
 
-    @property
-    def sample_id(self) -> str:
-        return self.keyvalues.get("sample_id", "")
-
-    @sample_id.setter
-    def sample_id(self, value: str) -> None:
-        self.keyvalues["sample_id"] = value
-
-    async def update(self, path: Path, *, sample_id: str | None = None) -> None:
+    async def update(self, path: Path, **kwargs) -> None:
         """Upload alignment index file and set cid."""
-        if sample_id is not None:
-            self.keyvalues["sample_id"] = sample_id
+        for key, value in kwargs.items():
+            if value is not None:
+                setattr(self, key, value)
         self.path = path
         await default_client.upload(self)
 

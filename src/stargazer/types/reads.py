@@ -21,38 +21,17 @@ from stargazer.utils.storage import default_client
 class R1File(ComponentFile):
     """R1 (forward) FASTQ read file component."""
 
+    _field_defaults = {"sample_id": ""}
+
     def __post_init__(self):
         self.keyvalues.setdefault("type", "reads")
         self.keyvalues.setdefault("component", "r1")
 
-    @property
-    def sample_id(self) -> str:
-        return self.keyvalues.get("sample_id", "")
-
-    @sample_id.setter
-    def sample_id(self, value: str) -> None:
-        self.keyvalues["sample_id"] = value
-
-    @property
-    def sequencing_platform(self) -> str | None:
-        return self.keyvalues.get("sequencing_platform")
-
-    @sequencing_platform.setter
-    def sequencing_platform(self, value: str) -> None:
-        self.keyvalues["sequencing_platform"] = value
-
-    async def update(
-        self,
-        path: Path,
-        *,
-        sample_id: str | None = None,
-        sequencing_platform: str | None = None,
-    ) -> None:
+    async def update(self, path: Path, **kwargs) -> None:
         """Upload R1 FASTQ file and set cid."""
-        if sample_id is not None:
-            self.keyvalues["sample_id"] = sample_id
-        if sequencing_platform is not None:
-            self.keyvalues["sequencing_platform"] = sequencing_platform
+        for key, value in kwargs.items():
+            if value is not None:
+                setattr(self, key, value)
         self.path = path
         await default_client.upload(self)
 
@@ -61,38 +40,17 @@ class R1File(ComponentFile):
 class R2File(ComponentFile):
     """R2 (reverse) FASTQ read file component."""
 
+    _field_defaults = {"sample_id": ""}
+
     def __post_init__(self):
         self.keyvalues.setdefault("type", "reads")
         self.keyvalues.setdefault("component", "r2")
 
-    @property
-    def sample_id(self) -> str:
-        return self.keyvalues.get("sample_id", "")
-
-    @sample_id.setter
-    def sample_id(self, value: str) -> None:
-        self.keyvalues["sample_id"] = value
-
-    @property
-    def sequencing_platform(self) -> str | None:
-        return self.keyvalues.get("sequencing_platform")
-
-    @sequencing_platform.setter
-    def sequencing_platform(self, value: str) -> None:
-        self.keyvalues["sequencing_platform"] = value
-
-    async def update(
-        self,
-        path: Path,
-        *,
-        sample_id: str | None = None,
-        sequencing_platform: str | None = None,
-    ) -> None:
+    async def update(self, path: Path, **kwargs) -> None:
         """Upload R2 FASTQ file and set cid."""
-        if sample_id is not None:
-            self.keyvalues["sample_id"] = sample_id
-        if sequencing_platform is not None:
-            self.keyvalues["sequencing_platform"] = sequencing_platform
+        for key, value in kwargs.items():
+            if value is not None:
+                setattr(self, key, value)
         self.path = path
         await default_client.upload(self)
 

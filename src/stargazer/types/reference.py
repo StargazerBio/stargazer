@@ -21,22 +21,17 @@ from stargazer.utils.storage import default_client
 class ReferenceFile(ComponentFile):
     """Reference FASTA file component."""
 
+    _field_defaults = {"build": ""}
+
     def __post_init__(self):
         self.keyvalues.setdefault("type", "reference")
         self.keyvalues.setdefault("component", "fasta")
 
-    @property
-    def build(self) -> str:
-        return self.keyvalues.get("build", "")
-
-    @build.setter
-    def build(self, value: str) -> None:
-        self.keyvalues["build"] = value
-
-    async def update(self, path: Path, *, build: str | None = None) -> None:
+    async def update(self, path: Path, **kwargs) -> None:
         """Upload FASTA file and set cid."""
-        if build is not None:
-            self.keyvalues["build"] = build
+        for key, value in kwargs.items():
+            if value is not None:
+                setattr(self, key, value)
         self.path = path
         await default_client.upload(self)
 
@@ -45,34 +40,17 @@ class ReferenceFile(ComponentFile):
 class ReferenceIndex(ComponentFile):
     """FASTA index (.fai) file component."""
 
+    _field_defaults = {"build": ""}
+
     def __post_init__(self):
         self.keyvalues.setdefault("type", "reference")
         self.keyvalues.setdefault("component", "faidx")
 
-    @property
-    def build(self) -> str:
-        return self.keyvalues.get("build", "")
-
-    @build.setter
-    def build(self, value: str) -> None:
-        self.keyvalues["build"] = value
-
-    @property
-    def tool(self) -> str | None:
-        return self.keyvalues.get("tool")
-
-    @tool.setter
-    def tool(self, value: str) -> None:
-        self.keyvalues["tool"] = value
-
-    async def update(
-        self, path: Path, *, build: str | None = None, tool: str | None = None
-    ) -> None:
+    async def update(self, path: Path, **kwargs) -> None:
         """Upload FASTA index file and set cid."""
-        if build is not None:
-            self.keyvalues["build"] = build
-        if tool is not None:
-            self.keyvalues["tool"] = tool
+        for key, value in kwargs.items():
+            if value is not None:
+                setattr(self, key, value)
         self.path = path
         await default_client.upload(self)
 
@@ -81,34 +59,17 @@ class ReferenceIndex(ComponentFile):
 class SequenceDict(ComponentFile):
     """Sequence dictionary (.dict) file component."""
 
+    _field_defaults = {"build": ""}
+
     def __post_init__(self):
         self.keyvalues.setdefault("type", "reference")
         self.keyvalues.setdefault("component", "sequence_dictionary")
 
-    @property
-    def build(self) -> str:
-        return self.keyvalues.get("build", "")
-
-    @build.setter
-    def build(self, value: str) -> None:
-        self.keyvalues["build"] = value
-
-    @property
-    def tool(self) -> str | None:
-        return self.keyvalues.get("tool")
-
-    @tool.setter
-    def tool(self, value: str) -> None:
-        self.keyvalues["tool"] = value
-
-    async def update(
-        self, path: Path, *, build: str | None = None, tool: str | None = None
-    ) -> None:
+    async def update(self, path: Path, **kwargs) -> None:
         """Upload sequence dictionary file and set cid."""
-        if build is not None:
-            self.keyvalues["build"] = build
-        if tool is not None:
-            self.keyvalues["tool"] = tool
+        for key, value in kwargs.items():
+            if value is not None:
+                setattr(self, key, value)
         self.path = path
         await default_client.upload(self)
 
@@ -117,34 +78,17 @@ class SequenceDict(ComponentFile):
 class AlignerIndex(ComponentFile):
     """Aligner index file component (one file per index file for multi-file indices)."""
 
+    _field_defaults = {"build": "", "aligner": ""}
+
     def __post_init__(self):
         self.keyvalues.setdefault("type", "reference")
         self.keyvalues.setdefault("component", "aligner_index")
 
-    @property
-    def build(self) -> str:
-        return self.keyvalues.get("build", "")
-
-    @build.setter
-    def build(self, value: str) -> None:
-        self.keyvalues["build"] = value
-
-    @property
-    def aligner(self) -> str:
-        return self.keyvalues.get("aligner", "")
-
-    @aligner.setter
-    def aligner(self, value: str) -> None:
-        self.keyvalues["aligner"] = value
-
-    async def update(
-        self, path: Path, *, build: str | None = None, aligner: str | None = None
-    ) -> None:
+    async def update(self, path: Path, **kwargs) -> None:
         """Upload aligner index file and set cid."""
-        if build is not None:
-            self.keyvalues["build"] = build
-        if aligner is not None:
-            self.keyvalues["aligner"] = aligner
+        for key, value in kwargs.items():
+            if value is not None:
+                setattr(self, key, value)
         self.path = path
         await default_client.upload(self)
 
