@@ -5,10 +5,10 @@ BWA tasks for reference genome indexing and alignment.
 import asyncio
 import shlex
 
-from pathlib import Path
-
 from stargazer.config import gatk_env
 from stargazer.types import Alignment, Reads, Reference
+from stargazer.types.alignment import AlignmentFile
+from stargazer.types.reference import AlignerIndex
 from stargazer.utils import _run
 
 
@@ -37,9 +37,9 @@ async def bwa_index(ref: Reference) -> Reference:
     await ref.fetch()
 
     # Get the cached reference file path
-    if not ref.fasta or not ref.fasta.local_path:
+    if not ref.fasta or not ref.fasta.path:
         raise ValueError("Reference FASTA file not available or not fetched")
-    ref_file_path = ref.fasta.local_path
+    ref_file_path = ref.fasta.path
 
     # Verify the reference file exists
     if not ref_file_path.exists():
@@ -49,13 +49,7 @@ async def bwa_index(ref: Reference) -> Reference:
     index_extensions = [".amb", ".ann", ".bwt", ".pac", ".sa"]
 
     # Check if we already have all BWA index files
-    # Compare by extension since cached files have CID-based names
-    existing_extensions = set()
-    for f in ref.aligner_index:
-        if f.name:
-            existing_extensions.add(Path(f.name).suffix.lower())
-
-    if all(ext.lower() in existing_extensions for ext in index_extensions):
+    if len(ref.aligner_index) >= len(index_extensions):
         return ref
 
     # Run bwa index in the cache directory
@@ -69,17 +63,8 @@ async def bwa_index(ref: Reference) -> Reference:
     if stderr:
         print(f"BWA stderr: {stderr}")
 
-    # Get the reference file's metadata to copy over
-    ref_file = ref.fasta
-    if not ref_file:
-        raise ValueError("Reference has no FASTA file")
-
-    # Build metadata for index files
-    keyvalues = {"type": "reference", "tool": "bwa_index"}
-    if ref_file.keyvalues:
-        # Copy over build info if present
-        if "build" in ref_file.keyvalues:
-            keyvalues["build"] = ref_file.keyvalues["build"]
+    # Get build from fasta metadata
+    build = ref.fasta.build
 
     # Collect all index file paths
     # BWA creates index files with the input filename as base
@@ -98,13 +83,11 @@ async def bwa_index(ref: Reference) -> Reference:
 
         index_file_paths.append(cached_index_path)
 
-    # Upload all index files to Pinata and add to reference
+    # Upload all index files and add to reference
     for file_path in index_file_paths:
-        ext = file_path.suffix.lower()
-        if ext in [".amb", ".ann", ".bwt", ".pac", ".sa"]:
-            aligner = keyvalues.get("tool", "bwa").lower()
-            build = keyvalues.get("build")
-            await ref.update_aligner_index(file_path, aligner=aligner, build=build)
+        idx = AlignerIndex()
+        await idx.update(file_path, aligner="bwa", build=build)
+        ref.aligner_index.append(idx)
 
     return ref
 
@@ -148,17 +131,17 @@ async def bwa_mem(
     await ref.fetch()
 
     # Get paths to input files
-    if not ref.fasta or not ref.fasta.local_path:
+    if not ref.fasta or not ref.fasta.path:
         raise ValueError("Reference FASTA file not available or not fetched")
-    ref_path = ref.fasta.local_path
+    ref_path = ref.fasta.path
 
-    if not reads.r1 or not reads.r1.local_path:
+    if not reads.r1 or not reads.r1.path:
         raise ValueError("Reads R1 file not available or not fetched")
-    r1_path = reads.r1.local_path
+    r1_path = reads.r1.path
 
     r2_path = None
-    if reads.r2 and reads.r2.local_path:
-        r2_path = reads.r2.local_path
+    if reads.r2 and reads.r2.path:
+        r2_path = reads.r2.path
 
     # Build read group string
     # Required fields: ID, SM
@@ -232,18 +215,14 @@ async def bwa_mem(
     if not output_bam.exists():
         raise FileNotFoundError(f"BWA-MEM did not create output BAM at {output_bam}")
 
-    # Create Alignment object
-    alignment = Alignment(
-        sample_id=reads.sample_id,
-    )
-
-    # Upload BAM file to Pinata
-    await alignment.update_alignment(
+    # Upload BAM file and build Alignment
+    bam = AlignmentFile()
+    await bam.update(
         output_bam,
+        sample_id=reads.sample_id,
         format="bam",
-        is_sorted=False,
         duplicates_marked=False,
         bqsr_applied=False,
     )
 
-    return alignment
+    return Alignment(sample_id=reads.sample_id, alignment=bam)

@@ -3,6 +3,7 @@ Samtools tasks for reference genome indexing.
 """
 
 from stargazer.types import Reference
+from stargazer.types.reference import ReferenceIndex
 from stargazer.config import gatk_env
 from stargazer.utils import _run
 
@@ -22,9 +23,9 @@ async def samtools_faidx(ref: Reference) -> Reference:
     await ref.fetch()
 
     # Get the cached reference file path
-    if not ref.fasta or not ref.fasta.local_path:
+    if not ref.fasta or not ref.fasta.path:
         raise ValueError("Reference FASTA file not available or not fetched")
-    ref_file_path = ref.fasta.local_path
+    ref_file_path = ref.fasta.path
 
     # Verify the reference file exists
     if not ref_file_path.exists():
@@ -44,7 +45,9 @@ async def samtools_faidx(ref: Reference) -> Reference:
     if not fai_path.exists():
         raise FileNotFoundError(f"FASTA index file {fai_path.name} was not created")
 
-    # Upload .fai file to Pinata
-    await ref.update_faidx(fai_path, build=ref.build, tool="samtools_faidx")
+    # Upload .fai file and attach to reference
+    faidx = ReferenceIndex()
+    await faidx.update(fai_path, build=ref.build, tool="samtools_faidx")
+    ref.faidx = faidx
 
     return ref

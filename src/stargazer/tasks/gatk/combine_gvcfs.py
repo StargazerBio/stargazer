@@ -12,6 +12,7 @@ from pathlib import Path
 
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Variants
+from stargazer.types.variants import VariantsFile
 from stargazer.utils import _run
 
 
@@ -69,7 +70,7 @@ async def combine_gvcfs(
 
     # Validate all inputs are GVCFs
     for i, gvcf in enumerate(gvcfs):
-        if not gvcf.is_gvcf:
+        if not gvcf.vcf or gvcf.vcf.variant_type != "gvcf":
             raise ValueError(
                 f"combine_gvcfs requires GVCF files, but gvcfs[{i}] is VCF. "
                 f"sample_id={gvcf.sample_id}"
@@ -82,15 +83,15 @@ async def combine_gvcfs(
 
     for gvcf in gvcfs:
         await gvcf.fetch()
-        if not gvcf.vcf or not gvcf.vcf.local_path:
+        if not gvcf.vcf or not gvcf.vcf.path:
             raise ValueError(f"GVCF file not available for sample_id={gvcf.sample_id}")
-        gvcf_paths.append(gvcf.vcf.local_path)
+        gvcf_paths.append(gvcf.vcf.path)
         sample_ids.append(gvcf.sample_id)
 
     # Get reference path
-    if not ref.fasta or not ref.fasta.local_path:
+    if not ref.fasta or not ref.fasta.path:
         raise ValueError("Reference FASTA file not available or not fetched")
-    ref_path = ref.fasta.local_path
+    ref_path = ref.fasta.path
 
     # Create output GVCF path
     output_dir = ref_path.parent
@@ -122,18 +123,12 @@ async def combine_gvcfs(
             f"stderr: {stderr}"
         )
 
-    # Create Variants object for combined GVCF
-    # Use cohort_id as sample_id for multi-sample GVCFs
-    combined = Variants(
-        sample_id=cohort_id,
-    )
-
-    # Build metadata for combined GVCF
-    build = (
-        ref.fasta.keyvalues.get("build") if ref.fasta and ref.fasta.keyvalues else None
-    )
-    await combined.update_vcf(
+    # Upload combined GVCF and build Variants
+    build = ref.fasta.build if ref.fasta else None
+    vcf = VariantsFile()
+    await vcf.update(
         output_gvcf,
+        sample_id=cohort_id,
         caller="combine_gvcfs",
         variant_type="gvcf",
         build=build,
@@ -141,4 +136,4 @@ async def combine_gvcfs(
         source_samples=sample_ids,
     )
 
-    return combined
+    return Variants(sample_id=cohort_id, vcf=vcf)

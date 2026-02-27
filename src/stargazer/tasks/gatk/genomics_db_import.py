@@ -62,8 +62,10 @@ async def genomics_db_import(
 
     # Check all inputs are GVCFs
     for gvcf in gvcfs:
-        if not gvcf.is_gvcf:
-            raise ValueError(f"All inputs must be GVCFs, got VCF: {gvcf.vcf_name}")
+        if not gvcf.vcf or gvcf.vcf.variant_type != "gvcf":
+            raise ValueError(
+                f"All inputs must be GVCFs, got VCF: sample_id={gvcf.sample_id}"
+            )
 
     # Workspace must not exist
     if workspace_path.exists():
@@ -82,8 +84,11 @@ async def genomics_db_import(
 
     with open(sample_map_path, "w") as f:
         for gvcf in gvcfs:
-            gvcf_path = gvcf.get_vcf_path()
-            f.write(f"{gvcf.sample_id}\t{gvcf_path}\n")
+            if not gvcf.vcf or not gvcf.vcf.path:
+                raise ValueError(
+                    f"GVCF file not available for sample_id={gvcf.sample_id}"
+                )
+            f.write(f"{gvcf.sample_id}\t{gvcf.vcf.path}\n")
 
     # Build command
     cmd = [

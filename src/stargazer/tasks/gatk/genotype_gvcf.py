@@ -7,6 +7,7 @@ This is a key step in the GATK Best Practices germline short variant discovery w
 
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Variants
+from stargazer.types.variants import VariantsFile
 from stargazer.utils import _run
 
 
@@ -51,7 +52,7 @@ async def genotype_gvcf(
         https://gatk.broadinstitute.org/hc/en-us/articles/360035535932-Germline-short-variant-discovery-SNPs-Indels
     """
     # Validate that this is a GVCF
-    if not gvcf.is_gvcf:
+    if not gvcf.vcf or gvcf.vcf.variant_type != "gvcf":
         raise ValueError(
             f"genotype_gvcf requires a GVCF file, but got VCF. sample_id={gvcf.sample_id}"
         )
@@ -61,30 +62,16 @@ async def genotype_gvcf(
     await ref.fetch()
 
     # Get paths to input files
-    if not ref.fasta or not ref.fasta.local_path:
+    if not ref.fasta or not ref.fasta.path:
         raise ValueError("Reference FASTA file not available or not fetched")
-    ref_path = ref.fasta.local_path
-    if not gvcf.vcf or not gvcf.vcf.local_path:
+    ref_path = ref.fasta.path
+    if not gvcf.vcf or not gvcf.vcf.path:
         raise ValueError("GVCF file not available or not fetched")
-    gvcf_path = gvcf.vcf.local_path
+    gvcf_path = gvcf.vcf.path
 
     # Create output VCF path
     output_dir = ref_path.parent
-    # Replace .g.vcf or .gvcf extension with .vcf
-    vcf_basename = gvcf.vcf.name or f"{gvcf.sample_id}.g.vcf"
-    if vcf_basename.endswith(".g.vcf.gz"):
-        vcf_basename = vcf_basename[:-9] + ".vcf"
-    elif vcf_basename.endswith(".g.vcf"):
-        vcf_basename = vcf_basename[:-6] + ".vcf"
-    elif vcf_basename.endswith(".gvcf.gz"):
-        vcf_basename = vcf_basename[:-8] + ".vcf"
-    elif vcf_basename.endswith(".gvcf"):
-        vcf_basename = vcf_basename[:-5] + ".vcf"
-    else:
-        # Fallback: append _genotyped.vcf
-        vcf_basename = vcf_basename.rsplit(".", 1)[0] + "_genotyped.vcf"
-
-    output_vcf = output_dir / vcf_basename
+    output_vcf = output_dir / f"{gvcf.sample_id}_genotyped.vcf"
 
     # Build GATK GenotypeGVCFs command
     cmd = [
@@ -107,22 +94,18 @@ async def genotype_gvcf(
             f"GenotypeGVCFs did not create output VCF at {output_vcf}. stderr: {stderr}"
         )
 
-    # Create Variants object for output
-    variants = Variants(
-        sample_id=gvcf.sample_id,
-    )
-
-    # Build metadata for VCF file
-    build = (
-        ref.fasta.keyvalues.get("build") if ref.fasta and ref.fasta.keyvalues else None
-    )
-    await variants.update_vcf(
+    # Upload output VCF and build Variants
+    build = ref.fasta.build if ref.fasta else None
+    source_samples = gvcf.vcf.source_samples or [gvcf.sample_id]
+    vcf_comp = VariantsFile()
+    await vcf_comp.update(
         output_vcf,
+        sample_id=gvcf.sample_id,
         caller="genotype_gvcf",
         variant_type="vcf",
         build=build,
-        sample_count=len(gvcf.source_samples),
-        source_samples=gvcf.source_samples,
+        sample_count=len(source_samples),
+        source_samples=source_samples,
     )
 
-    return variants
+    return Variants(sample_id=gvcf.sample_id, vcf=vcf_comp)

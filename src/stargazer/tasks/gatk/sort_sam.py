@@ -6,6 +6,7 @@ Sorts BAM files using GATK SortSam.
 
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
+from stargazer.types.alignment import AlignmentFile, AlignmentIndex
 from stargazer.utils import _run
 
 
@@ -52,12 +53,12 @@ async def sort_sam(
     await ref.fetch()
 
     # Get paths
-    if not ref.fasta or not ref.fasta.local_path:
+    if not ref.fasta or not ref.fasta.path:
         raise ValueError("Reference FASTA file not available or not fetched")
-    ref_path = ref.fasta.local_path
-    if not alignment.alignment or not alignment.alignment.local_path:
+    ref_path = ref.fasta.path
+    if not alignment.alignment or not alignment.alignment.path:
         raise ValueError("Alignment BAM file not available or not fetched")
-    bam_path = alignment.alignment.local_path
+    bam_path = alignment.alignment.path
     output_dir = ref_path.parent
 
     # Output BAM path
@@ -86,25 +87,23 @@ async def sort_sam(
     if not output_bam.exists():
         raise FileNotFoundError(f"SortSam did not create output BAM at {output_bam}")
 
-    # Create new Alignment object for sorted BAM
-    sorted_alignment = Alignment(
-        sample_id=alignment.sample_id,
-    )
-
-    # Upload sorted BAM to Pinata
-    await sorted_alignment.update_alignment(
+    # Upload sorted BAM and build Alignment
+    bam = AlignmentFile()
+    await bam.update(
         output_bam,
+        sample_id=alignment.sample_id,
         format="bam",
-        is_sorted=(sort_order == "coordinate"),
-        duplicates_marked=alignment.has_duplicates_marked,
-        bqsr_applied=alignment.has_bqsr_applied,
+        sorted=sort_order,
+        duplicates_marked=alignment.alignment.duplicates_marked,
+        bqsr_applied=alignment.alignment.bqsr_applied,
         tool="gatk_sort_sam",
     )
 
-    # Upload index file if created
+    idx = None
     if sort_order == "coordinate":
         bam_index = output_dir / f"{output_bam.name}.bai"
         if bam_index.exists():
-            await sorted_alignment.update_index(bam_index)
+            idx = AlignmentIndex()
+            await idx.update(bam_index, sample_id=alignment.sample_id)
 
-    return sorted_alignment
+    return Alignment(sample_id=alignment.sample_id, alignment=bam, index=idx)

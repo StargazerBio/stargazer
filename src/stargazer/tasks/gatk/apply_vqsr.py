@@ -8,6 +8,7 @@ from pathlib import Path
 
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Variants
+from stargazer.types.variants import VariantsFile
 from stargazer.utils import _run
 
 
@@ -67,9 +68,9 @@ async def apply_vqsr(
         https://gatk.broadinstitute.org/hc/en-us/articles/360035531612-Variant-Quality-Score-Recalibration-VQSR
     """
     # Validate inputs
-    if vcf.is_gvcf:
+    if vcf.vcf and vcf.vcf.variant_type == "gvcf":
         raise ValueError(
-            f"ApplyVQSR requires a genotyped VCF, not a GVCF. vcf_name={vcf.vcf_name}"
+            f"ApplyVQSR requires a genotyped VCF, not a GVCF. sample_id={vcf.sample_id}"
         )
 
     if mode not in ["SNP", "INDEL", "BOTH"]:
@@ -87,13 +88,13 @@ async def apply_vqsr(
         await ref.fetch()
 
     # Get paths
-    vcf_path = vcf.get_vcf_path()
+    if not vcf.vcf or not vcf.vcf.path:
+        raise ValueError("VCF file not available or not fetched")
+    vcf_path = vcf.vcf.path
     output_dir = vcf_path.parent
 
     # Output VCF
-    output_vcf = (
-        output_dir / f"{vcf.vcf_name.rsplit('.', 1)[0]}.{mode.lower()}.filtered.vcf"
-    )
+    output_vcf = output_dir / f"{vcf.sample_id}.{mode.lower()}.filtered.vcf"
 
     # Build command
     cmd = [
@@ -115,8 +116,9 @@ async def apply_vqsr(
 
     # Add reference if provided (optional for ApplyVQSR)
     if ref:
-        ref_path = ref.get_ref_path()
-        cmd.extend(["-R", str(ref_path)])
+        if not ref.fasta or not ref.fasta.path:
+            raise ValueError("Reference FASTA file not available or not fetched")
+        cmd.extend(["-R", str(ref.fasta.path)])
 
     # Execute
     await _run(cmd, cwd=str(output_dir))
@@ -125,30 +127,17 @@ async def apply_vqsr(
     if not output_vcf.exists():
         raise FileNotFoundError(f"ApplyVQSR did not create output VCF at {output_vcf}")
 
-    # Create Variants object for filtered VCF
-    variants = Variants(
+    # Upload filtered VCF and build Variants
+    vcf_comp = VariantsFile()
+    await vcf_comp.update(
+        output_vcf,
         sample_id=vcf.sample_id,
-        vcf_name=output_vcf.name,
+        caller=vcf.vcf.caller,
+        variant_type="vcf_filtered",
+        filter_method="vqsr",
+        vqsr_mode=mode.lower(),
+        truth_sensitivity=str(truth_sensitivity_filter_level),
+        build=vcf.vcf.build,
     )
 
-    # Build metadata
-    keyvalues = {
-        "type": "variants",
-        "sample_id": vcf.sample_id,
-        "caller": vcf.caller,
-        "variant_type": "vcf_filtered",
-        "filter_method": "vqsr",
-        "vqsr_mode": mode.lower(),
-        "truth_sensitivity": str(truth_sensitivity_filter_level),
-    }
-
-    # Try to get build from input VCF
-    for f in vcf.files:
-        if f.name == vcf.vcf_name and "build" in f.keyvalues:
-            keyvalues["build"] = f.keyvalues["build"]
-            break
-
-    # Upload filtered VCF
-    await variants.add_files(file_paths=[output_vcf], keyvalues=keyvalues)
-
-    return variants
+    return Variants(sample_id=vcf.sample_id, vcf=vcf_comp)

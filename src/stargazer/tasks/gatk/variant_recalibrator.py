@@ -118,10 +118,10 @@ async def variant_recalibrator(
     """
 
     # Validate inputs
-    if vcf.is_gvcf:
+    if vcf.vcf and vcf.vcf.variant_type == "gvcf":
         raise ValueError(
             f"VariantRecalibrator requires a genotyped VCF, not a GVCF. "
-            f"Run GenotypeGVCFs first. vcf_name={vcf.vcf_name}"
+            f"Run GenotypeGVCFs first. sample_id={vcf.sample_id}"
         )
 
     if not resources:
@@ -142,8 +142,12 @@ async def variant_recalibrator(
     await ref.fetch()
 
     # Get paths
-    vcf_path = vcf.get_vcf_path()
-    ref_path = ref.get_ref_path()
+    if not vcf.vcf or not vcf.vcf.path:
+        raise ValueError("VCF file not available or not fetched")
+    vcf_path = vcf.vcf.path
+    if not ref.fasta or not ref.fasta.path:
+        raise ValueError("Reference FASTA file not available or not fetched")
+    ref_path = ref.fasta.path
     output_dir = vcf_path.parent
 
     # Fetch resource files
@@ -157,11 +161,9 @@ async def variant_recalibrator(
                 f"Please ensure VQSR resources are available."
             )
 
-    # Output files
-    recal_file = output_dir / f"{vcf.vcf_name.rsplit('.', 1)[0]}.{mode.lower()}.recal"
-    tranches_file = (
-        output_dir / f"{vcf.vcf_name.rsplit('.', 1)[0]}.{mode.lower()}.tranches"
-    )
+    # Output files (named by sample_id)
+    recal_file = output_dir / f"{vcf.sample_id}.{mode.lower()}.recal"
+    tranches_file = output_dir / f"{vcf.sample_id}.{mode.lower()}.tranches"
 
     # Build command
     cmd = [

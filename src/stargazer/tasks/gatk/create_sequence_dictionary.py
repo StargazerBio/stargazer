@@ -3,6 +3,7 @@ GATK CreateSequenceDictionary task for reference genome.
 """
 
 from stargazer.types import Reference
+from stargazer.types.reference import SequenceDict
 from stargazer.config import gatk_env
 from stargazer.utils import _run
 
@@ -22,9 +23,9 @@ async def create_sequence_dictionary(ref: Reference) -> Reference:
     await ref.fetch()
 
     # Get the cached reference file path
-    if not ref.fasta or not ref.fasta.local_path:
+    if not ref.fasta or not ref.fasta.path:
         raise ValueError("Reference FASTA file not available or not fetched")
-    ref_file_path = ref.fasta.local_path
+    ref_file_path = ref.fasta.path
 
     # Verify the reference file exists
     if not ref_file_path.exists():
@@ -51,9 +52,11 @@ async def create_sequence_dictionary(ref: Reference) -> Reference:
             f"Sequence dictionary file {dict_path.name} was not created"
         )
 
-    # Upload .dict file to Pinata
-    await ref.update_sequence_dictionary(
+    # Upload .dict file and attach to reference
+    seq_dict = SequenceDict()
+    await seq_dict.update(
         dict_path, build=ref.build, tool="gatk_CreateSequenceDictionary"
     )
+    ref.sequence_dictionary = seq_dict
 
     return ref

@@ -6,6 +6,8 @@ Marks duplicate reads in BAM files using GATK MarkDuplicates.
 
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
+from stargazer.types.alignment import AlignmentFile, AlignmentIndex
+from stargazer.utils.component import ComponentFile
 from stargazer.utils import _run
 from stargazer.utils.storage import default_client
 
@@ -42,12 +44,12 @@ async def mark_duplicates(
     await ref.fetch()
 
     # Get paths
-    if not ref.fasta or not ref.fasta.local_path:
+    if not ref.fasta or not ref.fasta.path:
         raise ValueError("Reference FASTA file not available or not fetched")
-    ref_path = ref.fasta.local_path
-    if not alignment.alignment or not alignment.alignment.local_path:
+    ref_path = ref.fasta.path
+    if not alignment.alignment or not alignment.alignment.path:
         raise ValueError("Alignment BAM file not available or not fetched")
-    bam_path = alignment.alignment.local_path
+    bam_path = alignment.alignment.path
     output_dir = ref_path.parent
 
     # Output BAM and metrics paths
@@ -77,33 +79,34 @@ async def mark_duplicates(
             f"MarkDuplicates did not create output BAM at {output_bam}"
         )
 
-    # Create new Alignment object for marked BAM
-    marked_alignment = Alignment(
-        sample_id=alignment.sample_id,
-    )
-
-    # Upload marked BAM to Pinata
-    await marked_alignment.update_alignment(
+    # Upload marked BAM and build Alignment
+    bam = AlignmentFile()
+    await bam.update(
         output_bam,
+        sample_id=alignment.sample_id,
         format="bam",
-        is_sorted=True,
+        sorted="coordinate",
         duplicates_marked=True,
-        bqsr_applied=alignment.has_bqsr_applied,
+        bqsr_applied=alignment.alignment.bqsr_applied,
         tool="gatk_mark_duplicates",
     )
 
-    # Upload index file
+    idx = None
     bam_index = output_dir / f"{output_bam.name}.bai"
     if bam_index.exists():
-        await marked_alignment.update_index(bam_index)
+        idx = AlignmentIndex()
+        await idx.update(bam_index, sample_id=alignment.sample_id)
 
     # Optionally upload metrics file
     if metrics_file.exists():
-        metrics_keyvalues = {
-            "type": "duplicate_metrics",
-            "sample_id": alignment.sample_id,
-            "tool": "gatk_mark_duplicates",
-        }
-        await default_client.upload_file(metrics_file, keyvalues=metrics_keyvalues)
+        metrics_comp = ComponentFile(
+            path=metrics_file,
+            keyvalues={
+                "type": "duplicate_metrics",
+                "sample_id": alignment.sample_id,
+                "tool": "gatk_mark_duplicates",
+            },
+        )
+        await default_client.upload(metrics_comp)
 
-    return marked_alignment
+    return Alignment(sample_id=alignment.sample_id, alignment=bam, index=idx)

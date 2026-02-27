@@ -6,6 +6,7 @@ Merges aligned BAM with unmapped BAM using GATK MergeBamAlignment.
 
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
+from stargazer.types.alignment import AlignmentFile, AlignmentIndex
 from stargazer.utils import _run
 
 
@@ -48,15 +49,15 @@ async def merge_bam_alignment(
     await ref.fetch()
 
     # Get paths
-    if not ref.fasta or not ref.fasta.local_path:
+    if not ref.fasta or not ref.fasta.path:
         raise ValueError("Reference FASTA file not available or not fetched")
-    ref_path = ref.fasta.local_path
-    if not aligned_bam.alignment or not aligned_bam.alignment.local_path:
+    ref_path = ref.fasta.path
+    if not aligned_bam.alignment or not aligned_bam.alignment.path:
         raise ValueError("Aligned BAM file not available or not fetched")
-    aligned_path = aligned_bam.alignment.local_path
-    if not unmapped_bam.alignment or not unmapped_bam.alignment.local_path:
+    aligned_path = aligned_bam.alignment.path
+    if not unmapped_bam.alignment or not unmapped_bam.alignment.path:
         raise ValueError("Unmapped BAM file not available or not fetched")
-    unmapped_path = unmapped_bam.alignment.local_path
+    unmapped_path = unmapped_bam.alignment.path
     output_dir = ref_path.parent
 
     # Output BAM path
@@ -99,24 +100,22 @@ async def merge_bam_alignment(
             f"MergeBamAlignment did not create output BAM at {output_bam}"
         )
 
-    # Create new Alignment object for merged BAM
-    merged_alignment = Alignment(
-        sample_id=aligned_bam.sample_id,
-    )
-
-    # Upload merged BAM to Pinata
-    await merged_alignment.update_alignment(
+    # Upload merged BAM and build Alignment
+    bam = AlignmentFile()
+    await bam.update(
         output_bam,
+        sample_id=aligned_bam.sample_id,
         format="bam",
-        is_sorted=True,
-        duplicates_marked=aligned_bam.has_duplicates_marked,
-        bqsr_applied=aligned_bam.has_bqsr_applied,
+        sorted="coordinate",
+        duplicates_marked=aligned_bam.alignment.duplicates_marked,
+        bqsr_applied=aligned_bam.alignment.bqsr_applied,
         tool="gatk_merge_bam_alignment",
     )
 
-    # Upload index file
+    idx = None
     bam_index = output_dir / f"{output_bam.name}.bai"
     if bam_index.exists():
-        await merged_alignment.update_index(bam_index)
+        idx = AlignmentIndex()
+        await idx.update(bam_index, sample_id=aligned_bam.sample_id)
 
-    return merged_alignment
+    return Alignment(sample_id=aligned_bam.sample_id, alignment=bam, index=idx)
