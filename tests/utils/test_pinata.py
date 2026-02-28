@@ -7,8 +7,6 @@ To populate expected CIDs for test files, run:
     python cli/upload_to_pinata.py tests/fixtures/FILE -m type=reference -m env=test --update-config
 """
 
-import os
-
 import pytest
 from config import CIDS
 from conftest import FIXTURES_DIR
@@ -21,9 +19,6 @@ from stargazer.utils.pinata import PinataClient
 @pytest.mark.asyncio
 async def test_upload_and_delete_file():
     """Test uploading a file to Pinata and then deleting it."""
-    if not os.environ.get("PINATA_JWT"):
-        pytest.skip("PINATA_JWT environment variable not set")
-
     client = PinataClient()
 
     # Use the smallest reference file for quick testing
@@ -59,9 +54,6 @@ async def test_upload_and_delete_file():
 @pytest.mark.asyncio
 async def test_query():
     """Upload all reference files, query by CID, and verify they match expected CIDs."""
-    if not os.environ.get("PINATA_JWT"):
-        pytest.skip("PINATA_JWT environment variable not set")
-
     client = PinataClient()
 
     # Files to upload (TP53 reference files)
@@ -101,9 +93,6 @@ async def test_query():
 @pytest.mark.asyncio
 async def test_download_file(tmp_path):
     """Test downloading a file from Pinata gateway."""
-    if not os.environ.get("PINATA_JWT"):
-        pytest.skip("PINATA_JWT environment variable not set")
-
     client = PinataClient()
 
     # Use GRCh38_TP53.fa.fai - a small reference file known to be on Pinata

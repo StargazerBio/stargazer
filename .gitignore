@@ -175,3 +175,6 @@ Thumbs.db
 .claude/
 *.local.*
 wt/
+
+# Test secrets (JWT tokens, API keys)
+tests/.secrets/

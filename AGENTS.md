@@ -142,7 +142,7 @@ The project follows this structure:
 
 - **Paths:** Use `pathlib.Path` for all filesystem operations (e.g., `joinpath`). Use `resolve()` for absolute paths. Only convert to `str` immediately before a subprocess call.
 - **Formatting:** Use `ruff` for formatting and correctness checking
-- **Imports:** Use the `stargazer` package name, not relative imports across packages
+- **Imports:** Use the `stargazer` package name, not relative imports across packages. Module level imports should be at the top of the file!!
 - **Documentation:** Include docstrings explaining purpose and behavior
 - **Resource Awareness:** Specify appropriate resource requests for bioinformatics workloads
 - **Learn from V1:** Use `stargazer_flyte_v1/` for workflow logic, but adapt to v2 API

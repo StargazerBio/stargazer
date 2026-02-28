@@ -83,11 +83,6 @@ async def test_base_recalibrator_creates_report():
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
-    from stargazer.utils.local_storage import LocalStorageClient
-
-    if not isinstance(default_client, LocalStorageClient):
-        pytest.skip("test requires LocalStorageClient (unset PINATA_JWT)")
-
     sample_id = "NA12829_bqsr"
     local_dir = default_client.local_dir
     paths = setup_fixture_files(local_dir)
