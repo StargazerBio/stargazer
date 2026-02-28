@@ -2,23 +2,22 @@
 """
 Build a TinyDB JSON file from the fixtures directory.
 
-This creates a stargazer_local.json that maps each fixture file to its
-metadata keyvalues, enabling tests to use query() and hydrate() in local mode
-instead of manually constructing ComponentFile objects.
+Uses LocalStorageClient.upload() to compute proper local_{md5} CIDs so the
+fixtures DB stays in sync with live storage behaviour.
 
 Run this script whenever fixtures are added or changed:
-    python tests/fixtures/build_local_db.py
+    uv run python tests/fixtures/build_local_db.py
 """
 
-from datetime import datetime, timezone
+import asyncio
 from pathlib import Path
 
-from tinydb import TinyDB
+from stargazer.types.component import ComponentFile
+from stargazer.utils.local_storage import LocalStorageClient
 
 FIXTURES_DIR = Path(__file__).parent
 
 # Fixture file -> keyvalues mapping
-# Each entry maps a filename to the keyvalues dict that would be set on upload.
 FIXTURE_METADATA: dict[str, dict[str, str]] = {
     # Reference: GRCh38 TP53 region
     "GRCh38_TP53.fa": {
@@ -40,31 +39,31 @@ FIXTURE_METADATA: dict[str, dict[str, str]] = {
     "GRCh38_TP53.fa.amb": {
         "type": "reference",
         "component": "aligner_index",
-        "aligner": "bwa_index",
+        "aligner": "bwa",
         "build": "GRCh38",
     },
     "GRCh38_TP53.fa.ann": {
         "type": "reference",
         "component": "aligner_index",
-        "aligner": "bwa_index",
+        "aligner": "bwa",
         "build": "GRCh38",
     },
     "GRCh38_TP53.fa.bwt": {
         "type": "reference",
         "component": "aligner_index",
-        "aligner": "bwa_index",
+        "aligner": "bwa",
         "build": "GRCh38",
     },
     "GRCh38_TP53.fa.pac": {
         "type": "reference",
         "component": "aligner_index",
-        "aligner": "bwa_index",
+        "aligner": "bwa",
         "build": "GRCh38",
     },
     "GRCh38_TP53.fa.sa": {
         "type": "reference",
         "component": "aligner_index",
-        "aligner": "bwa_index",
+        "aligner": "bwa",
         "build": "GRCh38",
     },
     # Reads: NA12829
@@ -189,6 +188,7 @@ FIXTURE_METADATA: dict[str, dict[str, str]] = {
         "component": "vcf",
         "sample_id": "NA12829",
         "caller": "haplotypecaller",
+        "variant_type": "gvcf",
     },
     "NA12829_TP53.g.vcf.idx": {
         "type": "variants",
@@ -201,49 +201,42 @@ FIXTURE_METADATA: dict[str, dict[str, str]] = {
         "component": "vcf",
         "sample_id": "NA12891",
         "caller": "haplotypecaller",
+        "variant_type": "gvcf",
     },
     "NA12892_TP53.g.vcf": {
         "type": "variants",
         "component": "vcf",
         "sample_id": "NA12892",
         "caller": "haplotypecaller",
+        "variant_type": "gvcf",
     },
 }
 
 
-def build_db():
-    """Build the TinyDB JSON file from fixture files."""
+async def build_db() -> None:
+    """Build the TinyDB JSON file using native LocalStorageClient.upload()."""
     db_path = FIXTURES_DIR / "stargazer_local.json"
 
-    # Remove existing DB to start fresh
     if db_path.exists():
         db_path.unlink()
 
-    db = TinyDB(db_path)
-    now = datetime.now(timezone.utc).isoformat()
+    client = LocalStorageClient(local_dir=FIXTURES_DIR)
 
+    added = 0
     for filename, keyvalues in FIXTURE_METADATA.items():
         filepath = FIXTURES_DIR / filename
         if not filepath.exists():
             print(f"  SKIP (missing): {filename}")
             continue
 
-        record = {
-            "id": f"local_{filename}",
-            "cid": f"local_{filename}",
-            "name": filename,
-            "size": filepath.stat().st_size,
-            "keyvalues": keyvalues,
-            "created_at": now,
-            "is_public": False,
-            "rel_path": filename,
-        }
-        db.insert(record)
-        print(f"  added: {filename}")
+        comp = ComponentFile(path=filepath, keyvalues=keyvalues)
+        await client.upload(comp)
+        print(f"  added: {filename} → {comp.cid}")
+        added += 1
 
-    db.close()
-    print(f"\nWrote {db_path} with {len(FIXTURE_METADATA)} records")
+    client.db.close()
+    print(f"\nWrote {db_path} with {added} records")
 
 
 if __name__ == "__main__":
-    build_db()
+    asyncio.run(build_db())

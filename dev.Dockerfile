@@ -25,6 +25,9 @@ RUN wget https://github.com/broadinstitute/gatk/releases/download/${GATK_VERSION
 
 ENV PATH="/opt/gatk:${PATH}"
 
+# Convenience
+RUN curl -fsSL https://starship.rs/install.sh | sh -s -- --yes
+
 ARG USER=coder
 RUN useradd --groups sudo --no-create-home --shell /bin/bash ${USER} \
     && echo "${USER} ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/${USER} \

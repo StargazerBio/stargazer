@@ -7,10 +7,10 @@ import shutil
 import pytest
 from conftest import FIXTURES_DIR
 
+import stargazer.utils.storage as _storage_mod
 from stargazer.tasks.general.samtools import samtools_faidx
 from stargazer.types import Reference
 from stargazer.types.reference import ReferenceFile, ReferenceIndex
-from stargazer.utils.storage import default_client
 
 
 @pytest.mark.asyncio
@@ -24,10 +24,10 @@ async def test_samtools_faidx():
     ref_fixture = FIXTURES_DIR / "GRCh38_TP53.fa"
     assert ref_fixture.exists(), f"Test fixture not found: {ref_fixture}"
 
-    # Pre-populate cache using default_client
+    # Pre-populate cache using _storage_mod.default_client
     test_cid = "QmTestTP53Fasta"
-    cached_fasta = default_client.local_dir / test_cid
-    default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_fasta = _storage_mod.default_client.local_dir / test_cid
+    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(ref_fixture, cached_fasta)
 
     # Create a Reference with the cached file
@@ -69,13 +69,6 @@ async def test_samtools_faidx():
     assert fai.path is not None, "Should have path set"
     assert fai.path.exists(), "Index file should exist at path"
 
-    # Cleanup - use actual cached filenames (CID-based)
-    if cached_fasta.exists():
-        cached_fasta.unlink()
-    fai_path = cached_fasta.parent / f"{test_cid}.fai"
-    if fai_path.exists():
-        fai_path.unlink()
-
 
 @pytest.mark.asyncio
 async def test_samtools_faidx_idempotent():
@@ -87,13 +80,13 @@ async def test_samtools_faidx_idempotent():
     # Setup: Copy test reference to cache directory
     fixtures_ref_dir = FIXTURES_DIR
 
-    # Pre-populate cache using default_client
-    default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    # Pre-populate cache using _storage_mod.default_client
+    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
 
     test_cid_fasta = "QmTestTP53FastaIdempotent"
     test_cid_fai = "QmTestTP53FAI"
-    cached_fasta = default_client.local_dir / test_cid_fasta
-    cached_fai = default_client.local_dir / test_cid_fai
+    cached_fasta = _storage_mod.default_client.local_dir / test_cid_fasta
+    cached_fai = _storage_mod.default_client.local_dir / test_cid_fai
     shutil.copy(fixtures_ref_dir / "GRCh38_TP53.fa", cached_fasta)
     shutil.copy(fixtures_ref_dir / "GRCh38_TP53.fa.fai", cached_fai)
 
@@ -130,12 +123,6 @@ async def test_samtools_faidx_idempotent():
 
     # Should still have faidx component
     assert result.faidx is not None, "Should have faidx file"
-
-    # Cleanup
-    if cached_fasta.exists():
-        cached_fasta.unlink()
-    if cached_fai.exists():
-        cached_fai.unlink()
 
 
 @pytest.mark.asyncio

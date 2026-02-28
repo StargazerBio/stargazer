@@ -12,7 +12,7 @@ from stargazer.tasks.gatk.genotype_gvcf import genotype_gvcf
 from stargazer.types import Reference, Variants
 from stargazer.types.reference import ReferenceFile
 from stargazer.types.variants import VariantsFile
-from stargazer.utils.storage import default_client
+import stargazer.utils.storage as _storage_mod
 
 
 def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
@@ -47,7 +47,7 @@ async def test_genotype_gvcf_converts_to_vcf():
         pytest.skip("gatk not available in environment")
 
     sample_id = "NA12829_genotype"
-    local_dir = default_client.local_dir
+    local_dir = _storage_mod.default_client.local_dir
     paths = setup_fixture_files(local_dir)
 
     gvcf_file = VariantsFile(

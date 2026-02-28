@@ -4,6 +4,7 @@ Local filesystem storage client for Stargazer.
 Stores files locally with TinyDB metadata indexing. No network access required.
 """
 
+import hashlib
 import os
 import shutil
 from datetime import datetime, timezone
@@ -68,12 +69,15 @@ class LocalStorageClient:
         if path is None:
             raise ValueError("component.path must be set before uploading")
 
-        cid = f"local_{path.name}_{path.stat().st_size}"
+        # Generate MD5 hash of file content
+        md5_hash = hashlib.md5(path.read_bytes()).hexdigest()
+        cid = f"local_{md5_hash}"
 
-        # Copy to local dir
-        local_path = self.local_dir / cid
+        # Copy to local dir using original filename
+        local_path = self.local_dir / path.name
         local_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, local_path)
+        if path.resolve() != local_path.resolve():
+            shutil.copy2(path, local_path)
 
         # Store metadata in TinyDB
         now = datetime.now(timezone.utc)
@@ -82,7 +86,7 @@ class LocalStorageClient:
                 "cid": cid,
                 "keyvalues": component.keyvalues,
                 "created_at": now.isoformat(),
-                "rel_path": cid,
+                "rel_path": path.name,
             }
         )
 
@@ -104,7 +108,6 @@ class LocalStorageClient:
             return
 
         cid = component.cid
-
         # Check local dir first (cache key)
         cache_key = cid.replace("/", "_")
         cache_path = self.local_dir / cache_key

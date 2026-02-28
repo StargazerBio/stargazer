@@ -12,7 +12,7 @@ from stargazer.tasks.gatk.merge_bam_alignment import merge_bam_alignment
 from stargazer.types import Reference, Alignment
 from stargazer.types.alignment import AlignmentFile
 from stargazer.types.reference import ReferenceFile
-from stargazer.utils.storage import default_client
+import stargazer.utils.storage as _storage_mod
 
 
 def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
@@ -48,7 +48,7 @@ async def test_merge_bam_alignment_merges_bams():
         pytest.skip("gatk not available in environment")
 
     sample_id = "NA12829_merge"
-    local_dir = default_client.local_dir
+    local_dir = _storage_mod.default_client.local_dir
     paths = setup_fixture_files(local_dir)
 
     # Create ComponentFile objects with path set so fetch() short-circuits

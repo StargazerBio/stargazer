@@ -12,7 +12,7 @@ from stargazer.tasks.gatk.combine_gvcfs import combine_gvcfs
 from stargazer.types import Reference, Variants
 from stargazer.types.reference import ReferenceFile
 from stargazer.types.variants import VariantsFile
-from stargazer.utils.storage import default_client
+import stargazer.utils.storage as _storage_mod
 
 # Sample GVCFs available as fixtures (created from NA12829 TP53 data)
 SAMPLE_GVCFS = {
@@ -94,7 +94,7 @@ async def test_combine_gvcfs_merges_samples():
         pytest.skip("gatk not available in environment")
 
     sample_ids = ["NA12829", "NA12891", "NA12892"]
-    local_dir = default_client.local_dir
+    local_dir = _storage_mod.default_client.local_dir
     paths = setup_fixture_files(local_dir, sample_ids)
 
     ref = make_ref(paths)
@@ -165,7 +165,7 @@ async def test_combine_gvcfs_single_sample():
         pytest.skip("gatk not available in environment")
 
     sample_id = "NA12829"
-    local_dir = default_client.local_dir
+    local_dir = _storage_mod.default_client.local_dir
     paths = setup_fixture_files(local_dir, [sample_id])
 
     ref = make_ref(paths)

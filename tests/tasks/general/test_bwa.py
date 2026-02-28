@@ -7,10 +7,10 @@ import shutil
 import pytest
 from conftest import FIXTURES_DIR
 
+import stargazer.utils.storage as _storage_mod
 from stargazer.tasks.general.bwa import bwa_index
 from stargazer.types import Reference
 from stargazer.types.reference import ReferenceFile, AlignerIndex
-from stargazer.utils.storage import default_client
 
 
 @pytest.mark.asyncio
@@ -24,10 +24,10 @@ async def test_bwa_index():
     ref_fixture = FIXTURES_DIR / "GRCh38_TP53.fa"
     assert ref_fixture.exists(), f"Test fixture not found: {ref_fixture}"
 
-    # Pre-populate cache using default_client
+    # Pre-populate cache using _storage_mod.default_client
     test_cid = "QmTestTP53Fasta"
-    cached_fasta = default_client.local_dir / test_cid
-    default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_fasta = _storage_mod.default_client.local_dir / test_cid
+    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(ref_fixture, cached_fasta)
 
     # Create a Reference with the cached file
@@ -94,15 +94,6 @@ async def test_bwa_index():
         assert index_file.path is not None, f"Index file {ext} should have path set"
         assert index_file.path.exists(), f"Index file {ext} should exist at path"
 
-    # Cleanup - use actual cached filenames (CID-based)
-    if cached_fasta.exists():
-        cached_fasta.unlink()
-    for ext in index_extensions:
-        # Index files are named with CID as base
-        index_path = cached_fasta.parent / f"{test_cid}{ext}"
-        if index_path.exists():
-            index_path.unlink()
-
 
 @pytest.mark.asyncio
 async def test_bwa_index_idempotent():
@@ -114,12 +105,12 @@ async def test_bwa_index_idempotent():
     # Setup: Copy test reference to cache directory
     fixtures_ref_dir = FIXTURES_DIR
 
-    # Pre-populate cache using default_client
-    default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    # Pre-populate cache using _storage_mod.default_client
+    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
 
     # Create test CIDs for all files
     test_cid_fasta = "QmTestTP53FastaIdempotent"
-    cached_fasta = default_client.local_dir / test_cid_fasta
+    cached_fasta = _storage_mod.default_client.local_dir / test_cid_fasta
     shutil.copy(fixtures_ref_dir / "GRCh38_TP53.fa", cached_fasta)
 
     fasta_file = ReferenceFile(
@@ -139,7 +130,7 @@ async def test_bwa_index_idempotent():
         index_fixture = fixtures_ref_dir / f"GRCh38_TP53.fa{ext}"
         if index_fixture.exists():
             test_cid_index = f"QmTestTP53{ext_names[i].upper()}"
-            cached_index = default_client.local_dir / test_cid_index
+            cached_index = _storage_mod.default_client.local_dir / test_cid_index
             shutil.copy(index_fixture, cached_index)
 
             aligner_index_files.append(
@@ -171,14 +162,6 @@ async def test_bwa_index_idempotent():
     assert len(result.aligner_index) == original_index_count, (
         "Should not duplicate index files"
     )
-
-    # Cleanup
-    if cached_fasta.exists():
-        cached_fasta.unlink()
-    for i, ext in enumerate(index_extensions):
-        cached_index = default_client.local_dir / f"QmTestTP53{ext_names[i].upper()}"
-        if cached_index.exists():
-            cached_index.unlink()
 
 
 @pytest.mark.asyncio

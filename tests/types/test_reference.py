@@ -46,10 +46,10 @@ async def test_update_components_local_only():
         assert ref.faidx.cid.startswith("local_")
         assert ref.aligner_index[0].cid.startswith("local_")
 
-        # Files exist in cache
-        cache_fasta = _storage_mod.default_client.local_dir / ref.fasta.cid
-        cache_faidx = _storage_mod.default_client.local_dir / ref.faidx.cid
-        cache_bwt = _storage_mod.default_client.local_dir / ref.aligner_index[0].cid
+        # Files exist in cache under their original names
+        cache_fasta = _storage_mod.default_client.local_dir / test_fasta.name
+        cache_faidx = _storage_mod.default_client.local_dir / test_faidx.name
+        cache_bwt = _storage_mod.default_client.local_dir / test_bwt.name
 
         assert cache_fasta.exists()
         assert cache_faidx.exists()

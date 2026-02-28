@@ -2,8 +2,6 @@
 Tests for Alignment type.
 """
 
-import shutil
-
 import pytest
 from conftest import FIXTURES_DIR
 
@@ -13,45 +11,30 @@ import stargazer.utils.storage as _storage_mod
 
 
 @pytest.mark.asyncio
-async def test_alignment_fetch():
-    """Test fetch() downloads BAM and BAI files to cache."""
-    bam_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam"
-    bai_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam.bai"
-    assert bam_fixture.exists(), f"Test fixture not found: {bam_fixture}"
-    assert bai_fixture.exists(), f"Test fixture not found: {bai_fixture}"
-
-    # Pre-populate cache using _storage_mod.default_client
-    test_cid_bam = "QmTestBam"
-    test_cid_bai = "QmTestBai"
-    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
-    cached_bam = _storage_mod.default_client.local_dir / test_cid_bam
-    cached_bai = _storage_mod.default_client.local_dir / test_cid_bai
-    shutil.copy(bam_fixture, cached_bam)
-    shutil.copy(bai_fixture, cached_bai)
-
-    # Create component objects (no path set — will be resolved via cid)
-    bam = AlignmentFile(
-        cid=test_cid_bam,
-        keyvalues={
+async def test_alignment_fetch(fixtures_db):
+    """Test fetch() resolves BAM and BAI paths from CIDs via TinyDB."""
+    [bam_r] = await _storage_mod.default_client.query(
+        {
             "type": "alignment",
             "component": "alignment",
             "sample_id": "NA12829",
-            "format": "bam",
-            "sorted": "coordinate",
-            "duplicates_marked": "true",
-        },
+            "stage": "paired",
+        }
     )
-    idx = AlignmentIndex(
-        cid=test_cid_bai,
-        keyvalues={
+    [idx_r] = await _storage_mod.default_client.query(
+        {
             "type": "alignment",
             "component": "index",
             "sample_id": "NA12829",
-        },
+            "stage": "paired",
+        }
     )
 
-    alignment = Alignment(sample_id="NA12829", alignment=bam, index=idx)
+    # No path set — fetch() must resolve via TinyDB
+    bam = AlignmentFile(cid=bam_r.cid, keyvalues=bam_r.keyvalues)
+    idx = AlignmentIndex(cid=idx_r.cid, keyvalues=idx_r.keyvalues)
 
+    alignment = Alignment(sample_id="NA12829", alignment=bam, index=idx)
     cache_dir = await alignment.fetch()
 
     assert cache_dir == _storage_mod.default_client.local_dir
@@ -65,16 +48,12 @@ async def test_alignment_fetch():
 @pytest.mark.asyncio
 async def test_alignment_get_bam_path():
     """Test direct access to alignment component returns correct path."""
-    bam_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam"
-
-    test_cid_bam = "QmTestBamGetPath"
-    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
-    cached_bam = _storage_mod.default_client.local_dir / test_cid_bam
-    shutil.copy(bam_fixture, cached_bam)
+    bam_path = FIXTURES_DIR / "NA12829_TP53_paired.bam"
+    assert bam_path.exists()
 
     bam = AlignmentFile(
-        cid=test_cid_bam,
-        path=cached_bam,
+        cid="test",
+        path=bam_path,
         keyvalues={
             "type": "alignment",
             "component": "alignment",
@@ -84,28 +63,21 @@ async def test_alignment_get_bam_path():
 
     alignment = Alignment(sample_id="NA12829", alignment=bam)
 
-    bam_path = alignment.alignment.path
-    assert bam_path == cached_bam
-    assert bam_path.exists()
+    assert alignment.alignment.path == bam_path
+    assert alignment.alignment.path.exists()
 
 
 @pytest.mark.asyncio
 async def test_alignment_get_bai_path():
     """Test direct access to index component returns correct path when present."""
-    bam_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam"
-    bai_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam.bai"
-
-    test_cid_bam = "QmTestBamGetBai"
-    test_cid_bai = "QmTestBaiGetBai"
-    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
-    cached_bam = _storage_mod.default_client.local_dir / test_cid_bam
-    cached_bai = _storage_mod.default_client.local_dir / test_cid_bai
-    shutil.copy(bam_fixture, cached_bam)
-    shutil.copy(bai_fixture, cached_bai)
+    bam_path = FIXTURES_DIR / "NA12829_TP53_paired.bam"
+    bai_path = FIXTURES_DIR / "NA12829_TP53_paired.bam.bai"
+    assert bam_path.exists()
+    assert bai_path.exists()
 
     bam = AlignmentFile(
-        cid=test_cid_bam,
-        path=cached_bam,
+        cid="test",
+        path=bam_path,
         keyvalues={
             "type": "alignment",
             "component": "alignment",
@@ -113,31 +85,23 @@ async def test_alignment_get_bai_path():
         },
     )
     idx = AlignmentIndex(
-        cid=test_cid_bai,
-        path=cached_bai,
+        cid="test",
+        path=bai_path,
         keyvalues={"type": "alignment", "component": "index", "sample_id": "NA12829"},
     )
 
     alignment = Alignment(sample_id="NA12829", alignment=bam, index=idx)
 
-    bai_path = alignment.index.path
-    assert bai_path == cached_bai
-    assert bai_path.exists()
+    assert alignment.index.path == bai_path
+    assert alignment.index.path.exists()
 
 
 @pytest.mark.asyncio
 async def test_alignment_get_bai_path_none():
     """Test index component is None when BAI not present."""
-    bam_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam"
-
-    test_cid_bam = "QmTestBamNoBai"
-    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
-    cached_bam = _storage_mod.default_client.local_dir / test_cid_bam
-    shutil.copy(bam_fixture, cached_bam)
-
     bam = AlignmentFile(
-        cid=test_cid_bam,
-        path=cached_bam,
+        cid="test",
+        path=FIXTURES_DIR / "NA12829_TP53_paired.bam",
         keyvalues={
             "type": "alignment",
             "component": "alignment",

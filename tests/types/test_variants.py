@@ -2,8 +2,6 @@
 Tests for Variants type.
 """
 
-import shutil
-
 import pytest
 from conftest import FIXTURES_DIR
 
@@ -13,195 +11,122 @@ import stargazer.utils.storage as _storage_mod
 
 
 @pytest.mark.asyncio
-async def test_variants_fetch():
-    """Test fetch() downloads VCF and index files to cache."""
-    vcf_fixture = FIXTURES_DIR / "dummy.vcf"
-    tbi_fixture = FIXTURES_DIR / "dummy.vcf.tbi"
-
-    vcf_fixture.write_text(
-        "##fileformat=VCFv4.2\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+async def test_variants_fetch(fixtures_db):
+    """Test fetch() resolves VCF and index paths from CIDs via TinyDB."""
+    [vcf_r] = await _storage_mod.default_client.query(
+        {"type": "variants", "component": "vcf", "sample_id": "NA12829"}
     )
-    tbi_fixture.write_text("dummy_index")
+    [idx_r] = await _storage_mod.default_client.query(
+        {"type": "variants", "component": "index", "sample_id": "NA12829"}
+    )
 
-    try:
-        test_cid_vcf = "QmTestVcf"
-        test_cid_tbi = "QmTestTbi"
-        _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
-        cached_vcf = _storage_mod.default_client.local_dir / test_cid_vcf
-        cached_tbi = _storage_mod.default_client.local_dir / test_cid_tbi
-        shutil.copy(vcf_fixture, cached_vcf)
-        shutil.copy(tbi_fixture, cached_tbi)
+    # No path set — fetch() must resolve via TinyDB
+    vcf = VariantsFile(cid=vcf_r.cid, keyvalues=vcf_r.keyvalues)
+    tbi = VariantsIndex(cid=idx_r.cid, keyvalues=idx_r.keyvalues)
 
-        vcf = VariantsFile(
-            cid=test_cid_vcf,
-            keyvalues={
-                "type": "variants",
-                "component": "vcf",
-                "sample_id": "NA12829",
-                "caller": "deepvariant",
-            },
-        )
-        tbi = VariantsIndex(
-            cid=test_cid_tbi,
-            keyvalues={
-                "type": "variants",
-                "component": "index",
-                "sample_id": "NA12829",
-            },
-        )
+    variants = Variants(sample_id="NA12829", vcf=vcf, index=tbi)
+    cache_dir = await variants.fetch()
 
-        variants = Variants(sample_id="NA12829", vcf=vcf, index=tbi)
-
-        cache_dir = await variants.fetch()
-
-        assert cache_dir == _storage_mod.default_client.local_dir
-        assert cache_dir.exists()
-        assert variants.vcf.path is not None
-        assert variants.vcf.path.exists()
-        assert variants.index.path is not None
-        assert variants.index.path.exists()
-    finally:
-        if vcf_fixture.exists():
-            vcf_fixture.unlink()
-        if tbi_fixture.exists():
-            tbi_fixture.unlink()
+    assert cache_dir == _storage_mod.default_client.local_dir
+    assert cache_dir.exists()
+    assert variants.vcf.path is not None
+    assert variants.vcf.path.exists()
+    assert variants.index.path is not None
+    assert variants.index.path.exists()
 
 
 @pytest.mark.asyncio
 async def test_variants_get_vcf_path():
     """Test direct access to vcf component returns correct path."""
-    vcf_fixture = FIXTURES_DIR / "dummy2.vcf"
-    vcf_fixture.write_text("##fileformat=VCFv4.2\n")
+    vcf_path = FIXTURES_DIR / "NA12829_TP53.g.vcf"
+    assert vcf_path.exists()
 
-    try:
-        test_cid_vcf = "QmTestVcfGetPath"
-        _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
-        cached_vcf = _storage_mod.default_client.local_dir / test_cid_vcf
-        shutil.copy(vcf_fixture, cached_vcf)
+    vcf = VariantsFile(
+        cid="test",
+        path=vcf_path,
+        keyvalues={"type": "variants", "component": "vcf", "sample_id": "NA12829"},
+    )
 
-        vcf = VariantsFile(
-            cid=test_cid_vcf,
-            path=cached_vcf,
-            keyvalues={"type": "variants", "component": "vcf", "sample_id": "NA12829"},
-        )
+    variants = Variants(sample_id="NA12829", vcf=vcf)
 
-        variants = Variants(sample_id="NA12829", vcf=vcf)
-
-        vcf_path = variants.vcf.path
-        assert vcf_path == cached_vcf
-        assert vcf_path.exists()
-    finally:
-        if vcf_fixture.exists():
-            vcf_fixture.unlink()
+    assert variants.vcf.path == vcf_path
+    assert variants.vcf.path.exists()
 
 
 @pytest.mark.asyncio
 async def test_variants_get_index_path():
     """Test direct access to index component returns correct path when present."""
-    vcf_fixture = FIXTURES_DIR / "dummy3.vcf"
-    tbi_fixture = FIXTURES_DIR / "dummy3.vcf.tbi"
-    vcf_fixture.write_text("##fileformat=VCFv4.2\n")
-    tbi_fixture.write_text("dummy_index")
+    vcf_path = FIXTURES_DIR / "NA12829_TP53.g.vcf"
+    idx_path = FIXTURES_DIR / "NA12829_TP53.g.vcf.idx"
+    assert vcf_path.exists()
+    assert idx_path.exists()
 
-    try:
-        test_cid_vcf = "QmTestVcfGetIndex"
-        test_cid_tbi = "QmTestTbiGetIndex"
-        _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
-        cached_vcf = _storage_mod.default_client.local_dir / test_cid_vcf
-        cached_tbi = _storage_mod.default_client.local_dir / test_cid_tbi
-        shutil.copy(vcf_fixture, cached_vcf)
-        shutil.copy(tbi_fixture, cached_tbi)
+    vcf = VariantsFile(
+        cid="test",
+        path=vcf_path,
+        keyvalues={"type": "variants", "component": "vcf"},
+    )
+    tbi = VariantsIndex(
+        cid="test",
+        path=idx_path,
+        keyvalues={"type": "variants", "component": "index"},
+    )
 
-        vcf = VariantsFile(
-            cid=test_cid_vcf,
-            path=cached_vcf,
-            keyvalues={"type": "variants", "component": "vcf"},
-        )
-        tbi = VariantsIndex(
-            cid=test_cid_tbi,
-            path=cached_tbi,
-            keyvalues={"type": "variants", "component": "index"},
-        )
+    variants = Variants(sample_id="NA12829", vcf=vcf, index=tbi)
 
-        variants = Variants(sample_id="NA12829", vcf=vcf, index=tbi)
-
-        index_path = variants.index.path
-        assert index_path == cached_tbi
-        assert index_path.exists()
-    finally:
-        if vcf_fixture.exists():
-            vcf_fixture.unlink()
-        if tbi_fixture.exists():
-            tbi_fixture.unlink()
+    assert variants.index.path == idx_path
+    assert variants.index.path.exists()
 
 
 @pytest.mark.asyncio
 async def test_variants_get_index_path_none():
     """Test index component is None when index not present."""
-    vcf_fixture = FIXTURES_DIR / "dummy4.vcf"
-    vcf_fixture.write_text("##fileformat=VCFv4.2\n")
+    vcf = VariantsFile(
+        cid="test",
+        path=FIXTURES_DIR / "NA12829_TP53.g.vcf",
+        keyvalues={"type": "variants", "component": "vcf"},
+    )
 
-    try:
-        test_cid_vcf = "QmTestVcfNoIndex"
-        _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
-        cached_vcf = _storage_mod.default_client.local_dir / test_cid_vcf
-        shutil.copy(vcf_fixture, cached_vcf)
-
-        vcf = VariantsFile(
-            cid=test_cid_vcf,
-            path=cached_vcf,
-            keyvalues={"type": "variants", "component": "vcf"},
-        )
-
-        variants = Variants(sample_id="NA12829", vcf=vcf)
-        assert variants.index is None
-    finally:
-        if vcf_fixture.exists():
-            vcf_fixture.unlink()
+    variants = Variants(sample_id="NA12829", vcf=vcf)
+    assert variants.index is None
 
 
 @pytest.mark.asyncio
 async def test_variants_update_components():
     """Test component update() uploads files and sets metadata."""
-    vcf_fixture = FIXTURES_DIR / "dummy5.vcf"
-    tbi_fixture = FIXTURES_DIR / "dummy5.vcf.tbi"
-    vcf_fixture.write_text("##fileformat=VCFv4.2\n")
-    tbi_fixture.write_text("dummy_index")
+    vcf_fixture = FIXTURES_DIR / "NA12829_TP53.g.vcf"
+    idx_fixture = FIXTURES_DIR / "NA12829_TP53.g.vcf.idx"
+    assert vcf_fixture.exists()
+    assert idx_fixture.exists()
 
-    try:
-        vcf = VariantsFile()
-        await vcf.update(
-            vcf_fixture,
-            sample_id="NA12829",
-            caller="deepvariant",
-            variant_type="vcf",
-            build="GRCh38",
-        )
+    vcf = VariantsFile()
+    await vcf.update(
+        vcf_fixture,
+        sample_id="NA12829",
+        caller="haplotypecaller",
+        variant_type="gvcf",
+        build="GRCh38",
+    )
 
-        tbi = VariantsIndex()
-        await tbi.update(tbi_fixture, sample_id="NA12829")
+    tbi = VariantsIndex()
+    await tbi.update(idx_fixture, sample_id="NA12829")
 
-        variants = Variants(sample_id="NA12829", vcf=vcf, index=tbi)
+    variants = Variants(sample_id="NA12829", vcf=vcf, index=tbi)
 
-        assert variants.vcf is not None
-        assert variants.vcf.keyvalues.get("type") == "variants"
-        assert variants.vcf.keyvalues.get("component") == "vcf"
-        assert variants.vcf.keyvalues.get("sample_id") == "NA12829"
-        assert variants.vcf.keyvalues.get("caller") == "deepvariant"
-        assert variants.vcf.keyvalues.get("variant_type") == "vcf"
-        assert variants.vcf.keyvalues.get("build") == "GRCh38"
-        assert variants.vcf.cid != ""
+    assert variants.vcf is not None
+    assert variants.vcf.keyvalues.get("type") == "variants"
+    assert variants.vcf.keyvalues.get("component") == "vcf"
+    assert variants.vcf.keyvalues.get("sample_id") == "NA12829"
+    assert variants.vcf.keyvalues.get("caller") == "haplotypecaller"
+    assert variants.vcf.keyvalues.get("variant_type") == "gvcf"
+    assert variants.vcf.keyvalues.get("build") == "GRCh38"
+    assert variants.vcf.cid != ""
 
-        assert variants.index is not None
-        assert variants.index.keyvalues.get("type") == "variants"
-        assert variants.index.keyvalues.get("component") == "index"
-        assert variants.index.keyvalues.get("sample_id") == "NA12829"
-        assert variants.index.cid != ""
-    finally:
-        if vcf_fixture.exists():
-            vcf_fixture.unlink()
-        if tbi_fixture.exists():
-            tbi_fixture.unlink()
+    assert variants.index is not None
+    assert variants.index.keyvalues.get("type") == "variants"
+    assert variants.index.keyvalues.get("component") == "index"
+    assert variants.index.keyvalues.get("sample_id") == "NA12829"
+    assert variants.index.cid != ""
 
 
 @pytest.mark.asyncio

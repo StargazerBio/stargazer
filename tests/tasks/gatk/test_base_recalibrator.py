@@ -13,7 +13,7 @@ from stargazer.types import Reference, Alignment
 from stargazer.types.alignment import AlignmentFile
 from stargazer.types.component import ComponentFile
 from stargazer.types.reference import ReferenceFile
-from stargazer.utils.storage import default_client
+import stargazer.utils.storage as _storage_mod
 
 
 def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
@@ -64,7 +64,7 @@ def register_known_sites_in_db(local_dir: Path, paths: dict[str, Path]):
             shutil.copy2(src, dst)
 
     # Insert DB record so query() finds it by keyvalues
-    default_client.db.insert(
+    _storage_mod.default_client.db.insert(
         {
             "cid": "test_known_sites",
             "keyvalues": {
@@ -84,7 +84,7 @@ async def test_base_recalibrator_creates_report():
         pytest.skip("gatk not available in environment")
 
     sample_id = "NA12829_bqsr"
-    local_dir = default_client.local_dir
+    local_dir = _storage_mod.default_client.local_dir
     paths = setup_fixture_files(local_dir)
     register_known_sites_in_db(local_dir, paths)
 

@@ -2,8 +2,6 @@
 Tests for Reads type.
 """
 
-import shutil
-
 import pytest
 from conftest import FIXTURES_DIR
 
@@ -13,32 +11,20 @@ import stargazer.utils.storage as _storage_mod
 
 
 @pytest.mark.asyncio
-async def test_reads_fetch():
-    """Test fetch() downloads all FASTQ files to cache."""
-    r1_fixture = FIXTURES_DIR / "NA12829_TP53_R1.fq.gz"
-    r2_fixture = FIXTURES_DIR / "NA12829_TP53_R2.fq.gz"
-    assert r1_fixture.exists(), f"Test fixture not found: {r1_fixture}"
-    assert r2_fixture.exists(), f"Test fixture not found: {r2_fixture}"
-
-    test_cid_r1 = "QmTestR1"
-    test_cid_r2 = "QmTestR2"
-    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
-    cached_r1 = _storage_mod.default_client.local_dir / test_cid_r1
-    cached_r2 = _storage_mod.default_client.local_dir / test_cid_r2
-    shutil.copy(r1_fixture, cached_r1)
-    shutil.copy(r2_fixture, cached_r2)
-
-    r1 = R1File(
-        cid=test_cid_r1,
-        keyvalues={"type": "reads", "component": "r1", "sample_id": "NA12829"},
+async def test_reads_fetch(fixtures_db):
+    """Test fetch() resolves R1 and R2 paths from CIDs via TinyDB."""
+    [r1_r] = await _storage_mod.default_client.query(
+        {"type": "reads", "component": "r1", "sample_id": "NA12829"}
     )
-    r2 = R2File(
-        cid=test_cid_r2,
-        keyvalues={"type": "reads", "component": "r2", "sample_id": "NA12829"},
+    [r2_r] = await _storage_mod.default_client.query(
+        {"type": "reads", "component": "r2", "sample_id": "NA12829"}
     )
+
+    # No path set — fetch() must resolve via TinyDB
+    r1 = R1File(cid=r1_r.cid, keyvalues=r1_r.keyvalues)
+    r2 = R2File(cid=r2_r.cid, keyvalues=r2_r.keyvalues)
 
     reads = Reads(sample_id="NA12829", r1=r1, r2=r2)
-
     cache_dir = await reads.fetch()
 
     assert cache_dir == _storage_mod.default_client.local_dir
@@ -52,55 +38,45 @@ async def test_reads_fetch():
 @pytest.mark.asyncio
 async def test_reads_get_paths():
     """Test direct access to r1 and r2 components returns correct paths."""
-    r1_fixture = FIXTURES_DIR / "NA12829_TP53_R1.fq.gz"
-    r2_fixture = FIXTURES_DIR / "NA12829_TP53_R2.fq.gz"
-
-    test_cid_r1 = "QmTestR1GetPath"
-    test_cid_r2 = "QmTestR2GetPath"
-    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
-    cached_r1 = _storage_mod.default_client.local_dir / test_cid_r1
-    cached_r2 = _storage_mod.default_client.local_dir / test_cid_r2
-    shutil.copy(r1_fixture, cached_r1)
-    shutil.copy(r2_fixture, cached_r2)
+    r1_path = FIXTURES_DIR / "NA12829_TP53_R1.fq.gz"
+    r2_path = FIXTURES_DIR / "NA12829_TP53_R2.fq.gz"
+    assert r1_path.exists()
+    assert r2_path.exists()
 
     r1 = R1File(
-        cid=test_cid_r1,
-        path=cached_r1,
+        cid="test",
+        path=r1_path,
         keyvalues={"type": "reads", "component": "r1", "sample_id": "NA12829"},
     )
     r2 = R2File(
-        cid=test_cid_r2,
-        path=cached_r2,
+        cid="test",
+        path=r2_path,
         keyvalues={"type": "reads", "component": "r2", "sample_id": "NA12829"},
     )
 
     reads = Reads(sample_id="NA12829", r1=r1, r2=r2)
 
-    assert reads.r1.path == cached_r1
+    assert reads.r1.path == r1_path
     assert reads.r1.path.exists()
-    assert reads.r2.path == cached_r2
+    assert reads.r2.path == r2_path
     assert reads.r2.path.exists()
 
 
 @pytest.mark.asyncio
 async def test_reads_get_r2_path_single_end():
     """Test r2 component is None for single-end reads."""
-    r1_fixture = FIXTURES_DIR / "NA12829_TP53_R1.fq.gz"
-
-    test_cid_r1 = "QmTestR1SingleEnd"
-    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
-    cached_r1 = _storage_mod.default_client.local_dir / test_cid_r1
-    shutil.copy(r1_fixture, cached_r1)
+    r1_path = FIXTURES_DIR / "NA12829_TP53_R1.fq.gz"
+    assert r1_path.exists()
 
     r1 = R1File(
-        cid=test_cid_r1,
-        path=cached_r1,
+        cid="test",
+        path=r1_path,
         keyvalues={"type": "reads", "component": "r1", "sample_id": "NA12829"},
     )
 
     reads = Reads(sample_id="NA12829", r1=r1)
 
-    assert reads.r1.path == cached_r1
+    assert reads.r1.path == r1_path
     assert reads.r2 is None
 
 

@@ -12,7 +12,7 @@ from stargazer.tasks.gatk.mark_duplicates import mark_duplicates
 from stargazer.types import Reference, Alignment
 from stargazer.types.alignment import AlignmentFile
 from stargazer.types.reference import ReferenceFile
-from stargazer.utils.storage import default_client
+import stargazer.utils.storage as _storage_mod
 
 
 def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
@@ -47,7 +47,7 @@ async def test_mark_duplicates_marks_duplicates():
         pytest.skip("gatk not available in environment")
 
     sample_id = "NA12829_markdup"
-    local_dir = default_client.local_dir
+    local_dir = _storage_mod.default_client.local_dir
     paths = setup_fixture_files(local_dir)
 
     bam_file = AlignmentFile(

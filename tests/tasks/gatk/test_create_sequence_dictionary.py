@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURES_DIR
 
+import stargazer.utils.storage as _storage_mod
 from stargazer.tasks.gatk.create_sequence_dictionary import create_sequence_dictionary
 from stargazer.types import Reference
 from stargazer.types.reference import ReferenceFile, ReferenceIndex
-from stargazer.utils.storage import default_client
 
 
 def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
@@ -43,7 +43,7 @@ async def test_create_sequence_dictionary_creates_dict():
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
-    local_dir = default_client.local_dir
+    local_dir = _storage_mod.default_client.local_dir
     paths = setup_fixture_files(local_dir)
 
     ref_fasta = ReferenceFile(
