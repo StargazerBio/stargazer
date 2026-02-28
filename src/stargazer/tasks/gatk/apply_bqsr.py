@@ -7,7 +7,7 @@ Applies BQSR recalibration to BAM files using GATK ApplyBQSR.
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
 from stargazer.types.alignment import AlignmentFile
-from stargazer.utils.component import ComponentFile
+from stargazer.types.component import ComponentFile
 from stargazer.utils import _run
 from stargazer.utils.storage import default_client
 

@@ -17,7 +17,7 @@ from typing import Optional
 import aiohttp
 import aiofiles
 
-from stargazer.utils.component import ComponentFile
+from stargazer.types.component import ComponentFile
 
 
 class PinataClient:

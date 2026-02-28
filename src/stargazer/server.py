@@ -19,7 +19,7 @@ from mcp.server.fastmcp import FastMCP
 
 from stargazer.marshal import marshal_input, marshal_output
 from stargazer.registry import TaskRegistry
-from stargazer.utils.component import ComponentFile
+from stargazer.types.component import ComponentFile
 from stargazer.utils.storage import default_client
 
 # ---------------------------------------------------------------------------

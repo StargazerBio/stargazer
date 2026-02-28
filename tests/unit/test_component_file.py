@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from stargazer.utils.component import ComponentFile
+from stargazer.types.component import ComponentFile
 
 
 class TestComponentFileRoundtrip:

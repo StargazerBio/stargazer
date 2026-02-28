@@ -1,6 +1,6 @@
 """Roundtrip serialization tests for to_dict() / from_dict() on all types."""
 
-from stargazer.utils.component import ComponentFile
+from stargazer.types.component import ComponentFile
 from stargazer.types.reference import (
     Reference,
     ReferenceFile,

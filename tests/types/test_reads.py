@@ -9,7 +9,7 @@ from conftest import FIXTURES_DIR
 
 from stargazer.types import Reads
 from stargazer.types.reads import R1File, R2File
-from stargazer.utils.storage import default_client
+import stargazer.utils.storage as _storage_mod
 
 
 @pytest.mark.asyncio
@@ -22,9 +22,9 @@ async def test_reads_fetch():
 
     test_cid_r1 = "QmTestR1"
     test_cid_r2 = "QmTestR2"
-    default_client.local_dir.mkdir(parents=True, exist_ok=True)
-    cached_r1 = default_client.local_dir / test_cid_r1
-    cached_r2 = default_client.local_dir / test_cid_r2
+    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_r1 = _storage_mod.default_client.local_dir / test_cid_r1
+    cached_r2 = _storage_mod.default_client.local_dir / test_cid_r2
     shutil.copy(r1_fixture, cached_r1)
     shutil.copy(r2_fixture, cached_r2)
 
@@ -41,7 +41,7 @@ async def test_reads_fetch():
 
     cache_dir = await reads.fetch()
 
-    assert cache_dir == default_client.local_dir
+    assert cache_dir == _storage_mod.default_client.local_dir
     assert cache_dir.exists()
     assert reads.r1.path is not None
     assert reads.r1.path.exists()
@@ -57,9 +57,9 @@ async def test_reads_get_paths():
 
     test_cid_r1 = "QmTestR1GetPath"
     test_cid_r2 = "QmTestR2GetPath"
-    default_client.local_dir.mkdir(parents=True, exist_ok=True)
-    cached_r1 = default_client.local_dir / test_cid_r1
-    cached_r2 = default_client.local_dir / test_cid_r2
+    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_r1 = _storage_mod.default_client.local_dir / test_cid_r1
+    cached_r2 = _storage_mod.default_client.local_dir / test_cid_r2
     shutil.copy(r1_fixture, cached_r1)
     shutil.copy(r2_fixture, cached_r2)
 
@@ -88,8 +88,8 @@ async def test_reads_get_r2_path_single_end():
     r1_fixture = FIXTURES_DIR / "NA12829_TP53_R1.fq.gz"
 
     test_cid_r1 = "QmTestR1SingleEnd"
-    default_client.local_dir.mkdir(parents=True, exist_ok=True)
-    cached_r1 = default_client.local_dir / test_cid_r1
+    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_r1 = _storage_mod.default_client.local_dir / test_cid_r1
     shutil.copy(r1_fixture, cached_r1)
 
     r1 = R1File(

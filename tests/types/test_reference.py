@@ -9,7 +9,7 @@ import pytest
 from pathlib import Path
 from stargazer.types import Reference
 from stargazer.types.reference import ReferenceFile, ReferenceIndex, AlignerIndex
-from stargazer.utils.storage import default_client
+import stargazer.utils.storage as _storage_mod
 
 
 @pytest.mark.asyncio
@@ -47,9 +47,9 @@ async def test_update_components_local_only():
         assert ref.aligner_index[0].cid.startswith("local_")
 
         # Files exist in cache
-        cache_fasta = default_client.local_dir / ref.fasta.cid
-        cache_faidx = default_client.local_dir / ref.faidx.cid
-        cache_bwt = default_client.local_dir / ref.aligner_index[0].cid
+        cache_fasta = _storage_mod.default_client.local_dir / ref.fasta.cid
+        cache_faidx = _storage_mod.default_client.local_dir / ref.faidx.cid
+        cache_bwt = _storage_mod.default_client.local_dir / ref.aligner_index[0].cid
 
         assert cache_fasta.exists()
         assert cache_faidx.exists()
@@ -83,7 +83,7 @@ async def test_reference_fetch():
         # Fetch (in local-only mode, files already have path set after update)
         cache_dir = await ref.fetch()
 
-        assert cache_dir == default_client.local_dir
+        assert cache_dir == _storage_mod.default_client.local_dir
         assert cache_dir.exists()
 
         # After fetch, path is set

@@ -9,7 +9,7 @@ from conftest import FIXTURES_DIR
 
 from stargazer.types import Alignment
 from stargazer.types.alignment import AlignmentFile, AlignmentIndex
-from stargazer.utils.storage import default_client
+import stargazer.utils.storage as _storage_mod
 
 
 @pytest.mark.asyncio
@@ -20,12 +20,12 @@ async def test_alignment_fetch():
     assert bam_fixture.exists(), f"Test fixture not found: {bam_fixture}"
     assert bai_fixture.exists(), f"Test fixture not found: {bai_fixture}"
 
-    # Pre-populate cache using default_client
+    # Pre-populate cache using _storage_mod.default_client
     test_cid_bam = "QmTestBam"
     test_cid_bai = "QmTestBai"
-    default_client.local_dir.mkdir(parents=True, exist_ok=True)
-    cached_bam = default_client.local_dir / test_cid_bam
-    cached_bai = default_client.local_dir / test_cid_bai
+    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_bam = _storage_mod.default_client.local_dir / test_cid_bam
+    cached_bai = _storage_mod.default_client.local_dir / test_cid_bai
     shutil.copy(bam_fixture, cached_bam)
     shutil.copy(bai_fixture, cached_bai)
 
@@ -54,7 +54,7 @@ async def test_alignment_fetch():
 
     cache_dir = await alignment.fetch()
 
-    assert cache_dir == default_client.local_dir
+    assert cache_dir == _storage_mod.default_client.local_dir
     assert cache_dir.exists()
     assert alignment.alignment.path is not None
     assert alignment.alignment.path.exists()
@@ -68,8 +68,8 @@ async def test_alignment_get_bam_path():
     bam_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam"
 
     test_cid_bam = "QmTestBamGetPath"
-    default_client.local_dir.mkdir(parents=True, exist_ok=True)
-    cached_bam = default_client.local_dir / test_cid_bam
+    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_bam = _storage_mod.default_client.local_dir / test_cid_bam
     shutil.copy(bam_fixture, cached_bam)
 
     bam = AlignmentFile(
@@ -97,9 +97,9 @@ async def test_alignment_get_bai_path():
 
     test_cid_bam = "QmTestBamGetBai"
     test_cid_bai = "QmTestBaiGetBai"
-    default_client.local_dir.mkdir(parents=True, exist_ok=True)
-    cached_bam = default_client.local_dir / test_cid_bam
-    cached_bai = default_client.local_dir / test_cid_bai
+    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_bam = _storage_mod.default_client.local_dir / test_cid_bam
+    cached_bai = _storage_mod.default_client.local_dir / test_cid_bai
     shutil.copy(bam_fixture, cached_bam)
     shutil.copy(bai_fixture, cached_bai)
 
@@ -131,8 +131,8 @@ async def test_alignment_get_bai_path_none():
     bam_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam"
 
     test_cid_bam = "QmTestBamNoBai"
-    default_client.local_dir.mkdir(parents=True, exist_ok=True)
-    cached_bam = default_client.local_dir / test_cid_bam
+    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
+    cached_bam = _storage_mod.default_client.local_dir / test_cid_bam
     shutil.copy(bam_fixture, cached_bam)
 
     bam = AlignmentFile(

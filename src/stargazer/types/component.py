@@ -24,15 +24,33 @@ class ComponentFile:
     Subclasses can declare:
         _field_types: map of field name → type (bool, int, list) for coercion
         _field_defaults: map of field name → default value (e.g. {"sample_id": ""})
+        _type_key: the "type" keyvalue (e.g. "reference", "alignment")
+        _component_key: the "component" keyvalue (e.g. "fasta", "vcf")
     """
 
+    _registry: ClassVar[dict[tuple[str, str], type["ComponentFile"]]] = {}
     _field_types: ClassVar[dict[str, type]] = {}
     _field_defaults: ClassVar[dict[str, Any]] = {}
     _own_attrs: ClassVar[frozenset] = frozenset(("cid", "path", "keyvalues"))
+    _type_key: ClassVar[str] = ""
+    _component_key: ClassVar[str] = ""
 
     cid: str = ""
     path: Path | None = None
     keyvalues: dict[str, str] = field(default_factory=dict)
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        tk = cls.__dict__.get("_type_key", "")
+        ck = cls.__dict__.get("_component_key", "")
+        if tk and ck:
+            ComponentFile._registry[(tk, ck)] = cls
+
+    def __post_init__(self):
+        if self._type_key:
+            self.keyvalues.setdefault("type", self._type_key)
+        if self._component_key:
+            self.keyvalues.setdefault("component", self._component_key)
 
     def __getattr__(self, name: str) -> Any:
         # Only called when normal attribute lookup fails
@@ -63,6 +81,16 @@ class ComponentFile:
             self.keyvalues[name] = ",".join(value)
         else:
             self.keyvalues[name] = str(value)
+
+    async def update(self, path: Path, **kwargs) -> None:
+        """Upload file and set cid. Shared by all component types."""
+        from stargazer.utils.storage import default_client
+
+        for key, value in kwargs.items():
+            if value is not None:
+                setattr(self, key, value)
+        self.path = path
+        await default_client.upload(self)
 
     def to_dict(self) -> dict:
         """Serialize to a JSON-friendly dict."""

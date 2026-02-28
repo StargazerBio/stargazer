@@ -13,12 +13,12 @@ from stargazer.types import (
     Reads,
     specialize,
 )
-from stargazer.utils.component import ComponentFile
+from stargazer.types.component import ComponentFile
 from stargazer.utils.storage import default_client
 from stargazer.utils.query import generate_query_combinations
 
 
-# Maps (type, component) -> (ContainerClass, field_name, is_list)
+# Maps (type, component) -> (BioTypeClass, field_name, is_list)
 # Routes specialized ComponentFiles to the correct container field
 TYPE_REGISTRY: dict[tuple[str, str], tuple[type, str, bool]] = {
     # Reference components

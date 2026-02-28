@@ -6,7 +6,7 @@ Creates BQSR recalibration table using GATK BaseRecalibrator.
 
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
-from stargazer.utils.component import ComponentFile
+from stargazer.types.component import ComponentFile
 from stargazer.utils import _run
 from stargazer.utils.storage import default_client
 

@@ -9,7 +9,7 @@ from conftest import FIXTURES_DIR
 
 from stargazer.types import Variants
 from stargazer.types.variants import VariantsFile, VariantsIndex
-from stargazer.utils.storage import default_client
+import stargazer.utils.storage as _storage_mod
 
 
 @pytest.mark.asyncio
@@ -26,9 +26,9 @@ async def test_variants_fetch():
     try:
         test_cid_vcf = "QmTestVcf"
         test_cid_tbi = "QmTestTbi"
-        default_client.local_dir.mkdir(parents=True, exist_ok=True)
-        cached_vcf = default_client.local_dir / test_cid_vcf
-        cached_tbi = default_client.local_dir / test_cid_tbi
+        _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
+        cached_vcf = _storage_mod.default_client.local_dir / test_cid_vcf
+        cached_tbi = _storage_mod.default_client.local_dir / test_cid_tbi
         shutil.copy(vcf_fixture, cached_vcf)
         shutil.copy(tbi_fixture, cached_tbi)
 
@@ -54,7 +54,7 @@ async def test_variants_fetch():
 
         cache_dir = await variants.fetch()
 
-        assert cache_dir == default_client.local_dir
+        assert cache_dir == _storage_mod.default_client.local_dir
         assert cache_dir.exists()
         assert variants.vcf.path is not None
         assert variants.vcf.path.exists()
@@ -75,8 +75,8 @@ async def test_variants_get_vcf_path():
 
     try:
         test_cid_vcf = "QmTestVcfGetPath"
-        default_client.local_dir.mkdir(parents=True, exist_ok=True)
-        cached_vcf = default_client.local_dir / test_cid_vcf
+        _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
+        cached_vcf = _storage_mod.default_client.local_dir / test_cid_vcf
         shutil.copy(vcf_fixture, cached_vcf)
 
         vcf = VariantsFile(
@@ -106,9 +106,9 @@ async def test_variants_get_index_path():
     try:
         test_cid_vcf = "QmTestVcfGetIndex"
         test_cid_tbi = "QmTestTbiGetIndex"
-        default_client.local_dir.mkdir(parents=True, exist_ok=True)
-        cached_vcf = default_client.local_dir / test_cid_vcf
-        cached_tbi = default_client.local_dir / test_cid_tbi
+        _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
+        cached_vcf = _storage_mod.default_client.local_dir / test_cid_vcf
+        cached_tbi = _storage_mod.default_client.local_dir / test_cid_tbi
         shutil.copy(vcf_fixture, cached_vcf)
         shutil.copy(tbi_fixture, cached_tbi)
 
@@ -143,8 +143,8 @@ async def test_variants_get_index_path_none():
 
     try:
         test_cid_vcf = "QmTestVcfNoIndex"
-        default_client.local_dir.mkdir(parents=True, exist_ok=True)
-        cached_vcf = default_client.local_dir / test_cid_vcf
+        _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
+        cached_vcf = _storage_mod.default_client.local_dir / test_cid_vcf
         shutil.copy(vcf_fixture, cached_vcf)
 
         vcf = VariantsFile(

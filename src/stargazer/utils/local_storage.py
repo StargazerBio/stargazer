@@ -12,7 +12,7 @@ from typing import Optional
 
 from tinydb import TinyDB, Query
 
-from stargazer.utils.component import ComponentFile
+from stargazer.types.component import ComponentFile
 
 
 class LocalStorageClient:

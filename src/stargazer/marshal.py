@@ -8,12 +8,9 @@ import types as _types
 from pathlib import Path
 from typing import Any, Union, get_args, get_origin
 
-from stargazer.types import Alignment, Reads, Reference, Variants
-from stargazer.utils.component import ComponentFile
+from stargazer.types.component import ComponentFile
+from stargazer.types.biotype import BioType
 from stargazer.tasks.gatk.variant_recalibrator import VQSRResource
-
-# Types that support from_dict()
-_FROM_DICT_TYPES = {Reference, Alignment, Reads, Variants, ComponentFile}
 
 
 def marshal_input(value: Any, hint: Any) -> Any:
@@ -33,7 +30,11 @@ def marshal_input(value: Any, hint: Any) -> Any:
         return [marshal_input(item, args[0]) for item in value]
 
     # Domain types with from_dict
-    if isinstance(hint, type) and hint in _FROM_DICT_TYPES and isinstance(value, dict):
+    if (
+        isinstance(hint, type)
+        and issubclass(hint, (ComponentFile, BioType))
+        and isinstance(value, dict)
+    ):
         return hint.from_dict(value)
 
     # VQSRResource (no from_dict)

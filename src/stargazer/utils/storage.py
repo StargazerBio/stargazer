@@ -14,7 +14,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional, Protocol
 
-from stargazer.utils.component import ComponentFile
+from stargazer.types.component import ComponentFile
 
 
 class StorageClient(Protocol):

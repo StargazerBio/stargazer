@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from stargazer.utils.component import ComponentFile
+from stargazer.types.component import ComponentFile
 from stargazer.types import specialize
 from stargazer.types.reference import (
     ReferenceFile,

@@ -2,7 +2,8 @@
 Stargazer types for bioinformatics workflows.
 """
 
-from stargazer.utils.component import ComponentFile
+from stargazer.types.component import ComponentFile
+from stargazer.types.biotype import BioType
 from stargazer.types.reference import (
     Reference,
     ReferenceFile,
@@ -14,19 +15,8 @@ from stargazer.types.reads import Reads, R1File, R2File
 from stargazer.types.alignment import Alignment, AlignmentFile, AlignmentIndex
 from stargazer.types.variants import Variants, VariantsFile, VariantsIndex
 
-# Maps (type, component) keyvalue pairs to the derived ComponentFile class
-COMPONENT_REGISTRY: dict[tuple[str, str], type[ComponentFile]] = {
-    ("reference", "fasta"): ReferenceFile,
-    ("reference", "faidx"): ReferenceIndex,
-    ("reference", "sequence_dictionary"): SequenceDict,
-    ("reference", "aligner_index"): AlignerIndex,
-    ("alignment", "alignment"): AlignmentFile,
-    ("alignment", "index"): AlignmentIndex,
-    ("variants", "vcf"): VariantsFile,
-    ("variants", "index"): VariantsIndex,
-    ("reads", "r1"): R1File,
-    ("reads", "r2"): R2File,
-}
+# Auto-populated via ComponentFile.__init_subclass__
+COMPONENT_REGISTRY = ComponentFile._registry
 
 
 def specialize(component: ComponentFile) -> ComponentFile:
@@ -53,6 +43,7 @@ def specialize(component: ComponentFile) -> ComponentFile:
 __all__ = [
     # Base
     "ComponentFile",
+    "BioType",
     # Derived
     "COMPONENT_REGISTRY",
     "specialize",
