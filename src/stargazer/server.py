@@ -19,6 +19,7 @@ from mcp.server.fastmcp import FastMCP
 
 from stargazer.marshal import marshal_input, marshal_output
 from stargazer.registry import TaskRegistry
+from stargazer.types import COMPONENT_REGISTRY
 from stargazer.types.component import ComponentFile
 from stargazer.utils.storage import default_client
 
@@ -46,7 +47,15 @@ async def query_files(keyvalues: dict[str, str]) -> list[dict]:
 
 @mcp.tool()
 async def upload_file(path: str, keyvalues: dict[str, str]) -> dict:
-    """Upload a file with metadata key-value pairs."""
+    """Upload a file with metadata key-value pairs.
+
+    keyvalues must include "type" and "component". Valid pairs are derived
+    from the ComponentFile registry (e.g. type=reference component=fasta).
+    """
+    pair = (keyvalues.get("type"), keyvalues.get("component"))
+    if pair not in COMPONENT_REGISTRY:
+        valid = sorted(COMPONENT_REGISTRY.keys())
+        raise ValueError(f"Invalid type/component pair {pair}. Valid pairs: {valid}")
     comp = ComponentFile(path=Path(path), keyvalues=keyvalues)
     await default_client.upload(comp)
     return comp.to_dict()
