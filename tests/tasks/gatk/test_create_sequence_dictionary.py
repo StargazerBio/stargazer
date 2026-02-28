@@ -3,7 +3,6 @@ Tests for create_sequence_dictionary task.
 """
 
 import shutil
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -11,8 +10,8 @@ from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.create_sequence_dictionary import create_sequence_dictionary
 from stargazer.types import Reference
+from stargazer.types.reference import ReferenceFile, ReferenceIndex
 from stargazer.utils.storage import default_client
-from stargazer.utils.ipfile import IpFile
 
 
 def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
@@ -47,38 +46,30 @@ async def test_create_sequence_dictionary_creates_dict():
     local_dir = default_client.local_dir
     paths = setup_fixture_files(local_dir)
 
-    ref_ipfile = IpFile(
-        id="test-ref-fasta",
+    ref_fasta = ReferenceFile(
         cid="test_ref_fasta_dict",
-        name="GRCh38_TP53.fa",
-        size=paths["ref_fasta"].stat().st_size,
+        path=paths["ref_fasta"],
         keyvalues={
             "type": "reference",
             "component": "fasta",
             "build": "GRCh38",
         },
-        created_at=datetime.now(),
     )
-    ref_ipfile.local_path = paths["ref_fasta"]
 
-    fai_ipfile = IpFile(
-        id="test-ref-fai",
+    fai_file = ReferenceIndex(
         cid="test_ref_fai_dict",
-        name="GRCh38_TP53.fa.fai",
-        size=paths["ref_fai"].stat().st_size,
+        path=paths["ref_fai"],
         keyvalues={
             "type": "reference",
             "component": "faidx",
             "build": "GRCh38",
         },
-        created_at=datetime.now(),
     )
-    fai_ipfile.local_path = paths["ref_fai"]
 
     ref = Reference(
         build="GRCh38",
-        fasta=ref_ipfile,
-        faidx=fai_ipfile,
+        fasta=ref_fasta,
+        faidx=fai_file,
     )
 
     # Run create_sequence_dictionary
@@ -92,7 +83,6 @@ async def test_create_sequence_dictionary_creates_dict():
     assert result.sequence_dictionary is not None, (
         "Should have sequence_dictionary file"
     )
-    assert result.sequence_dictionary.size > 0, "Dictionary file should not be empty"
 
     # Verify .dict file has metadata
     assert (
@@ -109,12 +99,10 @@ async def test_create_sequence_dictionary_creates_dict():
         "Should copy build metadata from reference"
     )
 
-    # Verify .dict file exists at local_path
-    assert result.sequence_dictionary.local_path is not None, (
-        "Should have local_path set"
-    )
-    assert result.sequence_dictionary.local_path.exists(), (
-        "Dictionary file should exist at local_path"
+    # Verify .dict file exists at path
+    assert result.sequence_dictionary.path is not None, "Should have path set"
+    assert result.sequence_dictionary.path.exists(), (
+        "Dictionary file should exist at path"
     )
 
 

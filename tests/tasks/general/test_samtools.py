@@ -3,15 +3,14 @@ Tests for samtools tasks.
 """
 
 import shutil
-from datetime import datetime
 
 import pytest
 from conftest import FIXTURES_DIR
 
 from stargazer.tasks.general.samtools import samtools_faidx
 from stargazer.types import Reference
+from stargazer.types.reference import ReferenceFile, ReferenceIndex
 from stargazer.utils.storage import default_client
-from stargazer.utils.ipfile import IpFile
 
 
 @pytest.mark.asyncio
@@ -32,18 +31,14 @@ async def test_samtools_faidx():
     shutil.copy(ref_fixture, cached_fasta)
 
     # Create a Reference with the cached file
-    fasta_file = IpFile(
-        id="test-id",
+    fasta_file = ReferenceFile(
         cid=test_cid,
-        name="GRCh38_TP53.fa",
-        size=cached_fasta.stat().st_size,
         keyvalues={
             "type": "reference",
             "component": "fasta",
             "build": "GRCh38",
             "env": "test",
         },
-        created_at=datetime.now(),
     )
 
     ref = Reference(
@@ -59,26 +54,20 @@ async def test_samtools_faidx():
     assert result.build == "GRCh38"
 
     # Verify .fai file was added to faidx component
-    fai_files = result.faidx
-    assert fai_files is not None, "Should have faidx file"
-    assert fai_files.size > 0, "Index file should not be empty"
+    fai = result.faidx
+    assert fai is not None, "Should have faidx file"
 
     # Verify .fai file has metadata
-    assert fai_files.keyvalues.get("tool") == "samtools_faidx", (
-        "Should have tool metadata"
-    )
-    assert fai_files.keyvalues.get("type") == "reference", "Should have type metadata"
-    assert fai_files.keyvalues.get("component") == "faidx", (
-        "Should have component metadata"
-    )
-    assert fai_files.keyvalues.get("build") == "GRCh38", (
+    assert fai.keyvalues.get("tool") == "samtools_faidx", "Should have tool metadata"
+    assert fai.keyvalues.get("type") == "reference", "Should have type metadata"
+    assert fai.keyvalues.get("component") == "faidx", "Should have component metadata"
+    assert fai.keyvalues.get("build") == "GRCh38", (
         "Should copy build metadata from reference"
     )
 
-    # Verify .fai file exists at local_path
-    # Samtools creates files with CID as base name (e.g., QmTestTP53Fasta.fai)
-    assert fai_files.local_path is not None, "Should have local_path set"
-    assert fai_files.local_path.exists(), "Index file should exist at local_path"
+    # Verify .fai file exists at path
+    assert fai.path is not None, "Should have path set"
+    assert fai.path.exists(), "Index file should exist at path"
 
     # Cleanup - use actual cached filenames (CID-based)
     if cached_fasta.exists():
@@ -109,30 +98,22 @@ async def test_samtools_faidx_idempotent():
     shutil.copy(fixtures_ref_dir / "GRCh38_TP53.fa.fai", cached_fai)
 
     # Create Reference with both files already present
-    fasta_file = IpFile(
-        id="test-id-fasta",
+    fasta_file = ReferenceFile(
         cid=test_cid_fasta,
-        name="GRCh38_TP53.fa",
-        size=cached_fasta.stat().st_size,
         keyvalues={
             "type": "reference",
             "component": "fasta",
             "env": "test",
         },
-        created_at=datetime.now(),
     )
 
-    fai_file = IpFile(
-        id="test-id-fai",
+    fai_file = ReferenceIndex(
         cid=test_cid_fai,
-        name="GRCh38_TP53.fa.fai",
-        size=cached_fai.stat().st_size,
         keyvalues={
             "type": "reference",
             "component": "faidx",
             "env": "test",
         },
-        created_at=datetime.now(),
     )
 
     ref = Reference(

@@ -4,7 +4,7 @@ Build a TinyDB JSON file from the fixtures directory.
 
 This creates a stargazer_local.json that maps each fixture file to its
 metadata keyvalues, enabling tests to use query() and hydrate() in local mode
-instead of manually constructing IpFile objects.
+instead of manually constructing ComponentFile objects.
 
 Run this script whenever fixtures are added or changed:
     python tests/fixtures/build_local_db.py

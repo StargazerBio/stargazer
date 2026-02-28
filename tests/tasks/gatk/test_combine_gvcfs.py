@@ -3,7 +3,6 @@ Tests for combine_gvcfs task.
 """
 
 import shutil
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -11,8 +10,9 @@ from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.combine_gvcfs import combine_gvcfs
 from stargazer.types import Reference, Variants
+from stargazer.types.reference import ReferenceFile
+from stargazer.types.variants import VariantsFile
 from stargazer.utils.storage import default_client
-from stargazer.utils.ipfile import IpFile
 
 # Sample GVCFs available as fixtures (created from NA12829 TP53 data)
 SAMPLE_GVCFS = {
@@ -57,31 +57,24 @@ def setup_fixture_files(local_dir: Path, sample_ids: list[str]) -> dict[str, Pat
 
 def make_ref(paths: dict[str, Path]) -> Reference:
     """Create a Reference object from fixture paths."""
-    ref_ipfile = IpFile(
-        id="test-ref-fasta",
+    ref_fasta = ReferenceFile(
         cid="test_ref_fasta",
-        name="GRCh38_TP53.fa",
-        size=paths["ref_fasta"].stat().st_size,
+        path=paths["ref_fasta"],
         keyvalues={
             "type": "reference",
             "component": "fasta",
             "build": "GRCh38",
         },
-        created_at=datetime.now(),
     )
-    ref_ipfile.local_path = paths["ref_fasta"]
-    return Reference(build="GRCh38", fasta=ref_ipfile)
+    return Reference(build="GRCh38", fasta=ref_fasta)
 
 
 def make_gvcf(sample_id: str, paths: dict[str, Path]) -> Variants:
     """Create a Variants GVCF object from fixture paths."""
-    gvcf_name = SAMPLE_GVCFS[sample_id]
     gvcf_path = paths[f"gvcf_{sample_id}"]
-    gvcf_ipfile = IpFile(
-        id=f"test-{sample_id}-gvcf",
+    gvcf_file = VariantsFile(
         cid=f"test_gvcf_{sample_id}",
-        name=gvcf_name,
-        size=gvcf_path.stat().st_size,
+        path=gvcf_path,
         keyvalues={
             "type": "variants",
             "component": "vcf",
@@ -90,10 +83,8 @@ def make_gvcf(sample_id: str, paths: dict[str, Path]) -> Variants:
             "variant_type": "gvcf",
             "build": "GRCh38",
         },
-        created_at=datetime.now(),
     )
-    gvcf_ipfile.local_path = gvcf_path
-    return Variants(sample_id=sample_id, vcf=gvcf_ipfile)
+    return Variants(sample_id=sample_id, vcf=gvcf_file)
 
 
 @pytest.mark.asyncio
@@ -148,13 +139,9 @@ async def test_combine_gvcfs_rejects_empty_list():
 async def test_combine_gvcfs_rejects_vcf_input():
     """Test that combine_gvcfs raises error when any input is VCF (not GVCF)."""
     sample_id = "NA12878_vcf"
-    test_cid = "QmTestVCFCombine"
 
-    vcf_ipfile = IpFile(
-        id=f"test-{sample_id}-vcf",
-        cid=test_cid,
-        name=f"{sample_id}.vcf",
-        size=1000,
+    vcf_file = VariantsFile(
+        cid="QmTestVCFCombine",
         keyvalues={
             "type": "variants",
             "component": "vcf",
@@ -162,10 +149,9 @@ async def test_combine_gvcfs_rejects_vcf_input():
             "caller": "haplotypecaller",
             "variant_type": "vcf",
         },
-        created_at=datetime.now(),
     )
 
-    variants = Variants(sample_id=sample_id, vcf=vcf_ipfile)
+    variants = Variants(sample_id=sample_id, vcf=vcf_file)
     ref = Reference(build="test")
 
     with pytest.raises(ValueError, match="requires GVCF files"):
@@ -206,31 +192,24 @@ async def test_combine_gvcfs_single_sample():
 async def test_variants_multi_sample_properties():
     """Test new multi-sample properties on Variants type."""
     # Test single sample variant
-    single_ipfile = IpFile(
-        id="test-single",
+    single_file = VariantsFile(
         cid="QmSingle",
-        name="single.g.vcf",
-        size=1000,
         keyvalues={
             "type": "variants",
             "component": "vcf",
             "sample_id": "NA12878",
             "variant_type": "gvcf",
         },
-        created_at=datetime.now(),
     )
 
-    single_variant = Variants(sample_id="NA12878", vcf=single_ipfile)
+    single_variant = Variants(sample_id="NA12878", vcf=single_file)
 
     assert not single_variant.is_multi_sample
     assert single_variant.source_samples == ["NA12878"]
 
     # Test multi-sample variant
-    multi_ipfile = IpFile(
-        id="test-multi",
+    multi_file = VariantsFile(
         cid="QmMulti",
-        name="cohort.g.vcf",
-        size=5000,
         keyvalues={
             "type": "variants",
             "component": "vcf",
@@ -239,10 +218,9 @@ async def test_variants_multi_sample_properties():
             "sample_count": "3",
             "source_samples": "NA12878,NA12891,NA12892",
         },
-        created_at=datetime.now(),
     )
 
-    multi_variant = Variants(sample_id="cohort", vcf=multi_ipfile)
+    multi_variant = Variants(sample_id="cohort", vcf=multi_file)
 
     assert multi_variant.is_multi_sample
     assert set(multi_variant.source_samples) == {"NA12878", "NA12891", "NA12892"}

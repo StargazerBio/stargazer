@@ -3,7 +3,6 @@ Tests for merge_bam_alignment task.
 """
 
 import shutil
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -11,8 +10,9 @@ from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.merge_bam_alignment import merge_bam_alignment
 from stargazer.types import Reference, Alignment
+from stargazer.types.alignment import AlignmentFile
+from stargazer.types.reference import ReferenceFile
 from stargazer.utils.storage import default_client
-from stargazer.utils.ipfile import IpFile
 
 
 def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
@@ -51,12 +51,10 @@ async def test_merge_bam_alignment_merges_bams():
     local_dir = default_client.local_dir
     paths = setup_fixture_files(local_dir)
 
-    # Create IpFile objects with local_path set so fetch() short-circuits
-    aligned_ipfile = IpFile(
-        id="test-aligned-bam",
+    # Create ComponentFile objects with path set so fetch() short-circuits
+    aligned_file = AlignmentFile(
         cid="test_aligned_bam",
-        name="NA12829_TP53_bwa_aligned.bam",
-        size=paths["aligned_bam"].stat().st_size,
+        path=paths["aligned_bam"],
         keyvalues={
             "type": "alignment",
             "component": "alignment",
@@ -64,15 +62,11 @@ async def test_merge_bam_alignment_merges_bams():
             "tool": "bwa_mem",
             "sorted": "unsorted",
         },
-        created_at=datetime.now(),
     )
-    aligned_ipfile.local_path = paths["aligned_bam"]
 
-    unmapped_ipfile = IpFile(
-        id="test-unmapped-bam",
+    unmapped_file = AlignmentFile(
         cid="test_unmapped_bam",
-        name="NA12829_TP53_unmapped.bam",
-        size=paths["unmapped_bam"].stat().st_size,
+        path=paths["unmapped_bam"],
         keyvalues={
             "type": "alignment",
             "component": "alignment",
@@ -80,37 +74,31 @@ async def test_merge_bam_alignment_merges_bams():
             "tool": "picard",
             "sorted": "queryname",
         },
-        created_at=datetime.now(),
     )
-    unmapped_ipfile.local_path = paths["unmapped_bam"]
 
-    ref_ipfile = IpFile(
-        id="test-ref-fasta",
+    ref_fasta = ReferenceFile(
         cid="test_ref_fasta",
-        name="GRCh38_TP53.fa",
-        size=paths["ref_fasta"].stat().st_size,
+        path=paths["ref_fasta"],
         keyvalues={
             "type": "reference",
             "component": "fasta",
             "build": "GRCh38",
         },
-        created_at=datetime.now(),
     )
-    ref_ipfile.local_path = paths["ref_fasta"]
 
     aligned_bam = Alignment(
         sample_id=sample_id,
-        alignment=aligned_ipfile,
+        alignment=aligned_file,
     )
 
     unmapped_bam = Alignment(
         sample_id=sample_id,
-        alignment=unmapped_ipfile,
+        alignment=unmapped_file,
     )
 
     ref = Reference(
         build="GRCh38",
-        fasta=ref_ipfile,
+        fasta=ref_fasta,
     )
 
     merged = await merge_bam_alignment(

@@ -207,6 +207,7 @@ class PinataClient:
     async def query(self, keyvalues: dict[str, str]) -> list[ComponentFile]:
         """
         Query files by keyvalue metadata from Pinata API.
+        Paginates through all results automatically.
 
         Args:
             keyvalues: Metadata key-value pairs to filter by
@@ -222,20 +223,29 @@ class PinataClient:
             for key, value in keyvalues.items():
                 params[f"metadata[{key}]"] = value
 
+        results: list[ComponentFile] = []
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                url, headers=self._headers(), params=params
-            ) as response:
-                response.raise_for_status()
-                data = await response.json()
+            while True:
+                async with session.get(
+                    url, headers=self._headers(), params=params
+                ) as response:
+                    response.raise_for_status()
+                    data = await response.json()
 
-                return [
-                    ComponentFile(
-                        cid=f["cid"],
-                        keyvalues=f.get("keyvalues", {}),
-                    )
-                    for f in data.get("data", {}).get("files", [])
-                ]
+                    for f in data.get("data", {}).get("files", []):
+                        results.append(
+                            ComponentFile(
+                                cid=f["cid"],
+                                keyvalues=f.get("keyvalues", {}),
+                            )
+                        )
+
+                    next_token = data.get("data", {}).get("next_page_token")
+                    if not next_token:
+                        break
+                    params["pageToken"] = next_token
+
+        return results
 
     async def delete(self, component: ComponentFile) -> None:
         """

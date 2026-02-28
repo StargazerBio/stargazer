@@ -55,3 +55,23 @@ class Variants(BioType):
     sample_id: str
     vcf: VariantsFile | None = None
     index: VariantsIndex | None = None
+
+    @property
+    def is_gvcf(self) -> bool:
+        return self.vcf is not None and self.vcf.keyvalues.get("variant_type") == "gvcf"
+
+    @property
+    def is_multi_sample(self) -> bool:
+        if self.vcf is None:
+            return False
+        count = self.vcf.sample_count
+        return count is not None and count > 1
+
+    @property
+    def source_samples(self) -> list[str]:
+        if self.vcf is None:
+            return [self.sample_id]
+        samples = self.vcf.source_samples
+        if samples:
+            return samples
+        return [self.sample_id]

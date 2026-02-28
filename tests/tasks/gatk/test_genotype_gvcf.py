@@ -3,7 +3,6 @@ Tests for genotype_gvcf task.
 """
 
 import shutil
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -11,8 +10,9 @@ from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.genotype_gvcf import genotype_gvcf
 from stargazer.types import Reference, Variants
+from stargazer.types.reference import ReferenceFile
+from stargazer.types.variants import VariantsFile
 from stargazer.utils.storage import default_client
-from stargazer.utils.ipfile import IpFile
 
 
 def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
@@ -50,11 +50,9 @@ async def test_genotype_gvcf_converts_to_vcf():
     local_dir = default_client.local_dir
     paths = setup_fixture_files(local_dir)
 
-    gvcf_ipfile = IpFile(
-        id="test-gvcf",
+    gvcf_file = VariantsFile(
         cid="test_gvcf",
-        name=f"{sample_id}.g.vcf",
-        size=paths["gvcf"].stat().st_size,
+        path=paths["gvcf"],
         keyvalues={
             "type": "variants",
             "component": "vcf",
@@ -63,26 +61,20 @@ async def test_genotype_gvcf_converts_to_vcf():
             "variant_type": "gvcf",
             "build": "GRCh38",
         },
-        created_at=datetime.now(),
     )
-    gvcf_ipfile.local_path = paths["gvcf"]
 
-    ref_ipfile = IpFile(
-        id="test-ref-fasta",
+    ref_fasta = ReferenceFile(
         cid="test_ref_fasta",
-        name="GRCh38_TP53.fa",
-        size=paths["ref_fasta"].stat().st_size,
+        path=paths["ref_fasta"],
         keyvalues={
             "type": "reference",
             "component": "fasta",
             "build": "GRCh38",
         },
-        created_at=datetime.now(),
     )
-    ref_ipfile.local_path = paths["ref_fasta"]
 
-    gvcf = Variants(sample_id=sample_id, vcf=gvcf_ipfile)
-    ref = Reference(build="GRCh38", fasta=ref_ipfile)
+    gvcf = Variants(sample_id=sample_id, vcf=gvcf_file)
+    ref = Reference(build="GRCh38", fasta=ref_fasta)
 
     result = await genotype_gvcf(gvcf=gvcf, ref=ref)
 
@@ -104,13 +96,9 @@ async def test_genotype_gvcf_converts_to_vcf():
 async def test_genotype_gvcf_rejects_vcf_input():
     """Test that genotype_gvcf raises error for VCF input (expects GVCF)."""
     sample_id = "NA12829_test"
-    test_cid = "QmTestVCFInput"
 
-    vcf_ipfile = IpFile(
-        id=f"test-{sample_id}-vcf",
-        cid=test_cid,
-        name=f"{sample_id}.vcf",
-        size=1000,
+    vcf_file = VariantsFile(
+        cid="QmTestVCFInput",
         keyvalues={
             "type": "variants",
             "component": "vcf",
@@ -118,10 +106,9 @@ async def test_genotype_gvcf_rejects_vcf_input():
             "caller": "haplotypecaller",
             "variant_type": "vcf",
         },
-        created_at=datetime.now(),
     )
 
-    variants = Variants(sample_id=sample_id, vcf=vcf_ipfile)
+    variants = Variants(sample_id=sample_id, vcf=vcf_file)
     ref = Reference(build="test")
 
     with pytest.raises(ValueError, match="requires a GVCF file"):

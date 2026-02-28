@@ -3,7 +3,6 @@ Tests for apply_bqsr task.
 """
 
 import shutil
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -11,8 +10,10 @@ from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.apply_bqsr import apply_bqsr
 from stargazer.types import Reference, Alignment
+from stargazer.types.alignment import AlignmentFile
+from stargazer.types.component import ComponentFile
+from stargazer.types.reference import ReferenceFile
 from stargazer.utils.storage import default_client
-from stargazer.utils.ipfile import IpFile
 
 
 def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
@@ -52,11 +53,9 @@ async def test_apply_bqsr_recalibrates_bam():
     local_dir = default_client.local_dir
     paths = setup_fixture_files(local_dir)
 
-    bam_ipfile = IpFile(
-        id="test-markdup-bam",
+    bam_file = AlignmentFile(
         cid="test_markdup_bam",
-        name="NA12829_TP53_markdup.bam",
-        size=paths["bam"].stat().st_size,
+        path=paths["bam"],
         keyvalues={
             "type": "alignment",
             "component": "alignment",
@@ -65,52 +64,42 @@ async def test_apply_bqsr_recalibrates_bam():
             "sorted": "coordinate",
             "duplicates_marked": "true",
         },
-        created_at=datetime.now(),
     )
-    bam_ipfile.local_path = paths["bam"]
 
-    ref_ipfile = IpFile(
-        id="test-ref-fasta",
+    ref_fasta = ReferenceFile(
         cid="test_ref_fasta",
-        name="GRCh38_TP53.fa",
-        size=paths["ref_fasta"].stat().st_size,
+        path=paths["ref_fasta"],
         keyvalues={
             "type": "reference",
             "component": "fasta",
             "build": "GRCh38",
         },
-        created_at=datetime.now(),
     )
-    ref_ipfile.local_path = paths["ref_fasta"]
 
-    recal_ipfile = IpFile(
-        id="test-recal-table",
+    recal_file = ComponentFile(
         cid="test_recal_table",
-        name="NA12829_TP53_bqsr.table",
-        size=paths["recal_table"].stat().st_size,
+        path=paths["recal_table"],
         keyvalues={
             "type": "bqsr_report",
             "sample_id": sample_id,
             "tool": "gatk_baserecalibrator",
         },
-        created_at=datetime.now(),
     )
-    recal_ipfile.local_path = paths["recal_table"]
 
     alignment = Alignment(
         sample_id=sample_id,
-        alignment=bam_ipfile,
+        alignment=bam_file,
     )
 
     ref = Reference(
         build="GRCh38",
-        fasta=ref_ipfile,
+        fasta=ref_fasta,
     )
 
     recalibrated = await apply_bqsr(
         alignment=alignment,
         ref=ref,
-        recal_report=recal_ipfile,
+        recal_report=recal_file,
     )
 
     # Verify result
@@ -119,10 +108,10 @@ async def test_apply_bqsr_recalibrates_bam():
     assert recalibrated.has_bqsr_applied
 
     # Check metadata
-    bam_file = recalibrated.alignment
-    assert bam_file is not None
-    assert bam_file.keyvalues.get("bqsr_applied") == "true"
-    assert bam_file.keyvalues.get("tool") == "gatk_apply_bqsr"
+    result_bam = recalibrated.alignment
+    assert result_bam is not None
+    assert result_bam.keyvalues.get("bqsr_applied") == "true"
+    assert result_bam.keyvalues.get("tool") == "gatk_apply_bqsr"
 
 
 @pytest.mark.asyncio
@@ -136,11 +125,8 @@ async def test_apply_bqsr_task_is_callable():
 async def test_alignment_has_bqsr_applied_property():
     """Test has_bqsr_applied property on Alignment type."""
     # Test alignment without BQSR
-    non_bqsr_ipfile = IpFile(
-        id="test-no-bqsr",
+    non_bqsr_file = AlignmentFile(
         cid="QmNoBQSR",
-        name="no_bqsr.bam",
-        size=1000,
         keyvalues={
             "type": "alignment",
             "component": "alignment",
@@ -148,22 +134,18 @@ async def test_alignment_has_bqsr_applied_property():
             "sorted": "coordinate",
             "duplicates_marked": "true",
         },
-        created_at=datetime.now(),
     )
 
     non_bqsr_alignment = Alignment(
         sample_id="test",
-        alignment=non_bqsr_ipfile,
+        alignment=non_bqsr_file,
     )
 
     assert not non_bqsr_alignment.has_bqsr_applied
 
     # Test alignment with BQSR
-    bqsr_ipfile = IpFile(
-        id="test-with-bqsr",
+    bqsr_file = AlignmentFile(
         cid="QmWithBQSR",
-        name="with_bqsr.bam",
-        size=1000,
         keyvalues={
             "type": "alignment",
             "component": "alignment",
@@ -172,12 +154,11 @@ async def test_alignment_has_bqsr_applied_property():
             "duplicates_marked": "true",
             "bqsr_applied": "true",
         },
-        created_at=datetime.now(),
     )
 
     bqsr_alignment = Alignment(
         sample_id="test",
-        alignment=bqsr_ipfile,
+        alignment=bqsr_file,
     )
 
     assert bqsr_alignment.has_bqsr_applied

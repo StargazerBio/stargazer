@@ -3,15 +3,14 @@ Tests for BWA tasks.
 """
 
 import shutil
-from datetime import datetime
 
 import pytest
 from conftest import FIXTURES_DIR
 
 from stargazer.tasks.general.bwa import bwa_index
 from stargazer.types import Reference
+from stargazer.types.reference import ReferenceFile, AlignerIndex
 from stargazer.utils.storage import default_client
-from stargazer.utils.ipfile import IpFile
 
 
 @pytest.mark.asyncio
@@ -32,18 +31,14 @@ async def test_bwa_index():
     shutil.copy(ref_fixture, cached_fasta)
 
     # Create a Reference with the cached file
-    fasta_file = IpFile(
-        id="test-id",
+    fasta_file = ReferenceFile(
         cid=test_cid,
-        name="GRCh38_TP53.fa",
-        size=cached_fasta.stat().st_size,
         keyvalues={
             "type": "reference",
             "component": "fasta",
             "build": "GRCh38",
             "env": "test",
         },
-        created_at=datetime.now(),
     )
 
     ref = Reference(
@@ -65,17 +60,18 @@ async def test_bwa_index():
     assert len(result.aligner_index) == 5, "Should have exactly 5 BWA index files"
 
     for ext in index_extensions:
-        # Find index file by checking names in aligner_index
+        # Find index file by checking path names in aligner_index
         index_files = [
-            f for f in result.aligner_index if f and f.name and f.name.endswith(ext)
+            f
+            for f in result.aligner_index
+            if f and f.path and f.path.name.endswith(ext)
         ]
         assert len(index_files) == 1, f"Should have exactly one {ext} file"
 
         index_file = index_files[0]
-        assert index_file.size > 0, f"Index file {ext} should not be empty"
 
         # Verify index file has metadata
-        assert index_files[0].keyvalues.get("aligner") == "bwa_index", (
+        assert index_files[0].keyvalues.get("aligner") == "bwa", (
             f"Index file {ext} should have aligner metadata"
         )
         assert index_files[0].keyvalues.get("type") == "reference", (
@@ -94,13 +90,9 @@ async def test_bwa_index():
             f"Index file {ext} should copy build metadata from reference"
         )
 
-        # Verify file exists at local_path
-        assert index_file.local_path is not None, (
-            f"Index file {ext} should have local_path set"
-        )
-        assert index_file.local_path.exists(), (
-            f"Index file {ext} should exist at local_path"
-        )
+        # Verify file exists at path
+        assert index_file.path is not None, f"Index file {ext} should have path set"
+        assert index_file.path.exists(), f"Index file {ext} should exist at path"
 
     # Cleanup - use actual cached filenames (CID-based)
     if cached_fasta.exists():
@@ -130,24 +122,19 @@ async def test_bwa_index_idempotent():
     cached_fasta = default_client.local_dir / test_cid_fasta
     shutil.copy(fixtures_ref_dir / "GRCh38_TP53.fa", cached_fasta)
 
-    files_list = [
-        IpFile(
-            id="test-id-fasta",
-            cid=test_cid_fasta,
-            name="GRCh38_TP53.fa",
-            size=cached_fasta.stat().st_size,
-            keyvalues={
-                "type": "reference",
-                "component": "fasta",
-                "env": "test",
-            },
-            created_at=datetime.now(),
-        )
-    ]
+    fasta_file = ReferenceFile(
+        cid=test_cid_fasta,
+        keyvalues={
+            "type": "reference",
+            "component": "fasta",
+            "env": "test",
+        },
+    )
 
     # Add all index files if they exist in fixtures
     index_extensions = [".amb", ".ann", ".bwt", ".pac", ".sa"]
     ext_names = ["amb", "ann", "bwt", "pac", "sa"]
+    aligner_index_files = []
     for i, ext in enumerate(index_extensions):
         index_fixture = fixtures_ref_dir / f"GRCh38_TP53.fa{ext}"
         if index_fixture.exists():
@@ -155,26 +142,22 @@ async def test_bwa_index_idempotent():
             cached_index = default_client.local_dir / test_cid_index
             shutil.copy(index_fixture, cached_index)
 
-            files_list.append(
-                IpFile(
-                    id=f"test-id-{ext}",
+            aligner_index_files.append(
+                AlignerIndex(
                     cid=test_cid_index,
-                    name=f"GRCh38_TP53.fa{ext}",
-                    size=cached_index.stat().st_size,
                     keyvalues={
                         "type": "reference",
                         "component": "aligner_index",
-                        "aligner": "bwa_index",
+                        "aligner": "bwa",
                         "env": "test",
                     },
-                    created_at=datetime.now(),
                 )
             )
 
     ref = Reference(
         build="GRCh38",
-        fasta=files_list[0] if files_list else None,
-        aligner_index=files_list[1:] if len(files_list) > 1 else [],
+        fasta=fasta_file,
+        aligner_index=aligner_index_files,
     )
 
     # Run bwa_index (should not regenerate if all files present)
@@ -184,7 +167,7 @@ async def test_bwa_index_idempotent():
     assert isinstance(result, Reference)
 
     # Should still have same number of aligner_index files
-    original_index_count = len(files_list) - 1  # Subtract FASTA file
+    original_index_count = len(aligner_index_files)
     assert len(result.aligner_index) == original_index_count, (
         "Should not duplicate index files"
     )

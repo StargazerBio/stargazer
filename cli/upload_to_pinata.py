@@ -15,6 +15,7 @@ from pathlib import Path
 # Add parent directory to path to import stargazer modules
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from stargazer.types.component import ComponentFile
 from stargazer.utils.pinata import PinataClient
 
 
@@ -36,28 +37,28 @@ async def upload_file(
     print(f"  Metadata: {keyvalues}")
 
     try:
-        ipfile = await client.upload_file(file_path, keyvalues=keyvalues)
+        comp = ComponentFile(path=file_path, keyvalues=dict(keyvalues))
+        await client.upload(comp)
 
-        print("  ✓ Success!")
-        print(f"    CID: {ipfile.cid}")
-        print(f"    ID: {ipfile.id}")
+        print("  Success!")
+        print(f"    CID: {comp.cid}")
         print()
 
         # Update config.py if requested
         if update_config and config_path:
-            update_config_file(config_path, file_path.name, ipfile.cid)
+            update_config_file(config_path, file_path.name, comp.cid)
 
-        return ipfile
+        return comp
 
     except Exception as e:
-        print(f"  ✗ Failed: {e}\n")
+        print(f"  Failed: {e}\n")
         return None
 
 
 def update_config_file(config_path: Path, filename: str, cid: str):
     """Update tests/config.py with the new CID."""
     if not config_path.exists():
-        print(f"  ⚠ Config file not found: {config_path}")
+        print(f"  Config file not found: {config_path}")
         return
 
     # Read current config
@@ -70,9 +71,9 @@ def update_config_file(config_path: Path, filename: str, cid: str):
     if old_line_pattern in config_content:
         config_content = config_content.replace(old_line_pattern, new_line)
         config_path.write_text(config_content)
-        print(f"  ✓ Updated {filename} in {config_path}")
+        print(f"  Updated {filename} in {config_path}")
     else:
-        print(f"  ⚠ No empty entry for {filename} in config.py")
+        print(f"  No empty entry for {filename} in config.py")
         print(f'     Add manually: "{filename}": "{cid}"')
 
 

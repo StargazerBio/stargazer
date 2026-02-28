@@ -13,7 +13,7 @@ import pytest
 from config import CIDS
 from conftest import FIXTURES_DIR
 
-from stargazer.utils.ipfile import IpFile
+from stargazer.types.component import ComponentFile
 from stargazer.utils.pinata import PinataClient
 
 
@@ -27,29 +27,29 @@ async def test_upload_and_delete_file():
     client = PinataClient()
 
     # Use the smallest reference file for quick testing
-    test_file = FIXTURES_DIR.joinpath("upload_delete.txt")
-    assert test_file.exists(), f"Test file not found: {test_file}"
+    test_file_path = FIXTURES_DIR.joinpath("upload_delete.txt")
+    assert test_file_path.exists(), f"Test file not found: {test_file_path}"
 
     # Upload the file with test metadata
-    print(f"\nUploading test file: {test_file.name}")
-    test_file = await client.upload_file(test_file, keyvalues={"test": "true"})
+    print(f"\nUploading test file: {test_file_path.name}")
+    comp = ComponentFile(path=test_file_path, keyvalues={"test": "true"})
+    await client.upload(comp)
 
     try:
         # Verify upload succeeded
-        assert test_file.id is not None, "Upload should return a file ID"
-        assert test_file.cid is not None, "Upload should return a CID"
-        assert test_file.keyvalues.get("test") == "true", "Metadata should be preserved"
-        print(f"Upload successful - ID: {test_file.id}, CID: {test_file.cid}")
+        assert comp.cid, "Upload should return a CID"
+        assert comp.keyvalues.get("test") == "true", "Metadata should be preserved"
+        print(f"Upload successful - CID: {comp.cid}")
 
         # If we have an expected CID, verify it matches (CIDs are deterministic)
         expected_cid = CIDS.get("upload_delete.txt")
         if expected_cid:
-            assert test_file.cid == expected_cid, (
-                f"CID mismatch: expected {expected_cid}, got {test_file.cid}"
+            assert comp.cid == expected_cid, (
+                f"CID mismatch: expected {expected_cid}, got {comp.cid}"
             )
             print("CID matches expected value")
         else:
-            print(f"  Note: Add to CIDS: 'upload_delete.txt': '{test_file.cid}'")
+            print(f"  Note: Add to CIDS: 'upload_delete.txt': '{comp.cid}'")
 
     finally:
         pass  # Pinata API issue with delay after upload
@@ -79,7 +79,7 @@ async def test_query():
 
     # Query by keyvalue to find all reference files
     print("\nQuerying files by keyvalue (type=reference)...")
-    found_files = await client.query_files({"type": "reference"})
+    found_files = await client.query({"type": "reference"})
     print(found_files)
 
     # Should find at least our uploaded files
@@ -113,36 +113,24 @@ async def test_download_file(tmp_path):
 
     expected_content = FIXTURES_DIR.joinpath(test_file).read_text()
 
-    from datetime import datetime, timezone
-
-    test_ipfile = IpFile(
-        id="test-download-id",
+    comp = ComponentFile(
         cid=test_cid,
-        name=test_file,
-        size=len(expected_content.encode()),
         keyvalues={"type": "reference"},
-        created_at=datetime.now(timezone.utc),
-        is_public=False,
     )
 
     print(f"\nDownloading file with CID: {test_cid}")
-    downloaded_ipfile = await client.download_file(test_ipfile)
+    await client.download(comp)
 
     # Verify the file was downloaded
-    assert downloaded_ipfile.local_path is not None, (
-        "Downloaded file should have a path"
-    )
-    assert downloaded_ipfile.local_path.exists(), (
-        f"Downloaded file not found at: {downloaded_ipfile.local_path}"
-    )
-    print(f"File downloaded successfully to: {downloaded_ipfile.local_path}")
+    assert comp.path is not None, "Downloaded file should have a path"
+    assert comp.path.exists(), f"Downloaded file not found at: {comp.path}"
+    print(f"File downloaded successfully to: {comp.path}")
 
-    # Verify IpFile metadata is preserved
-    assert downloaded_ipfile.cid == test_cid, "CID should match"
-    assert downloaded_ipfile.name == test_file, "Name should match"
+    # Verify ComponentFile metadata is preserved
+    assert comp.cid == test_cid, "CID should match"
 
     # Read and verify content
-    content = downloaded_ipfile.local_path.read_text()
+    content = comp.path.read_text()
     assert content == expected_content, (
         f"Content mismatch: expected '{expected_content}', got '{content}'"
     )
@@ -151,13 +139,13 @@ async def test_download_file(tmp_path):
     # Test downloading to a specific destination
     dest_path = tmp_path / "downloaded_test.txt"
 
-    # Reset local_path so download_file doesn't short-circuit
-    test_ipfile.local_path = None
+    # Reset path so download doesn't short-circuit
+    comp.path = None
 
     print(f"Downloading to specific destination: {dest_path}")
-    result_ipfile = await client.download_file(test_ipfile, dest=dest_path)
+    await client.download(comp, dest=dest_path)
 
-    assert result_ipfile.local_path == dest_path, "Destination path should match"
+    assert comp.path == dest_path, "Destination path should match"
     assert dest_path.exists(), "File should exist at destination"
     assert dest_path.read_text() == expected_content, "Content should match original"
     print("Download to specific destination successful")

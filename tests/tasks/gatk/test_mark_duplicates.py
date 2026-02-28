@@ -3,7 +3,6 @@ Tests for mark_duplicates task.
 """
 
 import shutil
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -11,8 +10,9 @@ from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.mark_duplicates import mark_duplicates
 from stargazer.types import Reference, Alignment
+from stargazer.types.alignment import AlignmentFile
+from stargazer.types.reference import ReferenceFile
 from stargazer.utils.storage import default_client
-from stargazer.utils.ipfile import IpFile
 
 
 def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
@@ -50,11 +50,9 @@ async def test_mark_duplicates_marks_duplicates():
     local_dir = default_client.local_dir
     paths = setup_fixture_files(local_dir)
 
-    bam_ipfile = IpFile(
-        id="test-merged-bam",
+    bam_file = AlignmentFile(
         cid="test_merged_bam",
-        name="NA12829_TP53_merged.bam",
-        size=paths["bam"].stat().st_size,
+        path=paths["bam"],
         keyvalues={
             "type": "alignment",
             "component": "alignment",
@@ -62,32 +60,26 @@ async def test_mark_duplicates_marks_duplicates():
             "tool": "gatk_merge_bam_alignment",
             "sorted": "coordinate",
         },
-        created_at=datetime.now(),
     )
-    bam_ipfile.local_path = paths["bam"]
 
-    ref_ipfile = IpFile(
-        id="test-ref-fasta",
+    ref_fasta = ReferenceFile(
         cid="test_ref_fasta",
-        name="GRCh38_TP53.fa",
-        size=paths["ref_fasta"].stat().st_size,
+        path=paths["ref_fasta"],
         keyvalues={
             "type": "reference",
             "component": "fasta",
             "build": "GRCh38",
         },
-        created_at=datetime.now(),
     )
-    ref_ipfile.local_path = paths["ref_fasta"]
 
     alignment = Alignment(
         sample_id=sample_id,
-        alignment=bam_ipfile,
+        alignment=bam_file,
     )
 
     ref = Reference(
         build="GRCh38",
-        fasta=ref_ipfile,
+        fasta=ref_fasta,
     )
 
     marked = await mark_duplicates(
@@ -100,10 +92,10 @@ async def test_mark_duplicates_marks_duplicates():
     assert marked.sample_id == sample_id
 
     # Check metadata
-    bam_file = marked.alignment
-    assert bam_file is not None
-    assert bam_file.keyvalues.get("duplicates_marked") == "true"
-    assert bam_file.keyvalues.get("tool") == "gatk_mark_duplicates"
+    result_bam = marked.alignment
+    assert result_bam is not None
+    assert result_bam.keyvalues.get("duplicates_marked") == "true"
+    assert result_bam.keyvalues.get("tool") == "gatk_mark_duplicates"
 
 
 @pytest.mark.asyncio

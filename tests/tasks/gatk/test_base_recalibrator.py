@@ -3,7 +3,6 @@ Tests for base_recalibrator task.
 """
 
 import shutil
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -11,8 +10,10 @@ from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.base_recalibrator import base_recalibrator
 from stargazer.types import Reference, Alignment
+from stargazer.types.alignment import AlignmentFile
+from stargazer.types.component import ComponentFile
+from stargazer.types.reference import ReferenceFile
 from stargazer.utils.storage import default_client
-from stargazer.utils.ipfile import IpFile
 
 
 def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
@@ -51,22 +52,27 @@ def setup_fixture_files(local_dir: Path) -> dict[str, Path]:
 
 def register_known_sites_in_db(local_dir: Path, paths: dict[str, Path]):
     """
-    Insert known sites VCF record directly into TinyDB so query_files() can find it.
-    Uses a rel_path that preserves the .vcf extension for GATK compatibility.
+    Register known sites VCF in the local DB so query() can find it.
+    Copies both the VCF and its index, preserving filenames for GATK compatibility.
     """
+    vcf_name = "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf"
+    # Copy VCF and index to local_dir preserving names
+    for key in ("known_sites", "known_sites_idx"):
+        src = paths[key]
+        dst = local_dir / src.name
+        if not dst.exists():
+            shutil.copy2(src, dst)
+
+    # Insert DB record so query() finds it by keyvalues
     default_client.db.insert(
         {
-            "id": "test-known-sites",
             "cid": "test_known_sites",
-            "name": "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf",
-            "size": paths["known_sites"].stat().st_size,
             "keyvalues": {
                 "type": "known_sites",
-                "name": "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf",
+                "name": vcf_name,
             },
-            "created_at": datetime.now().isoformat(),
-            "is_public": False,
-            "rel_path": "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf",
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "rel_path": vcf_name,
         }
     )
 
@@ -77,16 +83,19 @@ async def test_base_recalibrator_creates_report():
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
+    from stargazer.utils.local_storage import LocalStorageClient
+
+    if not isinstance(default_client, LocalStorageClient):
+        pytest.skip("test requires LocalStorageClient (unset PINATA_JWT)")
+
     sample_id = "NA12829_bqsr"
     local_dir = default_client.local_dir
     paths = setup_fixture_files(local_dir)
     register_known_sites_in_db(local_dir, paths)
 
-    bam_ipfile = IpFile(
-        id="test-markdup-bam",
+    bam_file = AlignmentFile(
         cid="test_markdup_bam",
-        name="NA12829_TP53_markdup.bam",
-        size=paths["bam"].stat().st_size,
+        path=paths["bam"],
         keyvalues={
             "type": "alignment",
             "component": "alignment",
@@ -95,32 +104,26 @@ async def test_base_recalibrator_creates_report():
             "sorted": "coordinate",
             "duplicates_marked": "true",
         },
-        created_at=datetime.now(),
     )
-    bam_ipfile.local_path = paths["bam"]
 
-    ref_ipfile = IpFile(
-        id="test-ref-fasta",
+    ref_fasta = ReferenceFile(
         cid="test_ref_fasta",
-        name="GRCh38_TP53.fa",
-        size=paths["ref_fasta"].stat().st_size,
+        path=paths["ref_fasta"],
         keyvalues={
             "type": "reference",
             "component": "fasta",
             "build": "GRCh38",
         },
-        created_at=datetime.now(),
     )
-    ref_ipfile.local_path = paths["ref_fasta"]
 
     alignment = Alignment(
         sample_id=sample_id,
-        alignment=bam_ipfile,
+        alignment=bam_file,
     )
 
     ref = Reference(
         build="GRCh38",
-        fasta=ref_ipfile,
+        fasta=ref_fasta,
     )
 
     recal_report = await base_recalibrator(
@@ -130,7 +133,7 @@ async def test_base_recalibrator_creates_report():
     )
 
     # Verify result
-    assert isinstance(recal_report, IpFile)
+    assert isinstance(recal_report, ComponentFile)
     assert recal_report.keyvalues.get("type") == "bqsr_report"
     assert recal_report.keyvalues.get("sample_id") == sample_id
 

@@ -55,3 +55,11 @@ class Alignment(BioType):
     sample_id: str
     alignment: AlignmentFile | None = None
     index: AlignmentIndex | None = None
+
+    @property
+    def has_bqsr_applied(self) -> bool:
+        return self.alignment is not None and self.alignment.bqsr_applied
+
+    @property
+    def has_duplicates_marked(self) -> bool:
+        return self.alignment is not None and self.alignment.duplicates_marked
