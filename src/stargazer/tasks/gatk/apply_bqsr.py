@@ -4,12 +4,12 @@ apply_bqsr task for Stargazer.
 Applies BQSR recalibration to BAM files using GATK ApplyBQSR.
 """
 
+import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
 from stargazer.types.alignment import AlignmentFile
 from stargazer.types.component import ComponentFile
 from stargazer.utils import _run
-from stargazer.utils.storage import default_client
 
 
 @gatk_env.task
@@ -56,7 +56,7 @@ async def apply_bqsr(
     # Fetch all inputs to cache
     await alignment.fetch()
     await ref.fetch()
-    await default_client.download(recal_report)
+    await _storage.default_client.download(recal_report)
 
     # Get paths
     if not ref.fasta or not ref.fasta.path:
@@ -66,7 +66,7 @@ async def apply_bqsr(
         raise ValueError("Alignment BAM file not available or not fetched")
     bam_path = alignment.alignment.path
     recal_path = recal_report.path
-    output_dir = ref_path.parent
+    output_dir = _storage.default_client.local_dir
 
     if not recal_path or not recal_path.exists():
         raise FileNotFoundError(

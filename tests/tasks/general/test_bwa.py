@@ -7,159 +7,89 @@ import shutil
 import pytest
 from conftest import FIXTURES_DIR
 
-import stargazer.utils.storage as _storage_mod
 from stargazer.tasks.general.bwa import bwa_index
 from stargazer.types import Reference
 from stargazer.types.reference import ReferenceFile, AlignerIndex
 
 
 @pytest.mark.asyncio
-async def test_bwa_index():
+async def test_bwa_index(fixtures_db):
     """Test bwa index creates all index files (.amb, .ann, .bwt, .pac, .sa)."""
-    # Check if bwa is available
     if shutil.which("bwa") is None:
         pytest.skip("bwa not available in environment")
 
-    # Setup: Copy test reference to cache directory
-    ref_fixture = FIXTURES_DIR / "GRCh38_TP53.fa"
-    assert ref_fixture.exists(), f"Test fixture not found: {ref_fixture}"
-
-    # Pre-populate cache using _storage_mod.default_client
-    test_cid = "QmTestTP53Fasta"
-    cached_fasta = _storage_mod.default_client.local_dir / test_cid
-    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy(ref_fixture, cached_fasta)
-
-    # Create a Reference with the cached file
-    fasta_file = ReferenceFile(
-        cid=test_cid,
+    ref_fasta = ReferenceFile(
+        path=FIXTURES_DIR / "GRCh38_TP53.fa",
         keyvalues={
             "type": "reference",
             "component": "fasta",
             "build": "GRCh38",
-            "env": "test",
         },
     )
 
-    ref = Reference(
-        build="GRCh38",
-        fasta=fasta_file,
-    )
+    ref = Reference(build="GRCh38", fasta=ref_fasta)
 
-    # Run bwa_index - it will call ref.fetch() internally
+    fixtures_db()  # checkout: switch to isolated work dir
+
     result = await bwa_index(ref)
 
-    # Verify result
     assert isinstance(result, Reference)
     assert result.build == "GRCh38"
-
-    # Verify all 5 BWA index files were added
-    index_extensions = [".amb", ".ann", ".bwt", ".pac", ".sa"]
-
-    # Collect all index files from aligner_index
     assert len(result.aligner_index) == 5, "Should have exactly 5 BWA index files"
 
+    index_extensions = [".amb", ".ann", ".bwt", ".pac", ".sa"]
     for ext in index_extensions:
-        # Find index file by checking path names in aligner_index
-        index_files = [
+        matching = [
             f
             for f in result.aligner_index
             if f and f.path and f.path.name.endswith(ext)
         ]
-        assert len(index_files) == 1, f"Should have exactly one {ext} file"
+        assert len(matching) == 1, f"Should have exactly one {ext} file"
 
-        index_file = index_files[0]
-
-        # Verify index file has metadata
-        assert index_files[0].keyvalues.get("aligner") == "bwa", (
-            f"Index file {ext} should have aligner metadata"
-        )
-        assert index_files[0].keyvalues.get("type") == "reference", (
-            f"Index file {ext} should have type metadata"
-        )
-        assert index_files[0].keyvalues.get("component") == "aligner_index", (
-            f"Index file {ext} should have component metadata"
-        )
-        assert index_files[0].keyvalues.get("build") == "GRCh38", (
-            f"Index file {ext} should copy build metadata from reference"
-        )
-        assert index_file.keyvalues.get("type") == "reference", (
-            f"Index file {ext} should have type metadata"
-        )
-        assert index_file.keyvalues.get("build") == "GRCh38", (
-            f"Index file {ext} should copy build metadata from reference"
-        )
-
-        # Verify file exists at path
-        assert index_file.path is not None, f"Index file {ext} should have path set"
-        assert index_file.path.exists(), f"Index file {ext} should exist at path"
+        idx = matching[0]
+        assert idx.keyvalues.get("aligner") == "bwa"
+        assert idx.keyvalues.get("type") == "reference"
+        assert idx.keyvalues.get("component") == "aligner_index"
+        assert idx.keyvalues.get("build") == "GRCh38"
+        assert idx.path is not None
+        assert idx.path.exists()
 
 
 @pytest.mark.asyncio
-async def test_bwa_index_idempotent():
+async def test_bwa_index_idempotent(fixtures_db):
     """Test that bwa_index is idempotent (doesn't fail if index files already exist)."""
-    # Check if bwa is available
     if shutil.which("bwa") is None:
         pytest.skip("bwa not available in environment")
 
-    # Setup: Copy test reference to cache directory
-    fixtures_ref_dir = FIXTURES_DIR
-
-    # Pre-populate cache using _storage_mod.default_client
-    _storage_mod.default_client.local_dir.mkdir(parents=True, exist_ok=True)
-
-    # Create test CIDs for all files
-    test_cid_fasta = "QmTestTP53FastaIdempotent"
-    cached_fasta = _storage_mod.default_client.local_dir / test_cid_fasta
-    shutil.copy(fixtures_ref_dir / "GRCh38_TP53.fa", cached_fasta)
-
-    fasta_file = ReferenceFile(
-        cid=test_cid_fasta,
-        keyvalues={
-            "type": "reference",
-            "component": "fasta",
-            "env": "test",
-        },
-    )
-
-    # Add all index files if they exist in fixtures
     index_extensions = [".amb", ".ann", ".bwt", ".pac", ".sa"]
-    ext_names = ["amb", "ann", "bwt", "pac", "sa"]
-    aligner_index_files = []
-    for i, ext in enumerate(index_extensions):
-        index_fixture = fixtures_ref_dir / f"GRCh38_TP53.fa{ext}"
-        if index_fixture.exists():
-            test_cid_index = f"QmTestTP53{ext_names[i].upper()}"
-            cached_index = _storage_mod.default_client.local_dir / test_cid_index
-            shutil.copy(index_fixture, cached_index)
-
-            aligner_index_files.append(
-                AlignerIndex(
-                    cid=test_cid_index,
-                    keyvalues={
-                        "type": "reference",
-                        "component": "aligner_index",
-                        "aligner": "bwa",
-                        "env": "test",
-                    },
-                )
-            )
+    aligner_index_files = [
+        AlignerIndex(
+            path=FIXTURES_DIR / f"GRCh38_TP53.fa{ext}",
+            keyvalues={
+                "type": "reference",
+                "component": "aligner_index",
+                "aligner": "bwa",
+            },
+        )
+        for ext in index_extensions
+        if (FIXTURES_DIR / f"GRCh38_TP53.fa{ext}").exists()
+    ]
 
     ref = Reference(
         build="GRCh38",
-        fasta=fasta_file,
+        fasta=ReferenceFile(
+            path=FIXTURES_DIR / "GRCh38_TP53.fa",
+            keyvalues={"type": "reference", "component": "fasta"},
+        ),
         aligner_index=aligner_index_files,
     )
 
-    # Run bwa_index (should not regenerate if all files present)
+    fixtures_db()  # checkout
+
     result = await bwa_index(ref)
 
-    # Verify result
     assert isinstance(result, Reference)
-
-    # Should still have same number of aligner_index files
-    original_index_count = len(aligner_index_files)
-    assert len(result.aligner_index) == original_index_count, (
+    assert len(result.aligner_index) == len(aligner_index_files), (
         "Should not duplicate index files"
     )
 
@@ -167,13 +97,10 @@ async def test_bwa_index_idempotent():
 @pytest.mark.asyncio
 async def test_bwa_index_missing_file():
     """Test that bwa_index raises error when reference file is missing."""
-    # Check if bwa is available
     if shutil.which("bwa") is None:
         pytest.skip("bwa not available in environment")
 
-    # Create a Reference with no FASTA file
     ref = Reference(build="nonexistent.fasta")
 
-    # Should raise ValueError when trying to fetch empty reference
     with pytest.raises(ValueError, match="No files to fetch"):
         await bwa_index(ref)

@@ -4,12 +4,12 @@ mark_duplicates task for Stargazer.
 Marks duplicate reads in BAM files using GATK MarkDuplicates.
 """
 
+import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
 from stargazer.types.alignment import AlignmentFile, AlignmentIndex
 from stargazer.types.component import ComponentFile
 from stargazer.utils import _run
-from stargazer.utils.storage import default_client
 
 
 @gatk_env.task
@@ -46,11 +46,10 @@ async def mark_duplicates(
     # Get paths
     if not ref.fasta or not ref.fasta.path:
         raise ValueError("Reference FASTA file not available or not fetched")
-    ref_path = ref.fasta.path
     if not alignment.alignment or not alignment.alignment.path:
         raise ValueError("Alignment BAM file not available or not fetched")
     bam_path = alignment.alignment.path
-    output_dir = ref_path.parent
+    output_dir = _storage.default_client.local_dir
 
     # Output BAM and metrics paths
     output_bam = output_dir / f"{alignment.sample_id}_marked_duplicates.bam"
@@ -107,6 +106,6 @@ async def mark_duplicates(
                 "tool": "gatk_mark_duplicates",
             },
         )
-        await default_client.upload(metrics_comp)
+        await _storage.default_client.upload(metrics_comp)
 
     return Alignment(sample_id=alignment.sample_id, alignment=bam, index=idx)

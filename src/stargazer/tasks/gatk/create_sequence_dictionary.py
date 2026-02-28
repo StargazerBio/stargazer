@@ -2,9 +2,10 @@
 GATK CreateSequenceDictionary task for reference genome.
 """
 
+import stargazer.utils.storage as _storage
+from stargazer.config import gatk_env
 from stargazer.types import Reference
 from stargazer.types.reference import SequenceDict
-from stargazer.config import gatk_env
 from stargazer.utils import _run
 
 
@@ -35,8 +36,9 @@ async def create_sequence_dictionary(ref: Reference) -> Reference:
     if ref.sequence_dictionary is not None:
         return ref
 
-    # Run GATK CreateSequenceDictionary
-    dict_path = ref_file_path.parent / f"{ref_file_path.stem}.dict"
+    # Run GATK CreateSequenceDictionary, writing .dict to output_dir
+    output_dir = _storage.default_client.local_dir
+    dict_path = output_dir / f"{ref_file_path.stem}.dict"
     cmd = [
         "gatk",
         "CreateSequenceDictionary",
@@ -45,7 +47,7 @@ async def create_sequence_dictionary(ref: Reference) -> Reference:
         "-O",
         str(dict_path),
     ]
-    await _run(cmd, cwd=str(ref_file_path.parent))
+    await _run(cmd, cwd=str(output_dir))
 
     if not dict_path.exists():
         raise FileNotFoundError(

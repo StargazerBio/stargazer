@@ -2,9 +2,10 @@
 Samtools tasks for reference genome indexing.
 """
 
+import stargazer.utils.storage as _storage
+from stargazer.config import gatk_env
 from stargazer.types import Reference
 from stargazer.types.reference import ReferenceIndex
-from stargazer.config import gatk_env
 from stargazer.utils import _run
 
 
@@ -35,12 +36,12 @@ async def samtools_faidx(ref: Reference) -> Reference:
     if ref.faidx is not None:
         return ref
 
-    # Run samtools faidx in the cache directory
-    # The .fai will be created next to the source file
+    # Run samtools faidx, writing .fai to output_dir
+    output_dir = _storage.default_client.local_dir
     base_name = ref_file_path.name
-    fai_path = ref_file_path.parent / f"{base_name}.fai"
+    fai_path = output_dir / f"{base_name}.fai"
     cmd = ["samtools", "faidx", str(ref_file_path), "--fai-idx", str(fai_path)]
-    await _run(cmd, cwd=str(ref_file_path.parent))
+    await _run(cmd, cwd=str(output_dir))
 
     if not fai_path.exists():
         raise FileNotFoundError(f"FASTA index file {fai_path.name} was not created")

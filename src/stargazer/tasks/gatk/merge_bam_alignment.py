@@ -4,6 +4,7 @@ merge_bam_alignment task for Stargazer.
 Merges aligned BAM with unmapped BAM using GATK MergeBamAlignment.
 """
 
+import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
 from stargazer.types.alignment import AlignmentFile, AlignmentIndex
@@ -58,7 +59,7 @@ async def merge_bam_alignment(
     if not unmapped_bam.alignment or not unmapped_bam.alignment.path:
         raise ValueError("Unmapped BAM file not available or not fetched")
     unmapped_path = unmapped_bam.alignment.path
-    output_dir = ref_path.parent
+    output_dir = _storage.default_client.local_dir
 
     # Output BAM path
     output_bam = output_dir / f"{aligned_bam.sample_id}_merged.bam"

@@ -51,34 +51,16 @@ def pytest_runtest_teardown(item, nextitem):
         os.environ.pop("PINATA_JWT", None)
 
 
-@pytest.fixture(autouse=True)
-def setup_local_mode(request, tmp_path):
-    """Configure tests to run in local mode with isolated storage.
-
-    Pinata-marked tests bypass this fixture so they can use the real
-    Pinata client.
-    """
-    if request.node.get_closest_marker("pinata"):
-        yield
-        return
-
-    test_local_dir = tmp_path / "stargazer_test"
-    test_local_dir.mkdir(parents=True, exist_ok=True)
-
-    local_client = LocalStorageClient(local_dir=test_local_dir)
-
-    orig_client = _storage_mod.default_client
-    _storage_mod.default_client = local_client
-
-    yield
-
-    _storage_mod.default_client = orig_client
-
-
 @pytest.fixture
 def fixtures_db(tmp_path):
-    """Two-phase fixture: query inputs from fixtures, run tasks in clean tmp."""
-    # Phase 1: point at fixtures for querying
+    """Two-phase fixture: query inputs from fixtures, run tasks in clean tmp.
+
+    Phase 1 (before calling checkout): default_client points to FIXTURES_DIR
+    so tests can query the fixtures DB and build types with real CIDs/paths.
+
+    Phase 2 (after calling checkout()): default_client switches to an empty
+    tmp work dir so task outputs are isolated per test.
+    """
     fixtures_client = LocalStorageClient(local_dir=FIXTURES_DIR)
     fixtures_client.local_db_path = FIXTURES_DB
 
@@ -92,5 +74,6 @@ def fixtures_db(tmp_path):
         work_client = LocalStorageClient(local_dir=work_dir)
         _storage_mod.default_client = work_client
 
-    checkout._orig_client = orig_client
-    return checkout
+    yield checkout
+
+    _storage_mod.default_client = orig_client

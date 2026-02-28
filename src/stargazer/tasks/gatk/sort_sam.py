@@ -4,6 +4,7 @@ sort_sam task for Stargazer.
 Sorts BAM files using GATK SortSam.
 """
 
+import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
 from stargazer.types.alignment import AlignmentFile, AlignmentIndex
@@ -55,11 +56,10 @@ async def sort_sam(
     # Get paths
     if not ref.fasta or not ref.fasta.path:
         raise ValueError("Reference FASTA file not available or not fetched")
-    ref_path = ref.fasta.path
     if not alignment.alignment or not alignment.alignment.path:
         raise ValueError("Alignment BAM file not available or not fetched")
     bam_path = alignment.alignment.path
-    output_dir = ref_path.parent
+    output_dir = _storage.default_client.local_dir
 
     # Output BAM path
     output_bam = output_dir / f"{alignment.sample_id}_sorted_{sort_order}.bam"

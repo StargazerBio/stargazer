@@ -5,6 +5,7 @@ Performs joint genotyping by converting GVCF to VCF using GATK GenotypeGVCFs.
 This is a key step in the GATK Best Practices germline short variant discovery workflow.
 """
 
+import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Variants
 from stargazer.types.variants import VariantsFile
@@ -70,7 +71,7 @@ async def genotype_gvcf(
     gvcf_path = gvcf.vcf.path
 
     # Create output VCF path
-    output_dir = ref_path.parent
+    output_dir = _storage.default_client.local_dir
     output_vcf = output_dir / f"{gvcf.sample_id}_genotyped.vcf"
 
     # Build GATK GenotypeGVCFs command

@@ -10,6 +10,7 @@ workflow when performing cohort analysis.
 
 from pathlib import Path
 
+import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Variants
 from stargazer.types.variants import VariantsFile
@@ -94,7 +95,7 @@ async def combine_gvcfs(
     ref_path = ref.fasta.path
 
     # Create output GVCF path
-    output_dir = ref_path.parent
+    output_dir = _storage.default_client.local_dir
     output_gvcf = output_dir / f"{cohort_id}_combined.g.vcf"
 
     # Build CombineGVCFs command

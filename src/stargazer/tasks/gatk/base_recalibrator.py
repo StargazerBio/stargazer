@@ -4,11 +4,11 @@ base_recalibrator task for Stargazer.
 Creates BQSR recalibration table using GATK BaseRecalibrator.
 """
 
+import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
 from stargazer.types.component import ComponentFile
 from stargazer.utils import _run
-from stargazer.utils.storage import default_client
 
 
 @gatk_env.task
@@ -65,13 +65,13 @@ async def base_recalibrator(
         raise ValueError("Alignment BAM file not available or not fetched")
     bam_path = alignment.alignment.path
 
-    output_dir = ref_path.parent
+    output_dir = _storage.default_client.local_dir
 
     # Fetch known sites VCFs to cache
     known_sites_paths = []
     for site_name in known_sites:
         # Query for the known sites VCF file
-        files = await default_client.query(
+        files = await _storage.default_client.query(
             {
                 "type": "known_sites",
                 "name": site_name,
@@ -80,14 +80,14 @@ async def base_recalibrator(
 
         if not files:
             # Try alternate query with just the name
-            files = await default_client.query({"name": site_name})
+            files = await _storage.default_client.query({"name": site_name})
 
         if not files:
             raise ValueError(f"Known sites file not found: {site_name}")
 
         # Download the file
         site_file = files[0]
-        await default_client.download(site_file)
+        await _storage.default_client.download(site_file)
         known_sites_paths.append(site_file.path)
 
     # Output recalibration report path
@@ -127,6 +127,6 @@ async def base_recalibrator(
             "tool": "gatk_base_recalibrator",
         },
     )
-    await default_client.upload(recal_comp)
+    await _storage.default_client.upload(recal_comp)
 
     return recal_comp

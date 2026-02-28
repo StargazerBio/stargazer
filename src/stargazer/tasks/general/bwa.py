@@ -5,6 +5,7 @@ BWA tasks for reference genome indexing and alignment.
 import asyncio
 import shlex
 
+import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Alignment, Reads, Reference
 from stargazer.types.alignment import AlignmentFile
@@ -52,10 +53,12 @@ async def bwa_index(ref: Reference) -> Reference:
     if len(ref.aligner_index) >= len(index_extensions):
         return ref
 
-    # Run bwa index in the cache directory
-    # BWA index creates index files next to the source file
-    cmd = ["bwa", "index", str(ref_file_path)]
-    stdout, stderr = await _run(cmd, cwd=str(ref_file_path.parent))
+    # Run bwa index, directing output to output_dir via -p prefix
+    output_dir = _storage.default_client.local_dir
+    base_name = ref_file_path.name
+    output_prefix = output_dir / base_name
+    cmd = ["bwa", "index", "-p", str(output_prefix), str(ref_file_path)]
+    stdout, stderr = await _run(cmd, cwd=str(output_dir))
 
     # Log any output from bwa
     if stdout:
@@ -66,15 +69,11 @@ async def bwa_index(ref: Reference) -> Reference:
     # Get build from fasta metadata
     build = ref.fasta.build
 
-    # Collect all index file paths
-    # BWA creates index files with the input filename as base
-    # e.g., if input is /path/to/QmABC, it creates QmABC.amb, QmABC.ann, etc.
-    base_name = ref_file_path.name
+    # Collect all index file paths from output_dir
     index_file_paths = []
 
     for ext in index_extensions:
-        # Index files are named after the cached file (CID), not ref_name
-        cached_index_path = ref_file_path.parent / f"{base_name}{ext}"
+        cached_index_path = output_dir / f"{base_name}{ext}"
 
         if not cached_index_path.exists():
             raise FileNotFoundError(
@@ -158,8 +157,8 @@ async def bwa_mem(
             f"@RG\\tID:{reads.sample_id}\\tSM:{reads.sample_id}\\tLB:lib\\tPL:ILLUMINA"
         )
 
-    # Create output BAM path in cache directory
-    output_dir = ref_path.parent
+    # Create output BAM path in output dir
+    output_dir = _storage.default_client.local_dir
     output_bam = output_dir / f"{reads.sample_id}_aligned.bam"
 
     # Build BWA-MEM command
