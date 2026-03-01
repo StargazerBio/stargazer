@@ -36,6 +36,15 @@ class VariantsIndex(ComponentFile):
     _field_defaults = {"sample_id": ""}
 
 
+@dataclass
+class KnownSites(ComponentFile):
+    """Known variant sites VCF file used for BQSR."""
+
+    _type_key: ClassVar[str] = "variants"
+    _component_key: ClassVar[str] = "known_sites"
+    _field_defaults = {"sample_id": ""}
+
+
 # ---------------------------------------------------------------------------
 # BioType
 # ---------------------------------------------------------------------------

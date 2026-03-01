@@ -96,7 +96,7 @@ class TaskRegistry:
         for name in tasks_mod.__all__:
             obj = getattr(tasks_mod, name)
             if not hasattr(obj, "func"):
-                continue  # Skip non-task objects like VQSRResource
+                continue
             self._register(obj.short_name, obj, category="task")
 
     def _discover_workflows(self):

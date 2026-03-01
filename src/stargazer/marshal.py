@@ -10,7 +10,6 @@ from typing import Any, Union, get_args, get_origin
 
 from stargazer.types.component import ComponentFile
 from stargazer.types.biotype import BioType
-from stargazer.tasks.gatk.variant_recalibrator import VQSRResource
 
 
 def marshal_input(value: Any, hint: Any) -> Any:
@@ -36,10 +35,6 @@ def marshal_input(value: Any, hint: Any) -> Any:
         and isinstance(value, dict)
     ):
         return hint.from_dict(value)
-
-    # VQSRResource (no from_dict)
-    if isinstance(hint, type) and hint is VQSRResource and isinstance(value, dict):
-        return VQSRResource(**value)
 
     # Path
     if isinstance(hint, type) and issubclass(hint, Path):

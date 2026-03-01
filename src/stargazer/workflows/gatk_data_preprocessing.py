@@ -23,7 +23,7 @@ import asyncio
 import flyte
 
 from stargazer.config import gatk_env
-from stargazer.types import Reference, Reads, Alignment
+from stargazer.types import Reference, Reads, Alignment, KnownSites
 from stargazer.tasks import (
     samtools_faidx,
     create_sequence_dictionary,
@@ -71,7 +71,7 @@ async def prepare_reference(ref_name: str) -> Reference:
 async def preprocess_sample(
     sample_id: str,
     ref: Reference,
-    known_sites: list[str] | None = None,
+    known_sites: list[KnownSites] | None = None,
     run_bqsr: bool = True,
 ) -> Alignment:
     """
@@ -88,8 +88,7 @@ async def preprocess_sample(
     Args:
         sample_id: Sample identifier for querying reads from Pinata
         ref: Prepared reference genome (with indices)
-        known_sites: List of known variant VCF filenames for BQSR
-                    (e.g., ["dbsnp_146.hg38.vcf.gz", "Mills_and_1000G_gold_standard.indels.hg38.vcf.gz"])
+        known_sites: List of Variants objects for known variant sites (dbSNP, known indels, etc.)
                     Required if run_bqsr=True
         run_bqsr: Whether to apply BQSR (default: True)
                   If True, known_sites must be provided
@@ -108,7 +107,7 @@ async def preprocess_sample(
         alignment = await preprocess_sample(
             sample_id="NA12878",
             ref=ref,
-            known_sites=["dbsnp_146.hg38.vcf.gz", "Mills_and_1000G_gold_standard.indels.hg38.vcf.gz"],
+            known_sites=[mills_variants, dbsnp_variants],
             run_bqsr=True,
         )
 
@@ -172,7 +171,7 @@ async def preprocess_sample(
 async def preprocess_cohort(
     sample_ids: list[str],
     ref_name: str,
-    known_sites: list[str] | None = None,
+    known_sites: list[KnownSites] | None = None,
     run_bqsr: bool = True,
 ) -> list[Alignment]:
     """
@@ -189,7 +188,7 @@ async def preprocess_cohort(
     Args:
         sample_ids: List of sample identifiers
         ref_name: Reference genome name
-        known_sites: List of known variant VCF filenames for BQSR
+        known_sites: List of Variants objects for known variant sites
         run_bqsr: Whether to apply BQSR (default: True)
 
     Returns:
@@ -202,7 +201,7 @@ async def preprocess_cohort(
         alignments = await preprocess_cohort(
             sample_ids=["NA12878", "NA12891", "NA12892"],
             ref_name="GRCh38.fa",
-            known_sites=["dbsnp_146.hg38.vcf.gz"],
+            known_sites=[dbsnp_variants],
             run_bqsr=True,
         )
     """
@@ -238,7 +237,7 @@ async def preprocess_cohort(
 async def apply_bqsr_to_alignment(
     alignment: Alignment,
     ref: Reference,
-    known_sites: list[str],
+    known_sites: list[KnownSites],
 ) -> Alignment:
     """
     Apply BQSR to an existing alignment.
@@ -259,7 +258,7 @@ async def apply_bqsr_to_alignment(
         recalibrated = await apply_bqsr_to_alignment(
             alignment=existing_alignment,
             ref=ref,
-            known_sites=["dbsnp_146.hg38.vcf.gz"],
+            known_sites=[dbsnp_variants],
         )
     """
     if not known_sites:
@@ -293,7 +292,7 @@ if __name__ == "__main__":
         preprocess_cohort,
         sample_ids=["NA12829_TP53"],
         ref_name="GRCh38_TP53.fa",
-        known_sites=["Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf"],
+        known_sites=[],  # Provide Variants objects for known sites
         apply_bqsr=True,
     )
     run.wait()

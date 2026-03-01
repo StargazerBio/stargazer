@@ -6,7 +6,7 @@ Creates BQSR recalibration table using GATK BaseRecalibrator.
 
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
-from stargazer.types import Reference, Alignment
+from stargazer.types import Reference, Alignment, KnownSites
 from stargazer.types.component import ComponentFile
 from stargazer.utils import _run
 
@@ -15,7 +15,7 @@ from stargazer.utils import _run
 async def base_recalibrator(
     alignment: Alignment,
     ref: Reference,
-    known_sites: list[str],
+    known_sites: list[KnownSites],
 ) -> ComponentFile:
     """
     Generate a Base Quality Score Recalibration report.
@@ -26,8 +26,7 @@ async def base_recalibrator(
     Args:
         alignment: Input BAM file (should be sorted and have duplicates marked)
         ref: Reference genome with FASTA index
-        known_sites: List of known variant VCF files (dbSNP, known indels, etc.)
-                    These should be filenames stored in storage with type="known_sites"
+        known_sites: List of Variants objects for known variant sites (dbSNP, known indels, etc.)
 
     Returns:
         ComponentFile containing the BQSR recalibration report
@@ -38,7 +37,7 @@ async def base_recalibrator(
         recal_report = await base_recalibrator(
             alignment=alignment,
             ref=ref,
-            known_sites=["dbsnp_146.hg38.vcf.gz", "Mills_and_1000G_gold_standard.indels.hg38.vcf.gz"],
+            known_sites=[mills_variants, dbsnp_variants],
         )
         recalibrated_bam = await applybqsr(
             alignment=alignment,
@@ -69,26 +68,9 @@ async def base_recalibrator(
 
     # Fetch known sites VCFs to cache
     known_sites_paths = []
-    for site_name in known_sites:
-        # Query for the known sites VCF file
-        files = await _storage.default_client.query(
-            {
-                "type": "known_sites",
-                "name": site_name,
-            }
-        )
-
-        if not files:
-            # Try alternate query with just the name
-            files = await _storage.default_client.query({"name": site_name})
-
-        if not files:
-            raise ValueError(f"Known sites file not found: {site_name}")
-
-        # Download the file
-        site_file = files[0]
-        await _storage.default_client.download(site_file)
-        known_sites_paths.append(site_file.path)
+    for site in known_sites:
+        await _storage.default_client.download(site)
+        known_sites_paths.append(site.path)
 
     # Output recalibration report path
     output_recal = output_dir / f"{alignment.sample_id}_bqsr.table"

@@ -13,7 +13,7 @@ from stargazer.types.reference import (
 )
 from stargazer.types.reads import Reads, R1File, R2File
 from stargazer.types.alignment import Alignment, AlignmentFile, AlignmentIndex
-from stargazer.types.variants import Variants, VariantsFile, VariantsIndex
+from stargazer.types.variants import Variants, VariantsFile, VariantsIndex, KnownSites
 
 # Auto-populated via ComponentFile.__init_subclass__
 COMPONENT_REGISTRY = ComponentFile._registry
@@ -65,4 +65,5 @@ __all__ = [
     "Variants",
     "VariantsFile",
     "VariantsIndex",
+    "KnownSites",
 ]

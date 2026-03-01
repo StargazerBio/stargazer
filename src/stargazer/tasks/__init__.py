@@ -17,7 +17,7 @@ from stargazer.tasks.gatk.merge_bam_alignment import merge_bam_alignment
 from stargazer.tasks.gatk.genotype_gvcf import genotype_gvcf
 from stargazer.tasks.gatk.combine_gvcfs import combine_gvcfs
 from stargazer.tasks.gatk.genomics_db_import import genomics_db_import
-from stargazer.tasks.gatk.variant_recalibrator import variant_recalibrator, VQSRResource
+from stargazer.tasks.gatk.variant_recalibrator import variant_recalibrator
 from stargazer.tasks.gatk.apply_vqsr import apply_vqsr
 
 __all__ = [
@@ -42,6 +42,5 @@ __all__ = [
     "genomics_db_import",
     # Variant filtering (VQSR)
     "variant_recalibrator",
-    "VQSRResource",
     "apply_vqsr",
 ]

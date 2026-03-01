@@ -7,9 +7,8 @@ import shutil
 import pytest
 from conftest import FIXTURES_DIR
 
-import stargazer.utils.storage as _storage_mod
 from stargazer.tasks.gatk.base_recalibrator import base_recalibrator
-from stargazer.types import Reference, Alignment
+from stargazer.types import Reference, Alignment, KnownSites
 from stargazer.types.alignment import AlignmentFile
 from stargazer.types.component import ComponentFile
 from stargazer.types.reference import ReferenceFile
@@ -51,29 +50,15 @@ async def test_base_recalibrator_creates_report(fixtures_db):
 
     fixtures_db()  # checkout: switch to isolated work dir
 
-    # Upload known sites (VCF + index) into work DB so the task's query() can find them
-    # GATK requires the .idx file to be co-located with the VCF for random access
-    await _storage_mod.default_client.upload(
-        ComponentFile(
-            path=FIXTURES_DIR / KNOWN_SITES_VCF,
-            keyvalues={"type": "known_sites", "name": KNOWN_SITES_VCF},
-        )
-    )
-    await _storage_mod.default_client.upload(
-        ComponentFile(
-            path=FIXTURES_DIR / f"{KNOWN_SITES_VCF}.idx",
-            keyvalues={
-                "type": "known_sites",
-                "component": "index",
-                "name": f"{KNOWN_SITES_VCF}.idx",
-            },
-        )
+    known_sites_file = KnownSites(
+        path=FIXTURES_DIR / KNOWN_SITES_VCF,
+        keyvalues={"sample_id": KNOWN_SITES_VCF},
     )
 
     recal_report = await base_recalibrator(
         alignment=alignment,
         ref=ref,
-        known_sites=[KNOWN_SITES_VCF],
+        known_sites=[known_sites_file],
     )
 
     assert isinstance(recal_report, ComponentFile)

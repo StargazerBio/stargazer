@@ -4,7 +4,6 @@ VariantRecalibrator task for Stargazer.
 Builds a recalibration model to score variant quality for filtering purposes using VQSR.
 """
 
-from dataclasses import dataclass
 from pathlib import Path
 
 from stargazer.config import gatk_env
@@ -12,43 +11,11 @@ from stargazer.types import Reference, Variants
 from stargazer.utils import _run
 
 
-@dataclass
-class VQSRResource:
-    """
-    Resource file for VQSR training/validation.
-
-    Attributes:
-        name: Resource name label (e.g., "hapmap", "1000G", "dbsnp")
-        vcf_name: Name of the resource VCF file (stored in Pinata)
-        known: Whether the resource is a known site (true/false string for GATK)
-        training: Whether to use for training the model (true/false string)
-        truth: Whether this is a truth set (true/false string)
-        prior: Prior probability for variants in this resource (e.g., "15.0" for high confidence)
-
-    Example:
-        hapmap = VQSRResource(
-            name="hapmap",
-            vcf_name="hapmap_3.3.hg38.vcf.gz",
-            known="false",
-            training="true",
-            truth="true",
-            prior="15.0"
-        )
-    """
-
-    name: str
-    vcf_name: str
-    known: str
-    training: str
-    truth: str
-    prior: str
-
-
 @gatk_env.task
 async def variant_recalibrator(
     vcf: Variants,
     ref: Reference,
-    resources: list[VQSRResource],
+    resources: list[Variants],
     annotations: list[str],
     mode: str = "SNP",
     tranches: list[float] | None = None,
@@ -64,7 +31,7 @@ async def variant_recalibrator(
     Args:
         vcf: Input VCF with variants to recalibrate
         ref: Reference genome
-        resources: List of VQSRResource objects specifying training/truth sets
+        resources: List of Variants objects with VQSR metadata in vcf.keyvalues
         annotations: List of annotation names to use for training (e.g., ["QD", "FS", "MQ"])
         mode: Recalibration mode - "SNP", "INDEL", or "BOTH" (default: "SNP")
         tranches: Truth sensitivity tranches as percentages (default: [100.0, 99.9, 99.0, 90.0])
@@ -78,27 +45,21 @@ async def variant_recalibrator(
         FileNotFoundError: If output files are not created
 
     Example:
-        # Typical SNP recalibration
+        # Typical SNP recalibration — resources are Variants with VQSR keyvalues
         resources = [
-            VQSRResource(
-                name="hapmap",
-                vcf_name="hapmap_3.3.hg38.vcf.gz",
-                known="false", training="true", truth="true", prior="15.0"
+            Variants(
+                sample_id="hapmap",
+                vcf=VariantsFile(
+                    path=Path("hapmap_3.3.hg38.vcf.gz"),
+                    keyvalues={"known": "false", "training": "true", "truth": "true", "prior": "15.0"},
+                ),
             ),
-            VQSRResource(
-                name="omni",
-                vcf_name="1000G_omni2.5.hg38.vcf.gz",
-                known="false", training="true", truth="true", prior="12.0"
-            ),
-            VQSRResource(
-                name="1000G",
-                vcf_name="1000G_phase1.snps.high_confidence.hg38.vcf.gz",
-                known="false", training="true", truth="false", prior="10.0"
-            ),
-            VQSRResource(
-                name="dbsnp",
-                vcf_name="dbsnp_146.hg38.vcf.gz",
-                known="true", training="false", truth="false", prior="2.0"
+            Variants(
+                sample_id="dbsnp",
+                vcf=VariantsFile(
+                    path=Path("dbsnp_146.hg38.vcf.gz"),
+                    keyvalues={"known": "true", "training": "false", "truth": "false", "prior": "2.0"},
+                ),
             ),
         ]
 
@@ -152,14 +113,7 @@ async def variant_recalibrator(
 
     # Fetch resource files
     for resource in resources:
-        # Resources should be pre-uploaded to Pinata and hydrated like any other file
-        # For now, assume they're in the same output_dir
-        resource_path = output_dir / resource.vcf_name
-        if not resource_path.exists():
-            raise FileNotFoundError(
-                f"Resource file not found: {resource_path}. "
-                f"Please ensure VQSR resources are available."
-            )
+        await resource.fetch()
 
     # Output files (named by sample_id)
     recal_file = output_dir / f"{vcf.sample_id}.{mode.lower()}.recal"
@@ -185,10 +139,11 @@ async def variant_recalibrator(
 
     # Add resources
     for resource in resources:
-        resource_path = output_dir / resource.vcf_name
+        resource_path = resource.vcf.path
+        kv = resource.vcf.keyvalues
         resource_arg = (
-            f"--resource:{resource.name},known={resource.known},"
-            f"training={resource.training},truth={resource.truth},prior={resource.prior}"
+            f"--resource:{resource.sample_id},known={kv.get('known')},"
+            f"training={kv.get('training')},truth={kv.get('truth')},prior={kv.get('prior')}"
         )
         cmd.extend([resource_arg, str(resource_path)])
 

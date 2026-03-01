@@ -4,7 +4,6 @@ from pathlib import Path
 
 from stargazer.marshal import marshal_input, marshal_output
 from stargazer.types import Reference, Alignment, Reads, Variants
-from stargazer.tasks.gatk.variant_recalibrator import VQSRResource
 
 
 # ---------------------------------------------------------------------------
@@ -39,22 +38,6 @@ def test_marshal_input_variants_from_dict():
     result = marshal_input(d, Variants)
     assert isinstance(result, Variants)
     assert result.sample_id == "NA12878"
-
-
-def test_marshal_input_vqsr_resource():
-    """VQSRResource is constructed via **kwargs."""
-    d = {
-        "name": "hapmap",
-        "vcf_name": "hapmap.vcf.gz",
-        "known": "false",
-        "training": "true",
-        "truth": "true",
-        "prior": "15.0",
-    }
-    result = marshal_input(d, VQSRResource)
-    assert isinstance(result, VQSRResource)
-    assert result.name == "hapmap"
-    assert result.prior == "15.0"
 
 
 def test_marshal_input_path():

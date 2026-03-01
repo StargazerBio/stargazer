@@ -28,7 +28,7 @@ import asyncio
 import flyte
 
 from stargazer.config import gatk_env
-from stargazer.types import Reference, Reads, Alignment, Variants
+from stargazer.types import Reference, Reads, Alignment, Variants, KnownSites
 from stargazer.tasks import (
     hydrate,
     samtools_faidx,
@@ -41,7 +41,6 @@ from stargazer.tasks import (
     base_recalibrator,
     apply_bqsr,
     variant_recalibrator,
-    VQSRResource,
     apply_vqsr,
 )
 
@@ -74,7 +73,7 @@ async def prepare_reference(ref_name: str) -> Reference:
 async def align_sample(
     sample_id: str,
     ref: Reference,
-    known_sites: list[str] | None = None,
+    known_sites: list[KnownSites] | None = None,
     run_bqsr: bool = False,
 ) -> Alignment:
     """
@@ -87,8 +86,7 @@ async def align_sample(
     Args:
         sample_id: Sample identifier for querying reads
         ref: Prepared reference genome
-        known_sites: List of known variant VCF filenames for BQSR
-                    (e.g., ["dbsnp_146.hg38.vcf.gz"])
+        known_sites: List of Variants objects for known variant sites (dbSNP, known indels, etc.)
         run_bqsr: Whether to apply BQSR (default: False)
                   If True, known_sites must be provided
 
@@ -158,7 +156,7 @@ async def call_variants_gvcf(
 async def germline_single_sample(
     sample_id: str,
     ref_name: str,
-    known_sites: list[str] | None = None,
+    known_sites: list[KnownSites] | None = None,
     run_bqsr: bool = False,
 ) -> tuple[Alignment, Variants]:
     """
@@ -173,8 +171,7 @@ async def germline_single_sample(
     Args:
         sample_id: Sample identifier
         ref_name: Reference genome name
-        known_sites: List of known variant VCF filenames for BQSR
-                    (e.g., ["dbsnp_146.hg38.vcf.gz"])
+        known_sites: List of Variants objects for known variant sites (dbSNP, known indels, etc.)
         run_bqsr: Whether to apply BQSR (default: False)
                   Recommended for production use
 
@@ -228,7 +225,7 @@ async def germline_cohort(
     sample_ids: list[str],
     ref_name: str,
     cohort_id: str = "cohort",
-    known_sites: list[str] | None = None,
+    known_sites: list[KnownSites] | None = None,
     run_bqsr: bool = False,
 ) -> tuple[list[Alignment], list[Variants], Variants]:
     """
@@ -368,10 +365,10 @@ async def germline_cohort_with_vqsr(
     sample_ids: list[str],
     ref_name: str,
     cohort_id: str = "cohort",
-    known_sites: list[str] | None = None,
+    known_sites: list[KnownSites] | None = None,
     run_bqsr: bool = False,
-    vqsr_snp_resources: list[VQSRResource] | None = None,
-    vqsr_indel_resources: list[VQSRResource] | None = None,
+    vqsr_snp_resources: list[Variants] | None = None,
+    vqsr_indel_resources: list[Variants] | None = None,
     snp_truth_sensitivity: float = 99.0,
     indel_truth_sensitivity: float = 99.0,
 ) -> tuple[list[Alignment], list[Variants], Variants, Variants]:
@@ -407,39 +404,9 @@ async def germline_cohort_with_vqsr(
         - filtered_vcf: Final VQSR-filtered VCF (production-quality)
 
     Example:
-        from stargazer.tasks import VQSRResource
-
-        # Define VQSR resources for SNPs
-        snp_resources = [
-            VQSRResource(
-                name="hapmap", vcf_name="hapmap_3.3.hg38.vcf.gz",
-                known="false", training="true", truth="true", prior="15.0"
-            ),
-            VQSRResource(
-                name="omni", vcf_name="1000G_omni2.5.hg38.vcf.gz",
-                known="false", training="true", truth="true", prior="12.0"
-            ),
-            VQSRResource(
-                name="1000G", vcf_name="1000G_phase1.snps.high_confidence.hg38.vcf.gz",
-                known="false", training="true", truth="false", prior="10.0"
-            ),
-            VQSRResource(
-                name="dbsnp", vcf_name="dbsnp_146.hg38.vcf.gz",
-                known="true", training="false", truth="false", prior="2.0"
-            ),
-        ]
-
-        # Define VQSR resources for INDELs
-        indel_resources = [
-            VQSRResource(
-                name="mills", vcf_name="Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
-                known="false", training="true", truth="true", prior="12.0"
-            ),
-            VQSRResource(
-                name="dbsnp", vcf_name="dbsnp_146.hg38.vcf.gz",
-                known="true", training="false", truth="false", prior="2.0"
-            ),
-        ]
+        # VQSR resources are Variants objects with VQSR metadata in keyvalues
+        snp_resources = [hapmap_variants, omni_variants, thousandg_variants, dbsnp_variants]
+        indel_resources = [mills_variants, dbsnp_variants]
 
         flyte.init_from_config()
 
@@ -448,7 +415,7 @@ async def germline_cohort_with_vqsr(
             sample_ids=["NA12878", "NA12891", "NA12892"],
             ref_name="GRCh38.fa",
             cohort_id="family_trio",
-            known_sites=["dbsnp_146.hg38.vcf.gz"],
+            known_sites=[dbsnp_variants],
             run_bqsr=True,
             vqsr_snp_resources=snp_resources,
             vqsr_indel_resources=indel_resources,

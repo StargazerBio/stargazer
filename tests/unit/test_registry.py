@@ -51,12 +51,6 @@ def test_discovery_finds_all_workflows():
     assert expected_workflows == wf_names
 
 
-def test_vqsr_resource_excluded():
-    """VQSRResource (non-task dataclass) is not registered."""
-    reg = TaskRegistry()
-    assert reg.get("VQSRResource") is None
-
-
 def test_duplicate_prepare_reference_not_duplicated():
     """prepare_reference exists in both workflow modules but is registered once."""
     reg = TaskRegistry()
