@@ -441,40 +441,31 @@ async def germline_cohort_with_vqsr(
     if vqsr_snp_resources and vqsr_indel_resources:
         # SNP recalibration
 
-        snp_recal, snp_tranches = await variant_recalibrator(
+        # SNP recalibration
+        snp_vcf = await variant_recalibrator(
             vcf=joint_vcf,
             ref=ref,
             resources=vqsr_snp_resources,
             annotations=["QD", "MQRankSum", "ReadPosRankSum", "FS", "MQ", "SOR"],
             mode="SNP",
         )
-
-        # Apply SNP filtering
         snp_filtered_vcf = await apply_vqsr(
-            vcf=joint_vcf,
-            recal_file=snp_recal,
-            tranches_file=snp_tranches,
+            vcf=snp_vcf,
             ref=ref,
-            mode="SNP",
             truth_sensitivity_filter_level=snp_truth_sensitivity,
         )
 
         # INDEL recalibration
-        indel_recal, indel_tranches = await variant_recalibrator(
+        indel_vcf = await variant_recalibrator(
             vcf=snp_filtered_vcf,
             ref=ref,
             resources=vqsr_indel_resources,
             annotations=["QD", "MQRankSum", "ReadPosRankSum", "FS", "SOR"],
             mode="INDEL",
         )
-
-        # Apply INDEL filtering
         final_filtered_vcf = await apply_vqsr(
-            vcf=snp_filtered_vcf,
-            recal_file=indel_recal,
-            tranches_file=indel_tranches,
+            vcf=indel_vcf,
             ref=ref,
-            mode="INDEL",
             truth_sensitivity_filter_level=indel_truth_sensitivity,
         )
 

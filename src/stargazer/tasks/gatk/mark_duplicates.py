@@ -7,8 +7,7 @@ Marks duplicate reads in BAM files using GATK MarkDuplicates.
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment
-from stargazer.types.alignment import AlignmentFile, AlignmentIndex
-from stargazer.types.component import ComponentFile
+from stargazer.types.alignment import AlignmentFile, AlignmentIndex, DuplicateMetrics
 from stargazer.utils import _run
 
 
@@ -98,14 +97,9 @@ async def mark_duplicates(
 
     # Optionally upload metrics file
     if metrics_file.exists():
-        metrics_comp = ComponentFile(
-            path=metrics_file,
-            keyvalues={
-                "type": "duplicate_metrics",
-                "sample_id": alignment.sample_id,
-                "tool": "gatk_mark_duplicates",
-            },
+        metrics_comp = DuplicateMetrics()
+        await metrics_comp.update(
+            metrics_file, sample_id=alignment.sample_id, tool="gatk_mark_duplicates"
         )
-        await _storage.default_client.upload(metrics_comp)
 
     return Alignment(sample_id=alignment.sample_id, alignment=bam, index=idx)

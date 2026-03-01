@@ -45,6 +45,24 @@ class KnownSites(ComponentFile):
     _field_defaults = {"sample_id": ""}
 
 
+@dataclass
+class RecalFile(ComponentFile):
+    """VQSR recalibration file (.recal) produced by GATK VariantRecalibrator."""
+
+    _type_key: ClassVar[str] = "variants"
+    _component_key: ClassVar[str] = "recal"
+    _field_defaults = {"sample_id": "", "mode": ""}
+
+
+@dataclass
+class TranchesFile(ComponentFile):
+    """VQSR tranches file (.tranches) produced by GATK VariantRecalibrator."""
+
+    _type_key: ClassVar[str] = "variants"
+    _component_key: ClassVar[str] = "tranches"
+    _field_defaults = {"sample_id": "", "mode": ""}
+
+
 # ---------------------------------------------------------------------------
 # BioType
 # ---------------------------------------------------------------------------
@@ -59,11 +77,15 @@ class Variants(BioType):
         sample_id: Sample identifier
         vcf: VCF/GVCF file
         index: VCF index (.tbi) file
+        recal: VQSR recalibration file (set after variant_recalibrator, consumed by apply_vqsr)
+        tranches: VQSR tranches file (set after variant_recalibrator, consumed by apply_vqsr)
     """
 
     sample_id: str
     vcf: VariantsFile | None = None
     index: VariantsIndex | None = None
+    recal: RecalFile | None = None
+    tranches: TranchesFile | None = None
 
     @property
     def is_gvcf(self) -> bool:

@@ -12,8 +12,21 @@ from stargazer.types.reference import (
     AlignerIndex,
 )
 from stargazer.types.reads import Reads, R1File, R2File
-from stargazer.types.alignment import Alignment, AlignmentFile, AlignmentIndex
-from stargazer.types.variants import Variants, VariantsFile, VariantsIndex, KnownSites
+from stargazer.types.alignment import (
+    Alignment,
+    AlignmentFile,
+    AlignmentIndex,
+    BQSRReport,
+    DuplicateMetrics,
+)
+from stargazer.types.variants import (
+    Variants,
+    VariantsFile,
+    VariantsIndex,
+    KnownSites,
+    RecalFile,
+    TranchesFile,
+)
 
 # Auto-populated via ComponentFile.__init_subclass__
 COMPONENT_REGISTRY = ComponentFile._registry
@@ -61,9 +74,13 @@ __all__ = [
     "Alignment",
     "AlignmentFile",
     "AlignmentIndex",
+    "BQSRReport",
+    "DuplicateMetrics",
     # Variants
     "Variants",
     "VariantsFile",
     "VariantsIndex",
     "KnownSites",
+    "RecalFile",
+    "TranchesFile",
 ]

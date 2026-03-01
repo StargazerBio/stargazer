@@ -9,8 +9,7 @@ from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.apply_bqsr import apply_bqsr
 from stargazer.types import Reference, Alignment
-from stargazer.types.alignment import AlignmentFile
-from stargazer.types.component import ComponentFile
+from stargazer.types.alignment import AlignmentFile, BQSRReport
 from stargazer.types.reference import ReferenceFile
 
 
@@ -35,6 +34,10 @@ async def test_apply_bqsr_recalibrates_bam(fixtures_db):
                 "duplicates_marked": "true",
             },
         ),
+        bqsr_report=BQSRReport(
+            path=FIXTURES_DIR / "NA12829_TP53_bqsr.table",
+            keyvalues={"sample_id": sample_id, "tool": "gatk_base_recalibrator"},
+        ),
     )
 
     ref = Reference(
@@ -45,22 +48,9 @@ async def test_apply_bqsr_recalibrates_bam(fixtures_db):
         ),
     )
 
-    recal_file = ComponentFile(
-        path=FIXTURES_DIR / "NA12829_TP53_bqsr.table",
-        keyvalues={
-            "type": "bqsr_report",
-            "sample_id": sample_id,
-            "tool": "gatk_base_recalibrator",
-        },
-    )
-
     fixtures_db()  # checkout: switch to isolated work dir
 
-    recalibrated = await apply_bqsr(
-        alignment=alignment,
-        ref=ref,
-        recal_report=recal_file,
-    )
+    recalibrated = await apply_bqsr(alignment=alignment, ref=ref)
 
     assert isinstance(recalibrated, Alignment)
     assert recalibrated.sample_id == sample_id
@@ -70,6 +60,19 @@ async def test_apply_bqsr_recalibrates_bam(fixtures_db):
     assert result_bam is not None
     assert result_bam.keyvalues.get("bqsr_applied") == "true"
     assert result_bam.keyvalues.get("tool") == "gatk_apply_bqsr"
+    # bqsr_report is not carried to the output (report was consumed)
+    assert recalibrated.bqsr_report is None
+
+
+@pytest.mark.asyncio
+async def test_apply_bqsr_rejects_missing_report():
+    """Test that apply_bqsr raises if bqsr_report is not set on alignment."""
+    alignment = Alignment(
+        sample_id="test",
+        alignment=AlignmentFile(keyvalues={"duplicates_marked": "true"}),
+    )
+    with pytest.raises(ValueError, match="bqsr_report is not set"):
+        await apply_bqsr(alignment=alignment, ref=Reference(build="test"))
 
 
 @pytest.mark.asyncio

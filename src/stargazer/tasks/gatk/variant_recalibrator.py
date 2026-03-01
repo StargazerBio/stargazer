@@ -4,10 +4,9 @@ VariantRecalibrator task for Stargazer.
 Builds a recalibration model to score variant quality for filtering purposes using VQSR.
 """
 
-from pathlib import Path
-
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Variants
+from stargazer.types.variants import RecalFile, TranchesFile
 from stargazer.utils import _run
 
 
@@ -20,13 +19,13 @@ async def variant_recalibrator(
     mode: str = "SNP",
     tranches: list[float] | None = None,
     max_gaussians: int = 8,
-) -> tuple[Path, Path]:
+) -> Variants:
     """
     Build a recalibration model to score variant quality (VQSR).
 
     Uses machine learning to build a model that distinguishes true variants
-    from artifacts based on variant annotations. This is the first step of
-    VQSR filtering; use apply_vqsr to apply the model.
+    from artifacts based on variant annotations. Returns the same VCF with
+    recal and tranches fields populated, ready to pass directly to apply_vqsr.
 
     Args:
         vcf: Input VCF with variants to recalibrate
@@ -38,47 +37,15 @@ async def variant_recalibrator(
         max_gaussians: Maximum number of Gaussians for positive model (default: 8)
 
     Returns:
-        Tuple of (recal_file, tranches_file) paths
+        Variants with recal and tranches fields set
 
     Raises:
         ValueError: If VCF is a GVCF (must be genotyped VCF)
         FileNotFoundError: If output files are not created
 
-    Example:
-        # Typical SNP recalibration — resources are Variants with VQSR keyvalues
-        resources = [
-            Variants(
-                sample_id="hapmap",
-                vcf=VariantsFile(
-                    path=Path("hapmap_3.3.hg38.vcf.gz"),
-                    keyvalues={"known": "false", "training": "true", "truth": "true", "prior": "15.0"},
-                ),
-            ),
-            Variants(
-                sample_id="dbsnp",
-                vcf=VariantsFile(
-                    path=Path("dbsnp_146.hg38.vcf.gz"),
-                    keyvalues={"known": "true", "training": "false", "truth": "false", "prior": "2.0"},
-                ),
-            ),
-        ]
-
-        annotations = ["QD", "MQRankSum", "ReadPosRankSum", "FS", "MQ", "SOR"]
-
-        recal, tranches = await variant_recalibrator(
-            vcf=joint_vcf,
-            ref=ref,
-            resources=resources,
-            annotations=annotations,
-            mode="SNP",
-        )
-
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037504732-VariantRecalibrator
-        https://gatk.broadinstitute.org/hc/en-us/articles/360035531612-Variant-Quality-Score-Recalibration-VQSR
     """
-
-    # Validate inputs
     if vcf.vcf and vcf.vcf.variant_type == "gvcf":
         raise ValueError(
             f"VariantRecalibrator requires a genotyped VCF, not a GVCF. "
@@ -94,15 +61,12 @@ async def variant_recalibrator(
     if mode not in ["SNP", "INDEL", "BOTH"]:
         raise ValueError(f"mode must be 'SNP', 'INDEL', or 'BOTH', got: {mode}")
 
-    # Set default tranches
     if tranches is None:
         tranches = [100.0, 99.9, 99.0, 90.0]
 
-    # Fetch inputs
     await vcf.fetch()
     await ref.fetch()
 
-    # Get paths
     if not vcf.vcf or not vcf.vcf.path:
         raise ValueError("VCF file not available or not fetched")
     vcf_path = vcf.vcf.path
@@ -111,15 +75,12 @@ async def variant_recalibrator(
     ref_path = ref.fasta.path
     output_dir = vcf_path.parent
 
-    # Fetch resource files
     for resource in resources:
         await resource.fetch()
 
-    # Output files (named by sample_id)
-    recal_file = output_dir / f"{vcf.sample_id}.{mode.lower()}.recal"
-    tranches_file = output_dir / f"{vcf.sample_id}.{mode.lower()}.tranches"
+    recal_path = output_dir / f"{vcf.sample_id}.{mode.lower()}.recal"
+    tranches_path = output_dir / f"{vcf.sample_id}.{mode.lower()}.tranches"
 
-    # Build command
     cmd = [
         "gatk",
         "VariantRecalibrator",
@@ -128,16 +89,15 @@ async def variant_recalibrator(
         "-V",
         str(vcf_path),
         "-O",
-        str(recal_file),
+        str(recal_path),
         "--tranches-file",
-        str(tranches_file),
+        str(tranches_path),
         "--mode",
         mode,
         "--max-gaussians",
         str(max_gaussians),
     ]
 
-    # Add resources
     for resource in resources:
         resource_path = resource.vcf.path
         kv = resource.vcf.keyvalues
@@ -147,25 +107,35 @@ async def variant_recalibrator(
         )
         cmd.extend([resource_arg, str(resource_path)])
 
-    # Add annotations
     for annotation in annotations:
         cmd.extend(["-an", annotation])
 
-    # Add tranches
     for tranche in tranches:
         cmd.extend(["-tranche", str(tranche)])
 
-    # Execute
     await _run(cmd, cwd=str(output_dir))
 
-    # Verify outputs
-    if not recal_file.exists():
+    if not recal_path.exists():
         raise FileNotFoundError(
-            f"VariantRecalibrator did not create recal file at {recal_file}"
+            f"VariantRecalibrator did not create recal file at {recal_path}"
         )
-    if not tranches_file.exists():
+    if not tranches_path.exists():
         raise FileNotFoundError(
-            f"VariantRecalibrator did not create tranches file at {tranches_file}"
+            f"VariantRecalibrator did not create tranches file at {tranches_path}"
         )
 
-    return recal_file, tranches_file
+    recal = RecalFile()
+    await recal.update(recal_path, sample_id=vcf.sample_id, mode=mode.lower())
+
+    tranches_comp = TranchesFile()
+    await tranches_comp.update(
+        tranches_path, sample_id=vcf.sample_id, mode=mode.lower()
+    )
+
+    return Variants(
+        sample_id=vcf.sample_id,
+        vcf=vcf.vcf,
+        index=vcf.index,
+        recal=recal,
+        tranches=tranches_comp,
+    )

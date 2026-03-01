@@ -10,7 +10,6 @@ from stargazer.tasks.gatk.create_sequence_dictionary import create_sequence_dict
 # GATK tasks
 from stargazer.tasks.gatk.base_recalibrator import base_recalibrator
 from stargazer.tasks.gatk.apply_bqsr import apply_bqsr
-from stargazer.tasks.gatk.analyze_covariates import analyze_covariates
 from stargazer.tasks.gatk.mark_duplicates import mark_duplicates
 from stargazer.tasks.gatk.sort_sam import sort_sam
 from stargazer.tasks.gatk.merge_bam_alignment import merge_bam_alignment
@@ -35,7 +34,6 @@ __all__ = [
     # BQSR (Base Quality Score Recalibration)
     "base_recalibrator",
     "apply_bqsr",
-    "analyze_covariates",
     # GVCF processing
     "genotype_gvcf",
     "combine_gvcfs",

@@ -19,7 +19,6 @@ def test_discovery_finds_all_tasks():
         "merge_bam_alignment",
         "base_recalibrator",
         "apply_bqsr",
-        "analyze_covariates",
         "genotype_gvcf",
         "combine_gvcfs",
         "genomics_db_import",
@@ -91,14 +90,13 @@ def test_to_catalog_structure():
     assert "Alignment" in bwa_mem_entry["outputs"][0]["type"]
 
 
-def test_multi_output_task():
-    """Tasks with tuple returns have multiple outputs (o0, o1, ...)."""
+def test_variant_recalibrator_single_output():
+    """variant_recalibrator returns a single Variants output."""
     reg = TaskRegistry()
     info = reg.get("variant_recalibrator")
     assert info is not None
-    assert len(info.outputs) == 2
-    assert info.outputs[0].name == "o0"
-    assert info.outputs[1].name == "o1"
+    assert len(info.outputs) == 1
+    assert info.outputs[0].type_name == "Variants"
 
 
 def test_get_returns_none_for_unknown():

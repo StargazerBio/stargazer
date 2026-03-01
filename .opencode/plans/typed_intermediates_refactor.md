@@ -498,28 +498,30 @@ Minimal set:
 Each phase must leave all existing tests passing before the next phase starts.
 
 ### Phase 1 — New type modules (no task changes yet)
-- [ ] Check existing `src/stargazer/types/vqsr.py` — adopt or replace
-- [ ] Create `src/stargazer/types/reports.py` with `BQSRReport`, `DuplicateMetrics`
-- [ ] Write `tests/unit/test_reports.py` — run and pass
+- [x] Check existing `src/stargazer/types/vqsr.py` — adopt or replace
+- [x] Create `src/stargazer/types/reports.py` with `BQSRReport`, `DuplicateMetrics`
+  - NOTE: `BQSRReport._type_key="alignment"`, `_component_key="bqsr_report"` (not standalone)
+  - NOTE: `DuplicateMetrics._type_key="alignment"`, `_component_key="markdup_metrics"`
+  - NOTE: `Alignment` BioType gains `bqsr_report: BQSRReport | None = None` field
+- [x] Write `tests/unit/test_reports.py` — run and pass
 - [ ] Write `tests/unit/test_vqsr_types.py` — run and pass
-- [ ] Update `src/stargazer/types/__init__.py` — add imports and `__all__` entries
-- [ ] `uv run pytest tests/unit/ -v` — all pass
+- [x] Update `src/stargazer/types/__init__.py` — add imports and `__all__` entries
+- [x] `uv run pytest tests/unit/ -v` — all pass
 
 ### Phase 2 — BQSR task updates
-- [ ] Update `base_recalibrator` — return `BQSRReport`
-- [ ] Update `apply_bqsr` — accept `BQSRReport`
-- [ ] Update `analyze_covariates` — accept `BQSRReport`
-- [ ] Update `test_base_recalibrator.py` — assert `BQSRReport` instance and component key
-- [ ] Update `test_apply_bqsr.py` — construct `BQSRReport` in test setup
-- [ ] Update `build_local_db.py` — add `"component": "report"` to bqsr entry
-- [ ] `uv run python tests/fixtures/build_local_db.py`
-- [ ] `uv run pytest tests/tasks/gatk/test_base_recalibrator.py tests/tasks/gatk/test_apply_bqsr.py -v`
+- [x] Update `base_recalibrator` — return `BQSRReport`
+- [x] Update `apply_bqsr` — accept `BQSRReport`
+- [x] Update `analyze_covariates` — accept `BQSRReport`; download before use
+- [x] Update `test_base_recalibrator.py` — assert `BQSRReport` instance and component key
+- [x] Update `test_apply_bqsr.py` — construct `BQSRReport` in test setup
+- [x] Update `build_local_db.py` — set `"type": "alignment"`, `"component": "bqsr_report"` on bqsr entry
+- [x] `uv run python tests/fixtures/build_local_db.py`
+- [x] `uv run pytest tests/tasks/gatk/test_base_recalibrator.py tests/tasks/gatk/test_apply_bqsr.py -v`
 
 ### Phase 3 — DuplicateMetrics side-effect
-- [ ] Update `mark_duplicates` — use `DuplicateMetrics()` instead of bare `ComponentFile`
-- [ ] Update `build_local_db.py` — add `"component": "metrics"` to duplicate_metrics entry
-- [ ] `uv run python tests/fixtures/build_local_db.py`
-- [ ] `uv run pytest tests/tasks/gatk/test_mark_duplicates.py -v`
+- [x] Update `mark_duplicates` — use `DuplicateMetrics()` instead of bare `ComponentFile`
+- [x] `build_local_db.py` — `markdup_metrics` entry already had correct `"type": "alignment"`, `"component": "markdup_metrics"`
+- [x] `uv run pytest tests/tasks/gatk/test_mark_duplicates.py -v`
 
 ### Phase 4 — VQSR task updates
 - [ ] Write `tests/tasks/gatk/test_variant_recalibrator.py` (tests first)

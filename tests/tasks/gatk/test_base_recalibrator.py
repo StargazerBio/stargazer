@@ -9,8 +9,7 @@ from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.base_recalibrator import base_recalibrator
 from stargazer.types import Reference, Alignment, KnownSites
-from stargazer.types.alignment import AlignmentFile
-from stargazer.types.component import ComponentFile
+from stargazer.types.alignment import AlignmentFile, BQSRReport
 from stargazer.types.reference import ReferenceFile
 
 
@@ -19,7 +18,7 @@ KNOWN_SITES_VCF = "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf"
 
 @pytest.mark.asyncio
 async def test_base_recalibrator_creates_report(fixtures_db):
-    """Test that base_recalibrator creates a recalibration report."""
+    """Test that base_recalibrator returns an Alignment with bqsr_report set."""
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
@@ -55,15 +54,20 @@ async def test_base_recalibrator_creates_report(fixtures_db):
         keyvalues={"sample_id": KNOWN_SITES_VCF},
     )
 
-    recal_report = await base_recalibrator(
+    result = await base_recalibrator(
         alignment=alignment,
         ref=ref,
         known_sites=[known_sites_file],
     )
 
-    assert isinstance(recal_report, ComponentFile)
-    assert recal_report.keyvalues.get("type") == "bqsr_report"
-    assert recal_report.keyvalues.get("sample_id") == sample_id
+    assert isinstance(result, Alignment)
+    assert result.bqsr_report is not None
+    assert isinstance(result.bqsr_report, BQSRReport)
+    assert result.bqsr_report.keyvalues.get("type") == "alignment"
+    assert result.bqsr_report.keyvalues.get("component") == "bqsr_report"
+    assert result.bqsr_report.keyvalues.get("sample_id") == sample_id
+    # alignment and index carry through unchanged
+    assert result.alignment is alignment.alignment
 
 
 @pytest.mark.asyncio

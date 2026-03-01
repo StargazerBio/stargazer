@@ -4,10 +4,9 @@ base_recalibrator task for Stargazer.
 Creates BQSR recalibration table using GATK BaseRecalibrator.
 """
 
-import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Alignment, KnownSites
-from stargazer.types.component import ComponentFile
+from stargazer.types.alignment import BQSRReport
 from stargazer.utils import _run
 
 
@@ -16,46 +15,33 @@ async def base_recalibrator(
     alignment: Alignment,
     ref: Reference,
     known_sites: list[KnownSites],
-) -> ComponentFile:
+) -> Alignment:
     """
     Generate a Base Quality Score Recalibration report.
 
     Uses GATK BaseRecalibrator to analyze patterns of covariation in the
-    sequence dataset and produce a recalibration table for use with applybqsr.
+    sequence dataset and produce a recalibration table. Returns the same
+    Alignment with bqsr_report populated, ready to pass directly to apply_bqsr.
 
     Args:
         alignment: Input BAM file (should be sorted and have duplicates marked)
         ref: Reference genome with FASTA index
-        known_sites: List of Variants objects for known variant sites (dbSNP, known indels, etc.)
+        known_sites: List of KnownSites VCFs for known variant sites (dbSNP, known indels, etc.)
 
     Returns:
-        ComponentFile containing the BQSR recalibration report
-
-    Example:
-        ref = await prepare_reference(ref_name="GRCh38.fa")
-        alignment = await mark_duplicates(alignment=alignment, ref=ref)
-        recal_report = await base_recalibrator(
-            alignment=alignment,
-            ref=ref,
-            known_sites=[mills_variants, dbsnp_variants],
-        )
-        recalibrated_bam = await applybqsr(
-            alignment=alignment,
-            ref=ref,
-            recal_report=recal_report,
-        )
+        Alignment with bqsr_report set
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360036898312-BaseRecalibrator
     """
+    import stargazer.utils.storage as _storage
+
     if not known_sites:
         raise ValueError("known_sites list cannot be empty for BQSR")
 
-    # Fetch alignment and reference to cache
     await alignment.fetch()
     await ref.fetch()
 
-    # Get paths (phase 4 will update these to use .path)
     if not ref.fasta or not ref.fasta.path:
         raise ValueError("Reference FASTA file not available or not fetched")
     ref_path = ref.fasta.path
@@ -66,16 +52,13 @@ async def base_recalibrator(
 
     output_dir = _storage.default_client.local_dir
 
-    # Fetch known sites VCFs to cache
     known_sites_paths = []
     for site in known_sites:
         await _storage.default_client.download(site)
         known_sites_paths.append(site.path)
 
-    # Output recalibration report path
     output_recal = output_dir / f"{alignment.sample_id}_bqsr.table"
 
-    # Build GATK BaseRecalibrator command
     cmd = [
         "gatk",
         "BaseRecalibrator",
@@ -86,29 +69,24 @@ async def base_recalibrator(
         "-O",
         str(output_recal),
     ]
-
-    # Add known sites (can specify multiple times)
     for site_path in known_sites_paths:
         cmd.extend(["--known-sites", str(site_path)])
 
-    # Execute BaseRecalibrator
     await _run(cmd, cwd=str(output_dir))
 
-    # Verify output was created
     if not output_recal.exists():
         raise FileNotFoundError(
             f"BaseRecalibrator did not create recalibration report at {output_recal}"
         )
 
-    # Upload recalibration report
-    recal_comp = ComponentFile(
-        path=output_recal,
-        keyvalues={
-            "type": "bqsr_report",
-            "sample_id": alignment.sample_id,
-            "tool": "gatk_base_recalibrator",
-        },
+    report = BQSRReport()
+    await report.update(
+        output_recal, sample_id=alignment.sample_id, tool="gatk_base_recalibrator"
     )
-    await _storage.default_client.upload(recal_comp)
 
-    return recal_comp
+    return Alignment(
+        sample_id=alignment.sample_id,
+        alignment=alignment.alignment,
+        index=alignment.index,
+        bqsr_report=report,
+    )

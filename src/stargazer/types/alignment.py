@@ -36,6 +36,24 @@ class AlignmentIndex(ComponentFile):
     _field_defaults = {"sample_id": ""}
 
 
+@dataclass
+class BQSRReport(ComponentFile):
+    """BQSR recalibration table produced by GATK BaseRecalibrator."""
+
+    _type_key: ClassVar[str] = "alignment"
+    _component_key: ClassVar[str] = "bqsr_report"
+    _field_defaults = {"sample_id": ""}
+
+
+@dataclass
+class DuplicateMetrics(ComponentFile):
+    """Duplicate metrics text file produced by GATK MarkDuplicates."""
+
+    _type_key: ClassVar[str] = "alignment"
+    _component_key: ClassVar[str] = "markdup_metrics"
+    _field_defaults = {"sample_id": ""}
+
+
 # ---------------------------------------------------------------------------
 # BioType
 # ---------------------------------------------------------------------------
@@ -50,11 +68,13 @@ class Alignment(BioType):
         sample_id: Sample identifier
         alignment: BAM/CRAM alignment file
         index: BAI/CRAI index file
+        bqsr_report: BQSR recalibration table (set after base_recalibrator, consumed by apply_bqsr)
     """
 
     sample_id: str
     alignment: AlignmentFile | None = None
     index: AlignmentIndex | None = None
+    bqsr_report: BQSRReport | None = None
 
     @property
     def has_bqsr_applied(self) -> bool:

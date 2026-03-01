@@ -169,7 +169,8 @@ FIXTURE_METADATA: dict[str, dict[str, str]] = {
         "recalibrated": "true",
     },
     "NA12829_TP53_bqsr.table": {
-        "type": "bqsr_report",
+        "type": "alignment",
+        "component": "bqsr_report",
         "sample_id": "NA12829",
     },
     # Known sites

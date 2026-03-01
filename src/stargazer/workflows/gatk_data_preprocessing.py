@@ -150,19 +150,15 @@ async def preprocess_sample(
 
     # Step 4: BQSR (optional but recommended)
     if run_bqsr and known_sites:
-        # Generate recalibration table
-        recal_report = await base_recalibrator(
+        # Generate recalibration table (sets alignment.bqsr_report)
+        alignment = await base_recalibrator(
             alignment=alignment,
             ref=ref,
             known_sites=known_sites,
         )
 
-        # Apply recalibration
-        alignment = await apply_bqsr(
-            alignment=alignment,
-            ref=ref,
-            recal_report=recal_report,
-        )
+        # Apply recalibration (reads alignment.bqsr_report)
+        alignment = await apply_bqsr(alignment=alignment, ref=ref)
 
     return alignment
 
@@ -264,21 +260,10 @@ async def apply_bqsr_to_alignment(
     if not known_sites:
         raise ValueError("known_sites list cannot be empty for BQSR")
 
-    # Generate recalibration table
-    recal_report = await base_recalibrator(
-        alignment=alignment,
-        ref=ref,
-        known_sites=known_sites,
+    alignment = await base_recalibrator(
+        alignment=alignment, ref=ref, known_sites=known_sites
     )
-
-    # Apply recalibration
-    recalibrated_alignment = await apply_bqsr(
-        alignment=alignment,
-        ref=ref,
-        recal_report=recal_report,
-    )
-
-    return recalibrated_alignment
+    return await apply_bqsr(alignment=alignment, ref=ref)
 
 
 if __name__ == "__main__":
