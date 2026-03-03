@@ -113,7 +113,7 @@ async def bwa_mem(
         Alignment object with unsorted BAM file
 
     Example:
-        from stargazer.tasks import hydrate
+        from stargazer.utils.hydrate import hydrate
 
         ref_list = await hydrate({"type": "reference", "build": "GRCh38.fa"})
         ref = next((r for r in ref_list if isinstance(r, Reference)), None)

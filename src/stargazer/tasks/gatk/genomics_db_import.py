@@ -16,7 +16,6 @@ async def genomics_db_import(
     gvcfs: list[Variants],
     workspace_path: Path,
     intervals: list[str] | None = None,
-    batch_size: int = 50,
 ) -> Path:
     """
     Import GVCFs to GenomicsDB workspace for scalable joint genotyping.
@@ -98,8 +97,6 @@ async def genomics_db_import(
         str(workspace_path),
         "--sample-name-map",
         str(sample_map_path),
-        "--batch-size",
-        str(batch_size),
     ]
 
     # Add intervals if specified

@@ -19,7 +19,7 @@ References:
 """
 
 from stargazer.config import gatk_env
-from stargazer.types import Reference, Reads, Alignment, KnownSites
+from stargazer.types import Reference, Reads, Alignment, Variants
 from stargazer.tasks import (
     samtools_faidx,
     create_sequence_dictionary,
@@ -30,33 +30,25 @@ from stargazer.tasks import (
     base_recalibrator,
     apply_bqsr,
 )
-from stargazer.utils.storage import default_client
 
 
 @gatk_env.task
-async def prepare_reference(ref_name: str) -> Reference:
+async def prepare_reference(data: list[Reference]) -> Reference:
     """
     Prepare reference genome for alignment and variant calling.
 
-    Hydrates reference from Pinata and creates necessary indices:
+    Creates necessary indices from a hydrated Reference:
     1. FASTA index (samtools faidx) - Required for alignment and BQSR
-    2. BWA index (bwa index) - Required for BWA-MEM alignment
+    2. Sequence dictionary (GATK CreateSequenceDictionary)
+    3. BWA index (bwa index) - Required for BWA-MEM alignment
 
     Args:
-        ref_name: Reference genome name (e.g., "GRCh38.fa")
+        data: List containing a single Reference with fasta component
 
     Returns:
         Reference object with all indices
-
-    Example:
-        ref = await prepare_reference(ref_name="GRCh38.fa")
     """
-    fasta_files = await default_client.query(
-        {"type": "reference", "component": "fasta", "build": ref_name}
-    )
-    if not fasta_files:
-        raise ValueError(f"Reference not found for build: {ref_name}")
-    ref = Reference(build=ref_name, fasta=fasta_files[0])
+    ref = data[0]
     ref = await samtools_faidx(ref)
     ref = await create_sequence_dictionary(ref)
     ref = await bwa_index(ref)
@@ -65,9 +57,7 @@ async def prepare_reference(ref_name: str) -> Reference:
 
 @gatk_env.task
 async def preprocess_sample(
-    sample_id: str,
-    ref: Reference,
-    known_sites: list[KnownSites] | None = None,
+    data: list[Reference | Reads | Variants],
     run_bqsr: bool = True,
 ) -> Alignment:
     """
@@ -82,58 +72,29 @@ async def preprocess_sample(
     All steps use standard GATK/BWA tools.
 
     Args:
-        sample_id: Sample identifier for querying reads from Pinata
-        ref: Prepared reference genome (with indices)
-        known_sites: List of Variants objects for known variant sites (dbSNP, known indels, etc.)
-                    Required if run_bqsr=True
+        data: Hydrated BioTypes containing Reference, Reads, and optionally
+              Variants with known_sites for BQSR
         run_bqsr: Whether to apply BQSR (default: True)
-                  If True, known_sites must be provided
+                  If True, data must contain Variants with known_sites
 
     Returns:
         Alignment object with sorted, duplicate-marked BAM
         (and optionally BQSR-recalibrated if run_bqsr=True)
 
     Raises:
-        ValueError: If run_bqsr=True but known_sites is empty/None
-
-    Example:
-        ref = await prepare_reference(ref_name="GRCh38.fa")
-
-        # With BQSR (recommended)
-        alignment = await preprocess_sample(
-            sample_id="NA12878",
-            ref=ref,
-            known_sites=[mills_variants, dbsnp_variants],
-            run_bqsr=True,
-        )
-
-        # Without BQSR (faster, but less accurate)
-        alignment = await preprocess_sample(
-            sample_id="NA12878",
-            ref=ref,
-            run_bqsr=False,
-        )
+        ValueError: If run_bqsr=True but no known_sites found in data
     """
+    ref = next(d for d in data if isinstance(d, Reference))
+    reads = next(d for d in data if isinstance(d, Reads))
+    known_sites = [
+        d.known_sites for d in data if isinstance(d, Variants) and d.known_sites
+    ]
+
     if run_bqsr and not known_sites:
         raise ValueError(
             "known_sites must be provided when run_bqsr=True. "
-            "Provide VCF files like dbSNP, Mills indels, or set run_bqsr=False."
+            "Provide Variants with known_sites component, or set run_bqsr=False."
         )
-
-    # Query reads from storage
-    r1_files = await default_client.query(
-        {"type": "reads", "component": "r1", "sample_id": sample_id}
-    )
-    if not r1_files:
-        raise ValueError(f"Reads not found for sample_id: {sample_id}")
-    r2_files = await default_client.query(
-        {"type": "reads", "component": "r2", "sample_id": sample_id}
-    )
-    reads = Reads(
-        sample_id=sample_id,
-        r1=r1_files[0],
-        r2=r2_files[0] if r2_files else None,
-    )
 
     # Step 1: Align reads to reference using BWA-MEM
     alignment = await bwa_mem(reads=reads, ref=ref)

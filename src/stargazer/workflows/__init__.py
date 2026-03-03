@@ -6,12 +6,7 @@ from stargazer.workflows.gatk_data_preprocessing import (
 )
 
 from stargazer.workflows.germline_short_variant_discovery import (
-    align_sample,
-    call_variants_gvcf,
-    germline_single_sample,
-    germline_cohort,
-    germline_from_gvcfs,
-    germline_cohort_with_vqsr,
+    germline_short_variant_discovery,
 )
 
 __all__ = [
@@ -19,10 +14,5 @@ __all__ = [
     "prepare_reference",
     "preprocess_sample",
     # GATK Best Practices germline workflows
-    "align_sample",
-    "call_variants_gvcf",
-    "germline_single_sample",
-    "germline_cohort",
-    "germline_from_gvcfs",
-    "germline_cohort_with_vqsr",
+    "germline_short_variant_discovery",
 ]

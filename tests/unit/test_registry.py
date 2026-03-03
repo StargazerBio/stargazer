@@ -9,7 +9,6 @@ def test_discovery_finds_all_tasks():
     task_names = {t.name for t in reg.list_tasks(category="task")}
 
     expected_tasks = {
-        "hydrate",
         "samtools_faidx",
         "create_sequence_dictionary",
         "bwa_index",
@@ -19,11 +18,10 @@ def test_discovery_finds_all_tasks():
         "merge_bam_alignment",
         "base_recalibrator",
         "apply_bqsr",
+        "haplotype_caller",
         "genotype_gvcf",
         "combine_gvcfs",
         "genomics_db_import",
-        "variant_recalibrator",
-        "apply_vqsr",
     }
     assert expected_tasks == task_names
 
@@ -37,15 +35,8 @@ def test_discovery_finds_all_workflows():
         # gatk_data_preprocessing
         "prepare_reference",
         "preprocess_sample",
-        "preprocess_cohort",
-        "apply_bqsr_to_alignment",
         # germline_short_variant_discovery
-        "align_sample",
-        "call_variants_gvcf",
-        "germline_single_sample",
-        "germline_cohort",
-        "germline_from_gvcfs",
-        "germline_cohort_with_vqsr",
+        "germline_short_variant_discovery",
     }
     assert expected_workflows == wf_names
 
@@ -90,15 +81,6 @@ def test_to_catalog_structure():
     assert "Alignment" in bwa_mem_entry["outputs"][0]["type"]
 
 
-def test_variant_recalibrator_single_output():
-    """variant_recalibrator returns a single Variants output."""
-    reg = TaskRegistry()
-    info = reg.get("variant_recalibrator")
-    assert info is not None
-    assert len(info.outputs) == 1
-    assert info.outputs[0].type_name == "Variants"
-
-
 def test_get_returns_none_for_unknown():
     """get() returns None for unregistered task names."""
     reg = TaskRegistry()
@@ -117,7 +99,7 @@ def test_list_tasks_no_filter():
 def test_task_info_has_task_obj():
     """TaskInfo stores the original Flyte task object."""
     reg = TaskRegistry()
-    info = reg.get("hydrate")
+    info = reg.get("bwa_mem")
     assert info is not None
     assert hasattr(info.task_obj, "func")
     assert callable(info.task_obj.func)

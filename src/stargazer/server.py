@@ -17,10 +17,11 @@ from pathlib import Path
 import flyte
 from mcp.server.fastmcp import FastMCP
 
-from stargazer.marshal import marshal_input, marshal_output
+from stargazer.marshal import marshal_output
 from stargazer.registry import TaskRegistry
 from stargazer.types import COMPONENT_REGISTRY
 from stargazer.types.component import ComponentFile
+from stargazer.utils.hydrate import hydrate
 from stargazer.utils.storage import default_client
 
 # ---------------------------------------------------------------------------
@@ -96,7 +97,7 @@ def list_tasks(category: str | None = None) -> list[dict]:
 
 
 @mcp.tool()
-def run_task(task_name: str, inputs: dict) -> dict:
+async def run_task(task_name: str, inputs: dict) -> dict:
     """Run any registered task or workflow by name using Flyte local execution.
 
     Accepts JSON-friendly inputs (dicts for domain types like Reference,
@@ -105,8 +106,8 @@ def run_task(task_name: str, inputs: dict) -> dict:
     Args:
         task_name: Name of the task or workflow (from list_tasks).
         inputs: Keyword arguments as a JSON dict. Domain types (Reference,
-                Alignment, Reads, Variants, ComponentFile) should be passed as
-                dicts matching their to_dict() format.
+                Alignment, Reads, Variants) should be passed as filter dicts
+                for hydration (e.g. {"type": "reference", "build": "GRCh38"}).
 
     Returns:
         Serialized task output. Single outputs returned directly,
@@ -117,22 +118,16 @@ def run_task(task_name: str, inputs: dict) -> dict:
         available = [t.name for t in _registry.list_tasks()]
         raise ValueError(f"Unknown task: {task_name!r}. Available: {available}")
 
-    # Build a lookup of param name → type hint
-    param_hints = {p.name: p.type_hint for p in info.params}
+    # Hydrate BioTypes from storage filters, pass everything else as scalars
+    filters = inputs.pop("filters", {})
+    data = await hydrate(filters) if filters else []
 
-    # Marshal each input from JSON-friendly to typed Python objects
-    marshaled = {}
-    for key, value in inputs.items():
-        hint = param_hints.get(key)
-        if hint is None:
-            raise ValueError(
-                f"Unknown parameter {key!r} for task {task_name!r}. "
-                f"Expected: {list(param_hints.keys())}"
-            )
-        marshaled[key] = marshal_input(value, hint)
+    kwargs = dict(inputs)
+    if data:
+        kwargs["data"] = data
 
     # Execute via Flyte local run context
-    run = _run_ctx.run(info.task_obj, **marshaled)
+    run = _run_ctx.run(info.task_obj, **kwargs)
     run.wait()
     result = run.outputs()
 

@@ -24,8 +24,6 @@ from stargazer.types.variants import (
     VariantsFile,
     VariantsIndex,
     KnownSites,
-    RecalFile,
-    TranchesFile,
 )
 
 # Auto-populated via ComponentFile.__init_subclass__
@@ -81,6 +79,4 @@ __all__ = [
     "VariantsFile",
     "VariantsIndex",
     "KnownSites",
-    "RecalFile",
-    "TranchesFile",
 ]

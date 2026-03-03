@@ -1,11 +1,10 @@
 """
-General hydration task for Stargazer types.
+General hydration for Stargazer types.
 
 Routes ComponentFiles from storage queries to appropriate type instances based on
 the `type` and `component` keyvalues.
 """
 
-from stargazer.config import gatk_env
 from stargazer.types import (
     Reference,
     Alignment,
@@ -32,6 +31,7 @@ TYPE_REGISTRY: dict[tuple[str, str], tuple[type, str, bool]] = {
     # Variants components
     ("variants", "vcf"): (Variants, "vcf", False),
     ("variants", "index"): (Variants, "index", False),
+    ("variants", "known_sites"): (Variants, "known_sites", False),
     # Reads components
     ("reads", "r1"): (Reads, "r1", False),
     ("reads", "r2"): (Reads, "r2", False),
@@ -47,7 +47,6 @@ TYPE_IDENTITY: dict[str, str] = {
 }
 
 
-@gatk_env.task
 async def hydrate(
     filters: dict[str, str | list[str]],
 ) -> list[Reference | Alignment | Variants | Reads]:

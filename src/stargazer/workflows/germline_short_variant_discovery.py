@@ -1,491 +1,60 @@
 """
 GATK Best Practices: Germline Short Variant Discovery (SNPs + Indels)
 
-This workflow implements the complete GATK Best Practices pipeline for identifying
-germline short variants (SNPs and Indels) from sequencing data.
+Implements the GATK pipeline starting from preprocessed BAM files:
+    1. HaplotypeCaller  — per-sample GVCF
+    2. CombineGVCFs     — merge per-sample GVCFs
+    3. GenotypeGVCFs    — joint genotyping
 
-The workflow supports both single-sample and multi-sample (cohort) analysis:
+Prerequisites:
+    Inputs must be preprocessed with gatk_data_preprocessing.prepare_reference
+    and gatk_data_preprocessing.preprocess_sample.
 
-Single-Sample Mode:
-    1. Pre-process reads (align, mark duplicates, optional BQSR)
-    2. Call variants per sample (HaplotypeCaller in GVCF mode)
-    3. Genotype single sample (GenotypeGVCFs)
-
-Multi-Sample (Cohort) Mode:
-    1. Pre-process reads for each sample (align, mark duplicates, optional BQSR)
-    2. Call variants per sample (HaplotypeCaller in GVCF mode)
-    3. Consolidate GVCFs (CombineGVCFs)
-    4. Joint genotyping (GenotypeGVCFs)
-
-References:
-    - https://gatk.broadinstitute.org/hc/en-us/articles/360035535932-Germline-short-variant-discovery-SNPs-Indels
-    - https://gatk.broadinstitute.org/hc/en-us/articles/360035535912-Data-pre-processing-for-variant-discovery
-    - https://github.com/gatk-workflows/gatk4-germline-snps-indels
+Reference:
+    https://gatk.broadinstitute.org/hc/en-us/articles/360035535932-Germline-short-variant-discovery-SNPs-Indels
 """
 
 import asyncio
 
-import flyte
-
 from stargazer.config import gatk_env
-from stargazer.types import Reference, Reads, Alignment, Variants, KnownSites
+from stargazer.types import Reference, Alignment, Variants
 from stargazer.tasks import (
-    hydrate,
-    samtools_faidx,
-    bwa_index,
-    bwa_mem,
-    sort_sam,
-    mark_duplicates,
-    genotype_gvcf,
+    haplotype_caller,
     combine_gvcfs,
-    base_recalibrator,
-    apply_bqsr,
-    variant_recalibrator,
-    apply_vqsr,
+    genotype_gvcf,
 )
 
 
 @gatk_env.task
-async def prepare_reference(ref_name: str) -> Reference:
-    """
-    Prepare reference genome for variant calling.
-
-    Hydrates reference from Pinata and creates necessary indices:
-    1. FASTA index (samtools faidx)
-    2. BWA index (bwa index)
-
-    Args:
-        ref_name: Reference genome name (e.g., "GRCh38.fa")
-
-    Returns:
-        Reference object with all indices
-    """
-    refs = await hydrate({"type": "reference", "build": ref_name})
-    ref = next((r for r in refs if isinstance(r, Reference)), None)
-    if not ref:
-        raise ValueError(f"Reference not found for build: {ref_name}")
-    ref = await samtools_faidx(ref)
-    ref = await bwa_index(ref)
-    return ref
-
-
-@gatk_env.task
-async def align_sample(
-    sample_id: str,
-    ref: Reference,
-    known_sites: list[KnownSites] | None = None,
-    run_bqsr: bool = False,
-) -> Alignment:
-    """
-    Align a single sample's reads to reference and optionally apply BQSR.
-
-    Hydrates reads from Pinata and runs BWA-MEM for alignment,
-    sorting, and duplicate marking. Optionally applies Base Quality
-    Score Recalibration (BQSR) if known_sites are provided.
-
-    Args:
-        sample_id: Sample identifier for querying reads
-        ref: Prepared reference genome
-        known_sites: List of Variants objects for known variant sites (dbSNP, known indels, etc.)
-        run_bqsr: Whether to apply BQSR (default: False)
-                  If True, known_sites must be provided
-
-    Returns:
-        Alignment object with sorted, duplicate-marked BAM
-        (optionally BQSR-recalibrated)
-
-    Raises:
-        ValueError: If run_bqsr=True but known_sites is empty
-    """
-    if run_bqsr and not known_sites:
-        raise ValueError("known_sites must be provided when run_bqsr=True")
-
-    reads_list = await hydrate({"type": "reads", "sample_id": sample_id})
-    reads = next((r for r in reads_list if isinstance(r, Reads)), None)
-    if not reads:
-        raise ValueError(f"Reads not found for sample_id: {sample_id}")
-
-    alignment = await bwa_mem(reads=reads, ref=ref)
-    alignment = await sort_sam(alignment=alignment, ref=ref, sort_order="coordinate")
-    alignment = await mark_duplicates(alignment=alignment, ref=ref)
-
-    # Apply BQSR if requested
-    if run_bqsr and known_sites:
-        recal_report = await base_recalibrator(
-            alignment=alignment,
-            ref=ref,
-            known_sites=known_sites,
-        )
-        alignment = await apply_bqsr(
-            alignment=alignment,
-            ref=ref,
-            recal_report=recal_report,
-        )
-
-    return alignment
-
-
-@gatk_env.task
-async def call_variants_gvcf(
-    alignment: Alignment,
-    ref: Reference,
-) -> Variants:
-    """
-    Call variants for a single sample in GVCF mode.
-
-    Uses HaplotypeCaller to generate per-sample GVCF with genotype
-    likelihoods for all sites (variant and reference).
-
-    Args:
-        alignment: Sorted, duplicate-marked BAM
-        ref: Reference genome
-
-    Returns:
-        Variants object with indexed GVCF
-
-    Raises:
-        NotImplementedError: HaplotypeCaller task is not yet implemented
-    """
-    raise NotImplementedError(
-        "haplotypecaller task not yet implemented. "
-        "Please implement the HaplotypeCaller task to enable variant calling."
-    )
-
-
-@gatk_env.task
-async def germline_single_sample(
-    sample_id: str,
-    ref_name: str,
-    known_sites: list[KnownSites] | None = None,
-    run_bqsr: bool = False,
-) -> tuple[Alignment, Variants]:
-    """
-    Single-sample germline short variant discovery workflow.
-
-    Implements GATK Best Practices for a single sample:
-    1. Prepare reference (index)
-    2. Pre-process reads (align, mark duplicates, optional BQSR)
-    3. Call variants (HaplotypeCaller in GVCF mode)
-    4. Genotype (GenotypeGVCFs)
-
-    Args:
-        sample_id: Sample identifier
-        ref_name: Reference genome name
-        known_sites: List of Variants objects for known variant sites (dbSNP, known indels, etc.)
-        run_bqsr: Whether to apply BQSR (default: False)
-                  Recommended for production use
-
-    Returns:
-        Tuple of (alignment, final_vcf)
-        - alignment: Sorted, duplicate-marked BAM (optionally BQSR-recalibrated)
-        - final_vcf: Final VCF with called variants
-
-    Example:
-        flyte.init_from_config()
-
-        # Without BQSR (faster)
-        run = flyte.run(
-            germline_single_sample,
-            sample_id="NA12878",
-            ref_name="GRCh38.fa"
-        )
-
-        # With BQSR (recommended for production)
-        run = flyte.run(
-            germline_single_sample,
-            sample_id="NA12878",
-            ref_name="GRCh38.fa",
-            known_sites=["dbsnp_146.hg38.vcf.gz"],
-            run_bqsr=True,
-        )
-        alignment, vcf = run.wait().outputs
-    """
-    # Step 1: Prepare reference
-    ref = await prepare_reference(ref_name=ref_name)
-
-    # Step 2: Pre-process reads (align, mark duplicates, optional BQSR)
-    alignment = await align_sample(
-        sample_id=sample_id,
-        ref=ref,
-        known_sites=known_sites,
-        run_bqsr=run_bqsr,
-    )
-
-    # Step 3: Call variants (GVCF mode)
-    gvcf = await call_variants_gvcf(alignment=alignment, ref=ref)
-
-    # Step 4: Joint genotyping (single sample)
-    vcf = await genotype_gvcf(gvcf=gvcf, ref=ref)
-
-    return alignment, vcf
-
-
-@gatk_env.task
-async def germline_cohort(
-    sample_ids: list[str],
-    ref_name: str,
-    cohort_id: str = "cohort",
-    known_sites: list[KnownSites] | None = None,
-    run_bqsr: bool = False,
-) -> tuple[list[Alignment], list[Variants], Variants]:
-    """
-    Multi-sample (cohort) germline short variant discovery workflow.
-
-    Implements GATK Best Practices joint calling workflow:
-    1. Prepare reference (index)
-    2. For each sample in parallel:
-       a. Pre-process reads (align, mark duplicates, optional BQSR)
-       b. Call variants (HaplotypeCaller in GVCF mode)
-    3. Consolidate GVCFs (CombineGVCFs)
-    4. Joint genotyping (GenotypeGVCFs)
-
-    This approach enables incremental joint calling - new samples can be
-    added to the cohort by generating their GVCFs and re-running the
-    consolidation and genotyping steps.
-
-    Args:
-        sample_ids: List of sample identifiers
-        ref_name: Reference genome name
-        cohort_id: Identifier for the cohort (default: "cohort")
-        known_sites: List of known variant VCF filenames for BQSR
-        run_bqsr: Whether to apply BQSR (default: False)
-
-    Returns:
-        Tuple of (alignments, gvcfs, joint_vcf)
-        - alignments: List of sorted, duplicate-marked BAMs (one per sample)
-        - gvcfs: List of per-sample GVCFs
-        - joint_vcf: Final joint-called VCF with all samples
-
-    Example:
-        flyte.init_from_config()
-
-        # Without BQSR
-        run = flyte.run(
-            germline_cohort,
-            sample_ids=["NA12878", "NA12891", "NA12892"],
-            ref_name="GRCh38.fa",
-            cohort_id="family_trio"
-        )
-
-        # With BQSR (recommended)
-        run = flyte.run(
-            germline_cohort,
-            sample_ids=["NA12878", "NA12891", "NA12892"],
-            ref_name="GRCh38.fa",
-            cohort_id="family_trio",
-            known_sites=["dbsnp_146.hg38.vcf.gz"],
-            run_bqsr=True,
-        )
-        alignments, gvcfs, joint_vcf = run.wait().outputs
-
-    Reference:
-        https://gatk.broadinstitute.org/hc/en-us/articles/360035890431-The-logic-of-joint-calling-for-germline-short-variants
-    """
-    if not sample_ids:
-        raise ValueError("sample_ids list cannot be empty")
-
-    # Step 1: Prepare reference
-    ref = await prepare_reference(ref_name=ref_name)
-
-    # Step 2: Process each sample in parallel (preprocess + call variants)
-    async def process_sample(sample_id: str) -> tuple[Alignment, Variants]:
-        alignment = await align_sample(
-            sample_id=sample_id,
-            ref=ref,
-            known_sites=known_sites,
-            run_bqsr=run_bqsr,
-        )
-        gvcf = await call_variants_gvcf(alignment=alignment, ref=ref)
-        return alignment, gvcf
-
-    # Run all samples in parallel
-    results = await asyncio.gather(*[process_sample(sid) for sid in sample_ids])
-
-    # Unpack results
-    alignments = [r[0] for r in results]
-    gvcfs = [r[1] for r in results]
-
-    # Step 3: Consolidate GVCFs
-    combined_gvcf = await combine_gvcfs(gvcfs=gvcfs, ref=ref, cohort_id=cohort_id)
-
-    # Step 4: Joint genotyping
-    joint_vcf = await genotype_gvcf(gvcf=combined_gvcf, ref=ref)
-
-    return alignments, gvcfs, joint_vcf
-
-
-@gatk_env.task
-async def germline_from_gvcfs(
-    gvcfs: list[Variants],
-    ref_name: str,
+async def germline_short_variant_discovery(
+    data: list[Reference | Alignment],
     cohort_id: str = "cohort",
 ) -> Variants:
     """
-    Joint genotyping from existing GVCFs.
+    Germline short variant discovery from preprocessed BAMs.
 
-    This workflow is useful for incremental joint calling - when you have
-    existing per-sample GVCFs and want to add new samples or re-run
-    joint genotyping.
-
-    Args:
-        gvcfs: List of per-sample GVCF Variants objects
-        ref_name: Reference genome name
-        cohort_id: Identifier for the cohort (default: "cohort")
-
-    Returns:
-        Final joint-called VCF with all samples
-
-    Example:
-        # Add a new sample to existing cohort
-        new_gvcf = await call_variants_gvcf(new_alignment, ref)
-        all_gvcfs = existing_gvcfs + [new_gvcf]
-        joint_vcf = await germline_from_gvcfs(
-            gvcfs=all_gvcfs,
-            ref_name="GRCh38.fa",
-            cohort_id="updated_cohort"
-        )
-    """
-    if not gvcfs:
-        raise ValueError("gvcfs list cannot be empty")
-
-    # Prepare reference
-    ref = await prepare_reference(ref_name=ref_name)
-
-    # Consolidate GVCFs
-    combined_gvcf = await combine_gvcfs(gvcfs=gvcfs, ref=ref, cohort_id=cohort_id)
-
-    # Joint genotyping
-    joint_vcf = await genotype_gvcf(gvcf=combined_gvcf, ref=ref)
-
-    return joint_vcf
-
-
-@gatk_env.task
-async def germline_cohort_with_vqsr(
-    sample_ids: list[str],
-    ref_name: str,
-    cohort_id: str = "cohort",
-    known_sites: list[KnownSites] | None = None,
-    run_bqsr: bool = False,
-    vqsr_snp_resources: list[Variants] | None = None,
-    vqsr_indel_resources: list[Variants] | None = None,
-    snp_truth_sensitivity: float = 99.0,
-    indel_truth_sensitivity: float = 99.0,
-) -> tuple[list[Alignment], list[Variants], Variants, Variants]:
-    """
-    Complete germline short variant discovery workflow with VQSR filtering.
-
-    Implements the full GATK Best Practices pipeline including VQSR filtering
-    for production-quality variant calls:
-    1. Prepare reference (index)
-    2. For each sample in parallel:
-       a. Pre-process reads (align, mark duplicates, optional BQSR)
-       b. Call variants (HaplotypeCaller in GVCF mode)
-    3. Consolidate GVCFs (CombineGVCFs)
-    4. Joint genotyping (GenotypeGVCFs)
-    5. Variant filtration (VQSR for SNPs and INDELs)
+    Runs the GATK Best Practices pipeline across all samples and returns
+    a joint-genotyped VCF ready for downstream analysis.
 
     Args:
-        sample_ids: List of sample identifiers
-        ref_name: Reference genome name
-        cohort_id: Identifier for the cohort (default: "cohort")
-        known_sites: List of known variant VCF filenames for BQSR
-        run_bqsr: Whether to apply BQSR (default: False)
-        vqsr_snp_resources: VQSR resources for SNP recalibration (required for VQSR)
-        vqsr_indel_resources: VQSR resources for INDEL recalibration (required for VQSR)
-        snp_truth_sensitivity: SNP filtering sensitivity threshold (default: 99.0)
-        indel_truth_sensitivity: INDEL filtering sensitivity threshold (default: 99.0)
+        data: Hydrated BioTypes containing one Reference and one or more Alignments
+        cohort_id: Identifier for the combined GVCF (default: "cohort")
 
     Returns:
-        Tuple of (alignments, gvcfs, joint_vcf, filtered_vcf)
-        - alignments: List of sorted, duplicate-marked BAMs (one per sample)
-        - gvcfs: List of per-sample GVCFs
-        - joint_vcf: Unfiltered joint-called VCF with all samples
-        - filtered_vcf: Final VQSR-filtered VCF (production-quality)
-
-    Example:
-        # VQSR resources are Variants objects with VQSR metadata in keyvalues
-        snp_resources = [hapmap_variants, omni_variants, thousandg_variants, dbsnp_variants]
-        indel_resources = [mills_variants, dbsnp_variants]
-
-        flyte.init_from_config()
-
-        run = flyte.run(
-            germline_cohort_with_vqsr,
-            sample_ids=["NA12878", "NA12891", "NA12892"],
-            ref_name="GRCh38.fa",
-            cohort_id="family_trio",
-            known_sites=[dbsnp_variants],
-            run_bqsr=True,
-            vqsr_snp_resources=snp_resources,
-            vqsr_indel_resources=indel_resources,
-        )
-        alignments, gvcfs, joint_vcf, filtered_vcf = run.wait().outputs
-
-    Reference:
-        https://gatk.broadinstitute.org/hc/en-us/articles/360035535932-Germline-short-variant-discovery-SNPs-Indels
+        Joint-genotyped Variants
     """
-    # Run basic cohort workflow
-    alignments, gvcfs, joint_vcf = await germline_cohort(
-        sample_ids=sample_ids,
-        ref_name=ref_name,
-        cohort_id=cohort_id,
-        known_sites=known_sites,
-        run_bqsr=run_bqsr,
+    ref = next(d for d in data if isinstance(d, Reference))
+    alignments = [d for d in data if isinstance(d, Alignment)]
+
+    # 1. HaplotypeCaller — per-sample GVCFs in parallel
+    gvcfs = list(
+        await asyncio.gather(
+            *[haplotype_caller(alignment=a, ref=ref) for a in alignments]
+        )
     )
 
-    # Prepare reference for VQSR
-    ref = await prepare_reference(ref_name=ref_name)
+    # 2. CombineGVCFs — merge into a single GVCF
+    combined = await combine_gvcfs(gvcfs=gvcfs, ref=ref, cohort_id=cohort_id)
 
-    # Apply VQSR filtering if resources provided
-    if vqsr_snp_resources and vqsr_indel_resources:
-        # SNP recalibration
-
-        # SNP recalibration
-        snp_vcf = await variant_recalibrator(
-            vcf=joint_vcf,
-            ref=ref,
-            resources=vqsr_snp_resources,
-            annotations=["QD", "MQRankSum", "ReadPosRankSum", "FS", "MQ", "SOR"],
-            mode="SNP",
-        )
-        snp_filtered_vcf = await apply_vqsr(
-            vcf=snp_vcf,
-            ref=ref,
-            truth_sensitivity_filter_level=snp_truth_sensitivity,
-        )
-
-        # INDEL recalibration
-        indel_vcf = await variant_recalibrator(
-            vcf=snp_filtered_vcf,
-            ref=ref,
-            resources=vqsr_indel_resources,
-            annotations=["QD", "MQRankSum", "ReadPosRankSum", "FS", "SOR"],
-            mode="INDEL",
-        )
-        final_filtered_vcf = await apply_vqsr(
-            vcf=indel_vcf,
-            ref=ref,
-            truth_sensitivity_filter_level=indel_truth_sensitivity,
-        )
-
-        return alignments, gvcfs, joint_vcf, final_filtered_vcf
-    else:
-        # Return joint VCF without VQSR filtering (not recommended for production)
-        return alignments, gvcfs, joint_vcf, joint_vcf
-
-
-if __name__ == "__main__":
-    import pprint
-
-    flyte.init_from_config()
-
-    # Example: Single sample
-    print("Running single-sample germline workflow...")
-    run = flyte.with_runcontext(mode="local").run(
-        germline_single_sample,
-        sample_id="NA12829",
-        ref_name="GRCh38_TP53.fa",
-    )
-    run.wait()
-    pprint.pprint(run.outputs)
+    # 3. GenotypeGVCFs — joint genotyping
+    return await genotype_gvcf(gvcf=combined, ref=ref)
