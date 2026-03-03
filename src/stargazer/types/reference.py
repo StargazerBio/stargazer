@@ -1,78 +1,43 @@
 """
-Reference genome types for Stargazer.
-
-Defines ComponentFile subclasses for reference genome files and the
-Reference container that composes them.
+Reference genome asset types for Stargazer.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import ClassVar
 
-from stargazer.types.component import ComponentFile
-from stargazer.types.biotype import BioType
-
-
-# ---------------------------------------------------------------------------
-# Component file types
-# ---------------------------------------------------------------------------
+from stargazer.types.asset import Asset
 
 
 @dataclass
-class ReferenceFile(ComponentFile):
-    """Reference FASTA file component."""
+class Reference(Asset):
+    """Reference FASTA file asset."""
 
-    _type_key: ClassVar[str] = "reference"
-    _component_key: ClassVar[str] = "fasta"
+    _asset_key: ClassVar[str] = "reference"
     _field_defaults = {"build": ""}
 
 
 @dataclass
-class ReferenceIndex(ComponentFile):
-    """FASTA index (.fai) file component."""
+class ReferenceIndex(Asset):
+    """FASTA index (.fai) file asset.
 
-    _type_key: ClassVar[str] = "reference"
-    _component_key: ClassVar[str] = "faidx"
+    Carries reference_cid linking back to the Reference it was built from.
+    """
+
+    _asset_key: ClassVar[str] = "reference_index"
     _field_defaults = {"build": ""}
 
 
 @dataclass
-class SequenceDict(ComponentFile):
-    """Sequence dictionary (.dict) file component."""
+class SequenceDict(Asset):
+    """Sequence dictionary (.dict) file asset."""
 
-    _type_key: ClassVar[str] = "reference"
-    _component_key: ClassVar[str] = "sequence_dictionary"
+    _asset_key: ClassVar[str] = "sequence_dict"
     _field_defaults = {"build": ""}
 
 
 @dataclass
-class AlignerIndex(ComponentFile):
-    """Aligner index file component (one file per index file for multi-file indices)."""
+class AlignerIndex(Asset):
+    """Aligner index file asset (one file per index file for multi-file indices)."""
 
-    _type_key: ClassVar[str] = "reference"
-    _component_key: ClassVar[str] = "aligner_index"
+    _asset_key: ClassVar[str] = "aligner_index"
     _field_defaults = {"build": "", "aligner": ""}
-
-
-# ---------------------------------------------------------------------------
-# BioType
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class Reference(BioType):
-    """
-    A reference genome stored as typed component files.
-
-    Attributes:
-        build: Reference genome build (e.g., "GRCh38", "T2T-CHM13")
-        fasta: Reference FASTA file
-        faidx: FASTA index (.fai) file
-        sequence_dictionary: Sequence dictionary (.dict) file
-        aligner_index: Aligner index files (one per file in multi-file index)
-    """
-
-    build: str
-    fasta: ReferenceFile | None = None
-    faidx: ReferenceIndex | None = None
-    sequence_dictionary: SequenceDict | None = None
-    aligner_index: list[AlignerIndex] = field(default_factory=list)

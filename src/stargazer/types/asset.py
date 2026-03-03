@@ -1,8 +1,5 @@
 """
-ComponentFile base dataclass for Stargazer.
-
-Lives in utils to avoid circular imports — storage clients need ComponentFile,
-and type modules need storage clients.
+Asset base dataclass for Stargazer.
 """
 
 from dataclasses import dataclass, field
@@ -13,8 +10,8 @@ from typing_extensions import Self
 
 
 @dataclass
-class ComponentFile:
-    """Base class for all typed file components in Stargazer.
+class Asset:
+    """Base class for all typed file assets in Stargazer.
 
     Attributes:
         cid: Content identifier (CID) for the stored file
@@ -22,18 +19,16 @@ class ComponentFile:
         keyvalues: Metadata key-value pairs for querying and routing
 
     Subclasses can declare:
-        _field_types: map of field name → type (bool, int, list) for coercion
-        _field_defaults: map of field name → default value (e.g. {"sample_id": ""})
-        _type_key: the "type" keyvalue (e.g. "reference", "alignment")
-        _component_key: the "component" keyvalue (e.g. "fasta", "vcf")
+        _field_types: map of field name -> type (bool, int, list) for coercion
+        _field_defaults: map of field name -> default value (e.g. {"sample_id": ""})
+        _asset_key: the "asset" keyvalue (e.g. "reference", "alignment")
     """
 
-    _registry: ClassVar[dict[tuple[str, str], type["ComponentFile"]]] = {}
+    _registry: ClassVar[dict[str, type["Asset"]]] = {}
     _field_types: ClassVar[dict[str, type]] = {}
     _field_defaults: ClassVar[dict[str, Any]] = {}
     _own_attrs: ClassVar[frozenset] = frozenset(("cid", "path", "keyvalues"))
-    _type_key: ClassVar[str] = ""
-    _component_key: ClassVar[str] = ""
+    _asset_key: ClassVar[str] = ""
 
     cid: str = ""
     path: Path | None = None
@@ -41,16 +36,15 @@ class ComponentFile:
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        tk = cls.__dict__.get("_type_key", "")
-        ck = cls.__dict__.get("_component_key", "")
-        if tk and ck:
-            ComponentFile._registry[(tk, ck)] = cls
+        ak = cls.__dict__.get("_asset_key", "")
+        if ak:
+            Asset._registry[ak] = cls
 
     def __post_init__(self):
-        if self._type_key:
-            self.keyvalues.setdefault("type", self._type_key)
-        if self._component_key:
-            self.keyvalues.setdefault("component", self._component_key)
+        if self._asset_key:
+            self.keyvalues.setdefault("asset", self._asset_key)
+        for k, v in self._field_defaults.items():
+            self.keyvalues.setdefault(k, v)
 
     def __getattr__(self, name: str) -> Any:
         # Only called when normal attribute lookup fails
@@ -83,7 +77,7 @@ class ComponentFile:
             self.keyvalues[name] = str(value)
 
     async def update(self, path: Path, **kwargs) -> None:
-        """Upload file and set cid. Shared by all component types."""
+        """Upload file and set cid. Shared by all asset types."""
         from stargazer.utils.storage import default_client
 
         for key, value in kwargs.items():

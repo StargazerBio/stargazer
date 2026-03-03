@@ -12,7 +12,7 @@ Run this script whenever fixtures are added or changed:
 import asyncio
 from pathlib import Path
 
-from stargazer.types.component import ComponentFile
+from stargazer.types.asset import Asset
 from stargazer.utils.local_storage import LocalStorageClient
 
 FIXTURES_DIR = Path(__file__).parent
@@ -21,138 +21,116 @@ FIXTURES_DIR = Path(__file__).parent
 FIXTURE_METADATA: dict[str, dict[str, str]] = {
     # Reference: GRCh38 TP53 region
     "GRCh38_TP53.fa": {
-        "type": "reference",
-        "component": "fasta",
+        "asset": "reference",
         "build": "GRCh38",
     },
     "GRCh38_TP53.fa.fai": {
-        "type": "reference",
-        "component": "faidx",
+        "asset": "reference_index",
         "build": "GRCh38",
     },
     "GRCh38_TP53.dict": {
-        "type": "reference",
-        "component": "sequence_dictionary",
+        "asset": "sequence_dict",
         "build": "GRCh38",
     },
     # BWA index files
     "GRCh38_TP53.fa.amb": {
-        "type": "reference",
-        "component": "aligner_index",
+        "asset": "aligner_index",
         "aligner": "bwa",
         "build": "GRCh38",
     },
     "GRCh38_TP53.fa.ann": {
-        "type": "reference",
-        "component": "aligner_index",
+        "asset": "aligner_index",
         "aligner": "bwa",
         "build": "GRCh38",
     },
     "GRCh38_TP53.fa.bwt": {
-        "type": "reference",
-        "component": "aligner_index",
+        "asset": "aligner_index",
         "aligner": "bwa",
         "build": "GRCh38",
     },
     "GRCh38_TP53.fa.pac": {
-        "type": "reference",
-        "component": "aligner_index",
+        "asset": "aligner_index",
         "aligner": "bwa",
         "build": "GRCh38",
     },
     "GRCh38_TP53.fa.sa": {
-        "type": "reference",
-        "component": "aligner_index",
+        "asset": "aligner_index",
         "aligner": "bwa",
         "build": "GRCh38",
     },
     # Reads: NA12829
     "NA12829_TP53_R1.fq.gz": {
-        "type": "reads",
-        "component": "r1",
+        "asset": "r1",
         "sample_id": "NA12829",
     },
     "NA12829_TP53_R2.fq.gz": {
-        "type": "reads",
-        "component": "r2",
+        "asset": "r2",
         "sample_id": "NA12829",
     },
     # Alignments: NA12829 at various pipeline stages
     "NA12829_TP53_unmapped.bam": {
-        "type": "alignment",
-        "component": "alignment",
+        "asset": "alignment",
         "sample_id": "NA12829",
         "stage": "unmapped",
     },
     "NA12829_TP53_bwa_aligned.bam": {
-        "type": "alignment",
-        "component": "alignment",
+        "asset": "alignment",
         "sample_id": "NA12829",
         "stage": "bwa_aligned",
     },
     "NA12829_TP53_merged.bam": {
-        "type": "alignment",
-        "component": "alignment",
+        "asset": "alignment",
         "sample_id": "NA12829",
         "stage": "merged",
     },
     "NA12829_TP53_merged.bai": {
-        "type": "alignment",
-        "component": "index",
+        "asset": "alignment_index",
         "sample_id": "NA12829",
         "stage": "merged",
     },
     "NA12829_TP53_paired.bam": {
-        "type": "alignment",
-        "component": "alignment",
+        "asset": "alignment",
         "sample_id": "NA12829",
         "stage": "paired",
     },
     "NA12829_TP53_paired.bam.bai": {
-        "type": "alignment",
-        "component": "index",
+        "asset": "alignment_index",
         "sample_id": "NA12829",
         "stage": "paired",
     },
     "NA12829_TP53_sorted_coordinate.bam": {
-        "type": "alignment",
-        "component": "alignment",
+        "asset": "alignment",
         "sample_id": "NA12829",
         "stage": "sorted_coordinate",
         "sorted": "coordinate",
     },
     "NA12829_TP53_sorted_coordinate.bai": {
-        "type": "alignment",
-        "component": "index",
+        "asset": "alignment_index",
         "sample_id": "NA12829",
         "stage": "sorted_coordinate",
         "sorted": "coordinate",
     },
     "NA12829_TP53_markdup.bam": {
-        "type": "alignment",
-        "component": "alignment",
+        "asset": "alignment",
         "sample_id": "NA12829",
         "stage": "markdup",
         "sorted": "coordinate",
         "duplicates_marked": "true",
     },
     "NA12829_TP53_markdup.bai": {
-        "type": "alignment",
-        "component": "index",
+        "asset": "alignment_index",
         "sample_id": "NA12829",
         "stage": "markdup",
         "sorted": "coordinate",
         "duplicates_marked": "true",
     },
     "NA12829_TP53_markdup_metrics.txt": {
-        "type": "alignment",
-        "component": "markdup_metrics",
+        "asset": "duplicate_metrics",
         "sample_id": "NA12829",
         "stage": "markdup",
     },
     "NA12829_TP53_recalibrated.bam": {
-        "type": "alignment",
-        "component": "alignment",
+        "asset": "alignment",
         "sample_id": "NA12829",
         "stage": "recalibrated",
         "sorted": "coordinate",
@@ -160,8 +138,7 @@ FIXTURE_METADATA: dict[str, dict[str, str]] = {
         "recalibrated": "true",
     },
     "NA12829_TP53_recalibrated.bai": {
-        "type": "alignment",
-        "component": "index",
+        "asset": "alignment_index",
         "sample_id": "NA12829",
         "stage": "recalibrated",
         "sorted": "coordinate",
@@ -169,45 +146,38 @@ FIXTURE_METADATA: dict[str, dict[str, str]] = {
         "recalibrated": "true",
     },
     "NA12829_TP53_bqsr.table": {
-        "type": "alignment",
-        "component": "bqsr_report",
+        "asset": "bqsr_report",
         "sample_id": "NA12829",
     },
     # Known sites
     "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf": {
-        "type": "variants",
-        "component": "known_sites",
-        "sample_id": "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf",
+        "asset": "known_sites",
+        "build": "GRCh38",
     },
     "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf.idx": {
-        "type": "variants",
-        "component": "index",
-        "sample_id": "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf",
+        "asset": "variants_index",
+        "build": "GRCh38",
     },
     # Variants: GVCFs
     "NA12829_TP53.g.vcf": {
-        "type": "variants",
-        "component": "vcf",
+        "asset": "variants",
         "sample_id": "NA12829",
         "caller": "haplotypecaller",
         "variant_type": "gvcf",
     },
     "NA12829_TP53.g.vcf.idx": {
-        "type": "variants",
-        "component": "index",
+        "asset": "variants_index",
         "sample_id": "NA12829",
         "caller": "haplotypecaller",
     },
     "NA12891_TP53.g.vcf": {
-        "type": "variants",
-        "component": "vcf",
+        "asset": "variants",
         "sample_id": "NA12891",
         "caller": "haplotypecaller",
         "variant_type": "gvcf",
     },
     "NA12892_TP53.g.vcf": {
-        "type": "variants",
-        "component": "vcf",
+        "asset": "variants",
         "sample_id": "NA12892",
         "caller": "haplotypecaller",
         "variant_type": "gvcf",
@@ -231,7 +201,7 @@ async def build_db() -> None:
             print(f"  SKIP (missing): {filename}")
             continue
 
-        comp = ComponentFile(path=filepath, keyvalues=keyvalues)
+        comp = Asset(path=filepath, keyvalues=keyvalues)
         await client.upload(comp)
         print(f"  added: {filename} → {comp.cid}")
         added += 1

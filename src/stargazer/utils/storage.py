@@ -14,7 +14,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional, Protocol
 
-from stargazer.types.component import ComponentFile
+from stargazer.types.asset import Asset
 
 
 class StorageClient(Protocol):
@@ -25,13 +25,13 @@ class StorageClient(Protocol):
 
     local_dir: Path
 
-    async def upload(self, component: ComponentFile) -> None:
+    async def upload(self, component: Asset) -> None:
         """Upload a file from component.path; sets component.cid."""
         ...
 
     async def download(
         self,
-        component: ComponentFile,
+        component: Asset,
         dest: Optional[Path] = None,
     ) -> None:
         """Download a file by cid; sets component.path."""
@@ -40,11 +40,11 @@ class StorageClient(Protocol):
     async def query(
         self,
         keyvalues: dict[str, str],
-    ) -> list[ComponentFile]:
-        """Query files by keyvalue metadata; returns ComponentFile list."""
+    ) -> list[Asset]:
+        """Query files by keyvalue metadata; returns Asset list."""
         ...
 
-    async def delete(self, component: ComponentFile) -> None:
+    async def delete(self, component: Asset) -> None:
         """Delete a file from storage."""
         ...
 

@@ -9,7 +9,7 @@ To populate expected CIDs for test files, run:
 
 import pytest
 from conftest import FIXTURES_DIR
-from stargazer.types.component import ComponentFile
+from stargazer.types.asset import Asset
 from stargazer.utils.pinata import PinataClient
 
 CIDS = {
@@ -36,7 +36,7 @@ async def test_upload_and_delete_file():
 
     # Upload the file with test metadata
     print(f"\nUploading test file: {test_file_path.name}")
-    comp = ComponentFile(path=test_file_path, keyvalues={"test": "true"})
+    comp = Asset(path=test_file_path, keyvalues={"test": "true"})
     await client.upload(comp)
 
     try:
@@ -111,7 +111,7 @@ async def test_download_file(tmp_path):
 
     expected_content = FIXTURES_DIR.joinpath(test_file).read_text()
 
-    comp = ComponentFile(
+    comp = Asset(
         cid=test_cid,
         keyvalues={"type": "reference"},
     )
@@ -124,7 +124,7 @@ async def test_download_file(tmp_path):
     assert comp.path.exists(), f"Downloaded file not found at: {comp.path}"
     print(f"File downloaded successfully to: {comp.path}")
 
-    # Verify ComponentFile metadata is preserved
+    # Verify Asset metadata is preserved
     assert comp.cid == test_cid, "CID should match"
 
     # Read and verify content

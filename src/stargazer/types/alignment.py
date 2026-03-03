@@ -1,85 +1,53 @@
 """
-Alignment types for Stargazer.
-
-Defines ComponentFile subclasses for BAM/CRAM alignment files and the
-Alignment container that composes them.
+Alignment asset types for Stargazer.
 """
 
 from dataclasses import dataclass
 from typing import ClassVar
 
-from stargazer.types.component import ComponentFile
-from stargazer.types.biotype import BioType
-
-
-# ---------------------------------------------------------------------------
-# Component file types
-# ---------------------------------------------------------------------------
+from stargazer.types.asset import Asset
 
 
 @dataclass
-class AlignmentFile(ComponentFile):
-    """BAM/CRAM alignment file component."""
+class Alignment(Asset):
+    """BAM/CRAM alignment file asset.
 
-    _type_key: ClassVar[str] = "alignment"
-    _component_key: ClassVar[str] = "alignment"
+    Carries reference_cid and r1_cid for provenance (PROV entity derivation).
+    """
+
+    _asset_key: ClassVar[str] = "alignment"
     _field_types = {"duplicates_marked": bool, "bqsr_applied": bool}
     _field_defaults = {"sample_id": ""}
 
 
 @dataclass
-class AlignmentIndex(ComponentFile):
-    """BAI/CRAI alignment index file component."""
+class AlignmentIndex(Asset):
+    """BAI/CRAI alignment index file asset.
 
-    _type_key: ClassVar[str] = "alignment"
-    _component_key: ClassVar[str] = "index"
-    _field_defaults = {"sample_id": ""}
-
-
-@dataclass
-class BQSRReport(ComponentFile):
-    """BQSR recalibration table produced by GATK BaseRecalibrator."""
-
-    _type_key: ClassVar[str] = "alignment"
-    _component_key: ClassVar[str] = "bqsr_report"
-    _field_defaults = {"sample_id": ""}
-
-
-@dataclass
-class DuplicateMetrics(ComponentFile):
-    """Duplicate metrics text file produced by GATK MarkDuplicates."""
-
-    _type_key: ClassVar[str] = "alignment"
-    _component_key: ClassVar[str] = "markdup_metrics"
-    _field_defaults = {"sample_id": ""}
-
-
-# ---------------------------------------------------------------------------
-# BioType
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class Alignment(BioType):
-    """
-    Aligned BAM/CRAM files stored as typed component files.
-
-    Attributes:
-        sample_id: Sample identifier
-        alignment: BAM/CRAM alignment file
-        index: BAI/CRAI index file
-        bqsr_report: BQSR recalibration table (set after base_recalibrator, consumed by apply_bqsr)
+    Carries alignment_cid linking to the Alignment it indexes.
     """
 
-    sample_id: str
-    alignment: AlignmentFile | None = None
-    index: AlignmentIndex | None = None
-    bqsr_report: BQSRReport | None = None
+    _asset_key: ClassVar[str] = "alignment_index"
+    _field_defaults = {"sample_id": ""}
 
-    @property
-    def has_bqsr_applied(self) -> bool:
-        return self.alignment is not None and self.alignment.bqsr_applied
 
-    @property
-    def has_duplicates_marked(self) -> bool:
-        return self.alignment is not None and self.alignment.duplicates_marked
+@dataclass
+class BQSRReport(Asset):
+    """BQSR recalibration table produced by GATK BaseRecalibrator.
+
+    Carries alignment_cid linking to the Alignment it was produced from.
+    """
+
+    _asset_key: ClassVar[str] = "bqsr_report"
+    _field_defaults = {"sample_id": ""}
+
+
+@dataclass
+class DuplicateMetrics(Asset):
+    """Duplicate metrics text file produced by GATK MarkDuplicates.
+
+    Carries alignment_cid linking to the Alignment it was produced from.
+    """
+
+    _asset_key: ClassVar[str] = "duplicate_metrics"
+    _field_defaults = {"sample_id": ""}

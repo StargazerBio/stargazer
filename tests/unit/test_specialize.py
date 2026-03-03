@@ -1,166 +1,155 @@
-"""Tests for ComponentFile specialization."""
+"""Tests for Asset specialization."""
 
 from pathlib import Path
 
-from stargazer.types.component import ComponentFile
+from stargazer.types.asset import Asset
 from stargazer.types import specialize
 from stargazer.types.reference import (
-    ReferenceFile,
+    Reference,
     ReferenceIndex,
     SequenceDict,
     AlignerIndex,
 )
-from stargazer.types.alignment import AlignmentFile, AlignmentIndex
-from stargazer.types.variants import VariantsFile, VariantsIndex
-from stargazer.types.reads import R1File, R2File
+from stargazer.types.alignment import Alignment, AlignmentIndex
+from stargazer.types.variants import Variants, VariantsIndex
+from stargazer.types.reads import R1, R2
 
 
 class TestSpecialize:
-    """specialize() converts a base ComponentFile to the correct derived type."""
+    """specialize() converts a base Asset to the correct derived type."""
 
-    def test_reference_fasta(self):
-        base = ComponentFile(
+    def test_reference(self):
+        base = Asset(
             cid="Qmfasta",
             path=Path("/tmp/ref.fa"),
-            keyvalues={"type": "reference", "component": "fasta", "build": "GRCh38"},
+            keyvalues={"asset": "reference", "build": "GRCh38"},
         )
         result = specialize(base)
-        assert type(result) is ReferenceFile
+        assert type(result) is Reference
         assert result.cid == "Qmfasta"
         assert result.path == Path("/tmp/ref.fa")
         assert result.build == "GRCh38"
 
-    def test_reference_faidx(self):
-        base = ComponentFile(
+    def test_reference_index(self):
+        base = Asset(
             cid="Qmfaidx",
-            keyvalues={"type": "reference", "component": "faidx", "build": "T2T"},
+            keyvalues={"asset": "reference_index", "build": "T2T"},
         )
         result = specialize(base)
         assert type(result) is ReferenceIndex
         assert result.build == "T2T"
 
-    def test_reference_sequence_dictionary(self):
-        base = ComponentFile(
+    def test_sequence_dict(self):
+        base = Asset(
             cid="Qmdict",
-            keyvalues={"type": "reference", "component": "sequence_dictionary"},
+            keyvalues={"asset": "sequence_dict"},
         )
         result = specialize(base)
         assert type(result) is SequenceDict
 
-    def test_reference_aligner_index(self):
-        base = ComponentFile(
+    def test_aligner_index(self):
+        base = Asset(
             cid="Qmaln",
-            keyvalues={
-                "type": "reference",
-                "component": "aligner_index",
-                "aligner": "bwa",
-            },
+            keyvalues={"asset": "aligner_index", "aligner": "bwa"},
         )
         result = specialize(base)
         assert type(result) is AlignerIndex
         assert result.aligner == "bwa"
 
-    def test_alignment_file(self):
-        base = ComponentFile(
+    def test_alignment(self):
+        base = Asset(
             cid="Qmbam",
             keyvalues={
-                "type": "alignment",
-                "component": "alignment",
+                "asset": "alignment",
                 "sample_id": "NA12878",
                 "duplicates_marked": "true",
                 "bqsr_applied": "false",
             },
         )
         result = specialize(base)
-        assert type(result) is AlignmentFile
+        assert type(result) is Alignment
         assert result.sample_id == "NA12878"
         assert result.duplicates_marked is True
         assert result.bqsr_applied is False
 
     def test_alignment_index(self):
-        base = ComponentFile(
+        base = Asset(
             cid="Qmbai",
-            keyvalues={"type": "alignment", "component": "index", "sample_id": "S1"},
+            keyvalues={"asset": "alignment_index", "sample_id": "S1"},
         )
         result = specialize(base)
         assert type(result) is AlignmentIndex
 
-    def test_variants_vcf(self):
-        base = ComponentFile(
+    def test_variants(self):
+        base = Asset(
             cid="Qmvcf",
             keyvalues={
-                "type": "variants",
-                "component": "vcf",
+                "asset": "variants",
                 "sample_id": "S1",
                 "sample_count": "3",
                 "source_samples": "S1,S2,S3",
             },
         )
         result = specialize(base)
-        assert type(result) is VariantsFile
+        assert type(result) is Variants
         assert result.sample_count == 3
         assert result.source_samples == ["S1", "S2", "S3"]
 
     def test_variants_index(self):
-        base = ComponentFile(
+        base = Asset(
             cid="Qmtbi",
-            keyvalues={"type": "variants", "component": "index"},
+            keyvalues={"asset": "variants_index"},
         )
         result = specialize(base)
         assert type(result) is VariantsIndex
 
-    def test_reads_r1(self):
-        base = ComponentFile(
+    def test_r1(self):
+        base = Asset(
             cid="Qmr1",
-            keyvalues={"type": "reads", "component": "r1", "sample_id": "S1"},
+            keyvalues={"asset": "r1", "sample_id": "S1"},
         )
         result = specialize(base)
-        assert type(result) is R1File
+        assert type(result) is R1
 
-    def test_reads_r2(self):
-        base = ComponentFile(
+    def test_r2(self):
+        base = Asset(
             cid="Qmr2",
-            keyvalues={"type": "reads", "component": "r2", "sample_id": "S1"},
+            keyvalues={"asset": "r2", "sample_id": "S1"},
         )
         result = specialize(base)
-        assert type(result) is R2File
+        assert type(result) is R2
 
-    def test_unknown_type_returns_base(self):
-        """Unknown type/component combos return the original ComponentFile."""
-        base = ComponentFile(
+    def test_unknown_returns_base(self):
+        """Unknown asset key returns the original Asset unchanged."""
+        base = Asset(
             cid="Qmunk",
-            keyvalues={"type": "unknown", "component": "thing"},
+            keyvalues={"asset": "unknown_thing"},
         )
         result = specialize(base)
         assert result is base
 
-    def test_missing_keyvalues_returns_base(self):
-        """ComponentFile with no type/component returns itself."""
-        base = ComponentFile(cid="Qmbare")
+    def test_missing_asset_keyvalue_returns_base(self):
+        """Asset with no 'asset' keyvalue returns itself."""
+        base = Asset(cid="Qmbare")
         result = specialize(base)
         assert result is base
 
     def test_already_specialized_is_idempotent(self):
-        """Calling specialize on an already-derived instance returns a new instance of the same type."""
-        original = AlignmentFile(
+        """Calling specialize on a derived instance returns a new instance of the same type."""
+        original = Alignment(
             cid="Qmbam",
-            keyvalues={
-                "type": "alignment",
-                "component": "alignment",
-                "sample_id": "S1",
-            },
+            keyvalues={"asset": "alignment", "sample_id": "S1"},
         )
         result = specialize(original)
-        assert type(result) is AlignmentFile
+        assert type(result) is Alignment
         assert result.cid == original.cid
 
     def test_preserves_all_keyvalues(self):
-        """Extra keyvalues beyond type/component are preserved."""
-        base = ComponentFile(
+        """Extra keyvalues are preserved after specialization."""
+        base = Asset(
             cid="Qm123",
             keyvalues={
-                "type": "alignment",
-                "component": "alignment",
+                "asset": "alignment",
                 "sample_id": "NA12878",
                 "custom_field": "custom_value",
             },
@@ -169,13 +158,13 @@ class TestSpecialize:
         assert result.keyvalues["custom_field"] == "custom_value"
 
     def test_does_not_mutate_original(self):
-        """The original ComponentFile is not modified."""
-        base = ComponentFile(
+        """The original Asset is not modified."""
+        base = Asset(
             cid="Qmorig",
             path=Path("/tmp/orig.bam"),
-            keyvalues={"type": "alignment", "component": "alignment"},
+            keyvalues={"asset": "alignment"},
         )
         original_kv = dict(base.keyvalues)
         specialize(base)
         assert base.keyvalues == original_kv
-        assert type(base) is ComponentFile
+        assert type(base) is Asset

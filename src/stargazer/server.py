@@ -19,9 +19,9 @@ from mcp.server.fastmcp import FastMCP
 
 from stargazer.marshal import marshal_output
 from stargazer.registry import TaskRegistry
-from stargazer.types import COMPONENT_REGISTRY
-from stargazer.types.component import ComponentFile
-from stargazer.utils.hydrate import hydrate
+from stargazer.types import ASSET_REGISTRY
+from stargazer.types.asset import Asset
+from stargazer.types.constellation import assemble
 from stargazer.utils.storage import default_client
 
 # ---------------------------------------------------------------------------
@@ -50,14 +50,14 @@ async def query_files(keyvalues: dict[str, str]) -> list[dict]:
 async def upload_file(path: str, keyvalues: dict[str, str]) -> dict:
     """Upload a file with metadata key-value pairs.
 
-    keyvalues must include "type" and "component". Valid pairs are derived
-    from the ComponentFile registry (e.g. type=reference component=fasta).
+    keyvalues must include "asset". Valid asset keys are derived
+    from the Asset registry (e.g. asset=reference component=fasta).
     """
-    pair = (keyvalues.get("type"), keyvalues.get("component"))
-    if pair not in COMPONENT_REGISTRY:
-        valid = sorted(COMPONENT_REGISTRY.keys())
-        raise ValueError(f"Invalid type/component pair {pair}. Valid pairs: {valid}")
-    comp = ComponentFile(path=Path(path), keyvalues=keyvalues)
+    asset_key = keyvalues.get("asset")
+    if asset_key not in ASSET_REGISTRY:
+        valid = sorted(ASSET_REGISTRY.keys())
+        raise ValueError(f"Invalid asset key {asset_key!r}. Valid keys: {valid}")
+    comp = Asset(path=Path(path), keyvalues=keyvalues)
     await default_client.upload(comp)
     return comp.to_dict()
 
@@ -65,7 +65,7 @@ async def upload_file(path: str, keyvalues: dict[str, str]) -> dict:
 @mcp.tool()
 async def download_file(cid: str) -> str:
     """Download a file by CID to local cache. Returns the local path."""
-    comp = ComponentFile(cid=cid)
+    comp = Asset(cid=cid)
     await default_client.download(comp)
     return str(comp.path)
 
@@ -73,7 +73,7 @@ async def download_file(cid: str) -> str:
 @mcp.tool()
 async def delete_file(cid: str) -> str:
     """Delete a file by CID."""
-    comp = ComponentFile(cid=cid)
+    comp = Asset(cid=cid)
     await default_client.delete(comp)
     return f"Deleted file {cid}"
 
@@ -105,9 +105,9 @@ async def run_task(task_name: str, inputs: dict) -> dict:
 
     Args:
         task_name: Name of the task or workflow (from list_tasks).
-        inputs: Keyword arguments as a JSON dict. Domain types (Reference,
-                Alignment, Reads, Variants) should be passed as filter dicts
-                for hydration (e.g. {"type": "reference", "build": "GRCh38"}).
+        inputs: Keyword arguments as a JSON dict. Domain types should be passed
+                as filter dicts under the "filters" key for assembly
+                (e.g. {"filters": {"build": "GRCh38", "asset": "reference"}}).
 
     Returns:
         Serialized task output. Single outputs returned directly,
@@ -118,13 +118,13 @@ async def run_task(task_name: str, inputs: dict) -> dict:
         available = [t.name for t in _registry.list_tasks()]
         raise ValueError(f"Unknown task: {task_name!r}. Available: {available}")
 
-    # Hydrate BioTypes from storage filters, pass everything else as scalars
+    # Assemble assets from storage filters, pass everything else as scalars
     filters = inputs.pop("filters", {})
-    data = await hydrate(filters) if filters else []
+    constellation = await assemble(**filters) if filters else None
 
     kwargs = dict(inputs)
-    if data:
-        kwargs["data"] = data
+    if constellation is not None:
+        kwargs["data"] = constellation
 
     # Execute via Flyte local run context
     run = _run_ctx.run(info.task_obj, **kwargs)

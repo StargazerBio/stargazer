@@ -17,7 +17,7 @@ from typing import Optional
 import aiohttp
 import aiofiles
 
-from stargazer.types.component import ComponentFile
+from stargazer.types.asset import Asset
 
 
 class PinataClient:
@@ -32,7 +32,7 @@ class PinataClient:
         client = PinataClient()
 
         # Upload with metadata
-        comp = ComponentFile(path=Path("data.bam"), keyvalues={"type": "alignment"})
+        comp = Asset(path=Path("data.bam"), keyvalues={"type": "alignment"})
         await client.upload(comp)  # sets comp.cid
 
         # Query by keyvalues
@@ -125,12 +125,12 @@ class PinataClient:
                 data = await response.json()
                 return data["data"]
 
-    async def upload(self, component: ComponentFile) -> None:
+    async def upload(self, component: Asset) -> None:
         """
         Upload a file to IPFS via Pinata. Sets component.cid.
 
         Args:
-            component: ComponentFile with path and keyvalues set
+            component: Asset with path and keyvalues set
         """
         path = component.path
         if path is None:
@@ -155,15 +155,13 @@ class PinataClient:
                 data_obj = result.get("data", result)
                 component.cid = data_obj["cid"]
 
-    async def download(
-        self, component: ComponentFile, dest: Optional[Path] = None
-    ) -> None:
+    async def download(self, component: Asset, dest: Optional[Path] = None) -> None:
         """
         Download a file from IPFS and set component.path.
         Uses local cache to avoid re-downloading.
 
         Args:
-            component: ComponentFile with cid set
+            component: Asset with cid set
             dest: Optional destination path (otherwise uses cache)
         """
         # Skip download if path is already set and file exists
@@ -204,7 +202,7 @@ class PinataClient:
         else:
             component.path = cache_path
 
-    async def query(self, keyvalues: dict[str, str]) -> list[ComponentFile]:
+    async def query(self, keyvalues: dict[str, str]) -> list[Asset]:
         """
         Query files by keyvalue metadata from Pinata API.
         Paginates through all results automatically.
@@ -213,7 +211,7 @@ class PinataClient:
             keyvalues: Metadata key-value pairs to filter by
 
         Returns:
-            List of matching ComponentFile objects
+            List of matching Asset objects
         """
         url = f"{self.API_BASE}/files/private"
         params: dict = {"pageLimit": 1000, "order": "DESC"}
@@ -223,7 +221,7 @@ class PinataClient:
             for key, value in keyvalues.items():
                 params[f"metadata[{key}]"] = value
 
-        results: list[ComponentFile] = []
+        results: list[Asset] = []
         async with aiohttp.ClientSession() as session:
             while True:
                 async with session.get(
@@ -234,7 +232,7 @@ class PinataClient:
 
                     for f in data.get("data", {}).get("files", []):
                         results.append(
-                            ComponentFile(
+                            Asset(
                                 cid=f["cid"],
                                 keyvalues=f.get("keyvalues", {}),
                             )
@@ -247,12 +245,12 @@ class PinataClient:
 
         return results
 
-    async def delete(self, component: ComponentFile) -> None:
+    async def delete(self, component: Asset) -> None:
         """
         Delete a file from Pinata by querying for its internal ID first.
 
         Args:
-            component: ComponentFile with cid set
+            component: Asset with cid set
         """
         url = f"{self.API_BASE}/files/private"
         params = {"cid": component.cid}

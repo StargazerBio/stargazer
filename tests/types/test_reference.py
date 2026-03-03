@@ -1,5 +1,5 @@
 """
-Tests for Reference type.
+Tests for Reference asset types.
 """
 
 import os
@@ -7,14 +7,19 @@ import tempfile
 
 import pytest
 from pathlib import Path
-from stargazer.types import Reference
-from stargazer.types.reference import ReferenceFile, ReferenceIndex, AlignerIndex
+
 import stargazer.utils.storage as _storage_mod
+from stargazer.types.reference import (
+    Reference,
+    ReferenceIndex,
+    AlignerIndex,
+    SequenceDict,
+)
 
 
 @pytest.mark.asyncio
 async def test_update_components_local_only():
-    """Test component update() methods in local-only mode."""
+    """Test asset update() methods in local-only mode."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
 
@@ -26,7 +31,7 @@ async def test_update_components_local_only():
         test_faidx.write_text("chr1\t8\t0\t9\t10\n")
         test_bwt.write_bytes(b"BWT_INDEX")
 
-        fasta = ReferenceFile()
+        fasta = Reference()
         await fasta.update(test_fasta, build="GRCh38")
 
         faidx = ReferenceIndex()
@@ -35,71 +40,68 @@ async def test_update_components_local_only():
         bwt = AlignerIndex()
         await bwt.update(test_bwt, build="GRCh38", aligner="bwa")
 
-        ref = Reference(build="GRCh38", fasta=fasta, faidx=faidx, aligner_index=[bwt])
-
-        assert ref.fasta is not None
-        assert ref.faidx is not None
-        assert len(ref.aligner_index) == 1
-
         # All files have local CIDs after upload
-        assert ref.fasta.cid.startswith("local_")
-        assert ref.faidx.cid.startswith("local_")
-        assert ref.aligner_index[0].cid.startswith("local_")
+        assert fasta.cid.startswith("local_")
+        assert faidx.cid.startswith("local_")
+        assert bwt.cid.startswith("local_")
+
+        # Keyvalues set correctly
+        assert fasta.keyvalues.get("asset") == "reference"
+        assert fasta.keyvalues.get("build") == "GRCh38"
+        assert faidx.keyvalues.get("asset") == "reference_index"
+        assert bwt.keyvalues.get("asset") == "aligner_index"
+        assert bwt.keyvalues.get("aligner") == "bwa"
 
         # Files exist in cache under their original names
-        cache_fasta = _storage_mod.default_client.local_dir / test_fasta.name
-        cache_faidx = _storage_mod.default_client.local_dir / test_faidx.name
-        cache_bwt = _storage_mod.default_client.local_dir / test_bwt.name
+        cache_dir = _storage_mod.default_client.local_dir
+        assert (cache_dir / test_fasta.name).exists()
+        assert (cache_dir / test_faidx.name).exists()
+        assert (cache_dir / test_bwt.name).exists()
 
-        assert cache_fasta.exists()
-        assert cache_faidx.exists()
-        assert cache_bwt.exists()
-
-        assert cache_fasta.read_text() == ">chr1\nATCGATCG\n"
-        assert cache_faidx.read_text() == "chr1\t8\t0\t9\t10\n"
-        assert cache_bwt.read_bytes() == b"BWT_INDEX"
+        assert (cache_dir / test_fasta.name).read_text() == ">chr1\nATCGATCG\n"
+        assert (cache_dir / test_faidx.name).read_text() == "chr1\t8\t0\t9\t10\n"
+        assert (cache_dir / test_bwt.name).read_bytes() == b"BWT_INDEX"
 
 
 @pytest.mark.asyncio
-async def test_reference_fetch():
-    """Test fetch() downloads all reference components."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir_path = Path(tmpdir)
+async def test_reference_fetch(fixtures_db):
+    """Test individual asset download() resolves paths from CIDs via TinyDB."""
+    [fasta_r] = await _storage_mod.default_client.query(
+        {"asset": "reference", "build": "GRCh38"}
+    )
+    [faidx_r] = await _storage_mod.default_client.query(
+        {"asset": "reference_index", "build": "GRCh38"}
+    )
 
-        test_fasta = tmpdir_path / "GRCh38.fa"
-        test_faidx = tmpdir_path / "GRCh38.fa.fai"
+    # Download resolves paths
+    await _storage_mod.default_client.download(fasta_r)
+    await _storage_mod.default_client.download(faidx_r)
 
-        test_fasta.write_text(">chr1\nATCGATCG\n")
-        test_faidx.write_text("chr1\t8\t0\t9\t10\n")
-
-        fasta = ReferenceFile()
-        await fasta.update(test_fasta, build="GRCh38")
-
-        faidx = ReferenceIndex()
-        await faidx.update(test_faidx, build="GRCh38")
-
-        ref = Reference(build="GRCh38", fasta=fasta, faidx=faidx)
-
-        # Fetch (in local-only mode, files already have path set after update)
-        cache_dir = await ref.fetch()
-
-        assert cache_dir == _storage_mod.default_client.local_dir
-        assert cache_dir.exists()
-
-        # After fetch, path is set
-        assert ref.fasta.path is not None
-        assert ref.fasta.path.exists()
-        assert ref.faidx.path is not None
-        assert ref.faidx.path.exists()
+    assert fasta_r.path is not None
+    assert fasta_r.path.exists()
+    assert faidx_r.path is not None
+    assert faidx_r.path.exists()
 
 
 @pytest.mark.asyncio
-async def test_reference_fetch_empty():
-    """Test fetch() raises ValueError for empty reference."""
-    ref = Reference(build="GRCh38")
+async def test_reference_aligner_index_query(fixtures_db):
+    """Test querying multiple aligner index files."""
+    results = await _storage_mod.default_client.query(
+        {"asset": "aligner_index", "build": "GRCh38", "aligner": "bwa"}
+    )
+    assert len(results) > 0
+    for r in results:
+        assert r.keyvalues.get("asset") == "aligner_index"
+        assert r.keyvalues.get("aligner") == "bwa"
 
-    with pytest.raises(ValueError, match="No files to fetch"):
-        await ref.fetch()
+
+@pytest.mark.asyncio
+async def test_sequence_dict_asset():
+    """Test SequenceDict asset keyvalues."""
+    sd = SequenceDict()
+    sd.build = "GRCh38"
+    assert sd.keyvalues.get("asset") == "sequence_dict"
+    assert sd.build == "GRCh38"
 
 
 def test_stargazer_mode_resolution():

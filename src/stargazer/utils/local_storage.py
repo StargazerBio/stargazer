@@ -13,7 +13,7 @@ from typing import Optional
 
 from tinydb import TinyDB, Query
 
-from stargazer.types.component import ComponentFile
+from stargazer.types.asset import Asset
 
 
 class LocalStorageClient:
@@ -25,7 +25,7 @@ class LocalStorageClient:
 
     Usage:
         client = LocalStorageClient()
-        comp = ComponentFile(path=Path("data.bam"), keyvalues={"type": "alignment"})
+        comp = Asset(path=Path("data.bam"), keyvalues={"type": "alignment"})
         await client.upload(comp)
         files = await client.query({"type": "alignment"})
         await client.download(comp)
@@ -58,12 +58,12 @@ class LocalStorageClient:
             self._db = TinyDB(self.local_db_path)
         return self._db
 
-    async def upload(self, component: ComponentFile) -> None:
+    async def upload(self, component: Asset) -> None:
         """
         Copy a file to local storage, index metadata in TinyDB, and set component.cid.
 
         Args:
-            component: ComponentFile with path and keyvalues set
+            component: Asset with path and keyvalues set
         """
         path = component.path
         if path is None:
@@ -92,15 +92,13 @@ class LocalStorageClient:
 
         component.cid = cid
 
-    async def download(
-        self, component: ComponentFile, dest: Optional[Path] = None
-    ) -> None:
+    async def download(self, component: Asset, dest: Optional[Path] = None) -> None:
         """
         Resolve a local file path and set component.path. For local storage, files are
         already on disk.
 
         Args:
-            component: ComponentFile with cid set
+            component: Asset with cid set
             dest: Optional destination path (copies file there)
         """
         # Skip if path is already set and file exists
@@ -144,7 +142,7 @@ class LocalStorageClient:
             "Use a PinataClient for remote files."
         )
 
-    async def query(self, keyvalues: dict[str, str]) -> list[ComponentFile]:
+    async def query(self, keyvalues: dict[str, str]) -> list[Asset]:
         """
         Query files by keyvalue metadata from TinyDB.
 
@@ -152,7 +150,7 @@ class LocalStorageClient:
             keyvalues: Metadata key-value pairs to filter by
 
         Returns:
-            List of matching ComponentFile objects
+            List of matching Asset objects
         """
         results = []
         for record in self.db.all():
@@ -160,7 +158,7 @@ class LocalStorageClient:
             if all(record_kv.get(k) == v for k, v in keyvalues.items()):
                 cid = record["cid"]
                 results.append(
-                    ComponentFile(
+                    Asset(
                         cid=cid,
                         path=self.local_dir / record["rel_path"],
                         keyvalues=record.get("keyvalues", {}),
@@ -168,12 +166,12 @@ class LocalStorageClient:
                 )
         return results
 
-    async def delete(self, component: ComponentFile) -> None:
+    async def delete(self, component: Asset) -> None:
         """
         Delete a file from local storage and TinyDB.
 
         Args:
-            component: ComponentFile with cid set
+            component: Asset with cid set
         """
         File = Query()
         record = self.db.get(File.cid == component.cid)

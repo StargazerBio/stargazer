@@ -2,22 +2,18 @@
 
 from pathlib import Path
 
-from stargazer.types.component import ComponentFile
+from stargazer.types.asset import Asset
 from stargazer.types.alignment import BQSRReport
-from stargazer.types import COMPONENT_REGISTRY
+from stargazer.types import ASSET_REGISTRY
 
 
 class TestBQSRReport:
-    def test_type_keyvalue(self):
+    def test_asset_keyvalue(self):
         r = BQSRReport()
-        assert r.keyvalues["type"] == "alignment"
+        assert r.keyvalues["asset"] == "bqsr_report"
 
-    def test_component_keyvalue(self):
-        r = BQSRReport()
-        assert r.keyvalues["component"] == "bqsr_report"
-
-    def test_is_component_file(self):
-        assert isinstance(BQSRReport(), ComponentFile)
+    def test_is_asset(self):
+        assert isinstance(BQSRReport(), Asset)
 
     def test_sample_id_via_keyvalues(self):
         r = BQSRReport()
@@ -29,17 +25,16 @@ class TestBQSRReport:
         r = BQSRReport()
         assert r.sample_id == ""
 
-    def test_registered_in_component_registry(self):
-        assert ("alignment", "bqsr_report") in COMPONENT_REGISTRY
-        assert COMPONENT_REGISTRY[("alignment", "bqsr_report")] is BQSRReport
+    def test_registered_in_asset_registry(self):
+        assert "bqsr_report" in ASSET_REGISTRY
+        assert ASSET_REGISTRY["bqsr_report"] is BQSRReport
 
     def test_roundtrip(self):
         r = BQSRReport(
             cid="Qm" + "a" * 44,
             path=Path("/tmp/sample_bqsr.table"),
             keyvalues={
-                "type": "alignment",
-                "component": "bqsr_report",
+                "asset": "bqsr_report",
                 "sample_id": "NA12829",
             },
         )
