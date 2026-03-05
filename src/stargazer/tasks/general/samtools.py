@@ -4,51 +4,41 @@ Samtools tasks for reference genome indexing.
 
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
-from stargazer.types import Reference
-from stargazer.types.reference import ReferenceIndex
+from stargazer.types import Reference, ReferenceIndex
 from stargazer.utils import _run
 
 
 @gatk_env.task
-async def samtools_faidx(ref: Reference) -> Reference:
+async def samtools_faidx(ref: Reference) -> ReferenceIndex:
     """
     Create a FASTA index (.fai file) using samtools faidx.
 
     Args:
-        ref: Reference object containing the FASTA file to index
+        ref: Reference FASTA asset
 
     Returns:
-        Reference object with the .fai index file added
+        ReferenceIndex asset containing the .fai file
     """
-    # Fetch all reference files to cache
-    await ref.fetch()
+    await _storage.default_client.download(ref)
+    ref_path = ref.path
 
-    # Get the cached reference file path
-    if not ref.fasta or not ref.fasta.path:
-        raise ValueError("Reference FASTA file not available or not fetched")
-    ref_file_path = ref.fasta.path
+    if not ref_path or not ref_path.exists():
+        raise FileNotFoundError(f"Reference file not found at {ref_path}")
 
-    # Verify the reference file exists
-    if not ref_file_path.exists():
-        raise FileNotFoundError(f"Reference file {ref.build} not found in cache")
-
-    # Check if we already have the .fai
-    if ref.faidx is not None:
-        return ref
-
-    # Run samtools faidx, writing .fai to output_dir
     output_dir = _storage.default_client.local_dir
-    base_name = ref_file_path.name
-    fai_path = output_dir / f"{base_name}.fai"
-    cmd = ["samtools", "faidx", str(ref_file_path), "--fai-idx", str(fai_path)]
+    fai_path = output_dir / f"{ref_path.name}.fai"
+    cmd = ["samtools", "faidx", str(ref_path), "--fai-idx", str(fai_path)]
     await _run(cmd, cwd=str(output_dir))
 
     if not fai_path.exists():
         raise FileNotFoundError(f"FASTA index file {fai_path.name} was not created")
 
-    # Upload .fai file and attach to reference
     faidx = ReferenceIndex()
-    await faidx.update(fai_path, build=ref.build, tool="samtools_faidx")
-    ref.faidx = faidx
+    await faidx.update(
+        fai_path,
+        build=ref.build,
+        tool="samtools_faidx",
+        reference_cid=ref.cid,
+    )
 
-    return ref
+    return faidx

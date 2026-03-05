@@ -4,9 +4,10 @@ base_recalibrator task for Stargazer.
 Creates BQSR recalibration table using GATK BaseRecalibrator.
 """
 
+import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
-from stargazer.types import Reference, Alignment, KnownSites
-from stargazer.types.alignment import BQSRReport
+from stargazer.types import Alignment, BQSRReport, KnownSites, Reference
+from stargazer.types.constellation import assemble
 from stargazer.utils import _run
 
 
@@ -15,48 +16,47 @@ async def base_recalibrator(
     alignment: Alignment,
     ref: Reference,
     known_sites: list[KnownSites],
-) -> Alignment:
+) -> BQSRReport:
     """
     Generate a Base Quality Score Recalibration report.
 
     Uses GATK BaseRecalibrator to analyze patterns of covariation in the
-    sequence dataset and produce a recalibration table. Returns the same
-    Alignment with bqsr_report populated, ready to pass directly to apply_bqsr.
+    sequence dataset and produce a recalibration table.
 
     Args:
-        alignment: Input BAM file (should be sorted and have duplicates marked)
-        ref: Reference genome with FASTA index
-        known_sites: List of KnownSites VCFs for known variant sites (dbSNP, known indels, etc.)
+        alignment: Input BAM asset (should be sorted and have duplicates marked)
+        ref: Reference FASTA asset
+        known_sites: List of KnownSites VCF assets (dbSNP, known indels, etc.)
 
     Returns:
-        Alignment with bqsr_report set
+        BQSRReport asset containing the recalibration table
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360036898312-BaseRecalibrator
     """
-    import stargazer.utils.storage as _storage
-
     if not known_sites:
         raise ValueError("known_sites list cannot be empty for BQSR")
 
-    await alignment.fetch()
-    await ref.fetch()
-
-    if not ref.fasta or not ref.fasta.path:
-        raise ValueError("Reference FASTA file not available or not fetched")
-    ref_path = ref.fasta.path
-
-    if not alignment.alignment or not alignment.alignment.path:
-        raise ValueError("Alignment BAM file not available or not fetched")
-    bam_path = alignment.alignment.path
-
-    output_dir = _storage.default_client.local_dir
-
-    known_sites_paths = []
+    await _storage.default_client.download(alignment)
+    await _storage.default_client.download(ref)
     for site in known_sites:
         await _storage.default_client.download(site)
-        known_sites_paths.append(site.path)
 
+    # Download reference companions (.fai, .dict) — GATK requires them alongside FASTA
+    c_ref = await assemble(
+        reference_cid=ref.cid, asset=["reference_index", "sequence_dict"]
+    )
+    if c_ref._assets:
+        await c_ref.fetch()
+
+    # Download alignment index (.bai) — GATK requires it alongside BAM
+    c_aln = await assemble(alignment_cid=alignment.cid, asset="alignment_index")
+    if c_aln._assets:
+        await c_aln.fetch()
+
+    ref_path = ref.path
+    bam_path = alignment.path
+    output_dir = _storage.default_client.local_dir
     output_recal = output_dir / f"{alignment.sample_id}_bqsr.table"
 
     cmd = [
@@ -69,8 +69,8 @@ async def base_recalibrator(
         "-O",
         str(output_recal),
     ]
-    for site_path in known_sites_paths:
-        cmd.extend(["--known-sites", str(site_path)])
+    for site in known_sites:
+        cmd.extend(["--known-sites", str(site.path)])
 
     await _run(cmd, cwd=str(output_dir))
 
@@ -81,12 +81,10 @@ async def base_recalibrator(
 
     report = BQSRReport()
     await report.update(
-        output_recal, sample_id=alignment.sample_id, tool="gatk_base_recalibrator"
+        output_recal,
+        sample_id=alignment.sample_id,
+        tool="gatk_base_recalibrator",
+        alignment_cid=alignment.cid,
     )
 
-    return Alignment(
-        sample_id=alignment.sample_id,
-        alignment=alignment.alignment,
-        index=alignment.index,
-        bqsr_report=report,
-    )
+    return report

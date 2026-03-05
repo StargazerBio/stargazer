@@ -6,8 +6,8 @@ Applies BQSR recalibration to BAM files using GATK ApplyBQSR.
 
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
-from stargazer.types import Reference, Alignment
-from stargazer.types.alignment import AlignmentFile
+from stargazer.types import Alignment, BQSRReport, Reference
+from stargazer.types.constellation import assemble
 from stargazer.utils import _run
 
 
@@ -15,48 +15,39 @@ from stargazer.utils import _run
 async def apply_bqsr(
     alignment: Alignment,
     ref: Reference,
+    bqsr_report: BQSRReport,
 ) -> Alignment:
     """
     Apply Base Quality Score Recalibration to a BAM file.
 
-    Uses GATK ApplyBQSR to recalibrate base quality scores using the
-    recalibration table stored in alignment.bqsr_report (set by base_recalibrator).
-
     Args:
-        alignment: Alignment with bqsr_report populated by base_recalibrator
-        ref: Reference genome with FASTA index
+        alignment: Input BAM asset
+        ref: Reference FASTA asset
+        bqsr_report: Recalibration table from base_recalibrator
 
     Returns:
-        Alignment object with recalibrated BAM file
-
-    Raises:
-        ValueError: If alignment.bqsr_report is not set
+        Alignment asset with recalibrated BAM file
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037055712-ApplyBQSR
     """
-    if not alignment.bqsr_report:
-        raise ValueError(
-            "alignment.bqsr_report is not set. Run base_recalibrator first."
-        )
+    await _storage.default_client.download(alignment)
+    await _storage.default_client.download(ref)
+    await _storage.default_client.download(bqsr_report)
 
-    await alignment.fetch()
-    await ref.fetch()
+    # Download reference companions (.fai, .dict) — GATK requires them alongside FASTA
+    c_ref = await assemble(
+        reference_cid=ref.cid, asset=["reference_index", "sequence_dict"]
+    )
+    if c_ref._assets:
+        await c_ref.fetch()
 
-    if not ref.fasta or not ref.fasta.path:
-        raise ValueError("Reference FASTA file not available or not fetched")
-    ref_path = ref.fasta.path
+    ref_path = ref.path
+    bam_path = alignment.path
+    recal_path = bqsr_report.path
 
-    if not alignment.alignment or not alignment.alignment.path:
-        raise ValueError("Alignment BAM file not available or not fetched")
-    bam_path = alignment.alignment.path
-
-    recal_path = alignment.bqsr_report.path
     if not recal_path or not recal_path.exists():
-        raise FileNotFoundError(
-            "BQSR recalibration report not found in cache. "
-            "Ensure alignment.bqsr_report was populated by base_recalibrator."
-        )
+        raise FileNotFoundError("BQSR recalibration report not found in cache.")
 
     output_dir = _storage.default_client.local_dir
     output_bam = output_dir / f"{alignment.sample_id}_recalibrated.bam"
@@ -79,15 +70,15 @@ async def apply_bqsr(
     if not output_bam.exists():
         raise FileNotFoundError(f"ApplyBQSR did not create output BAM at {output_bam}")
 
-    bam = AlignmentFile()
-    await bam.update(
+    recal_bam = Alignment()
+    await recal_bam.update(
         output_bam,
         sample_id=alignment.sample_id,
         format="bam",
         sorted="coordinate",
-        duplicates_marked=alignment.alignment.duplicates_marked,
+        duplicates_marked=alignment.duplicates_marked,
         bqsr_applied=True,
         tool="gatk_apply_bqsr",
     )
 
-    return Alignment(sample_id=alignment.sample_id, alignment=bam)
+    return recal_bam

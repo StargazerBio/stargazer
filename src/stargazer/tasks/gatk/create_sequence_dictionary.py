@@ -4,46 +4,34 @@ GATK CreateSequenceDictionary task for reference genome.
 
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
-from stargazer.types import Reference
-from stargazer.types.reference import SequenceDict
+from stargazer.types import Reference, SequenceDict
 from stargazer.utils import _run
 
 
 @gatk_env.task
-async def create_sequence_dictionary(ref: Reference) -> Reference:
+async def create_sequence_dictionary(ref: Reference) -> SequenceDict:
     """
     Create a sequence dictionary (.dict file) using GATK CreateSequenceDictionary.
 
     Args:
-        ref: Reference object containing the FASTA file
+        ref: Reference FASTA asset
 
     Returns:
-        Reference object with the .dict sequence dictionary file added
+        SequenceDict asset containing the .dict file
     """
-    # Fetch all reference files to cache
-    await ref.fetch()
+    await _storage.default_client.download(ref)
+    ref_path = ref.path
 
-    # Get the cached reference file path
-    if not ref.fasta or not ref.fasta.path:
-        raise ValueError("Reference FASTA file not available or not fetched")
-    ref_file_path = ref.fasta.path
+    if not ref_path or not ref_path.exists():
+        raise FileNotFoundError(f"Reference file not found at {ref_path}")
 
-    # Verify the reference file exists
-    if not ref_file_path.exists():
-        raise FileNotFoundError(f"Reference file {ref.build} not found in cache")
-
-    # Check if we already have the .dict
-    if ref.sequence_dictionary is not None:
-        return ref
-
-    # Run GATK CreateSequenceDictionary, writing .dict to output_dir
     output_dir = _storage.default_client.local_dir
-    dict_path = output_dir / f"{ref_file_path.stem}.dict"
+    dict_path = output_dir / f"{ref_path.stem}.dict"
     cmd = [
         "gatk",
         "CreateSequenceDictionary",
         "-R",
-        str(ref_file_path),
+        str(ref_path),
         "-O",
         str(dict_path),
     ]
@@ -54,11 +42,12 @@ async def create_sequence_dictionary(ref: Reference) -> Reference:
             f"Sequence dictionary file {dict_path.name} was not created"
         )
 
-    # Upload .dict file and attach to reference
     seq_dict = SequenceDict()
     await seq_dict.update(
-        dict_path, build=ref.build, tool="gatk_CreateSequenceDictionary"
+        dict_path,
+        build=ref.build,
+        tool="gatk_CreateSequenceDictionary",
+        reference_cid=ref.cid,
     )
-    ref.sequence_dictionary = seq_dict
 
-    return ref
+    return seq_dict

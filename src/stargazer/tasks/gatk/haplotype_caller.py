@@ -7,8 +7,8 @@ GATK HaplotypeCaller in GVCF mode.
 
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
-from stargazer.types import Reference, Alignment, Variants
-from stargazer.types.variants import VariantsFile
+from stargazer.types import Alignment, Reference, Variants, VariantsIndex
+from stargazer.types.constellation import assemble
 from stargazer.utils import _run
 
 
@@ -20,36 +20,33 @@ async def haplotype_caller(
     """
     Call germline variants in GVCF mode using GATK HaplotypeCaller.
 
-    Runs HaplotypeCaller with --emit-ref-confidence GVCF, producing a
-    per-sample GVCF with genotype likelihoods at every site. The GVCF
-    can be passed directly to genotype_gvcf (single-sample) or
-    combine_gvcfs followed by genotype_gvcf (cohort joint-calling).
-
     Args:
-        alignment: Sorted, duplicate-marked BAM (BQSR-recalibrated recommended)
-        ref: Reference genome with FASTA index and sequence dictionary
+        alignment: Sorted, duplicate-marked BAM asset (BQSR-recalibrated recommended)
+        ref: Reference FASTA asset with sequence dictionary
 
     Returns:
-        Variants object containing the per-sample GVCF
-
-    Raises:
-        ValueError: If required input files are missing or not fetched
-        FileNotFoundError: If HaplotypeCaller fails to produce output
+        Variants asset containing the per-sample GVCF
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037225632-HaplotypeCaller
     """
-    await alignment.fetch()
-    await ref.fetch()
+    await _storage.default_client.download(alignment)
+    await _storage.default_client.download(ref)
 
-    if not ref.fasta or not ref.fasta.path:
-        raise ValueError("Reference FASTA file not available or not fetched")
-    ref_path = ref.fasta.path
+    # Download reference companions (.fai, .dict) — GATK requires them alongside FASTA
+    c_ref = await assemble(
+        reference_cid=ref.cid, asset=["reference_index", "sequence_dict"]
+    )
+    if c_ref._assets:
+        await c_ref.fetch()
 
-    if not alignment.alignment or not alignment.alignment.path:
-        raise ValueError("Alignment BAM file not available or not fetched")
-    bam_path = alignment.alignment.path
+    # Download alignment index (.bai) — GATK requires it alongside BAM
+    c_aln = await assemble(alignment_cid=alignment.cid, asset="alignment_index")
+    if c_aln._assets:
+        await c_aln.fetch()
 
+    ref_path = ref.path
+    bam_path = alignment.path
     output_dir = _storage.default_client.local_dir
     output_gvcf = output_dir / f"{alignment.sample_id}.g.vcf"
 
@@ -73,16 +70,23 @@ async def haplotype_caller(
             f"HaplotypeCaller did not create output GVCF at {output_gvcf}"
         )
 
-    build = ref.fasta.build if ref.fasta else None
-    vcf_comp = VariantsFile()
-    await vcf_comp.update(
+    gvcf = Variants()
+    await gvcf.update(
         output_gvcf,
         sample_id=alignment.sample_id,
         caller="haplotype_caller",
         variant_type="gvcf",
-        build=build,
+        build=ref.build,
         sample_count=1,
-        source_samples=[alignment.sample_id],
+        source_samples=alignment.sample_id,
     )
 
-    return Variants(sample_id=alignment.sample_id, vcf=vcf_comp)
+    # Upload implicit index file produced by GATK
+    idx_path = output_dir / f"{output_gvcf.name}.idx"
+    if idx_path.exists():
+        vidx = VariantsIndex()
+        await vidx.update(
+            idx_path, sample_id=alignment.sample_id, variants_cid=gvcf.cid
+        )
+
+    return gvcf
