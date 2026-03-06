@@ -28,7 +28,7 @@ async def bwa_index(ref: Reference) -> list[AlignerIndex]:
     Reference:
         https://bio-bwa.sourceforge.net/bwa.shtml
     """
-    await _storage.default_client.download(ref)
+    await ref.fetch()
     ref_path = ref.path
 
     if not ref_path or not ref_path.exists():
@@ -69,8 +69,7 @@ async def bwa_index(ref: Reference) -> list[AlignerIndex]:
 async def bwa_mem(
     ref: Reference,
     r1: R1,
-    r2: R2 | None,
-    aligner_indices: list[AlignerIndex],
+    r2: R2 | None = None,
     read_group: dict[str, str] | None = None,
 ) -> Alignment:
     """
@@ -83,7 +82,6 @@ async def bwa_mem(
         ref: Reference FASTA asset
         r1: R1 FASTQ read asset
         r2: R2 FASTQ read asset (None for single-end)
-        aligner_indices: BWA index file assets (ensures they are fetched before BWA runs)
         read_group: Optional read group override (ID, SM, LB, PL, PU)
 
     Returns:
@@ -92,12 +90,11 @@ async def bwa_mem(
     Reference:
         https://bio-bwa.sourceforge.net/bwa.shtml
     """
-    await _storage.default_client.download(ref)
-    await _storage.default_client.download(r1)
+    # fetch() downloads ref + companions (aligner indices, .fai, .dict)
+    await ref.fetch()
+    await r1.fetch()
     if r2:
-        await _storage.default_client.download(r2)
-    for idx in aligner_indices:
-        await _storage.default_client.download(idx)
+        await r2.fetch()
 
     ref_path = ref.path
     r1_path = r1.path

@@ -1,10 +1,10 @@
-"""Tests for Constellation namespace and assemble()."""
+"""Tests for Constellation namespace and Constellation.assemble()."""
 
 import pytest
 from unittest.mock import AsyncMock, patch
 
 from stargazer.types.asset import Asset
-from stargazer.types.constellation import Constellation, assemble
+from stargazer.types.constellation import Constellation
 from stargazer.types.reference import Reference, ReferenceIndex, AlignerIndex
 from stargazer.types.reads import R1, R2
 
@@ -58,7 +58,7 @@ async def test_assemble_groups_by_asset_key():
     mock_client.query.return_value = [raw_ref, raw_idx]
 
     with patch("stargazer.utils.storage.default_client", mock_client):
-        c = await assemble(build="GRCh38")
+        c = await Constellation.assemble(build="GRCh38")
 
     assert type(c.reference) is Reference
     assert type(c.reference_index) is ReferenceIndex
@@ -75,7 +75,7 @@ async def test_assemble_list_filter_issues_multiple_queries():
     mock_client.query.side_effect = [[r1_raw], [r2_raw]]
 
     with patch("stargazer.utils.storage.default_client", mock_client):
-        c = await assemble(sample_id="S1", asset=["r1", "r2"])
+        c = await Constellation.assemble(sample_id="S1", asset=["r1", "r2"])
 
     assert mock_client.query.call_count == 2
     assert type(c.r1) is R1
@@ -91,7 +91,9 @@ async def test_assemble_deduplicates_by_cid():
     mock_client.query.side_effect = [[raw], [raw]]  # same CID returned twice
 
     with patch("stargazer.utils.storage.default_client", mock_client):
-        c = await assemble(build="GRCh38", asset=["reference", "reference"])
+        c = await Constellation.assemble(
+            build="GRCh38", asset=["reference", "reference"]
+        )
 
     # Should have exactly one reference, not two
     assert type(c.reference) is Reference
@@ -104,7 +106,7 @@ async def test_assemble_empty_result():
     mock_client.query.return_value = []
 
     with patch("stargazer.utils.storage.default_client", mock_client):
-        c = await assemble(build="nonexistent")
+        c = await Constellation.assemble(build="nonexistent")
 
     assert c.reference is None
     assert c.alignment is None
@@ -120,7 +122,7 @@ async def test_assemble_multiple_same_key_returns_list():
     mock_client.query.return_value = [idx1, idx2]
 
     with patch("stargazer.utils.storage.default_client", mock_client):
-        c = await assemble(build="GRCh38")
+        c = await Constellation.assemble(build="GRCh38")
 
     assert isinstance(c.aligner_index, list)
     assert len(c.aligner_index) == 2

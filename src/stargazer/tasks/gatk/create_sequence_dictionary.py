@@ -19,7 +19,7 @@ async def create_sequence_dictionary(ref: Reference) -> SequenceDict:
     Returns:
         SequenceDict asset containing the .dict file
     """
-    await _storage.default_client.download(ref)
+    await ref.fetch()
     ref_path = ref.path
 
     if not ref_path or not ref_path.exists():

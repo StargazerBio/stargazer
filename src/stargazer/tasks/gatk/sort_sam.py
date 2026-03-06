@@ -34,7 +34,7 @@ async def sort_sam(
             f"Invalid sort_order: {sort_order}. Must be one of {valid_sort_orders}"
         )
 
-    await _storage.default_client.download(alignment)
+    await alignment.fetch()
     bam_path = alignment.path
     output_dir = _storage.default_client.local_dir
     output_bam = output_dir / f"{alignment.sample_id}_sorted_{sort_order}.bam"

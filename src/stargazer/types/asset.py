@@ -76,6 +76,28 @@ class Asset:
         else:
             self.keyvalues[name] = str(value)
 
+    async def fetch(self) -> None:
+        """Download this asset and all its companions from storage.
+
+        Downloads the asset itself, then queries storage for any assets linked
+        via ``{_asset_key}_cid`` to auto-download companions (e.g. indices,
+        mate reads).
+        """
+        import stargazer.utils.storage as _storage
+        from stargazer.types.constellation import Constellation
+
+        await _storage.default_client.download(self)
+
+        if self._asset_key and self.cid:
+            c = await Constellation.assemble(**{f"{self._asset_key}_cid": self.cid})
+            if c._assets:
+                for value in c._assets.values():
+                    if isinstance(value, list):
+                        for a in value:
+                            await _storage.default_client.download(a)
+                    elif value is not None:
+                        await _storage.default_client.download(value)
+
     async def update(self, path: Path, **kwargs) -> None:
         """Upload file and set cid. Shared by all asset types."""
         from stargazer.utils.storage import default_client

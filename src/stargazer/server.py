@@ -21,7 +21,7 @@ from stargazer.marshal import marshal_output
 from stargazer.registry import TaskRegistry
 from stargazer.types import ASSET_REGISTRY
 from stargazer.types.asset import Asset
-from stargazer.types.constellation import assemble
+from stargazer.types.constellation import Constellation
 from stargazer.utils.storage import default_client
 
 # ---------------------------------------------------------------------------
@@ -120,7 +120,7 @@ async def run_task(task_name: str, inputs: dict) -> dict:
 
     # Assemble assets from storage filters, pass everything else as scalars
     filters = inputs.pop("filters", {})
-    constellation = await assemble(**filters) if filters else None
+    constellation = await Constellation.assemble(**filters) if filters else None
 
     kwargs = dict(inputs)
     if constellation is not None:

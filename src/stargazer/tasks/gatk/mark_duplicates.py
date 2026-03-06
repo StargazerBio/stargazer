@@ -28,7 +28,7 @@ async def mark_duplicates(alignment: Alignment) -> Alignment:
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037052812-MarkDuplicates-Picard
     """
-    await _storage.default_client.download(alignment)
+    await alignment.fetch()
     bam_path = alignment.path
     output_dir = _storage.default_client.local_dir
 

@@ -7,7 +7,6 @@ Merges aligned BAM with unmapped BAM using GATK MergeBamAlignment.
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Alignment, AlignmentIndex, Reference
-from stargazer.types.constellation import assemble
 from stargazer.utils import _run
 
 
@@ -31,16 +30,10 @@ async def merge_bam_alignment(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037226472-MergeBamAlignment-Picard
     """
-    await _storage.default_client.download(aligned_bam)
-    await _storage.default_client.download(unmapped_bam)
-    await _storage.default_client.download(ref)
-
-    # Download reference companions (.fai, .dict) — GATK requires them alongside FASTA
-    c_ref = await assemble(
-        reference_cid=ref.cid, asset=["reference_index", "sequence_dict"]
-    )
-    if c_ref._assets:
-        await c_ref.fetch()
+    # fetch() auto-downloads companions (.fai, .dict for ref)
+    await aligned_bam.fetch()
+    await unmapped_bam.fetch()
+    await ref.fetch()
 
     ref_path = ref.path
     aligned_path = aligned_bam.path

@@ -3,7 +3,7 @@ Stargazer types for bioinformatics workflows.
 """
 
 from stargazer.types.asset import Asset
-from stargazer.types.constellation import Constellation, assemble
+from stargazer.types.constellation import Constellation
 from stargazer.types.reference import (
     Reference,
     ReferenceIndex,
@@ -53,7 +53,6 @@ __all__ = [
     "specialize",
     # Constellation
     "Constellation",
-    "assemble",
     # Reference assets
     "Reference",
     "ReferenceIndex",

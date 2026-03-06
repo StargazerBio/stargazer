@@ -16,10 +16,9 @@ Reference:
 
 import asyncio
 
-import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Variants
-from stargazer.types.constellation import assemble
+from stargazer.types.constellation import Constellation
 from stargazer.tasks import (
     haplotype_caller,
     combine_gvcfs,
@@ -49,21 +48,18 @@ async def germline_short_variant_discovery(
         Joint-genotyped Variants asset
     """
     # Assemble reference
-    c_ref = await assemble(build=build, asset="reference")
+    c_ref = await Constellation.assemble(build=build, asset="reference")
     ref = c_ref.reference
     if ref is None:
         raise ValueError(f"No reference found for build={build!r}")
-    await _storage.default_client.download(ref)
 
     async def call_sample(sample_id: str) -> Variants:
-        c = await assemble(sample_id=sample_id, asset="alignment")
+        c = await Constellation.assemble(sample_id=sample_id, asset="alignment")
         alignment = c.alignment
         if alignment is None:
             raise ValueError(f"No alignment found for sample_id={sample_id!r}")
         if isinstance(alignment, list):
-            # Use the most recent (last) alignment if multiple exist
             alignment = alignment[-1]
-        await _storage.default_client.download(alignment)
         return await haplotype_caller(alignment=alignment, ref=ref)
 
     # 1. HaplotypeCaller — per-sample GVCFs in parallel

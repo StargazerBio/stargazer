@@ -19,7 +19,7 @@ async def samtools_faidx(ref: Reference) -> ReferenceIndex:
     Returns:
         ReferenceIndex asset containing the .fai file
     """
-    await _storage.default_client.download(ref)
+    await ref.fetch()
     ref_path = ref.path
 
     if not ref_path or not ref_path.exists():

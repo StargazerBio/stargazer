@@ -8,7 +8,6 @@ GATK HaplotypeCaller in GVCF mode.
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Alignment, Reference, Variants, VariantsIndex
-from stargazer.types.constellation import assemble
 from stargazer.utils import _run
 
 
@@ -30,20 +29,9 @@ async def haplotype_caller(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037225632-HaplotypeCaller
     """
-    await _storage.default_client.download(alignment)
-    await _storage.default_client.download(ref)
-
-    # Download reference companions (.fai, .dict) — GATK requires them alongside FASTA
-    c_ref = await assemble(
-        reference_cid=ref.cid, asset=["reference_index", "sequence_dict"]
-    )
-    if c_ref._assets:
-        await c_ref.fetch()
-
-    # Download alignment index (.bai) — GATK requires it alongside BAM
-    c_aln = await assemble(alignment_cid=alignment.cid, asset="alignment_index")
-    if c_aln._assets:
-        await c_aln.fetch()
+    # fetch() auto-downloads companions (.fai, .dict, .bai)
+    await alignment.fetch()
+    await ref.fetch()
 
     ref_path = ref.path
     bam_path = alignment.path

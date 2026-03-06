@@ -22,7 +22,7 @@ class Constellation:
     Missing assets return None.
 
     Example:
-        ref = await assemble(build="GRCh38")
+        ref = await Constellation.assemble(build="GRCh38")
         ref.reference         # Reference instance
         ref.reference_index   # ReferenceIndex instance (or None)
         ref.aligner_index     # list[AlignerIndex] (or None)
@@ -62,53 +62,53 @@ class Constellation:
 
         return _storage.default_client.local_dir
 
+    @classmethod
+    async def assemble(cls, **filters: Any) -> "Constellation":
+        """Query storage by keyvalue filters, specialize results, return as Constellation.
 
-async def assemble(**filters: Any) -> Constellation:
-    """Query storage by keyvalue filters, specialize results, return as Constellation.
+        Wraps the cartesian product query + specialize pattern into a single call.
+        Workflows call this at the top to gather what they need.
 
-    Wraps the cartesian product query + specialize pattern into a single call.
-    Workflows call this at the top to gather what they need.
+        The ``asset`` filter key accepts a string or list of strings to narrow by asset type.
+        Other filters are passed through as keyvalue matchers.
 
-    The `asset` filter key accepts a string or list of strings to narrow by asset type.
-    Other filters are passed through as keyvalue matchers.
+        Args:
+            **filters: Keyvalue filters. Values may be scalars or lists (cartesian product).
 
-    Args:
-        **filters: Keyvalue filters. Values may be scalars or lists (cartesian product).
+        Returns:
+            Constellation namespace with assets grouped by _asset_key.
 
-    Returns:
-        Constellation namespace with assets grouped by _asset_key.
+        Examples:
+            ref = await Constellation.assemble(build="GRCh38")
+            ref.reference        # Reference instance
+            ref.reference_index  # ReferenceIndex instance
 
-    Examples:
-        ref = await assemble(build="GRCh38")
-        ref.reference        # Reference instance
-        ref.reference_index  # ReferenceIndex instance
+            reads = await Constellation.assemble(sample_id="NA12878", asset=["r1", "r2"])
+            reads.r1             # R1 instance
+            reads.r2             # R2 instance
+        """
+        import stargazer.utils.storage as _storage
+        from stargazer.types import specialize
+        from stargazer.utils.query import generate_query_combinations
 
-        reads = await assemble(sample_id="NA12878", asset=["r1", "r2"])
-        reads.r1             # R1 instance
-        reads.r2             # R2 instance
-    """
-    import stargazer.utils.storage as _storage
-    from stargazer.types import specialize
-    from stargazer.utils.query import generate_query_combinations
+        query_combinations = generate_query_combinations(base_query={}, filters=filters)
 
-    query_combinations = generate_query_combinations(base_query={}, filters=filters)
+        # Execute queries, deduplicate by CID
+        all_assets: dict[str, Asset] = {}
+        for query in query_combinations:
+            for raw in await _storage.default_client.query(query):
+                all_assets[raw.cid] = raw
 
-    # Execute queries, deduplicate by CID
-    all_assets: dict[str, Asset] = {}
-    for query in query_combinations:
-        for raw in await _storage.default_client.query(query):
-            all_assets[raw.cid] = raw
+        # Specialize and group by _asset_key
+        grouped: dict[str, list[Asset]] = {}
+        for asset in all_assets.values():
+            specialized = specialize(asset)
+            key = specialized._asset_key or specialized.keyvalues.get("asset", "")
+            if key:
+                grouped.setdefault(key, []).append(specialized)
 
-    # Specialize and group by _asset_key
-    grouped: dict[str, list[Asset]] = {}
-    for asset in all_assets.values():
-        specialized = specialize(asset)
-        key = specialized._asset_key or specialized.keyvalues.get("asset", "")
-        if key:
-            grouped.setdefault(key, []).append(specialized)
-
-    # Collapse single-item lists to scalars
-    namespace: dict[str, Asset | list[Asset]] = {
-        k: (v[0] if len(v) == 1 else v) for k, v in grouped.items()
-    }
-    return Constellation(_assets=namespace)
+        # Collapse single-item lists to scalars
+        namespace: dict[str, Asset | list[Asset]] = {
+            k: (v[0] if len(v) == 1 else v) for k, v in grouped.items()
+        }
+        return cls(_assets=namespace)

@@ -10,7 +10,6 @@ from pathlib import Path
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Variants, VariantsIndex
-from stargazer.types.constellation import assemble
 from stargazer.utils import _run
 
 
@@ -44,24 +43,14 @@ async def combine_gvcfs(
                 f"sample_id={gvcf.sample_id}"
             )
 
-    await _storage.default_client.download(ref)
-
-    # Download reference companions (.fai, .dict) — GATK requires them alongside FASTA
-    c_ref = await assemble(
-        reference_cid=ref.cid, asset=["reference_index", "sequence_dict"]
-    )
-    if c_ref._assets:
-        await c_ref.fetch()
+    # fetch() auto-downloads companions (.fai, .dict for ref; .idx for each gvcf)
+    await ref.fetch()
 
     gvcf_paths: list[Path] = []
     sample_ids: list[str] = []
 
     for gvcf in gvcfs:
-        await _storage.default_client.download(gvcf)
-        # Download variants index (.idx) — GATK requires it alongside GVCF
-        c_vidx = await assemble(variants_cid=gvcf.cid, asset="variants_index")
-        if c_vidx._assets:
-            await c_vidx.fetch()
+        await gvcf.fetch()
         gvcf_paths.append(gvcf.path)
         sample_ids.append(gvcf.sample_id)
 

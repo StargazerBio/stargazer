@@ -7,7 +7,6 @@ Creates BQSR recalibration table using GATK BaseRecalibrator.
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Alignment, BQSRReport, KnownSites, Reference
-from stargazer.types.constellation import assemble
 from stargazer.utils import _run
 
 
@@ -37,22 +36,11 @@ async def base_recalibrator(
     if not known_sites:
         raise ValueError("known_sites list cannot be empty for BQSR")
 
-    await _storage.default_client.download(alignment)
-    await _storage.default_client.download(ref)
+    # fetch() auto-downloads companions (.fai, .dict, .bai, etc.)
+    await alignment.fetch()
+    await ref.fetch()
     for site in known_sites:
-        await _storage.default_client.download(site)
-
-    # Download reference companions (.fai, .dict) — GATK requires them alongside FASTA
-    c_ref = await assemble(
-        reference_cid=ref.cid, asset=["reference_index", "sequence_dict"]
-    )
-    if c_ref._assets:
-        await c_ref.fetch()
-
-    # Download alignment index (.bai) — GATK requires it alongside BAM
-    c_aln = await assemble(alignment_cid=alignment.cid, asset="alignment_index")
-    if c_aln._assets:
-        await c_aln.fetch()
+        await site.fetch()
 
     ref_path = ref.path
     bam_path = alignment.path
