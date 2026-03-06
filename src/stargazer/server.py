@@ -51,6 +51,8 @@ async def upload_file(path: str, keyvalues: dict[str, str]) -> dict:
 
     keyvalues must include "asset". Valid asset keys are derived
     from the Asset registry (e.g. asset=reference component=fasta).
+
+    When displaying results, always show a table with the CID and all keyvalues.
     """
     asset_key = keyvalues.get("asset")
     if asset_key not in ASSET_REGISTRY:
