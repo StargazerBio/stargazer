@@ -27,6 +27,7 @@ async def create_sequence_dictionary(ref: Reference) -> SequenceDict:
 
     output_dir = _storage.default_client.local_dir
     dict_path = output_dir / f"{ref_path.stem}.dict"
+    dict_path.unlink(missing_ok=True)
     cmd = [
         "gatk",
         "CreateSequenceDictionary",

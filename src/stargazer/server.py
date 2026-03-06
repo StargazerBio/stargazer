@@ -32,7 +32,6 @@ mcp = FastMCP("stargazer")
 
 flyte.init_from_config()
 _registry = TaskRegistry()
-_run_ctx = flyte.with_runcontext(mode="local")
 
 # ---------------------------------------------------------------------------
 # Storage tools
@@ -126,10 +125,16 @@ async def run_task(task_name: str, inputs: dict) -> dict:
     if constellation is not None:
         kwargs["data"] = constellation
 
-    # Execute via Flyte local run context
-    run = _run_ctx.run(info.task_obj, **kwargs)
+    # Execute via Flyte local run
+    run = flyte.run(info.task_obj, **kwargs)
     run.wait()
-    result = run.outputs()
+    named = run.outputs().named_outputs  # {"o0": value, ...}
+
+    # Unwrap single outputs; keep dict for multi-output tasks
+    if len(named) == 1:
+        result = next(iter(named.values()))
+    else:
+        result = named
 
     return marshal_output(result)
 

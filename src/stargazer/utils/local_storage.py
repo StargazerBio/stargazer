@@ -53,8 +53,14 @@ class LocalStorageClient:
 
     @property
     def db(self) -> TinyDB:
-        """Get TinyDB instance for local metadata storage (lazy initialized)."""
-        if self._db is None:
+        """Get TinyDB instance for local metadata storage (lazy initialized).
+
+        Re-opens if the DB file has been deleted externally, avoiding stale
+        file handle writes to a deleted inode.
+        """
+        if self._db is None or not self.local_db_path.exists():
+            if self._db is not None:
+                self._db.close()
             self._db = TinyDB(self.local_db_path)
         return self._db
 
@@ -79,15 +85,17 @@ class LocalStorageClient:
         if path.resolve() != local_path.resolve():
             shutil.copy2(path, local_path)
 
-        # Store metadata in TinyDB
+        # Upsert metadata in TinyDB (avoid duplicates on re-upload)
         now = datetime.now(timezone.utc)
-        self.db.insert(
+        File = Query()
+        self.db.upsert(
             {
                 "cid": cid,
                 "keyvalues": component.keyvalues,
                 "created_at": now.isoformat(),
                 "rel_path": path.name,
-            }
+            },
+            File.cid == cid,
         )
 
         component.cid = cid
