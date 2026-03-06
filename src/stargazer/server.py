@@ -12,17 +12,61 @@ Usage:
 
 import json
 import os
+import types as _types
 from pathlib import Path
+from typing import Any, get_args, get_origin
 
 import flyte
 from mcp.server.fastmcp import FastMCP
 
 from stargazer.marshal import marshal_output
-from stargazer.registry import TaskRegistry
+from stargazer.registry import TaskInfo, TaskRegistry
 from stargazer.types import ASSET_REGISTRY
 from stargazer.types.asset import Asset
 from stargazer.types.constellation import Constellation
 from stargazer.utils.storage import default_client
+
+
+def _asset_key_for_hint(hint: Any) -> str | None:
+    """Extract the _asset_key from a type hint, if it's an Asset type.
+
+    Handles plain Asset subclasses, list[Asset], and unions containing Assets.
+    Returns None for non-Asset hints (scalars, Path, etc.).
+    """
+    # Direct Asset subclass
+    if isinstance(hint, type) and issubclass(hint, Asset) and hint._asset_key:
+        return hint._asset_key
+
+    origin = get_origin(hint)
+    args = get_args(hint)
+
+    # list[AssetSubclass]
+    if origin is list and args:
+        inner = args[0]
+        if isinstance(inner, type) and issubclass(inner, Asset) and inner._asset_key:
+            return inner._asset_key
+
+    # Union / X | Y — find the Asset branch
+    if isinstance(hint, _types.UnionType) and args:
+        for arg in args:
+            if arg is type(None):
+                continue
+            key = _asset_key_for_hint(arg)
+            if key:
+                return key
+
+    return None
+
+
+def _is_list_asset_hint(hint: Any) -> bool:
+    """True if the hint is list[AssetSubclass]."""
+    origin = get_origin(hint)
+    args = get_args(hint)
+    if origin is list and args:
+        inner = args[0]
+        return isinstance(inner, type) and issubclass(inner, Asset)
+    return False
+
 
 # ---------------------------------------------------------------------------
 # FastMCP instance + registry
@@ -98,17 +142,21 @@ def list_tasks(category: str | None = None) -> list[dict]:
 
 
 @mcp.tool()
-async def run_task(task_name: str, inputs: dict) -> dict:
-    """Run any registered task or workflow by name using Flyte local execution.
+async def run_task(task_name: str, filters: dict, inputs: dict | None = None) -> dict:
+    """Run a single task by name for ad-hoc experimentation.
 
-    Accepts JSON-friendly inputs (dicts for domain types like Reference,
-    Alignment, etc.) and returns JSON-friendly outputs.
+    Use this for testing individual tools in isolation. Asset parameters
+    are assembled from storage using the provided filters — one call to
+    Constellation.assemble() resolves all required assets. Scalar and Path
+    parameters are passed separately via inputs.
+
+    For reproducible pipeline runs, use run_workflow instead.
 
     Args:
-        task_name: Name of the task or workflow (from list_tasks).
-        inputs: Keyword arguments as a JSON dict. Domain types should be passed
-                as filter dicts under the "filters" key for assembly
-                (e.g. {"filters": {"build": "GRCh38", "asset": "reference"}}).
+        task_name: Name of the task (from list_tasks with category="task").
+        filters: Keyvalue filters for Constellation.assemble() to resolve
+                 asset parameters (e.g. {"build": "GRCh38", "sample_id": "NA12878"}).
+        inputs: Optional scalar/Path keyword arguments (str, int, bool, list[str]).
 
     Returns:
         Serialized task output. Single outputs returned directly,
@@ -116,18 +164,72 @@ async def run_task(task_name: str, inputs: dict) -> dict:
     """
     info = _registry.get(task_name)
     if info is None:
-        available = [t.name for t in _registry.list_tasks()]
+        available = [t.name for t in _registry.list_tasks(category="task")]
         raise ValueError(f"Unknown task: {task_name!r}. Available: {available}")
+    if info.category != "task":
+        raise ValueError(f"{task_name!r} is a workflow — use run_workflow instead.")
 
-    # Assemble assets from storage filters, pass everything else as scalars
-    filters = inputs.pop("filters", {})
+    inputs = inputs or {}
+
+    # Assemble all assets from storage in one query
     constellation = await Constellation.assemble(**filters) if filters else None
 
-    kwargs = dict(inputs)
-    if constellation is not None:
-        kwargs["data"] = constellation
+    # Build kwargs: match Asset params from constellation, pass scalars from inputs
+    kwargs = {}
+    for p in info.params:
+        asset_key = _asset_key_for_hint(p.type_hint)
+        if asset_key and constellation is not None:
+            value = getattr(constellation, asset_key)
+            if value is None and p.required:
+                raise ValueError(
+                    f"Task {task_name!r} requires {p.name} ({asset_key}) "
+                    f"but no matching asset found for filters: {filters}"
+                )
+            # list[Asset] params need a list even if constellation collapsed to scalar
+            if value is not None and _is_list_asset_hint(p.type_hint):
+                value = value if isinstance(value, list) else [value]
+            if value is not None:
+                kwargs[p.name] = value
+        elif p.name in inputs:
+            value = inputs[p.name]
+            if p.type_hint is Path and isinstance(value, str):
+                value = Path(value)
+            kwargs[p.name] = value
 
-    # Execute via Flyte local run
+    return await _execute(info, kwargs)
+
+
+@mcp.tool()
+async def run_workflow(workflow_name: str, inputs: dict) -> dict:
+    """Run a workflow by name for reproducible pipeline execution.
+
+    Workflows accept scalar parameters (str, int, bool, list[str]) and
+    handle their own asset assembly internally. Pass inputs exactly as
+    the workflow signature defines them — no automatic resolution is
+    performed.
+
+    For ad-hoc experimentation with individual tools, use run_task instead.
+
+    Args:
+        workflow_name: Name of the workflow (from list_tasks with category="workflow").
+        inputs: Keyword arguments as a JSON dict (scalars only).
+
+    Returns:
+        Serialized workflow output. Single outputs returned directly,
+        multi-outputs as {"o0": ..., "o1": ...}.
+    """
+    info = _registry.get(workflow_name)
+    if info is None:
+        available = [t.name for t in _registry.list_tasks(category="workflow")]
+        raise ValueError(f"Unknown workflow: {workflow_name!r}. Available: {available}")
+    if info.category != "workflow":
+        raise ValueError(f"{workflow_name!r} is a task — use run_task instead.")
+
+    return await _execute(info, dict(inputs))
+
+
+async def _execute(info: TaskInfo, kwargs: dict) -> dict:
+    """Run a Flyte task/workflow and return marshalled output."""
     run = flyte.run(info.task_obj, **kwargs)
     run.wait()
     named = run.outputs().named_outputs  # {"o0": value, ...}
