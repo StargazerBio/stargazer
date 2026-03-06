@@ -21,6 +21,7 @@
 - Tests will run until they pass
 - All necessary CLI tools e.g. parabricks, bwa etc, are available in PATH. Use them to generate test assets as needed and alert the user if they are not available.
 - **CRITICAL** Do not consider backwards compatibility unless explicitly requested!
+- Run `ruff --fix` after every set of changes to satisfy the pre-commit
 
 ## OpenCode Agent Definitions
 
