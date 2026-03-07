@@ -137,7 +137,7 @@ def register_task(mcp: FastMCP, task_fn, name: str, description: str):
    - `bwa_index`, `bwa_mem`, `samtools_faidx`
    - `sort_sam`, `mark_duplicates`, `base_recalibrator`, `apply_bqsr`
    - `create_sequence_dictionary`
-   - `genotype_gvcf`, `combine_gvcfs`, `genomics_db_import`
+   - `joint_call_gvcfs`, `combine_gvcfs`, `genomics_db_import`
    - `variant_recalibrator`, `apply_vqsr`
 
 4. Register composite workflows:

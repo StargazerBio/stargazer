@@ -3,7 +3,7 @@ Stargazer types for bioinformatics workflows.
 """
 
 from stargazer.types.asset import Asset
-from stargazer.types.constellation import Constellation
+from stargazer.types.asset import assemble
 from stargazer.types.reference import (
     Reference,
     ReferenceIndex,
@@ -21,6 +21,7 @@ from stargazer.types.variants import (
     Variants,
     VariantsIndex,
     KnownSites,
+    VQSRModel,
 )
 
 # Auto-populated via Asset.__init_subclass__
@@ -51,8 +52,8 @@ __all__ = [
     # Registry + helpers
     "ASSET_REGISTRY",
     "specialize",
-    # Constellation
-    "Constellation",
+    # Query
+    "assemble",
     # Reference assets
     "Reference",
     "ReferenceIndex",
@@ -70,4 +71,5 @@ __all__ = [
     "Variants",
     "VariantsIndex",
     "KnownSites",
+    "VQSRModel",
 ]

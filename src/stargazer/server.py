@@ -23,7 +23,7 @@ from stargazer.marshal import marshal_output
 from stargazer.registry import TaskInfo, TaskRegistry
 from stargazer.types import ASSET_REGISTRY
 from stargazer.types.asset import Asset
-from stargazer.types.constellation import Constellation
+from stargazer.types.asset import assemble
 from stargazer.utils.storage import default_client
 
 
@@ -147,15 +147,15 @@ async def run_task(task_name: str, filters: dict, inputs: dict | None = None) ->
 
     Use this for testing individual tools in isolation. Asset parameters
     are assembled from storage using the provided filters — one call to
-    Constellation.assemble() resolves all required assets. Scalar and Path
-    parameters are passed separately via inputs.
+    assemble() resolves all required assets. Scalar and Path parameters
+    are passed separately via inputs.
 
     For reproducible pipeline runs, use run_workflow instead.
 
     Args:
         task_name: Name of the task (from list_tasks with category="task").
-        filters: Keyvalue filters for Constellation.assemble() to resolve
-                 asset parameters (e.g. {"build": "GRCh38", "sample_id": "NA12878"}).
+        filters: Keyvalue filters for assemble() to resolve asset parameters
+                 (e.g. {"build": "GRCh38", "sample_id": "NA12878"}).
         inputs: Optional scalar/Path keyword arguments (str, int, bool, list[str]).
 
     Returns:
@@ -172,24 +172,23 @@ async def run_task(task_name: str, filters: dict, inputs: dict | None = None) ->
     inputs = inputs or {}
 
     # Assemble all assets from storage in one query
-    constellation = await Constellation.assemble(**filters) if filters else None
+    assets = await assemble(**filters) if filters else []
 
-    # Build kwargs: match Asset params from constellation, pass scalars from inputs
+    # Build kwargs: match Asset params from the assembled list, scalars from inputs
     kwargs = {}
     for p in info.params:
         asset_key = _asset_key_for_hint(p.type_hint)
-        if asset_key and constellation is not None:
-            value = getattr(constellation, asset_key)
-            if value is None and p.required:
+        if asset_key:
+            matched = [a for a in assets if a._asset_key == asset_key]
+            if not matched and p.required:
                 raise ValueError(
                     f"Task {task_name!r} requires {p.name} ({asset_key}) "
                     f"but no matching asset found for filters: {filters}"
                 )
-            # list[Asset] params need a list even if constellation collapsed to scalar
-            if value is not None and _is_list_asset_hint(p.type_hint):
-                value = value if isinstance(value, list) else [value]
-            if value is not None:
-                kwargs[p.name] = value
+            if matched:
+                kwargs[p.name] = (
+                    matched if _is_list_asset_hint(p.type_hint) else matched[-1]
+                )
         elif p.name in inputs:
             value = inputs[p.name]
             if p.type_hint is Path and isinstance(value, str):

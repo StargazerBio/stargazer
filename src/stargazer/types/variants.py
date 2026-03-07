@@ -37,3 +37,15 @@ class KnownSites(Asset):
 
     _asset_key: ClassVar[str] = "known_sites"
     _field_defaults = {"build": ""}
+
+
+@dataclass
+class VQSRModel(Asset):
+    """VQSR recalibration model (.recal file + tranches path).
+
+    Produced by VariantRecalibrator. The recal file is the primary path;
+    the companion tranches file path is stored in keyvalues["tranches_path"].
+    """
+
+    _asset_key: ClassVar[str] = "vqsr_model"
+    _field_defaults = {"sample_id": "", "mode": "SNP"}

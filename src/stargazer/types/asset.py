@@ -84,19 +84,13 @@ class Asset:
         mate reads).
         """
         import stargazer.utils.storage as _storage
-        from stargazer.types.constellation import Constellation
 
         await _storage.default_client.download(self)
 
         if self._asset_key and self.cid:
-            c = await Constellation.assemble(**{f"{self._asset_key}_cid": self.cid})
-            if c._assets:
-                for value in c._assets.values():
-                    if isinstance(value, list):
-                        for a in value:
-                            await _storage.default_client.download(a)
-                    elif value is not None:
-                        await _storage.default_client.download(value)
+            companions = await assemble(**{f"{self._asset_key}_cid": self.cid})
+            for a in companions:
+                await _storage.default_client.download(a)
 
     async def update(self, path: Path, **kwargs) -> None:
         """Upload file and set cid. Shared by all asset types."""
@@ -124,3 +118,37 @@ class Asset:
             path=Path(data["path"]) if data.get("path") else None,
             keyvalues=data.get("keyvalues", {}),
         )
+
+
+async def assemble(**filters: Any) -> list["Asset"]:
+    """Query storage by keyvalue filters and return specialized assets.
+
+    The ``asset`` filter key accepts a string or list of strings to narrow
+    by asset type. Other filters are passed through as keyvalue matchers.
+
+    Args:
+        **filters: Keyvalue filters. Values may be scalars or lists
+                   (cartesian product).
+
+    Returns:
+        Flat list of specialized Asset subclass instances.
+
+    Examples:
+        assets = await assemble(build="GRCh38", asset="reference")
+        ref = next(a for a in assets if isinstance(a, Reference))
+
+        assets = await assemble(sample_id="NA12878", asset=["r1", "r2"])
+        r1 = next(a for a in assets if isinstance(a, R1))
+    """
+    import stargazer.utils.storage as _storage
+    from stargazer.types import specialize
+    from stargazer.utils.query import generate_query_combinations
+
+    query_combinations = generate_query_combinations(base_query={}, filters=filters)
+
+    seen: dict[str, Asset] = {}
+    for query in query_combinations:
+        for raw in await _storage.default_client.query(query):
+            seen[raw.cid] = raw
+
+    return [specialize(a) for a in seen.values()]

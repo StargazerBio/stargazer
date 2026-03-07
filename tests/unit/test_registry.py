@@ -19,9 +19,11 @@ def test_discovery_finds_all_tasks():
         "base_recalibrator",
         "apply_bqsr",
         "haplotype_caller",
-        "genotype_gvcf",
         "combine_gvcfs",
         "genomics_db_import",
+        "joint_call_gvcfs",
+        "variant_recalibrator",
+        "apply_vqsr",
     }
     assert expected_tasks == task_names
 
@@ -64,12 +66,12 @@ def test_to_catalog_structure():
 
     # Check params
     param_names = {p["name"] for p in bwa_mem_entry["params"]}
-    assert param_names == {"reads", "ref", "read_group"}
+    assert param_names == {"r1", "r2", "ref", "read_group"}
 
-    # reads is required
-    reads_param = next(p for p in bwa_mem_entry["params"] if p["name"] == "reads")
-    assert reads_param["required"] is True
-    assert "Reads" in reads_param["type"]
+    # r1 is required
+    r1_param = next(p for p in bwa_mem_entry["params"] if p["name"] == "r1")
+    assert r1_param["required"] is True
+    assert "R1" in r1_param["type"]
 
     # read_group is optional
     rg_param = next(p for p in bwa_mem_entry["params"] if p["name"] == "read_group")

@@ -13,9 +13,11 @@ from stargazer.tasks.gatk.mark_duplicates import mark_duplicates
 from stargazer.tasks.gatk.sort_sam import sort_sam
 from stargazer.tasks.gatk.merge_bam_alignment import merge_bam_alignment
 from stargazer.tasks.gatk.haplotype_caller import haplotype_caller
-from stargazer.tasks.gatk.genotype_gvcf import genotype_gvcf
 from stargazer.tasks.gatk.combine_gvcfs import combine_gvcfs
 from stargazer.tasks.gatk.genomics_db_import import genomics_db_import
+from stargazer.tasks.gatk.joint_call_gvcfs import joint_call_gvcfs
+from stargazer.tasks.gatk.variant_recalibrator import variant_recalibrator
+from stargazer.tasks.gatk.apply_vqsr import apply_vqsr
 
 __all__ = [
     # Reference indexing
@@ -32,7 +34,10 @@ __all__ = [
     "apply_bqsr",
     # GVCF processing
     "haplotype_caller",
-    "genotype_gvcf",
+    "joint_call_gvcfs",
     "combine_gvcfs",
     "genomics_db_import",
+    # VQSR filtering
+    "variant_recalibrator",
+    "apply_vqsr",
 ]

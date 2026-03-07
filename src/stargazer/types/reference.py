@@ -15,6 +15,29 @@ class Reference(Asset):
     _asset_key: ClassVar[str] = "reference"
     _field_defaults = {"build": ""}
 
+    @property
+    def contigs(self) -> list[str]:
+        """Read contig names from the companion .fai index.
+
+        Requires fetch() to have been called first so the ReferenceIndex
+        companion is downloaded alongside this reference.
+        """
+        if self.path is None:
+            raise ValueError("Reference has no local path — call fetch() first")
+        fai_path = self.path.parent / (self.path.name + ".fai")
+        if not fai_path.exists():
+            raise FileNotFoundError(
+                f"Reference index not found at {fai_path}. "
+                f"Run samtools_faidx first, then fetch() to download companions."
+            )
+        contigs = []
+        with open(fai_path) as f:
+            for line in f:
+                name = line.split("\t", 1)[0].strip()
+                if name:
+                    contigs.append(name)
+        return contigs
+
 
 @dataclass
 class ReferenceIndex(Asset):

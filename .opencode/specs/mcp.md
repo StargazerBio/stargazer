@@ -55,7 +55,7 @@ Each Flyte task is registered as an MCP tool. The tool name matches the Python f
 | `base_recalibrator` | Generate BQSR recalibration table |
 | `apply_bqsr` | Apply base quality score recalibration |
 | `create_sequence_dictionary` | Create sequence dictionary for reference |
-| `genotype_gvcf` | Genotype a GVCF |
+| `joint_call_gvcfs` | GenomicsDBImport + GenotypeGVCFs in one task |
 | `combine_gvcfs` | Combine multiple GVCFs |
 | `genomics_db_import` | Import GVCFs into GenomicsDB |
 | `variant_recalibrator` | Build variant quality recalibration model |

@@ -10,8 +10,8 @@ References:
 """
 
 from stargazer.config import gatk_env
-from stargazer.types import Alignment, KnownSites, Reference
-from stargazer.types.constellation import Constellation
+from stargazer.types import Alignment, KnownSites, R1, R2, Reference
+from stargazer.types.asset import assemble
 from stargazer.tasks import (
     samtools_faidx,
     create_sequence_dictionary,
@@ -42,10 +42,11 @@ async def prepare_reference(build: str) -> Reference:
     Returns:
         Reference asset (FASTA file)
     """
-    c = await Constellation.assemble(build=build, asset="reference")
-    ref = c.reference
-    if ref is None:
+    assets = await assemble(build=build, asset="reference")
+    refs = [a for a in assets if isinstance(a, Reference)]
+    if not refs:
         raise ValueError(f"No reference found for build={build!r}")
+    ref = refs[0]
 
     await samtools_faidx(ref)
     await create_sequence_dictionary(ref)
@@ -78,17 +79,20 @@ async def preprocess_sample(
         Alignment asset with the preprocessed BAM file
     """
     # Assemble reference
-    c_ref = await Constellation.assemble(build=build, asset="reference")
-    ref = c_ref.reference
-    if ref is None:
+    ref_assets = await assemble(build=build, asset="reference")
+    refs = [a for a in ref_assets if isinstance(a, Reference)]
+    if not refs:
         raise ValueError(f"No reference found for build={build!r}")
+    ref = refs[0]
 
     # Assemble reads
-    c_reads = await Constellation.assemble(sample_id=sample_id, asset=["r1", "r2"])
-    r1 = c_reads.r1
-    r2 = c_reads.r2  # May be None for single-end
-    if r1 is None:
+    read_assets = await assemble(sample_id=sample_id, asset=["r1", "r2"])
+    r1_list = [a for a in read_assets if isinstance(a, R1)]
+    if not r1_list:
         raise ValueError(f"No R1 reads found for sample_id={sample_id!r}")
+    r1 = r1_list[0]
+    r2_list = [a for a in read_assets if isinstance(a, R2)]
+    r2 = r2_list[0] if r2_list else None
 
     # Alignment pipeline — tasks call fetch() internally
     alignment = await bwa_mem(ref=ref, r1=r1, r2=r2)
@@ -96,15 +100,12 @@ async def preprocess_sample(
     alignment = await mark_duplicates(alignment=alignment)
 
     if run_bqsr:
-        c_known = await Constellation.assemble(build=build, asset="known_sites")
-        raw_known = c_known.known_sites
-        if raw_known is None:
+        known_assets = await assemble(build=build, asset="known_sites")
+        known_sites = [a for a in known_assets if isinstance(a, KnownSites)]
+        if not known_sites:
             raise ValueError(
                 f"run_bqsr=True but no known_sites found for build={build!r}"
             )
-        known_sites: list[KnownSites] = (
-            raw_known if isinstance(raw_known, list) else [raw_known]
-        )
 
         bqsr_report = await base_recalibrator(
             alignment=alignment,
