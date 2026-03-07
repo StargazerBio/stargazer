@@ -2,132 +2,165 @@
 
 ## Design Goals
 
-This design brings rigour and interoperability between bioinformatics tools by establishing a consistent interface for file metadata. Every file carries structured keyvalue metadata that describes its role, enabling:
+Every file in Stargazer carries structured keyvalue metadata that describes its role, enabling:
 
 - **Consistency**: All tools produce and consume files through the same metadata contract
-- **Extensibility**: New types, components, and metadata fields can be added without breaking existing code
+- **Extensibility**: New asset types and metadata fields can be added without breaking existing code
 - **Queryability**: Files can be discovered and filtered by metadata without path conventions
+- **Companion linking**: Related files (e.g. index + primary) are linked by CID references
 
-## Three-Layer Architecture
+## Architecture
 
 ```
-Typed File Components  (schema — what metadata exists, typed Python fields)
-        ↕  to_keyvalues() / from_keyvalues()
-    IpFile.keyvalues   (transport — flat dict[str, str])
-        ↕  upload_file() / query_files()
-  TinyDB / Pinata      (storage — persistence)
+Asset subclasses   (schema — typed Python fields via keyvalues)
+      ↕  __getattr__ / __setattr__ coercion
+  Asset.keyvalues  (transport — flat dict[str, str])
+      ↕  upload() / query()
+  StorageClient    (persistence — local TinyDB or Pinata)
 ```
 
-## IpFile: The Storage Primitive
+There is no separate "storage primitive" layer. `Asset` is both the typed schema and the storage identity.
 
-`IpFile` is the storage-layer abstraction. It holds an IPFS content identifier, file metadata, and an untyped `keyvalues: dict[str, str]` bag. IpFile does not know what the keyvalues mean — it is a transport container. Meaning is defined by the typed file component layer above it.
+## Asset: The Base Class
 
-| Field | Purpose |
-|-------|---------|
-| `id` | Unique identifier |
-| `cid` | Content hash (IPFS or local) |
-| `name` | Original filename |
-| `size` | File size in bytes |
-| `keyvalues` | Flat string metadata for querying |
-| `created_at` | Creation timestamp |
-| `local_path` | Cached local path (set after download) |
-| `is_public` | Visibility flag |
+`Asset` (`types/asset.py`) is a single dataclass for all typed file assets. Every file in the system is an Asset instance.
 
-IpFile is unchanged by this design. It remains a dumb storage primitive.
+| Field | Type | Purpose |
+|-------|------|---------|
+| `cid` | `str` | Content identifier (IPFS or local hash) |
+| `path` | `Path \| None` | Local filesystem path (set after download/upload) |
+| `keyvalues` | `dict[str, str]` | Flat metadata for querying and routing |
 
-## FileComponent: The Schema Layer
+### Subclass Declaration
 
-`FileComponent` is the base dataclass for all typed file components. Each subclass declares:
+Subclasses declare three class variables to define their schema:
 
-- `TYPE: ClassVar[str]` — the logical type (e.g. `"alignment"`)
-- `COMPONENT: ClassVar[str]` — the role within that type (e.g. `"alignment"`)
-- Named metadata fields with proper Python types (str, bool, int, list[str], Literal)
-- `ipfile: IpFile | None` — the storage identity, set after upload/download
+- `_asset_key: ClassVar[str]` — the value for `keyvalues["asset"]` (e.g. `"reference"`, `"alignment"`)
+- `_field_types: ClassVar[dict]` — field name to type (`bool`, `int`, `list`) for coercion
+- `_field_defaults: ClassVar[dict]` — field name to default value
 
-The base class provides:
-- `to_keyvalues()` — serializes typed fields to `dict[str, str]` for storage
-- `from_keyvalues()` — deserializes from `dict[str, str]` back to typed fields
-- `to_dict()` / `from_dict()` — JSON-friendly serialization for MCP transport
+Subclasses auto-register in `Asset._registry` via `__init_subclass__`. The registry maps `_asset_key` strings to their class.
 
-Field name = keyvalue key (1:1 mapping, no renaming). Type conversions are automatic: `bool` ↔ `"true"`/`"false"`, `int` ↔ `str`, `list[str]` ↔ comma-separated, `None` → omitted.
+### Keyvalue Coercion
 
-## File Component Definitions
+`__getattr__` and `__setattr__` transparently read/write `keyvalues` with type coercion:
 
-### Reference Components (`types/reference.py`)
+- `bool`: stored as `"true"` / `"false"`, returned as Python `bool`
+- `int`: stored as string, returned as Python `int`
+- `list`: stored as comma-separated string, returned as Python `list[str]`
+- `str`: no coercion needed
 
-| Class | TYPE | COMPONENT | Metadata Fields |
-|-------|------|-----------|----------------|
-| `Fasta` | reference | fasta | `build` |
-| `Faidx` | reference | faidx | `build`, `tool` |
-| `SequenceDict` | reference | sequence_dictionary | `build`, `tool` |
-| `AlignerIndex` | reference | aligner_index | `build`, `aligner` |
+Accessing a missing key returns the default from `_field_defaults`, or `False` for bools, or `None`.
 
-### Alignment Components (`types/alignment.py`)
+### Core Methods
 
-| Class | TYPE | COMPONENT | Metadata Fields |
-|-------|------|-----------|----------------|
-| `AlignmentFile` | alignment | alignment | `sample_id`, `format`, `sorted`, `duplicates_marked`, `bqsr_applied`, `tool` |
-| `AlignmentIndex` | alignment | index | `sample_id` |
+- `fetch()` — downloads self, then queries for companions via `{_asset_key}_cid = self.cid` and downloads those too
+- `update(path, **kwargs)` — sets keyvalues from kwargs, sets path, uploads to storage
+- `to_dict()` / `from_dict()` — JSON serialization
 
-### Reads Components (`types/reads.py`)
+## Asset Subclass Catalog
 
-| Class | TYPE | COMPONENT | Metadata Fields |
-|-------|------|-----------|----------------|
-| `R1File` | reads | r1 | `sample_id`, `sequencing_platform` |
-| `R2File` | reads | r2 | `sample_id`, `sequencing_platform` |
+### Reference Assets (`types/reference.py`)
 
-### Variants Components (`types/variants.py`)
+| Asset Key | Class | Fields | Notes |
+|-----------|-------|--------|-------|
+| `reference` | `Reference` | `build` | Has `contigs` property (reads .fai) |
+| `reference_index` | `ReferenceIndex` | `build` | Companion via `reference_cid` |
+| `sequence_dict` | `SequenceDict` | `build` | Companion via `reference_cid` |
+| `aligner_index` | `AlignerIndex` | `build`, `aligner` | One asset per index file |
 
-| Class | TYPE | COMPONENT | Metadata Fields |
-|-------|------|-----------|----------------|
-| `VariantsFile` | variants | vcf | `sample_id`, `caller`, `variant_type`, `build`, `sample_count`, `source_samples` |
-| `VariantsIndex` | variants | index | `sample_id` |
+### Read Assets (`types/reads.py`)
 
-## Container Types
+| Asset Key | Class | Fields | Notes |
+|-----------|-------|--------|-------|
+| `r1` | `R1` | `sample_id` | Paired via `mate_cid` |
+| `r2` | `R2` | `sample_id` | Paired via `mate_cid` |
 
-Container types (`Reference`, `Reads`, `Alignment`, `Variants`) are thin compositions that group related file components. They hold an identity field (`build` or `sample_id`) and optional typed file component fields.
+### Alignment Assets (`types/alignment.py`)
 
-- **Reference**: `build`, `fasta: Fasta`, `faidx: Faidx`, `sequence_dictionary: SequenceDict`, `aligner_index: list[AlignerIndex]`
-- **Reads**: `sample_id`, `r1: R1File`, `r2: R2File`, `read_group: dict`
-- **Alignment**: `sample_id`, `alignment: AlignmentFile`, `index: AlignmentIndex`
-- **Variants**: `sample_id`, `vcf: VariantsFile`, `index: VariantsIndex`
+| Asset Key | Class | Fields (coerced) | Notes |
+|-----------|-------|------------------|-------|
+| `alignment` | `Alignment` | `sample_id`, `duplicates_marked` (bool), `bqsr_applied` (bool) | Provenance via `reference_cid`, `r1_cid` |
+| `alignment_index` | `AlignmentIndex` | `sample_id` | Companion via `alignment_cid` |
+| `bqsr_report` | `BQSRReport` | `sample_id` | Linked via `alignment_cid` |
+| `duplicate_metrics` | `DuplicateMetrics` | `sample_id` | Linked via `alignment_cid` |
 
-Containers provide:
-- `fetch()` — downloads all component `ipfile`s to local cache
-- `to_dict()` / `from_dict()` — delegates to each component's serialization
-- `is_paired` on Reads (derived from container state, not a single file)
+### Variant Assets (`types/variants.py`)
 
-Containers do **not** have `update_*()` methods or property proxies into component keyvalues. Metadata is accessed directly on the component: `alignment.alignment.duplicates_marked`, not `alignment.has_duplicates_marked`.
+| Asset Key | Class | Fields (coerced) | Notes |
+|-----------|-------|------------------|-------|
+| `variants` | `Variants` | `sample_id`, `caller`, `variant_type`, `build`, `sample_count` (int), `source_samples` (list) | |
+| `variants_index` | `VariantsIndex` | `sample_id` | Companion via `variants_cid` |
+| `known_sites` | `KnownSites` | `build` | Reference-scoped, used for BQSR |
+| `vqsr_model` | `VQSRModel` | `sample_id`, `mode` | Produced by VariantRecalibrator |
 
-## Upload Pattern
+## Companion Pattern
 
-File upload is handled by `upload_component()`, a standalone async helper:
+Assets link to related files via `{asset_key}_cid` keyvalues. When `fetch()` is called on an asset:
 
-1. Task constructs a typed file component with metadata fields set
-2. Calls `upload_component(component, path)` which:
-   a. Calls `component.to_keyvalues()` to get the flat metadata dict
-   b. Calls `storage_client.upload_file(path, keyvalues=kv)` to store the file
-   c. Attaches the resulting `IpFile` to `component.ipfile`
-3. Task assigns the component to the container
+1. Downloads the asset itself
+2. Queries for assets where `{_asset_key}_cid` equals this asset's CID
+3. Downloads all matching companions
 
-This separates metadata construction (typed, validated at construction time) from storage (async side effect).
+Example: `Reference(cid="Qmref").fetch()` also finds and downloads any `ReferenceIndex` with `reference_cid="Qmref"`.
 
-## Hydration
+## Assembly
 
-The `hydrate()` task reverses the flow: given keyvalue filters, it queries storage and reconstructs typed instances:
+`assemble(**filters)` is a module-level async function in `types/asset.py`. It queries storage with keyvalue filters, deduplicates by CID, and returns a flat `list[Asset]` of specialized subclass instances.
 
-1. Query files from storage by keyvalue filters
-2. For each IpFile, look up `(type, component)` to find the FileComponent subclass
-3. Construct the component via `ComponentClass.from_keyvalues(kv, ipfile=ipfile)`
-4. Group components by identity (`build` or `sample_id`)
-5. Assemble container types from grouped components
+The `asset` filter key accepts a string or list of strings. List-valued filters produce cartesian product queries via `utils/query.py`.
 
-## Task Interoperability
+Workflows filter results with `isinstance`:
 
-Tool tasks follow a consistent pattern:
+```python
+assets = await assemble(build="GRCh38", asset="reference")
+ref = next(a for a in assets if isinstance(a, Reference))
+```
 
-1. **Input**: Receive container types (`Alignment`, `Reference`, etc.)
-2. **Fetch**: Download component files to local cache via `container.fetch()`
-3. **Execute**: Run tool using `component.ipfile.local_path` for file paths
-4. **Output**: Construct typed file components with metadata, upload via `upload_component()`
-5. **Return**: Assemble and return container with new components
+## Specialization
+
+`specialize(asset)` in `types/__init__.py` converts a base `Asset` to its registered subclass by looking up `keyvalues["asset"]` in `Asset._registry`. Returns the original instance if no match.
+
+## Storage Layer
+
+`utils/storage.py` defines the `StorageClient` protocol with four methods: `upload()`, `download()`, `query()`, `delete()`. The module-level `default_client` is resolved at import time based on environment:
+
+- `STARGAZER_MODE=local` (default): `LocalStorageClient` (TinyDB), or `PinataClient` if `PINATA_JWT` is set
+- `STARGAZER_MODE=cloud`: `PinataClient` (requires `PINATA_JWT`)
+
+Tasks never call storage directly. All storage interaction flows through `Asset.fetch()` and `Asset.update()`.
+
+## Task Pattern
+
+Tasks receive typed Asset inputs, fetch them, run tools, then update outputs:
+
+```python
+@gatk_env.task
+async def my_task(ref: Reference, aln: Alignment) -> Variants:
+    await asyncio.gather(ref.fetch(), aln.fetch())
+    # ... run tool using ref.path, aln.path ...
+    vcf = Variants()
+    await vcf.update(output_path, sample_id="NA12878")
+    return vcf
+```
+
+## Workflow Pattern
+
+Workflows accept scalar parameters and handle their own assembly. They call `assemble()` to query assets, filter by type, then pass typed assets to tasks:
+
+```python
+@gatk_env.task
+async def my_workflow(build: str, sample_id: str) -> Variants:
+    assets = await assemble(build=build, asset="reference")
+    ref = next(a for a in assets if isinstance(a, Reference))
+    # ... call tasks with ref, other typed assets ...
+```
+
+## MCP Server Integration
+
+The server (`server.py`) exposes two execution tools:
+
+- **`run_task`** — ad-hoc experimentation. Accepts `filters` dict, calls `assemble(**filters)` once, distributes assets to task parameters by matching `_asset_key` to type hints. Scalars passed via `inputs`.
+- **`run_workflow`** — reproducible pipelines. Passes scalar `inputs` straight through; workflows handle their own assembly internally.
+
+Storage tools (`query_files`, `upload_file`, `download_file`, `delete_file`) provide direct access to the storage layer for inspection and manual uploads.
