@@ -14,7 +14,6 @@ from stargazer.types import Alignment, KnownSites, R1, R2, Reference
 from stargazer.types.asset import assemble
 from stargazer.tasks import (
     samtools_faidx,
-    create_sequence_dictionary,
     bwa_index,
     bwa_mem,
     sort_sam,
@@ -31,8 +30,7 @@ async def prepare_reference(build: str) -> Reference:
 
     Assembles the reference FASTA from storage and creates necessary indices:
     1. FASTA index (samtools faidx)
-    2. Sequence dictionary (GATK CreateSequenceDictionary)
-    3. BWA index (bwa index)
+    2. BWA index (bwa index)
 
     All indices are uploaded to storage as side-effects.
 
@@ -49,7 +47,6 @@ async def prepare_reference(build: str) -> Reference:
     ref = refs[0]
 
     await samtools_faidx(ref)
-    await create_sequence_dictionary(ref)
     await bwa_index(ref)
 
     return ref

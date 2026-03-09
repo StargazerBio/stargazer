@@ -48,6 +48,19 @@ class KnownSites(Asset):
     training: str = "false"
     truth: str = "false"
     prior: str = "10"
+    vqsr_mode: str = ""
+
+
+@dataclass
+class KnownSitesIndex(Asset):
+    """VCF index (.idx) file for a KnownSites asset.
+
+    Carries known_sites_cid linking to the KnownSites VCF it indexes.
+    Fetched automatically alongside the VCF via Asset.fetch().
+    """
+
+    _asset_key: ClassVar[str] = "known_sites_index"
+    known_sites_cid: str = ""
 
 
 @dataclass

@@ -10,7 +10,7 @@ from stargazer.types import KnownSites, Reference, Variants, VQSRModel
 from stargazer.utils import _run
 
 _SNP_ANNOTATIONS = ["QD", "MQ", "MQRankSum", "ReadPosRankSum", "FS", "SOR"]
-_INDEL_ANNOTATIONS = ["QD", "MQRankSum", "ReadPosRankSum", "FS", "SOR"]
+_INDEL_ANNOTATIONS = ["QD", "FS", "SOR"]
 
 
 @gatk_env.task

@@ -50,18 +50,23 @@ class LocalStorageClient:
         # TinyDB for local metadata storage (lazy initialized)
         self.local_db_path = self.local_dir / "stargazer_local.json"
         self._db: Optional[TinyDB] = None
+        self._db_mtime: float = 0.0
 
     @property
     def db(self) -> TinyDB:
         """Get TinyDB instance for local metadata storage (lazy initialized).
 
-        Re-opens if the DB file has been deleted externally, avoiding stale
-        file handle writes to a deleted inode.
+        Re-opens if the DB file has been deleted or modified externally,
+        keeping _last_id in sync when other processes write to the same file.
         """
-        if self._db is None or not self.local_db_path.exists():
+        mtime = (
+            self.local_db_path.stat().st_mtime if self.local_db_path.exists() else 0.0
+        )
+        if self._db is None or mtime != self._db_mtime:
             if self._db is not None:
                 self._db.close()
             self._db = TinyDB(self.local_db_path)
+            self._db_mtime = mtime
         return self._db
 
     async def upload(self, component: Asset) -> None:

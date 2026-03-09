@@ -72,6 +72,7 @@ async def apply_bqsr(
         duplicates_marked=alignment.duplicates_marked,
         bqsr_applied=True,
         tool="gatk_apply_bqsr",
+        reference_cid=ref.cid,
     )
 
     return recal_bam

@@ -21,6 +21,7 @@ from stargazer.types.variants import (
     Variants,
     VariantsIndex,
     KnownSites,
+    KnownSitesIndex,
     VQSRModel,
 )
 
@@ -69,5 +70,6 @@ __all__ = [
     "Variants",
     "VariantsIndex",
     "KnownSites",
+    "KnownSitesIndex",
     "VQSRModel",
 ]

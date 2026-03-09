@@ -1,8 +1,9 @@
-FROM nvcr.io/nvidia/clara/clara-parabricks:4.6.0-1
+FROM ubuntu
 
 RUN apt-get update \
     && apt-get install -y \
     sudo \
+    jq \
     curl \
     git \
     nano \
