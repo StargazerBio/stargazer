@@ -39,11 +39,9 @@ def specialize(asset: Asset) -> Asset:
     cls = ASSET_REGISTRY.get(key)
     if cls is None:
         return asset
-    return cls(
-        cid=asset.cid,
-        path=asset.path,
-        keyvalues=dict(asset.keyvalues),
-    )
+    declared = set(cls._field_defaults) | set(cls._field_types)
+    field_kwargs = {k: v for k, v in asset.keyvalues.items() if k in declared}
+    return cls(cid=asset.cid, path=asset.path, **field_kwargs)
 
 
 __all__ = [

@@ -144,8 +144,8 @@ class TestSpecialize:
         assert type(result) is Alignment
         assert result.cid == original.cid
 
-    def test_preserves_all_keyvalues(self):
-        """Extra keyvalues are preserved after specialization."""
+    def test_unknown_keyvalues_dropped_on_specialize(self):
+        """Undeclared keyvalues are dropped during specialization (field enforcement)."""
         base = Asset(
             cid="Qm123",
             keyvalues={
@@ -155,7 +155,8 @@ class TestSpecialize:
             },
         )
         result = specialize(base)
-        assert result.keyvalues["custom_field"] == "custom_value"
+        assert result.sample_id == "NA12878"
+        assert "custom_field" not in result.keyvalues
 
     def test_does_not_mutate_original(self):
         """The original Asset is not modified."""

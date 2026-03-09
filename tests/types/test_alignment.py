@@ -107,28 +107,23 @@ async def test_alignment_path_not_cached():
 @pytest.mark.asyncio
 async def test_alignment_metadata_properties():
     """Test Alignment properties read from keyvalues."""
-    bam = Alignment(
-        keyvalues={
-            "duplicates_marked": "true",
-            "sorted": "coordinate",
-        }
-    )
+    bam = Alignment(duplicates_marked=True, sorted="coordinate")
 
     assert bam.duplicates_marked is True
     assert bam.sorted == "coordinate"
 
-    bam2 = Alignment(keyvalues={})
+    bam2 = Alignment()
     assert bam2.duplicates_marked is False
-    assert bam2.sorted is None
+    assert bam2.sorted == ""
 
 
 @pytest.mark.asyncio
 async def test_alignment_bqsr_applied():
     """Test bqsr_applied property reads from keyvalues."""
-    bam = Alignment(keyvalues={"bqsr_applied": "true"})
+    bam = Alignment(bqsr_applied=True)
     assert bam.bqsr_applied is True
 
-    bam2 = Alignment(keyvalues={})
+    bam2 = Alignment()
     assert bam2.bqsr_applied is False
 
 

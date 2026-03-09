@@ -102,7 +102,15 @@ async def upload_file(path: str, keyvalues: dict[str, str]) -> dict:
     if asset_key not in ASSET_REGISTRY:
         valid = sorted(ASSET_REGISTRY.keys())
         raise ValueError(f"Invalid asset key {asset_key!r}. Valid keys: {valid}")
-    comp = Asset(path=Path(path), keyvalues=keyvalues)
+    cls = ASSET_REGISTRY[asset_key]
+    declared = set(cls._field_defaults) | set(cls._field_types)
+    unknown = set(keyvalues) - declared - {"asset"}
+    if unknown:
+        raise ValueError(
+            f"Unknown keys for {asset_key!r}: {unknown}. Allowed: {sorted(declared)}"
+        )
+    field_kwargs = {k: v for k, v in keyvalues.items() if k in declared}
+    comp = cls(path=Path(path), **field_kwargs)
     await default_client.upload(comp)
     return comp.to_dict()
 

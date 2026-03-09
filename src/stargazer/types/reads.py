@@ -16,7 +16,9 @@ class R1(Asset):
     """
 
     _asset_key: ClassVar[str] = "r1"
-    _field_defaults = {"sample_id": ""}
+    sample_id: str = ""
+    mate_cid: str = ""
+    sequencing_platform: str = ""
 
 
 @dataclass
@@ -27,4 +29,6 @@ class R2(Asset):
     """
 
     _asset_key: ClassVar[str] = "r2"
-    _field_defaults = {"sample_id": ""}
+    sample_id: str = ""
+    mate_cid: str = ""
+    sequencing_platform: str = ""

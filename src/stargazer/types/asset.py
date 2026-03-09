@@ -2,11 +2,14 @@
 Asset base dataclass for Stargazer.
 """
 
+import typing
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
 from typing_extensions import Self
+
+_MISSING = object()
 
 
 @dataclass
@@ -18,10 +21,18 @@ class Asset:
         path: Local filesystem path (set after download or upload)
         keyvalues: Metadata key-value pairs for querying and routing
 
-    Subclasses can declare:
-        _field_types: map of field name -> type (bool, int, list) for coercion
-        _field_defaults: map of field name -> default value (e.g. {"sample_id": ""})
-        _asset_key: the "asset" keyvalue (e.g. "reference", "alignment")
+    Subclasses declare typed field annotations directly:
+
+        @dataclass
+        class Alignment(Asset):
+            _asset_key: ClassVar[str] = "alignment"
+            sample_id: str = ""
+            duplicates_marked: bool = False
+
+    ``__init_subclass__`` auto-derives ``_field_types`` (non-str fields) and
+    ``_field_defaults`` (all defaults) from the annotations. The ``_field_types``
+    and ``_field_defaults`` ClassVars on the base class are empty-dict defaults
+    inherited by subclasses that declare no fields.
     """
 
     _registry: ClassVar[dict[str, type["Asset"]]] = {}
@@ -40,39 +51,97 @@ class Asset:
         if ak:
             Asset._registry[ak] = cls
 
+        field_types: dict[str, type] = {}
+        field_defaults: dict[str, Any] = {}
+        for name, annotation in cls.__dict__.get("__annotations__", {}).items():
+            if name.startswith("_"):
+                continue
+            if typing.get_origin(annotation) is ClassVar:
+                continue
+            if annotation is not str:
+                field_types[name] = annotation
+            default = cls.__dict__.get(name, _MISSING)
+            if default is not _MISSING:
+                field_defaults[name] = default
+
+        if field_types:
+            cls._field_types = field_types
+        if field_defaults:
+            cls._field_defaults = field_defaults
+
     def __post_init__(self):
         if self._asset_key:
             self.keyvalues.setdefault("asset", self._asset_key)
-        for k, v in self._field_defaults.items():
-            self.keyvalues.setdefault(k, v)
+
+    def __getattribute__(self, name: str) -> Any:
+        # Fast-path: internal/private attrs skip all keyvalues logic
+        if name.startswith("_"):
+            return object.__getattribute__(self, name)
+
+        # Get the field registries without triggering recursion
+        field_defaults = object.__getattribute__(self, "_field_defaults")
+        field_types = object.__getattribute__(self, "_field_types")
+
+        # Only intercept declared fields; let everything else through
+        if name in field_defaults or name in field_types:
+            try:
+                kv = object.__getattribute__(self, "keyvalues")
+            except AttributeError:
+                return object.__getattribute__(self, name)
+            val = kv.get(name)
+            ftype = field_types.get(name)
+            if val is None:
+                if ftype is bool:
+                    return field_defaults.get(name, False)
+                return field_defaults.get(name)
+            if ftype is bool:
+                return val == "true"
+            if ftype is int:
+                return int(val)
+            if ftype is list:
+                return val.split(",") if val else None
+            return val
+
+        return object.__getattribute__(self, name)
 
     def __getattr__(self, name: str) -> Any:
-        # Only called when normal attribute lookup fails
+        # Fallback for undeclared keys on base Asset instances
         kv = self.__dict__.get("keyvalues", {})
-        val = kv.get(name)
-        ftype = self._field_types.get(name)
-        if val is None:
-            if ftype is bool:
-                return self._field_defaults.get(name, False)
-            return self._field_defaults.get(name)
-        if ftype is bool:
-            return val == "true"
-        if ftype is int:
-            return int(val)
-        if ftype is list:
-            return val.split(",") if val else None
-        return val
+        return kv.get(name)
 
     def __setattr__(self, name: str, value: Any) -> None:
         if name in self._own_attrs or name.startswith("_"):
             super().__setattr__(name, value)
             return
+        # Enforce allowed keys — only on subclasses that declare _asset_key
+        if self._asset_key:
+            allowed = (
+                frozenset(self._field_defaults)
+                | frozenset(self._field_types)
+                | {"asset"}
+            )
+            if name not in allowed:
+                raise ValueError(
+                    f"{type(self).__name__} does not allow keyvalue '{name}'. "
+                    f"Allowed: {sorted(allowed)}"
+                )
         # Coerce and store in keyvalues
         ftype = self._field_types.get(name)
-        if isinstance(value, bool) or ftype is bool:
+        if ftype is bool:
+            # Preserve already-serialized strings; coerce bool/other by truthiness
+            if isinstance(value, str):
+                self.keyvalues[name] = "true" if value == "true" else "false"
+            else:
+                self.keyvalues[name] = "true" if value else "false"
+        elif isinstance(value, bool):
             self.keyvalues[name] = "true" if value else "false"
         elif ftype is list or isinstance(value, list):
-            self.keyvalues[name] = ",".join(value)
+            if value is None:
+                self.keyvalues[name] = ""
+            elif isinstance(value, list):
+                self.keyvalues[name] = ",".join(value)
+            else:
+                self.keyvalues[name] = str(value)
         else:
             self.keyvalues[name] = str(value)
 
@@ -113,10 +182,21 @@ class Asset:
     @classmethod
     def from_dict(cls, data: dict) -> Self:
         """Reconstruct from a serialized dict."""
+        kv = data.get("keyvalues", {})
+        if cls._asset_key:
+            # Subclass: unpack declared fields as kwargs; keyvalues rebuilt by __setattr__
+            declared = set(cls._field_defaults) | set(cls._field_types)
+            field_kwargs = {k: v for k, v in kv.items() if k in declared}
+            return cls(
+                cid=data.get("cid", ""),
+                path=Path(data["path"]) if data.get("path") else None,
+                **field_kwargs,
+            )
+        # Base Asset: pass keyvalues directly
         return cls(
             cid=data.get("cid", ""),
             path=Path(data["path"]) if data.get("path") else None,
-            keyvalues=data.get("keyvalues", {}),
+            keyvalues=dict(kv),
         )
 
 

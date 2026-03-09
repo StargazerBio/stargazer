@@ -37,16 +37,8 @@ async def test_reads_get_paths():
     assert r1_path.exists()
     assert r2_path.exists()
 
-    r1 = R1(
-        cid="test",
-        path=r1_path,
-        keyvalues={"asset": "r1", "sample_id": "NA12829"},
-    )
-    r2 = R2(
-        cid="test",
-        path=r2_path,
-        keyvalues={"asset": "r2", "sample_id": "NA12829"},
-    )
+    r1 = R1(cid="test", path=r1_path, sample_id="NA12829")
+    r2 = R2(cid="test", path=r2_path, sample_id="NA12829")
 
     assert r1.path == r1_path
     assert r1.path.exists()
@@ -89,7 +81,7 @@ async def test_r1_path_not_cached():
 @pytest.mark.asyncio
 async def test_r2_is_optional():
     """Test that R2 is a standalone optional asset."""
-    r1 = R1(keyvalues={"asset": "r1", "sample_id": "NA12829"})
+    r1 = R1(sample_id="NA12829")
     assert r1.sample_id == "NA12829"
     assert r1.keyvalues.get("asset") == "r1"
 

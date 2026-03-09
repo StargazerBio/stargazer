@@ -87,29 +87,27 @@ async def test_variants_path_not_cached():
 @pytest.mark.asyncio
 async def test_variants_properties():
     """Test Variants properties read from keyvalues."""
-    vcf = Variants(keyvalues={"caller": "deepvariant", "variant_type": "gvcf"})
+    vcf = Variants(caller="deepvariant", variant_type="gvcf")
     assert vcf.caller == "deepvariant"
     assert vcf.variant_type == "gvcf"
 
-    vcf2 = Variants(keyvalues={"caller": "haplotypecaller", "variant_type": "vcf"})
+    vcf2 = Variants(caller="haplotypecaller", variant_type="vcf")
     assert vcf2.caller == "haplotypecaller"
     assert vcf2.variant_type == "vcf"
 
     vcf3 = Variants()
-    assert vcf3.caller is None
-    assert vcf3.variant_type is None
+    assert vcf3.caller == ""
+    assert vcf3.variant_type == ""
 
 
 @pytest.mark.asyncio
 async def test_variants_source_samples():
     """Test source_samples and sample_count properties on Variants asset."""
-    vcf = Variants(
-        keyvalues={"sample_count": "3", "source_samples": "NA12829,NA12830,NA12831"}
-    )
+    vcf = Variants(sample_count=3, source_samples=["NA12829", "NA12830", "NA12831"])
     assert vcf.sample_count == 3
     assert vcf.source_samples == ["NA12829", "NA12830", "NA12831"]
 
-    vcf2 = Variants(keyvalues={"sample_count": "1"})
+    vcf2 = Variants(sample_count=1)
     assert vcf2.sample_count == 1
     assert vcf2.source_samples is None
 

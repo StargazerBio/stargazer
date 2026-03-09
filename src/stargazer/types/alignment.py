@@ -16,8 +16,14 @@ class Alignment(Asset):
     """
 
     _asset_key: ClassVar[str] = "alignment"
-    _field_types = {"duplicates_marked": bool, "bqsr_applied": bool}
-    _field_defaults = {"sample_id": ""}
+    sample_id: str = ""
+    format: str = ""
+    sorted: str = ""
+    duplicates_marked: bool = False
+    bqsr_applied: bool = False
+    tool: str = ""
+    reference_cid: str = ""
+    r1_cid: str = ""
 
 
 @dataclass
@@ -28,7 +34,8 @@ class AlignmentIndex(Asset):
     """
 
     _asset_key: ClassVar[str] = "alignment_index"
-    _field_defaults = {"sample_id": ""}
+    sample_id: str = ""
+    alignment_cid: str = ""
 
 
 @dataclass
@@ -39,7 +46,9 @@ class BQSRReport(Asset):
     """
 
     _asset_key: ClassVar[str] = "bqsr_report"
-    _field_defaults = {"sample_id": ""}
+    sample_id: str = ""
+    tool: str = ""
+    alignment_cid: str = ""
 
 
 @dataclass
@@ -50,4 +59,6 @@ class DuplicateMetrics(Asset):
     """
 
     _asset_key: ClassVar[str] = "duplicate_metrics"
-    _field_defaults = {"sample_id": ""}
+    sample_id: str = ""
+    tool: str = ""
+    alignment_cid: str = ""

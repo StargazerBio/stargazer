@@ -16,7 +16,7 @@ def test_marshal_output_reference():
     ref = Reference(build="GRCh38")
     result = marshal_output(ref)
     assert isinstance(result, dict)
-    assert result["build"] == "GRCh38"
+    assert result["keyvalues"]["build"] == "GRCh38"
 
 
 def test_marshal_output_path():
@@ -34,7 +34,7 @@ def test_marshal_output_list():
     refs = [Reference(build="A"), Reference(build="B")]
     result = marshal_output(refs)
     assert len(result) == 2
-    assert result[0]["build"] == "A"
+    assert result[0]["keyvalues"]["build"] == "A"
 
 
 def test_marshal_output_none():

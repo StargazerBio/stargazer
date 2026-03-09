@@ -13,8 +13,13 @@ class Variants(Asset):
     """VCF/GVCF variant call file asset."""
 
     _asset_key: ClassVar[str] = "variants"
-    _field_types = {"sample_count": int, "source_samples": list}
-    _field_defaults = {"sample_id": ""}
+    sample_id: str = ""
+    caller: str = ""
+    variant_type: str = ""
+    build: str = ""
+    vqsr_mode: str = ""
+    sample_count: int = 0
+    source_samples: list = None
 
 
 @dataclass
@@ -25,7 +30,8 @@ class VariantsIndex(Asset):
     """
 
     _asset_key: ClassVar[str] = "variants_index"
-    _field_defaults = {"sample_id": ""}
+    sample_id: str = ""
+    variants_cid: str = ""
 
 
 @dataclass
@@ -36,7 +42,12 @@ class KnownSites(Asset):
     """
 
     _asset_key: ClassVar[str] = "known_sites"
-    _field_defaults = {"build": ""}
+    build: str = ""
+    resource_name: str = ""
+    known: str = "false"
+    training: str = "false"
+    truth: str = "false"
+    prior: str = "10"
 
 
 @dataclass
@@ -48,4 +59,8 @@ class VQSRModel(Asset):
     """
 
     _asset_key: ClassVar[str] = "vqsr_model"
-    _field_defaults = {"sample_id": "", "mode": "SNP"}
+    sample_id: str = ""
+    mode: str = "SNP"
+    tranches_path: str = ""
+    build: str = ""
+    variants_cid: str = ""

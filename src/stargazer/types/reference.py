@@ -13,7 +13,7 @@ class Reference(Asset):
     """Reference FASTA file asset."""
 
     _asset_key: ClassVar[str] = "reference"
-    _field_defaults = {"build": ""}
+    build: str = ""
 
     @property
     def contigs(self) -> list[str]:
@@ -47,7 +47,9 @@ class ReferenceIndex(Asset):
     """
 
     _asset_key: ClassVar[str] = "reference_index"
-    _field_defaults = {"build": ""}
+    build: str = ""
+    tool: str = ""
+    reference_cid: str = ""
 
 
 @dataclass
@@ -55,7 +57,9 @@ class SequenceDict(Asset):
     """Sequence dictionary (.dict) file asset."""
 
     _asset_key: ClassVar[str] = "sequence_dict"
-    _field_defaults = {"build": ""}
+    build: str = ""
+    tool: str = ""
+    reference_cid: str = ""
 
 
 @dataclass
@@ -63,4 +67,6 @@ class AlignerIndex(Asset):
     """Aligner index file asset (one file per index file for multi-file indices)."""
 
     _asset_key: ClassVar[str] = "aligner_index"
-    _field_defaults = {"build": "", "aligner": ""}
+    build: str = ""
+    aligner: str = ""
+    reference_cid: str = ""
