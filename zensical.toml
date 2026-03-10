@@ -1,6 +1,7 @@
 [project]
 site_name = "Stargazer"
 site_description = "Bioinformatics pipeline framework built on Flyte v2"
+site_url = "https://stargazerbio.github.io/stargazer/"
 docs_dir = "docs/_build"
 dev_addr = "0.0.0.0:8001"
 
