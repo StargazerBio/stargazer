@@ -1,7 +1,7 @@
-"""Inject dynamic catalog tables into static docs pages at build time.
+"""Inject dynamic content into static docs pages at build time.
 
-Each target page contains a {{ catalog }} placeholder that gets replaced
-with a table generated from the live registry.
+Each target page contains a placeholder ({{ catalog }} or {{ api }}) that
+gets replaced with content generated from the live registries.
 """
 
 from pathlib import Path
@@ -15,11 +15,33 @@ registry = TaskRegistry()
 DOCS = Path(__file__).parent
 
 
-def _inject(page: str, table: str) -> None:
+SRC = Path(__file__).parent.parent / "src"
+
+
+def _inject(page: str, **replacements: str) -> None:
     src = (DOCS / page).read_text()
+    for placeholder, content in replacements.items():
+        src = src.replace("{{ " + placeholder + " }}", content)
     with mkdocs_gen_files.open(page, "w") as f:
-        f.write(src.replace("{{ catalog }}", table))
+        f.write(src)
     mkdocs_gen_files.set_edit_path(page, page)
+
+
+def _api_directives() -> str:
+    sections: dict[str, list[str]] = {}
+    for path in sorted(SRC.rglob("*.py")):
+        if path.name.startswith("_"):
+            continue
+        module = ".".join(path.relative_to(SRC).with_suffix("").parts)
+        # Group by top-level subpackage (types, tasks, workflows, utils)
+        parts = path.relative_to(SRC / "stargazer").parts
+        section = parts[0].replace("_", " ").title() if parts else "Other"
+        sections.setdefault(section, []).append(f"::: {module}")
+
+    lines = []
+    for section, directives in sections.items():
+        lines += [f"## {section}", ""] + directives + [""]
+    return "\n".join(lines)
 
 
 def _task_table(category: str) -> str:
@@ -53,6 +75,7 @@ def _asset_table() -> str:
     return "\n".join(rows)
 
 
-_inject("architecture/tasks.md", _task_table("task"))
-_inject("architecture/workflows.md", _task_table("workflow"))
-_inject("architecture/types.md", _asset_table())
+_inject("architecture/tasks.md", catalog=_task_table("task"))
+_inject("architecture/workflows.md", catalog=_task_table("workflow"))
+_inject("architecture/types.md", catalog=_asset_table())
+_inject("reference/api.md", api=_api_directives())
