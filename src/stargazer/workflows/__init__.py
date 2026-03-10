@@ -1,5 +1,5 @@
 """
-# Flyte workflows for genomics pipelines.
+### Flyte workflows for genomics pipelines.
 
 spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """

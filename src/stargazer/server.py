@@ -1,5 +1,5 @@
 """
-# Stargazer MCP Server.
+### Stargazer MCP Server.
 
 Exposes storage tools and a dynamic task runner via FastMCP.
 Tasks and workflows are auto-discovered from the registry and executed

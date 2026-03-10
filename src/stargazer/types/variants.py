@@ -1,5 +1,5 @@
 """
-# Variant call asset types for Stargazer.
+### Variant call asset types for Stargazer.
 
 spec: [docs/architecture/types.md](../architecture/types.md)
 """

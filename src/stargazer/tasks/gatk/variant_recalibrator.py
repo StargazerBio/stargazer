@@ -1,5 +1,5 @@
 """
-# VariantRecalibrator task for Stargazer.
+### VariantRecalibrator task for Stargazer.
 
 Builds a recalibration model for VQSR using GATK VariantRecalibrator.
 

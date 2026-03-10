@@ -1,5 +1,5 @@
 """
-# GenomicsDBImport task for Stargazer.
+### GenomicsDBImport task for Stargazer.
 
 Import VCFs to GenomicsDB for efficient joint genotyping of large cohorts.
 

@@ -1,5 +1,5 @@
 """
-# GATK Best Practices: Data Pre-processing for Variant Discovery
+### GATK Best Practices: Data Pre-processing for Variant Discovery
 
 Implements:
 1. Reference preparation — FASTA index, sequence dictionary, BWA index

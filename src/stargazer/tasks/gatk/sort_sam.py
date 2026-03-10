@@ -1,5 +1,5 @@
 """
-# sort_sam task for Stargazer.
+### sort_sam task for Stargazer.
 
 Sorts BAM files using GATK SortSam.
 

@@ -1,5 +1,5 @@
 """
-# base_recalibrator task for Stargazer.
+### base_recalibrator task for Stargazer.
 
 Creates BQSR recalibration table using GATK BaseRecalibrator.
 

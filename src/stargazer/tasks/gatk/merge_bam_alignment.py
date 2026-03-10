@@ -1,5 +1,5 @@
 """
-# merge_bam_alignment task for Stargazer.
+### merge_bam_alignment task for Stargazer.
 
 Merges aligned BAM with unmapped BAM using GATK MergeBamAlignment.
 

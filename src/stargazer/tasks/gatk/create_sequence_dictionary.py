@@ -1,5 +1,5 @@
 """
-# GATK CreateSequenceDictionary task for reference genome.
+### GATK CreateSequenceDictionary task for reference genome.
 
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """

@@ -1,5 +1,5 @@
 """
-# Storage abstraction for Stargazer.
+### Storage abstraction for Stargazer.
 
 Defines the StorageClient protocol, StargazerMode enum, and factory function
 for creating storage clients based on STARGAZER_MODE configuration.

@@ -70,7 +70,7 @@ The markdown body contains detailed instructions including:
 
 Every module in `src/` has two conventions in its module-level docstring:
 
-1. The first line is a `#` heading so it renders prominently in the generated API docs.
+1. The first line is a `###` heading so it renders prominently in the generated API docs.
 2. A `spec:` line at the bottom is a markdown link to the relevant architecture doc:
 
 ```

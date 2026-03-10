@@ -1,5 +1,5 @@
 """
-# Stargazer types for bioinformatics workflows.
+### Stargazer types for bioinformatics workflows.
 
 spec: [docs/architecture/types.md](../architecture/types.md)
 """

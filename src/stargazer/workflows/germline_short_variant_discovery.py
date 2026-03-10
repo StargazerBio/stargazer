@@ -1,5 +1,5 @@
 """
-# GATK Best Practices: Germline Short Variant Discovery (SNPs + Indels)
+### GATK Best Practices: Germline Short Variant Discovery (SNPs + Indels)
 
 Implements the full GATK pipeline from preprocessed BAMs:
     1. HaplotypeCaller  — per-sample GVCF (parallel)

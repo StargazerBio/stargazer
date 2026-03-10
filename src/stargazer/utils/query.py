@@ -1,5 +1,5 @@
 """
-# Query generation utilities for Stargazer.
+### Query generation utilities for Stargazer.
 
 Utilities for generating metadata queries, including support for
 cartesian product queries across multiple dimensions.

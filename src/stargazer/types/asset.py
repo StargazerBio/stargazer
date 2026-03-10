@@ -1,5 +1,5 @@
 """
-# Asset base dataclass for Stargazer.
+### Asset base dataclass for Stargazer.
 
 spec: [docs/architecture/types.md](../architecture/types.md)
 """

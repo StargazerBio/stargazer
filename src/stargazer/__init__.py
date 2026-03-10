@@ -1,5 +1,5 @@
 """
-# Stargazer: Bioinformatics workflow orchestration with IPFS and Flyte v2.
+### Stargazer: Bioinformatics workflow orchestration with IPFS and Flyte v2.
 
 Combines IPFS decentralized storage (via Pinata) with Flyte v2 for
 computational genomics pipelines. The core innovation is using IPFS Content

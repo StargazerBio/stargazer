@@ -1,5 +1,5 @@
 """
-# Utility functions for genomics workflows.
+### Utility functions for genomics workflows.
 
 spec: [docs/architecture/overview.md](../architecture/overview.md)
 """

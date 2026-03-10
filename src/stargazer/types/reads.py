@@ -1,5 +1,5 @@
 """
-# Read file asset types for Stargazer.
+### Read file asset types for Stargazer.
 
 spec: [docs/architecture/types.md](../architecture/types.md)
 """

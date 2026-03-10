@@ -1,5 +1,5 @@
 """
-# Output marshaling: typed object → dict (for MCP response serialization).
+### Output marshaling: typed object → dict (for MCP response serialization).
 
 spec: [docs/architecture/mcp-server.md](../architecture/mcp-server.md)
 """

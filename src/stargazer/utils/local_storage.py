@@ -1,5 +1,5 @@
 """
-# Local filesystem storage client for Stargazer.
+### Local filesystem storage client for Stargazer.
 
 Stores files locally with TinyDB metadata indexing. No network access required.
 

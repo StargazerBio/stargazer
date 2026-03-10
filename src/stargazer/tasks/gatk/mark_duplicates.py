@@ -1,5 +1,5 @@
 """
-# mark_duplicates task for Stargazer.
+### mark_duplicates task for Stargazer.
 
 Marks duplicate reads in BAM files using GATK MarkDuplicates.
 

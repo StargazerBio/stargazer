@@ -1,5 +1,5 @@
 """
-# Pinata API v3 client for IPFS file storage.
+### Pinata API v3 client for IPFS file storage.
 
 Provides async interface for:
 - Uploading files with keyvalue metadata

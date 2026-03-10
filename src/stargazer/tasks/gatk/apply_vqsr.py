@@ -1,5 +1,5 @@
 """
-# ApplyVQSR task for Stargazer.
+### ApplyVQSR task for Stargazer.
 
 Applies VQSR recalibration to a VCF using GATK ApplyVQSR.
 

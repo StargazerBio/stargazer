@@ -1,5 +1,5 @@
 """
-# GATK tasks for genomics workflows.
+### GATK tasks for genomics workflows.
 
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """

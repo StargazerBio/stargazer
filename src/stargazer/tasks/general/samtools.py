@@ -1,5 +1,5 @@
 """
-# Samtools tasks for reference genome indexing.
+### Samtools tasks for reference genome indexing.
 
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """

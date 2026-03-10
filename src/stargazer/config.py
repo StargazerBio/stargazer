@@ -1,5 +1,5 @@
 """
-# Task environment and logger configuration for Stargazer.
+### Task environment and logger configuration for Stargazer.
 
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """

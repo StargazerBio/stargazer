@@ -1,5 +1,5 @@
 """
-# Reference genome asset types for Stargazer.
+### Reference genome asset types for Stargazer.
 
 spec: [docs/architecture/types.md](../architecture/types.md)
 """

@@ -112,7 +112,7 @@ Every module in `src/` carries a `spec:` line at the bottom of its docstring poi
 
 ### When writing new code
 
-1. Add a `# Heading` as the first line of the module docstring
+1. Add a `### Heading` as the first line of the module docstring
 2. Add a `spec:` link at the bottom of the module docstring using the mapping in AGENTS.md — `spec: [docs/architecture/X.md](../architecture/X.md)`
 3. Do **not** add `spec:` lines to class or function docstrings
 4. After implementation, re-read the linked doc and update any stale descriptions

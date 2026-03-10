@@ -1,5 +1,5 @@
 """
-# Subprocess utilities for running external commands.
+### Subprocess utilities for running external commands.
 
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """

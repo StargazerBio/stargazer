@@ -1,5 +1,5 @@
 """
-# CombineGVCFs task for Stargazer.
+### CombineGVCFs task for Stargazer.
 
 Combines multiple per-sample GVCFs into a single multi-sample GVCF
 for joint genotyping using GATK CombineGVCFs.

@@ -1,5 +1,5 @@
 """
-# Stargazer tasks for bioinformatics workflows.
+### Stargazer tasks for bioinformatics workflows.
 
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
