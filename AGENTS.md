@@ -31,7 +31,7 @@ The `.opencode/agent/` directory contains specialized agent definitions for [Ope
 
 | Agent | File | Purpose |
 |-------|------|---------|
-| **Architecture** | `architecture.md` | Designs feature plans in `.opencode/plans/` and maintains specs in `.opencode/specs/` |
+| **Architecture** | `architecture.md` | Designs feature plans in `.opencode/plans/` and maintains docs in `docs/` |
 | **Task** | `task.md` | Implements individual Flyte v2 tasks for bioinformatics tools |
 | **Test** | `test.md` | Writes unit and integration tests following TDD approach |
 | **Workflow** | `workflow.md` | Composes Flyte v2 tasks into end-to-end pipelines |
@@ -71,9 +71,10 @@ The markdown body contains detailed instructions including:
 - **`.opencode/reference/flyte_v2_docs.md`** - Official Flyte v2 documentation
 - **`.opencode/reference/sdk_examples_concise.md`** - Flyte SDK v2 examples
 - **`.opencode/reference/tool_refs/`** - Bioinformatics tool documentation, use as the source of truth for tool parameters and behavior
-- **`.opencode/specs/`** - Concise documentation on the project's design principles
-  - **Critical**: Specs must be updated as the project evolves to stay in sync with the current state
-  - No code in spec docs - these are high-level references supported by docstrings in the actual functions
+- **`docs/`** - Project documentation (architecture, guides, reference)
+  - **Critical**: Docs must be updated as the project evolves to stay in sync with the current state
+  - No code in architecture docs - these are high-level references supported by docstrings in the actual functions
+  - Guides are the only docs that contain code examples
 - **`.opencode/plans/`** - Step by step instructions for building new features and fixing bugs
   - Only place outside src where code snippets are allowed
   - Keep track of progress and check off completed work as you go
@@ -93,7 +94,11 @@ The project follows this structure:
   - `assets/` - Test fixtures and small data files
   - `unit/` - Unit tests
   - `integration/` - Integration tests
-- `.opencode/reference/` - Reference materials
+- `docs/` - Project documentation
+  - `architecture/` - System design and contracts
+  - `guides/` - Step-by-step walkthroughs with code examples
+  - `reference/` - Auto-generated API reference
+- `.opencode/reference/` - Agent-facing reference materials (Flyte docs, tool refs)
 - `scratch/` - Scratch materials
 
 ### Types Directory (`src/stargazer/types/`)

@@ -45,3 +45,11 @@ filterwarnings = [
     # Ignore Pydantic deprecation warnings from flyte package (third-party)
     "ignore:Support for class-based `config` is deprecated:pydantic.warnings.PydanticDeprecatedSince20",
 ]
+
+[dependency-groups]
+dev = [
+    "mkdocs>=1.6,<2",
+    "mkdocs-gen-files>=0.6.0",
+    "mkdocs-material>=9.7.4",
+    "mkdocstrings[python]>=1.0.3",
+]

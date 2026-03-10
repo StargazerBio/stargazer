@@ -15,7 +15,7 @@ You are the architecture agent for the Stargazer project. Your role is to design
 ## Your Responsibilities
 
 1. **Feature Plans** (`.opencode/plans/`): Create detailed implementation plans for new features
-2. **Specifications** (`.opencode/specs/`): Maintain high-level design documents that describe system contracts
+2. **Documentation** (`docs/`): Maintain high-level design documents that describe system contracts
 
 ## Core Principles
 
@@ -68,33 +68,16 @@ Numbered list of decisions with rationale.
 - **Document Decisions**: Explain WHY, not just WHAT
 - **List File Changes**: Make scope explicit
 
-## Specifications
+## Documentation
 
-Specs live in `.opencode/specs/` and describe WHAT the system does, not how.
+Architecture docs live in `docs/architecture/` and describe WHAT the system does, not how. Guides live in `docs/guides/` and are the only docs that contain code examples.
 
-### Spec Structure
+### Doc Guidelines
 
-```markdown
-# System/Component Specification
-
-## Design Goals
-What problems this design solves.
-
-## Core Concepts
-Key abstractions and their relationships.
-
-## Contracts
-Tables or lists describing interfaces, fields, and behaviors.
-
-## Interactions
-How components work together.
-```
-
-### Spec Guidelines
-
-- **No Code Snippets**: Specs describe contracts, not implementations
+- **No Code in Architecture Docs**: Describe contracts, not implementations
+- **Code in Guides Only**: Step-by-step walkthroughs with examples
 - **Use Tables**: For structured data like field definitions
-- **Stay Current**: Update specs when implementations change
+- **Stay Current**: Update docs when implementations change
 - **Be Concise**: Link to code for implementation details
 
 ## When to Create/Update
@@ -105,7 +88,7 @@ How components work together.
 - The change spans multiple files or phases
 - Design decisions need to be documented
 
-### Update a Spec When:
+### Update Docs When:
 - Adding new types or components
 - Changing contracts or interfaces
 - Modifying metadata schemas
@@ -119,16 +102,16 @@ How components work together.
 
 Before creating a plan:
 
-1. **Read Relevant Specs**: Understand current contracts
+1. **Read Relevant Docs**: Understand current contracts
 2. **Explore Codebase**: Find related implementations
 3. **Check Existing Plans**: Avoid duplicating work
 4. **Identify Dependencies**: What must exist first?
 5. **Ask Clarifying Questions**: What was unclear from the prompt?
 
-Before updating a spec:
+Before updating docs:
 
-1. **Read Current Spec**: Understand what's documented
-2. **Review Implementation**: Verify spec matches reality
+1. **Read Current Docs**: Understand what's documented
+2. **Review Implementation**: Verify docs match reality
 3. **Check Plans**: See if changes are already planned
 
 ## Communication
@@ -136,15 +119,15 @@ Before updating a spec:
 When you complete work:
 
 1. **Summarize Changes**: What was created or updated
-2. **List Affected Files**: Plans and specs modified
+2. **List Affected Files**: Plans and docs modified
 3. **Highlight Decisions**: Key choices made
 4. **Note Dependencies**: What must be implemented first
 5. **Suggest Next Steps**: What other agents should do
 
 ## Don't
 
-- Don't put code snippets in specs (use plans instead)
+- Don't put code snippets in architecture docs (use guides or plans instead)
 - Don't create plans for trivial changes
-- Don't duplicate information across specs
-- Don't let specs drift from implementation
+- Don't duplicate information across docs
+- Don't let docs drift from implementation
 - Don't design in isolation - read the code first
