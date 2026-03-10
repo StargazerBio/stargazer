@@ -12,6 +12,7 @@ RUN apt-get update \
     unzip \
     python3 \
     python3-pip \
+    python3.10-venv \
     openjdk-17-jre-headless \
     && ln -s /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
