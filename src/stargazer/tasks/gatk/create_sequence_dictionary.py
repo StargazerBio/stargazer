@@ -5,6 +5,7 @@ GATK CreateSequenceDictionary task for reference genome.
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Reference, SequenceDict
+from stargazer.config import logger
 from stargazer.utils import _run
 
 
@@ -19,6 +20,7 @@ async def create_sequence_dictionary(ref: Reference) -> SequenceDict:
     Returns:
         SequenceDict asset containing the .dict file
     """
+    logger.info(ref.to_dict())
     await ref.fetch()
     ref_path = ref.path
 
@@ -51,4 +53,5 @@ async def create_sequence_dictionary(ref: Reference) -> SequenceDict:
         reference_cid=ref.cid,
     )
 
+    logger.info(seq_dict.to_dict())
     return seq_dict

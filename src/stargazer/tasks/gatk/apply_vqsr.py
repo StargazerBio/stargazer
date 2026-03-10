@@ -9,6 +9,7 @@ from pathlib import Path
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Variants, VariantsIndex, VQSRModel
+from stargazer.config import logger
 from stargazer.utils import _run
 
 _DEFAULT_FILTER_LEVEL = {"SNP": 99.5, "INDEL": 99.0}
@@ -40,6 +41,9 @@ async def apply_vqsr(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360035531612-Variant-Quality-Score-Recalibration-VQSR
     """
+    logger.info(vcf.to_dict())
+    logger.info(ref.to_dict())
+    logger.info(vqsr_model.to_dict())
     mode = vqsr_model.keyvalues.get("mode", "SNP")
     if mode not in ("SNP", "INDEL"):
         raise ValueError(f"VQSRModel mode must be 'SNP' or 'INDEL', got {mode!r}")
@@ -105,4 +109,5 @@ async def apply_vqsr(
         vidx = VariantsIndex()
         await vidx.update(idx_path, sample_id=sample_id, variants_cid=filtered_vcf.cid)
 
+    logger.info(filtered_vcf.to_dict())
     return filtered_vcf

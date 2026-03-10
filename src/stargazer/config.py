@@ -1,4 +1,5 @@
 import flyte
+from loguru import logger as logger  # noqa: PLC0414
 
 # GATK task environment for GATK-specific tools
 # Uses GATK image with Java runtime and GATK tools

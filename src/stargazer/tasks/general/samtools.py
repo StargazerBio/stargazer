@@ -5,6 +5,7 @@ Samtools tasks for reference genome indexing.
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Reference, ReferenceIndex
+from stargazer.config import logger
 from stargazer.utils import _run
 
 
@@ -19,6 +20,7 @@ async def samtools_faidx(ref: Reference) -> ReferenceIndex:
     Returns:
         ReferenceIndex asset containing the .fai file
     """
+    logger.info(ref.to_dict())
     await ref.fetch()
     ref_path = ref.path
 
@@ -41,4 +43,5 @@ async def samtools_faidx(ref: Reference) -> ReferenceIndex:
         reference_cid=ref.cid,
     )
 
+    logger.info(faidx.to_dict())
     return faidx

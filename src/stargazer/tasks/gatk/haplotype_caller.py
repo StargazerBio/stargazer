@@ -8,6 +8,7 @@ GATK HaplotypeCaller in GVCF mode.
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Alignment, Reference, Variants, VariantsIndex
+from stargazer.config import logger
 from stargazer.utils import _run
 
 
@@ -29,6 +30,8 @@ async def haplotype_caller(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037225632-HaplotypeCaller
     """
+    logger.info(alignment.to_dict())
+    logger.info(ref.to_dict())
     # fetch() auto-downloads companions (.fai, .dict, .bai)
     await alignment.fetch()
     await ref.fetch()
@@ -77,4 +80,5 @@ async def haplotype_caller(
             idx_path, sample_id=alignment.sample_id, variants_cid=gvcf.cid
         )
 
+    logger.info(gvcf.to_dict())
     return gvcf

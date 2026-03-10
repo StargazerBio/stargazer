@@ -7,6 +7,7 @@ Sorts BAM files using GATK SortSam.
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Alignment, AlignmentIndex
+from stargazer.config import logger
 from stargazer.utils import _run
 
 
@@ -28,6 +29,7 @@ async def sort_sam(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037056932-SortSam-Picard
     """
+    logger.info(alignment.to_dict())
     valid_sort_orders = ["coordinate", "queryname", "duplicate"]
     if sort_order not in valid_sort_orders:
         raise ValueError(
@@ -79,4 +81,5 @@ async def sort_sam(
                 alignment_cid=sorted_bam.cid,
             )
 
+    logger.info(sorted_bam.to_dict())
     return sorted_bam

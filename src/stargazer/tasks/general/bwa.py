@@ -8,6 +8,7 @@ import shlex
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Alignment, AlignerIndex, R1, R2, Reference
+from stargazer.config import logger
 from stargazer.utils import _run
 
 
@@ -28,6 +29,7 @@ async def bwa_index(ref: Reference) -> list[AlignerIndex]:
     Reference:
         https://bio-bwa.sourceforge.net/bwa.shtml
     """
+    logger.info(ref.to_dict())
     await ref.fetch()
     ref_path = ref.path
 
@@ -41,11 +43,6 @@ async def bwa_index(ref: Reference) -> list[AlignerIndex]:
 
     cmd = ["bwa", "index", "-p", str(output_prefix), str(ref_path)]
     stdout, stderr = await _run(cmd, cwd=str(output_dir))
-
-    if stdout:
-        print(f"BWA stdout: {stdout}")
-    if stderr:
-        print(f"BWA stderr: {stderr}")
 
     indices = []
     for ext in index_extensions:
@@ -62,6 +59,7 @@ async def bwa_index(ref: Reference) -> list[AlignerIndex]:
         )
         indices.append(idx)
 
+    logger.info([x.to_dict() for x in indices])
     return indices
 
 
@@ -90,6 +88,10 @@ async def bwa_mem(
     Reference:
         https://bio-bwa.sourceforge.net/bwa.shtml
     """
+    logger.info(ref.to_dict())
+    logger.info(r1.to_dict())
+    if r2:
+        logger.info(r2.to_dict())
     # fetch() downloads ref + companions (aligner indices, .fai, .dict)
     await ref.fetch()
     await r1.fetch()
@@ -133,6 +135,7 @@ async def bwa_mem(
     samtools_cmd = f"samtools view -bS -o {output_bam} -"
     full_cmd = f"{bwa_cmd} | {samtools_cmd}"
 
+    logger.info(f"Running: {full_cmd}")
     proc = await asyncio.create_subprocess_shell(
         full_cmd,
         cwd=str(output_dir),
@@ -163,4 +166,5 @@ async def bwa_mem(
         r1_cid=r1.cid,
     )
 
+    logger.info(bam.to_dict())
     return bam

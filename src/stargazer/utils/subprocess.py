@@ -3,8 +3,11 @@ Subprocess utilities for running external commands.
 """
 
 import asyncio
+import shlex
 from pathlib import Path
 from typing import Any, Sequence
+
+from stargazer.config import logger
 
 
 async def _run(
@@ -27,6 +30,8 @@ async def _run(
     """
     # Convert all command arguments to strings
     str_cmd = [str(arg) for arg in cmd]
+
+    logger.info(f"Running: {shlex.join(str_cmd)}")
 
     # Run the subprocess
     process = await asyncio.create_subprocess_exec(

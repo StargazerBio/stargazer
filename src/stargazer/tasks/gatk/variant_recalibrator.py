@@ -7,6 +7,7 @@ Builds a recalibration model for VQSR using GATK VariantRecalibrator.
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import KnownSites, Reference, Variants, VQSRModel
+from stargazer.config import logger
 from stargazer.utils import _run
 
 _SNP_ANNOTATIONS = ["QD", "MQ", "MQRankSum", "ReadPosRankSum", "FS", "SOR"]
@@ -42,6 +43,9 @@ async def variant_recalibrator(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360035531612-Variant-Quality-Score-Recalibration-VQSR
     """
+    logger.info(vcf.to_dict())
+    logger.info(ref.to_dict())
+    logger.info([x.to_dict() for x in resources])
     if mode not in ("SNP", "INDEL"):
         raise ValueError(f"mode must be 'SNP' or 'INDEL', got {mode!r}")
     if not resources:
@@ -107,4 +111,5 @@ async def variant_recalibrator(
         variants_cid=vcf.cid,
     )
 
+    logger.info(model.to_dict())
     return model

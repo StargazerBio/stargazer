@@ -10,6 +10,7 @@ from pathlib import Path
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Variants, VariantsIndex
+from stargazer.config import logger
 from stargazer.utils import _run
 
 
@@ -33,6 +34,8 @@ async def combine_gvcfs(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037053272-CombineGVCFs
     """
+    logger.info([x.to_dict() for x in gvcfs])
+    logger.info(ref.to_dict())
     if not gvcfs:
         raise ValueError("gvcfs list cannot be empty")
 
@@ -95,4 +98,5 @@ async def combine_gvcfs(
         vidx = VariantsIndex()
         await vidx.update(idx_path, sample_id=cohort_id, variants_cid=combined_vcf.cid)
 
+    logger.info(combined_vcf.to_dict())
     return combined_vcf

@@ -7,6 +7,7 @@ Applies BQSR recalibration to BAM files using GATK ApplyBQSR.
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Alignment, BQSRReport, Reference
+from stargazer.config import logger
 from stargazer.utils import _run
 
 
@@ -30,6 +31,9 @@ async def apply_bqsr(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037055712-ApplyBQSR
     """
+    logger.info(alignment.to_dict())
+    logger.info(ref.to_dict())
+    logger.info(bqsr_report.to_dict())
     # fetch() auto-downloads companions (.fai, .dict, .bai, etc.)
     await alignment.fetch()
     await ref.fetch()
@@ -75,4 +79,5 @@ async def apply_bqsr(
         reference_cid=ref.cid,
     )
 
+    logger.info(recal_bam.to_dict())
     return recal_bam

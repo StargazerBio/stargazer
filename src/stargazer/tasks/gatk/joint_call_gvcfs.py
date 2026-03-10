@@ -12,6 +12,7 @@ from pathlib import Path
 import stargazer.utils.storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Reference, Variants, VariantsIndex
+from stargazer.config import logger
 from stargazer.utils import _run
 
 
@@ -40,6 +41,8 @@ async def joint_call_gvcfs(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360035535932
     """
+    logger.info([x.to_dict() for x in gvcfs])
+    logger.info(ref.to_dict())
     if not gvcfs:
         raise ValueError("At least one GVCF must be provided")
     for gvcf in gvcfs:
@@ -120,4 +123,5 @@ async def joint_call_gvcfs(
         vidx = VariantsIndex()
         await vidx.update(idx_path, sample_id=cohort_id, variants_cid=vcf.cid)
 
+    logger.info(vcf.to_dict())
     return vcf

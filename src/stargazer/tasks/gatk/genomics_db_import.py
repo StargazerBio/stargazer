@@ -8,6 +8,7 @@ from pathlib import Path
 
 from stargazer.config import gatk_env
 from stargazer.types import Variants
+from stargazer.config import logger
 from stargazer.utils import _run
 
 
@@ -31,6 +32,7 @@ async def genomics_db_import(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360036883491-GenomicsDBImport
     """
+    logger.info([x.to_dict() for x in gvcfs])
     if not gvcfs:
         raise ValueError("At least one GVCF must be provided")
 
