@@ -16,6 +16,7 @@ dependencies = [
     "pytest>=9.0.1",
     "pre-commit>=4.5.1",
     "tinydb>=4.8.2",
+    "zensical>=0.0.24",
 ]
 
 [project.scripts]
@@ -48,8 +49,5 @@ filterwarnings = [
 
 [dependency-groups]
 dev = [
-    "mkdocs>=1.6,<2",
-    "mkdocs-gen-files>=0.6.0",
-    "mkdocs-material>=9.7.4",
     "mkdocstrings[python]>=1.0.3",
 ]

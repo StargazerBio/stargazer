@@ -55,6 +55,22 @@ Stargazer's behavior is controlled by a single environment variable:
 
 See [Modes](architecture/modes.md) for details.
 
+## Docs
+
+To preview the documentation locally:
+
+```bash
+uv run python docs/gen_catalog.py  # generate dynamic content
+uv run zensical serve              # start the dev server at 0.0.0.0:8001
+```
+
+Or to build a static site:
+
+```bash
+uv run python docs/gen_catalog.py
+uv run zensical build
+```
+
 ## First Workflow
 
 Once your client is connected to the MCP server, you can run a workflow by asking your LLM to execute it. The server exposes all available tasks and workflows as tools — your client discovers them automatically via MCP.

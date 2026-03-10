@@ -1,47 +1,23 @@
-"""Inject dynamic content into static docs pages at build time.
+"""Pre-build script: inject dynamic catalog tables into docs pages.
 
-Each target page contains a placeholder ({{ catalog }} or {{ api }}) that
-gets replaced with content generated from the live registries.
+Reads all files from docs/, replaces {{ placeholder }} tokens with
+generated content, and writes results to docs/_build/. Run this before
+`zensical build`.
+
+Usage:
+    uv run python docs/gen_catalog.py
+    uv run zensical build
 """
 
+import shutil
 from pathlib import Path
-
-import mkdocs_gen_files
 
 from stargazer.registry import TaskRegistry
 from stargazer.types import ASSET_REGISTRY
 
 registry = TaskRegistry()
 DOCS = Path(__file__).parent
-
-
-SRC = Path(__file__).parent.parent / "src"
-
-
-def _inject(page: str, **replacements: str) -> None:
-    src = (DOCS / page).read_text()
-    for placeholder, content in replacements.items():
-        src = src.replace("{{ " + placeholder + " }}", content)
-    with mkdocs_gen_files.open(page, "w") as f:
-        f.write(src)
-    mkdocs_gen_files.set_edit_path(page, page)
-
-
-def _api_directives() -> str:
-    sections: dict[str, list[str]] = {}
-    for path in sorted(SRC.rglob("*.py")):
-        if path.name.startswith("_"):
-            continue
-        module = ".".join(path.relative_to(SRC).with_suffix("").parts)
-        # Group by top-level subpackage (types, tasks, workflows, utils)
-        parts = path.relative_to(SRC / "stargazer").parts
-        section = parts[0].replace("_", " ").title() if parts else "Other"
-        sections.setdefault(section, []).append(f"::: {module}")
-
-    lines = []
-    for section, directives in sections.items():
-        lines += [f"## {section}", ""] + directives + [""]
-    return "\n".join(lines)
+BUILD = DOCS / "_build"
 
 
 def _task_table(category: str) -> str:
@@ -75,7 +51,46 @@ def _asset_table() -> str:
     return "\n".join(rows)
 
 
-_inject("architecture/tasks.md", catalog=_task_table("task"))
-_inject("architecture/workflows.md", catalog=_task_table("workflow"))
-_inject("architecture/types.md", catalog=_asset_table())
-_inject("reference/api.md", api=_api_directives())
+def _api_directives() -> str:
+    src = DOCS.parent / "src"
+    sections: dict[str, list[str]] = {}
+    for path in sorted(src.rglob("*.py")):
+        if path.name.startswith("_"):
+            continue
+        module = ".".join(path.relative_to(src).with_suffix("").parts)
+        parts = path.relative_to(src / "stargazer").parts
+        section = parts[0].replace("_", " ").title() if parts else "Other"
+        sections.setdefault(section, []).append(f"::: {module}")
+    lines = []
+    for section, directives in sections.items():
+        lines += [f"## {section}", ""] + directives + [""]
+    return "\n".join(lines)
+
+
+REPLACEMENTS = {
+    "architecture/tasks.md": {"catalog": _task_table("task")},
+    "architecture/workflows.md": {"catalog": _task_table("workflow")},
+    "architecture/types.md": {"catalog": _asset_table()},
+    "reference/api.md": {"api": _api_directives()},
+}
+
+
+def build():
+    if BUILD.exists():
+        shutil.rmtree(BUILD)
+    shutil.copytree(
+        DOCS, BUILD, ignore=shutil.ignore_patterns("_build", "gen_catalog.py")
+    )
+
+    for rel_path, tokens in REPLACEMENTS.items():
+        target = BUILD / rel_path
+        src = target.read_text()
+        for placeholder, content in tokens.items():
+            src = src.replace("{{ " + placeholder + " }}", content)
+        target.write_text(src)
+
+    print(f"Generated docs -> {BUILD}")
+
+
+if __name__ == "__main__":
+    build()
