@@ -1,4 +1,8 @@
-"""GATK tasks for genomics workflows."""
+"""
+# GATK tasks for genomics workflows.
+
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
+"""
 
 from stargazer.tasks.gatk.apply_bqsr import apply_bqsr
 from stargazer.tasks.gatk.base_recalibrator import base_recalibrator

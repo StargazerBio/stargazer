@@ -1,8 +1,10 @@
 """
-haplotype_caller task for Stargazer.
+# haplotype_caller task for Stargazer.
 
 Calls germline SNPs and indels via local re-assembly of haplotypes using
 GATK HaplotypeCaller in GVCF mode.
+
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 import stargazer.utils.storage as _storage

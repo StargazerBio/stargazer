@@ -1,5 +1,5 @@
 """
-Storage abstraction for Stargazer.
+# Storage abstraction for Stargazer.
 
 Defines the StorageClient protocol, StargazerMode enum, and factory function
 for creating storage clients based on STARGAZER_MODE configuration.
@@ -7,6 +7,8 @@ for creating storage clients based on STARGAZER_MODE configuration.
 Configuration:
     STARGAZER_MODE=local (default)  -> local exec, local storage (or Pinata if JWT present)
     STARGAZER_MODE=cloud            -> union exec, Pinata storage (PINATA_JWT required)
+
+spec: [docs/architecture/modes.md](../architecture/modes.md)
 """
 
 import os
@@ -26,7 +28,8 @@ class StorageClient(Protocol):
     local_dir: Path
 
     async def upload(self, component: Asset) -> None:
-        """Upload a file from component.path; sets component.cid."""
+        """Upload a file from component.path; sets component.cid.
+        """
         ...
 
     async def download(
@@ -34,23 +37,27 @@ class StorageClient(Protocol):
         component: Asset,
         dest: Optional[Path] = None,
     ) -> None:
-        """Download a file by cid; sets component.path."""
+        """Download a file by cid; sets component.path.
+        """
         ...
 
     async def query(
         self,
         keyvalues: dict[str, str],
     ) -> list[Asset]:
-        """Query files by keyvalue metadata; returns Asset list."""
+        """Query files by keyvalue metadata; returns Asset list.
+        """
         ...
 
     async def delete(self, component: Asset) -> None:
-        """Delete a file from storage."""
+        """Delete a file from storage.
+        """
         ...
 
 
 class StargazerMode(Enum):
-    """Execution and storage mode for Stargazer."""
+    """Execution and storage mode for Stargazer.
+    """
 
     LOCAL = "local"
     CLOUD = "cloud"

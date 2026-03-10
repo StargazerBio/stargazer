@@ -1,4 +1,8 @@
-"""Flyte workflows for genomics pipelines."""
+"""
+# Flyte workflows for genomics pipelines.
+
+spec: [docs/architecture/workflows.md](../architecture/workflows.md)
+"""
 
 from stargazer.workflows.gatk_data_preprocessing import (
     prepare_reference,

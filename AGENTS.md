@@ -66,6 +66,25 @@ The markdown body contains detailed instructions including:
 - **workflow agent**: When composing tasks into pipelines
 - **code-review agent**: Before merging code, to catch issues early
 
+## Docstring Spec References
+
+Every module in `src/` has two conventions in its module-level docstring:
+
+1. The first line is a `#` heading so it renders prominently in the generated API docs.
+2. A `spec:` line at the bottom is a markdown link to the relevant architecture doc:
+
+```
+spec: [docs/architecture/types.md](../architecture/types.md)
+```
+
+**Rationale:** This serves two purposes:
+1. **Diff scanning** — when reviewing recent PRs or commits, an LLM can immediately see which spec doc is affected by any changed module and check whether the docs need updating.
+2. **Low-overhead lookup** — when making changes to a specific module, the relevant high-level architecture is one link away without any search.
+
+The `spec:` line is **module-level only** — class and function docstrings do not carry it.
+
+100% docstring coverage is enforced by the `docstr-coverage` pre-commit hook.
+
 ## Specs, Plans and Reference Materials
 
 - **`.opencode/reference/flyte_v2_docs.md`** - Official Flyte v2 documentation

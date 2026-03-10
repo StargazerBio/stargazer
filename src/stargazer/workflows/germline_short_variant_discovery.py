@@ -1,5 +1,5 @@
 """
-GATK Best Practices: Germline Short Variant Discovery (SNPs + Indels)
+# GATK Best Practices: Germline Short Variant Discovery (SNPs + Indels)
 
 Implements the full GATK pipeline from preprocessed BAMs:
     1. HaplotypeCaller  — per-sample GVCF (parallel)
@@ -15,6 +15,8 @@ Prerequisites:
 
 Reference:
     https://gatk.broadinstitute.org/hc/en-us/articles/360035535932-Germline-short-variant-discovery-SNPs-Indels
+
+spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
 import asyncio

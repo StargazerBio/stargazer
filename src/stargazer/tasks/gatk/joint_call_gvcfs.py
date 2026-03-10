@@ -1,9 +1,11 @@
 """
-joint_call_gvcfs task for Stargazer.
+# joint_call_gvcfs task for Stargazer.
 
 Consolidates per-sample GVCFs into a GenomicsDB datastore and performs joint
 genotyping in a single task, avoiding the need to persist the GenomicsDB
 workspace between tasks.
+
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 import tempfile

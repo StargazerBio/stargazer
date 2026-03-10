@@ -1,5 +1,7 @@
 """
-Samtools tasks for reference genome indexing.
+# Samtools tasks for reference genome indexing.
+
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 import stargazer.utils.storage as _storage

@@ -1,11 +1,16 @@
-"""Output marshaling: typed object → dict (for MCP response serialization)."""
+"""
+# Output marshaling: typed object → dict (for MCP response serialization).
+
+spec: [docs/architecture/mcp-server.md](../architecture/mcp-server.md)
+"""
 
 from pathlib import Path
 from typing import Any
 
 
 def marshal_output(value: Any) -> Any:
-    """Convert a typed Python object to a JSON-friendly structure for MCP transport."""
+    """Convert a typed Python object to a JSON-friendly structure for MCP transport.
+    """
     if value is None:
         return None
 

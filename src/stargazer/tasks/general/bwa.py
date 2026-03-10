@@ -1,5 +1,7 @@
 """
-BWA tasks for reference genome indexing and alignment.
+# BWA tasks for reference genome indexing and alignment.
+
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 import asyncio

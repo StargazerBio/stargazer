@@ -1,7 +1,9 @@
 """
-mark_duplicates task for Stargazer.
+# mark_duplicates task for Stargazer.
 
 Marks duplicate reads in BAM files using GATK MarkDuplicates.
+
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 import stargazer.utils.storage as _storage

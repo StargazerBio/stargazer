@@ -1,5 +1,7 @@
 """
-Asset base dataclass for Stargazer.
+# Asset base dataclass for Stargazer.
+
+spec: [docs/architecture/types.md](../architecture/types.md)
 """
 
 import typing
@@ -46,6 +48,7 @@ class Asset:
     keyvalues: dict[str, str] = field(default_factory=dict)
 
     def __init_subclass__(cls, **kwargs):
+        """Register subclass in the asset registry and derive field metadata."""
         super().__init_subclass__(**kwargs)
         ak = cls.__dict__.get("_asset_key", "")
         if ak:
@@ -70,10 +73,12 @@ class Asset:
             cls._field_defaults = field_defaults
 
     def __post_init__(self):
+        """Seed the 'asset' keyvalue from _asset_key on construction."""
         if self._asset_key:
             self.keyvalues.setdefault("asset", self._asset_key)
 
     def __getattribute__(self, name: str) -> Any:
+        """Read declared fields from keyvalues with type coercion; delegate everything else."""
         # Fast-path: internal/private attrs skip all keyvalues logic
         if name.startswith("_"):
             return object.__getattribute__(self, name)
@@ -105,11 +110,13 @@ class Asset:
         return object.__getattribute__(self, name)
 
     def __getattr__(self, name: str) -> Any:
+        """Fall back to keyvalues lookup for undeclared attributes on base Asset."""
         # Fallback for undeclared keys on base Asset instances
         kv = self.__dict__.get("keyvalues", {})
         return kv.get(name)
 
     def __setattr__(self, name: str, value: Any) -> None:
+        """Coerce and store declared fields into keyvalues; bypass for core attrs."""
         if name in self._own_attrs or name.startswith("_"):
             super().__setattr__(name, value)
             return
@@ -162,7 +169,8 @@ class Asset:
                 await _storage.default_client.download(a)
 
     async def update(self, path: Path, **kwargs) -> None:
-        """Upload file and set cid. Shared by all asset types."""
+        """Upload file and set cid. Shared by all asset types.
+        """
         from stargazer.utils.storage import default_client
 
         for key, value in kwargs.items():
@@ -172,7 +180,8 @@ class Asset:
         await default_client.upload(self)
 
     def to_dict(self) -> dict:
-        """Serialize to a JSON-friendly dict."""
+        """Serialize to a JSON-friendly dict.
+        """
         return {
             "cid": self.cid,
             "path": str(self.path) if self.path else None,
@@ -181,7 +190,8 @@ class Asset:
 
     @classmethod
     def from_dict(cls, data: dict) -> Self:
-        """Reconstruct from a serialized dict."""
+        """Reconstruct from a serialized dict.
+        """
         kv = data.get("keyvalues", {})
         if cls._asset_key:
             # Subclass: unpack declared fields as kwargs; keyvalues rebuilt by __setattr__

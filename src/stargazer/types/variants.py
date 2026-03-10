@@ -1,5 +1,7 @@
 """
-Variant call asset types for Stargazer.
+# Variant call asset types for Stargazer.
+
+spec: [docs/architecture/types.md](../architecture/types.md)
 """
 
 from dataclasses import dataclass
@@ -10,7 +12,8 @@ from stargazer.types.asset import Asset
 
 @dataclass
 class Variants(Asset):
-    """VCF/GVCF variant call file asset."""
+    """VCF/GVCF variant call file asset.
+    """
 
     _asset_key: ClassVar[str] = "variants"
     sample_id: str = ""

@@ -1,8 +1,10 @@
 """
-CombineGVCFs task for Stargazer.
+# CombineGVCFs task for Stargazer.
 
 Combines multiple per-sample GVCFs into a single multi-sample GVCF
 for joint genotyping using GATK CombineGVCFs.
+
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 from pathlib import Path

@@ -5,3 +5,8 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+  - repo: https://github.com/HunterMcGushion/docstr_coverage
+    rev: v2.3.2
+    hooks:
+      - id: docstr-coverage
+        args: [--verbose, "0", --fail-under=100, src/]

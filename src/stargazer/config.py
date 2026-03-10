@@ -1,3 +1,9 @@
+"""
+# Task environment and logger configuration for Stargazer.
+
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
+"""
+
 import flyte
 from loguru import logger as logger  # noqa: PLC0414
 

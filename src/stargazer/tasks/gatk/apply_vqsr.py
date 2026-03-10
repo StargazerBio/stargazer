@@ -1,7 +1,9 @@
 """
-ApplyVQSR task for Stargazer.
+# ApplyVQSR task for Stargazer.
 
 Applies VQSR recalibration to a VCF using GATK ApplyVQSR.
+
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 from pathlib import Path

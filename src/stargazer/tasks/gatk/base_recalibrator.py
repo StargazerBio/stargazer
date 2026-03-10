@@ -1,7 +1,9 @@
 """
-base_recalibrator task for Stargazer.
+# base_recalibrator task for Stargazer.
 
 Creates BQSR recalibration table using GATK BaseRecalibrator.
+
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 import stargazer.utils.storage as _storage

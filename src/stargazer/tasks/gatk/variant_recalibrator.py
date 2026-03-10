@@ -1,7 +1,9 @@
 """
-VariantRecalibrator task for Stargazer.
+# VariantRecalibrator task for Stargazer.
 
 Builds a recalibration model for VQSR using GATK VariantRecalibrator.
+
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 import stargazer.utils.storage as _storage

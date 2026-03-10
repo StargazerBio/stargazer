@@ -1,4 +1,8 @@
-"""Utility functions for genomics workflows."""
+"""
+# Utility functions for genomics workflows.
+
+spec: [docs/architecture/overview.md](../architecture/overview.md)
+"""
 
 from stargazer.utils.storage import (
     StorageClient,

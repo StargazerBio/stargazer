@@ -1,7 +1,9 @@
 """
-apply_bqsr task for Stargazer.
+# apply_bqsr task for Stargazer.
 
 Applies BQSR recalibration to BAM files using GATK ApplyBQSR.
+
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 import stargazer.utils.storage as _storage

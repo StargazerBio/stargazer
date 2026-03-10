@@ -1,7 +1,9 @@
 """
-merge_bam_alignment task for Stargazer.
+# merge_bam_alignment task for Stargazer.
 
 Merges aligned BAM with unmapped BAM using GATK MergeBamAlignment.
+
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 import stargazer.utils.storage as _storage

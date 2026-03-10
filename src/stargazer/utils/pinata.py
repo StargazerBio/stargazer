@@ -1,11 +1,13 @@
 """
-Pinata API v3 client for IPFS file storage.
+# Pinata API v3 client for IPFS file storage.
 
 Provides async interface for:
 - Uploading files with keyvalue metadata
 - Downloading files via IPFS gateway with local caching
 - Querying files by keyvalue pairs
 - Deleting files
+
+spec: [docs/architecture/modes.md](../architecture/modes.md)
 """
 
 import os
@@ -73,7 +75,8 @@ class PinataClient:
 
     @property
     def jwt(self) -> str:
-        """Get JWT token, raising error if not set."""
+        """Get JWT token, raising error if not set.
+        """
         if not self._jwt:
             raise ValueError(
                 "PINATA_JWT not set. Provide jwt= argument or "
@@ -82,11 +85,13 @@ class PinataClient:
         return self._jwt
 
     def _headers(self) -> dict:
-        """Get authorization headers."""
+        """Get authorization headers.
+        """
         return {"Authorization": f"Bearer {self.jwt}"}
 
     async def _get_gateway_domain(self) -> str:
-        """Fetch the dedicated gateway domain from Pinata API."""
+        """Fetch the dedicated gateway domain from Pinata API.
+        """
         if not hasattr(self, "_gateway_domain") or self._gateway_domain is None:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
@@ -105,7 +110,8 @@ class PinataClient:
         return self._gateway_domain
 
     async def _get_signed_url(self, cid: str, expires: int = 300) -> str:
-        """Get a signed download URL for a private file."""
+        """Get a signed download URL for a private file.
+        """
         import time
 
         gateway = await self._get_gateway_domain()

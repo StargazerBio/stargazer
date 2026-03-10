@@ -1,5 +1,5 @@
 """
-GATK Best Practices: Data Pre-processing for Variant Discovery
+# GATK Best Practices: Data Pre-processing for Variant Discovery
 
 Implements:
 1. Reference preparation — FASTA index, sequence dictionary, BWA index
@@ -7,6 +7,8 @@ Implements:
 
 References:
     - https://gatk.broadinstitute.org/hc/en-us/articles/360035535912-Data-pre-processing-for-variant-discovery
+
+spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
 from stargazer.config import gatk_env

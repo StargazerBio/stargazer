@@ -1,7 +1,9 @@
 """
-GenomicsDBImport task for Stargazer.
+# GenomicsDBImport task for Stargazer.
 
 Import VCFs to GenomicsDB for efficient joint genotyping of large cohorts.
+
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 from pathlib import Path

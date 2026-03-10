@@ -94,6 +94,36 @@ Architecture docs live in `docs/architecture/` and describe WHAT the system does
 - Modifying metadata schemas
 - Altering system interactions
 
+## Keeping Docs in Sync
+
+Every module in `src/` carries a `spec:` line at the bottom of its docstring pointing to its architecture doc. Use this to drive doc reviews:
+
+### When reviewing a PR or set of commits
+
+1. Scan the diff for changed files under `src/`
+2. For each changed module, read its `spec:` line to identify the affected doc
+3. Read the current doc and compare it against the changed code
+4. Update the doc if any of the following changed:
+   - A type's fields, keyvalues, or provenance links
+   - A task's inputs, outputs, or tool invocation
+   - A workflow's pipeline steps or assembly logic
+   - A storage client's interface or mode resolution
+   - The MCP server's tools, resources, or registry behaviour
+
+### When writing new code
+
+1. Add a `# Heading` as the first line of the module docstring
+2. Add a `spec:` link at the bottom of the module docstring using the mapping in AGENTS.md — `spec: [docs/architecture/X.md](../architecture/X.md)`
+3. Do **not** add `spec:` lines to class or function docstrings
+4. After implementation, re-read the linked doc and update any stale descriptions
+5. If a new module doesn't fit an existing spec, create the spec first, then write the code
+
+### What warrants a doc update vs. not
+
+**Update the doc** when the public contract changes: new fields, renamed parameters, altered behaviour, added/removed pipeline steps.
+
+**No update needed** for internal refactors, performance changes, or bug fixes that don't alter observable behaviour or interfaces.
+
 ### Archive a Plan When:
 - Implementation is complete
 - Move to `.opencode/plans/archive/` with completion date

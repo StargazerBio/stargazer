@@ -1,5 +1,7 @@
 """
-Alignment asset types for Stargazer.
+# Alignment asset types for Stargazer.
+
+spec: [docs/architecture/types.md](../architecture/types.md)
 """
 
 from dataclasses import dataclass
