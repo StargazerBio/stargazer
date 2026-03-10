@@ -28,7 +28,7 @@ nav = [
 ]
 
 [project.theme]
-logo = "assets/8-bit_stargazer_no-bg_32x32.png"
+logo = "assets/8-bit_stargazer_no-bg.png"
 favicon = "assets/8-bit_stargazer_no-bg_32x32.png"
 
 [[project.theme.palette]]

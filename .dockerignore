@@ -1,0 +1,6 @@
+tests/
+docs/
+scratch/
+wt/
+.opencode/
+*.md
