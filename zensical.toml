@@ -21,7 +21,10 @@ nav = [
     { "Writing a Workflow" = "guides/writing-a-workflow.md" },
     { "Using the MCP Server" = "guides/mcp-server.md" },
   ]},
-  { "API Reference" = "reference/api.md" },
+  { "Reference" = [
+    { "Catalog" = "reference/catalog.md" },
+    { "API" = "reference/api.md" },
+  ]},
 ]
 
 [project.theme]

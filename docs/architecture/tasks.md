@@ -23,4 +23,4 @@ async def my_task(ref: Reference, aln: Alignment) -> Variants:
 
 ## Available Tasks
 
-{{ catalog }}
+See the [Catalog](../reference/catalog.md#tasks) for a complete list of registered tasks.

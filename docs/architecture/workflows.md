@@ -21,4 +21,4 @@ async def my_workflow(build: str, sample_id: str) -> Variants:
 
 ## Available Workflows
 
-{{ catalog }}
+See the [Catalog](../reference/catalog.md#workflows) for a complete list of registered workflows.

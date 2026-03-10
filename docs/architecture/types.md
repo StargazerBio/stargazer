@@ -65,7 +65,7 @@ Accessing a missing key returns the default derived from the annotation, or `Fal
 
 ## Asset Subclass Catalog
 
-{{ catalog }}
+See the [Catalog](../reference/catalog.md#asset-types) for a complete list of registered asset types.
 
 ## Companion Pattern
 
