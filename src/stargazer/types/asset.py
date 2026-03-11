@@ -4,14 +4,15 @@
 spec: [docs/architecture/types.md](../architecture/types.md)
 """
 
-import typing
-from dataclasses import dataclass, field
+import dataclasses
+import json
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, get_type_hints
 
 from typing_extensions import Self
 
-_MISSING = object()
+_BASE_FIELDS = frozenset(("cid", "path"))
 
 
 @dataclass
@@ -21,9 +22,9 @@ class Asset:
     Attributes:
         cid: Content identifier (CID) for the stored file
         path: Local filesystem path (set after download or upload)
-        keyvalues: Metadata key-value pairs for querying and routing
+        keyvalues: Arbitrary metadata dict for base Asset instances only
 
-    Subclasses declare typed field annotations directly:
+    Subclasses declare typed fields as normal dataclass attributes:
 
         @dataclass
         class Alignment(Asset):
@@ -31,126 +32,91 @@ class Asset:
             sample_id: str = ""
             duplicates_marked: bool = False
 
-    ``__init_subclass__`` auto-derives ``_field_types`` (non-str fields) and
-    ``_field_defaults`` (all defaults) from the annotations. The ``_field_types``
-    and ``_field_defaults`` ClassVars on the base class are empty-dict defaults
-    inherited by subclasses that declare no fields.
+    Fields are plain Python attributes. ``to_keyvalues()`` serializes them to
+    ``dict[str, str]`` at storage boundaries; ``from_keyvalues()`` reconstructs
+    from storage. ``str`` fields pass through directly; all other types use
+    ``json.dumps`` / ``json.loads``.
     """
 
     _registry: ClassVar[dict[str, type["Asset"]]] = {}
-    _field_types: ClassVar[dict[str, type]] = {}
-    _field_defaults: ClassVar[dict[str, Any]] = {}
-    _own_attrs: ClassVar[frozenset] = frozenset(("cid", "path", "keyvalues"))
     _asset_key: ClassVar[str] = ""
 
     cid: str = ""
     path: Path | None = None
-    keyvalues: dict[str, str] = field(default_factory=dict)
 
     def __init_subclass__(cls, **kwargs):
-        """Register subclass in the asset registry and derive field metadata."""
+        """Register subclass in the asset registry."""
         super().__init_subclass__(**kwargs)
         ak = cls.__dict__.get("_asset_key", "")
         if ak:
             Asset._registry[ak] = cls
 
-        field_types: dict[str, type] = {}
-        field_defaults: dict[str, Any] = {}
-        for name, annotation in cls.__dict__.get("__annotations__", {}).items():
-            if name.startswith("_"):
-                continue
-            if typing.get_origin(annotation) is ClassVar:
-                continue
-            if annotation is not str:
-                field_types[name] = annotation
-            default = cls.__dict__.get(name, _MISSING)
-            if default is not _MISSING:
-                field_defaults[name] = default
-
-        if field_types:
-            cls._field_types = field_types
-        if field_defaults:
-            cls._field_defaults = field_defaults
-
-    def __post_init__(self):
-        """Seed the 'asset' keyvalue from _asset_key on construction."""
-        if self._asset_key:
-            self.keyvalues.setdefault("asset", self._asset_key)
-
-    def __getattribute__(self, name: str) -> Any:
-        """Read declared fields from keyvalues with type coercion; delegate everything else."""
-        # Fast-path: internal/private attrs skip all keyvalues logic
-        if name.startswith("_"):
-            return object.__getattribute__(self, name)
-
-        # Get the field registries without triggering recursion
-        field_defaults = object.__getattribute__(self, "_field_defaults")
-        field_types = object.__getattribute__(self, "_field_types")
-
-        # Only intercept declared fields; let everything else through
-        if name in field_defaults or name in field_types:
-            try:
-                kv = object.__getattribute__(self, "keyvalues")
-            except AttributeError:
-                return object.__getattribute__(self, name)
-            val = kv.get(name)
-            ftype = field_types.get(name)
-            if val is None:
-                if ftype is bool:
-                    return field_defaults.get(name, False)
-                return field_defaults.get(name)
-            if ftype is bool:
-                return val == "true"
-            if ftype is int:
-                return int(val)
-            if ftype is list:
-                return val.split(",") if val else None
-            return val
-
-        return object.__getattribute__(self, name)
-
-    def __getattr__(self, name: str) -> Any:
-        """Fall back to keyvalues lookup for undeclared attributes on base Asset."""
-        # Fallback for undeclared keys on base Asset instances
-        kv = self.__dict__.get("keyvalues", {})
-        return kv.get(name)
-
     def __setattr__(self, name: str, value: Any) -> None:
-        """Coerce and store declared fields into keyvalues; bypass for core attrs."""
-        if name in self._own_attrs or name.startswith("_"):
-            super().__setattr__(name, value)
-            return
-        # Enforce allowed keys — only on subclasses that declare _asset_key
-        if self._asset_key:
-            allowed = (
-                frozenset(self._field_defaults)
-                | frozenset(self._field_types)
-                | {"asset"}
-            )
+        """Enforce declared fields on typed subclasses; pass through on base Asset."""
+        if self._asset_key and not name.startswith("_") and name not in _BASE_FIELDS:
+            allowed = {f.name for f in dataclasses.fields(type(self))} - _BASE_FIELDS
             if name not in allowed:
-                raise ValueError(
-                    f"{type(self).__name__} does not allow keyvalue '{name}'. "
+                raise AttributeError(
+                    f"{type(self).__name__} has no field '{name}'. "
                     f"Allowed: {sorted(allowed)}"
                 )
-        # Coerce and store in keyvalues
-        ftype = self._field_types.get(name)
-        if ftype is bool:
-            # Preserve already-serialized strings; coerce bool/other by truthiness
-            if isinstance(value, str):
-                self.keyvalues[name] = "true" if value == "true" else "false"
-            else:
-                self.keyvalues[name] = "true" if value else "false"
-        elif isinstance(value, bool):
-            self.keyvalues[name] = "true" if value else "false"
-        elif ftype is list or isinstance(value, list):
-            if value is None:
-                self.keyvalues[name] = ""
-            elif isinstance(value, list):
-                self.keyvalues[name] = ",".join(value)
-            else:
-                self.keyvalues[name] = str(value)
-        else:
-            self.keyvalues[name] = str(value)
+        super().__setattr__(name, value)
+
+    def to_keyvalues(self) -> dict[str, str]:
+        """Serialize to storage format.
+
+        str fields pass through as-is; all other types are serialized with
+        json.dumps. Base Asset instances return their keyvalues dict directly.
+        """
+        if not self._asset_key:
+            return {}
+        hints = get_type_hints(type(self))
+        result: dict[str, str] = {"asset": self._asset_key}
+        for f in dataclasses.fields(self):
+            if f.name in _BASE_FIELDS:
+                continue
+            val = getattr(self, f.name)
+            result[f.name] = val if hints.get(f.name) is str else json.dumps(val)
+        return result
+
+    @classmethod
+    def from_keyvalues(
+        cls, kv: dict[str, str], cid: str = "", path: Path | None = None
+    ) -> "Asset":
+        """Reconstruct from a storage keyvalues dict.
+
+        str fields are assigned directly; all other types are deserialized with
+        json.loads. Base Asset receives keyvalues as-is.
+        """
+        if not cls._asset_key:
+            return cls(cid=cid, path=path)
+        hints = get_type_hints(cls)
+        kwargs = {}
+        for f in dataclasses.fields(cls):
+            if f.name in _BASE_FIELDS:
+                continue
+            if f.name in kv:
+                kwargs[f.name] = (
+                    kv[f.name] if hints.get(f.name) is str else json.loads(kv[f.name])
+                )
+        return cls(cid=cid, path=path, **kwargs)
+
+    def to_dict(self) -> dict:
+        """Serialize to a JSON-friendly dict."""
+        return {
+            "cid": self.cid,
+            "path": str(self.path) if self.path else None,
+            "keyvalues": self.to_keyvalues(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Self:
+        """Reconstruct from a serialized dict."""
+        return cls.from_keyvalues(
+            data.get("keyvalues", {}),
+            cid=data.get("cid", ""),
+            path=Path(data["path"]) if data.get("path") else None,
+        )
 
     async def fetch(self) -> None:
         """Download this asset and all its companions from storage.
@@ -159,7 +125,7 @@ class Asset:
         via ``{_asset_key}_cid`` to auto-download companions (e.g. indices,
         mate reads).
         """
-        import stargazer.utils.storage as _storage
+        import stargazer.utils.local_storage as _storage
 
         await _storage.default_client.download(self)
 
@@ -169,45 +135,14 @@ class Asset:
                 await _storage.default_client.download(a)
 
     async def update(self, path: Path, **kwargs) -> None:
-        """Upload file and set cid. Shared by all asset types.
-        """
-        from stargazer.utils.storage import default_client
+        """Upload file and set cid. Shared by all asset types."""
+        from stargazer.utils.local_storage import default_client
 
         for key, value in kwargs.items():
             if value is not None:
                 setattr(self, key, value)
         self.path = path
         await default_client.upload(self)
-
-    def to_dict(self) -> dict:
-        """Serialize to a JSON-friendly dict.
-        """
-        return {
-            "cid": self.cid,
-            "path": str(self.path) if self.path else None,
-            "keyvalues": self.keyvalues,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict) -> Self:
-        """Reconstruct from a serialized dict.
-        """
-        kv = data.get("keyvalues", {})
-        if cls._asset_key:
-            # Subclass: unpack declared fields as kwargs; keyvalues rebuilt by __setattr__
-            declared = set(cls._field_defaults) | set(cls._field_types)
-            field_kwargs = {k: v for k, v in kv.items() if k in declared}
-            return cls(
-                cid=data.get("cid", ""),
-                path=Path(data["path"]) if data.get("path") else None,
-                **field_kwargs,
-            )
-        # Base Asset: pass keyvalues directly
-        return cls(
-            cid=data.get("cid", ""),
-            path=Path(data["path"]) if data.get("path") else None,
-            keyvalues=dict(kv),
-        )
 
 
 async def assemble(**filters: Any) -> list["Asset"]:
@@ -230,15 +165,15 @@ async def assemble(**filters: Any) -> list["Asset"]:
         assets = await assemble(sample_id="NA12878", asset=["r1", "r2"])
         r1 = next(a for a in assets if isinstance(a, R1))
     """
-    import stargazer.utils.storage as _storage
+    import stargazer.utils.local_storage as _storage
     from stargazer.types import specialize
     from stargazer.utils.query import generate_query_combinations
 
     query_combinations = generate_query_combinations(base_query={}, filters=filters)
 
-    seen: dict[str, Asset] = {}
+    seen: dict[str, dict] = {}
     for query in query_combinations:
-        for raw in await _storage.default_client.query(query):
-            seen[raw.cid] = raw
+        for record in await _storage.default_client.query(query):
+            seen[record["cid"]] = record
 
-    return [specialize(a) for a in seen.values()]
+    return [specialize(r) for r in seen.values()]

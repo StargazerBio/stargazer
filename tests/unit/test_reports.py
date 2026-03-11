@@ -9,16 +9,14 @@ from stargazer.types import ASSET_REGISTRY
 
 class TestBQSRReport:
     def test_asset_keyvalue(self):
-        r = BQSRReport()
-        assert r.keyvalues["asset"] == "bqsr_report"
+        assert BQSRReport()._asset_key == "bqsr_report"
 
     def test_is_asset(self):
         assert isinstance(BQSRReport(), Asset)
 
-    def test_sample_id_via_keyvalues(self):
+    def test_sample_id_via_attr(self):
         r = BQSRReport()
         r.sample_id = "NA12829"
-        assert r.keyvalues["sample_id"] == "NA12829"
         assert r.sample_id == "NA12829"
 
     def test_sample_id_default(self):
@@ -33,13 +31,9 @@ class TestBQSRReport:
         r = BQSRReport(
             cid="Qm" + "a" * 44,
             path=Path("/tmp/sample_bqsr.table"),
-            keyvalues={
-                "asset": "bqsr_report",
-                "sample_id": "NA12829",
-            },
+            sample_id="NA12829",
         )
-        data = r.to_dict()
-        restored = BQSRReport.from_dict(data)
+        restored = BQSRReport.from_dict(r.to_dict())
         assert restored.cid == r.cid
         assert restored.path == r.path
-        assert restored.keyvalues == r.keyvalues
+        assert restored.sample_id == r.sample_id

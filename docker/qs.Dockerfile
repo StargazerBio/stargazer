@@ -7,6 +7,7 @@ RUN apt-get update \
     curl \
     wget \
     unzip \
+    samtools \
     openjdk-17-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 

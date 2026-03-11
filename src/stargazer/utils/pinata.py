@@ -1,18 +1,20 @@
 """
 ### Pinata API v3 client for IPFS file storage.
 
-Provides async interface for:
+Provides async interface for authenticated Pinata operations:
 - Uploading files with keyvalue metadata
-- Downloading files via IPFS gateway with local caching
+- Downloading private files via signed gateway URLs
 - Querying files by keyvalue pairs
 - Deleting files
 
-spec: [docs/architecture/modes.md](../architecture/modes.md)
+Used as a remote backend by LocalStorageClient when PINATA_JWT is available.
+
+spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
 
-import os
 import json
-import shutil
+import os
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -20,30 +22,30 @@ import aiohttp
 import aiofiles
 
 from stargazer.types.asset import Asset
+from stargazer.config import PINATA_JWT, PINATA_VISIBILITY
 
 
 class PinataClient:
-    """
-    Async client for Pinata API v3.
+    """Async client for Pinata API v3.
 
-    Used when STARGAZER_MODE=local and PINATA_JWT is available.
-    Handles uploads to IPFS via Pinata, downloads via IPFS gateways,
-    and metadata queries against the Pinata API.
+    Handles authenticated operations against the Pinata API: uploads,
+    private downloads via signed URLs, metadata queries, and deletions.
+
+    This is a pure remote transport — caching is handled by LocalStorageClient.
+
+    PINATA_VISIBILITY controls upload network and query/download behavior:
+    - "private": uploads as private, downloads via signed URLs, queries /files/private
+    - "public": uploads as public, downloads via public gateway (handled by
+      LocalStorageClient), queries /files/public
+
+    If JWT is unset, only public downloads are possible (via LocalStorageClient's
+    public gateway fallback).
 
     Usage:
         client = PinataClient()
-
-        # Upload with metadata
         comp = Asset(path=Path("data.bam"), keyvalues={"type": "alignment"})
         await client.upload(comp)  # sets comp.cid
-
-        # Query by keyvalues
         files = await client.query({"type": "alignment", "sample": "NA12878"})
-
-        # Download
-        await client.download(comp)  # sets comp.path
-
-        # Delete file
         await client.delete(comp)
     """
 
@@ -53,30 +55,20 @@ class PinataClient:
     def __init__(
         self,
         jwt: Optional[str] = None,
-        gateway: Optional[str] = None,
-        local_dir: Optional[Path] = None,
+        visibility: Optional[str] = None,
     ):
-        """
-        Initialize Pinata client.
+        """Initialize Pinata client.
 
         Args:
-            jwt: Pinata JWT token (defaults to PINATA_JWT env var)
-            gateway: IPFS gateway URL (defaults to gateway.pinata.cloud)
-            local_dir: Local directory for download caching
+            jwt: Pinata JWT token (defaults to PINATA_JWT from config)
+            visibility: "public" or "private" (defaults to PINATA_VISIBILITY from config)
         """
-        self._jwt = jwt or os.environ.get("PINATA_JWT")
-        self.gateway = gateway or os.environ.get(
-            "PINATA_GATEWAY", "https://gateway.pinata.cloud"
-        )
-        self.local_dir = local_dir or Path(
-            os.environ.get("STARGAZER_LOCAL", str(Path.home() / ".stargazer" / "local"))
-        )
-        self.local_dir.mkdir(parents=True, exist_ok=True)
+        self._jwt = jwt or os.environ.get("PINATA_JWT") or None
+        self.visibility = visibility or PINATA_VISIBILITY
 
     @property
     def jwt(self) -> str:
-        """Get JWT token, raising error if not set.
-        """
+        """Get JWT token, raising error if not set."""
         if not self._jwt:
             raise ValueError(
                 "PINATA_JWT not set. Provide jwt= argument or "
@@ -85,13 +77,11 @@ class PinataClient:
         return self._jwt
 
     def _headers(self) -> dict:
-        """Get authorization headers.
-        """
+        """Get authorization headers."""
         return {"Authorization": f"Bearer {self.jwt}"}
 
     async def _get_gateway_domain(self) -> str:
-        """Fetch the dedicated gateway domain from Pinata API.
-        """
+        """Fetch the dedicated gateway domain from Pinata API."""
         if not hasattr(self, "_gateway_domain") or self._gateway_domain is None:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
@@ -110,10 +100,7 @@ class PinataClient:
         return self._gateway_domain
 
     async def _get_signed_url(self, cid: str, expires: int = 300) -> str:
-        """Get a signed download URL for a private file.
-        """
-        import time
-
+        """Get a signed download URL for a private file."""
         gateway = await self._get_gateway_domain()
         payload = {
             "url": f"{gateway}/files/{cid}",
@@ -132,8 +119,7 @@ class PinataClient:
                 return data["data"]
 
     async def upload(self, component: Asset) -> None:
-        """
-        Upload a file to IPFS via Pinata. Sets component.cid.
+        """Upload a file to IPFS via Pinata. Sets component.cid.
 
         Args:
             component: Asset with path and keyvalues set
@@ -148,10 +134,11 @@ class PinataClient:
             data = aiohttp.FormData()
             data.add_field("file", open(path, "rb"), filename=path.name)
             data.add_field("name", path.name)
-            data.add_field("network", "private")
+            data.add_field("network", self.visibility)
 
-            if component.keyvalues:
-                data.add_field("keyvalues", json.dumps(component.keyvalues))
+            kv = component.to_keyvalues()
+            if kv:
+                data.add_field("keyvalues", json.dumps(kv))
 
             async with session.post(
                 url, headers=self._headers(), data=data
@@ -161,57 +148,39 @@ class PinataClient:
                 data_obj = result.get("data", result)
                 component.cid = data_obj["cid"]
 
-    async def download(self, component: Asset, dest: Optional[Path] = None) -> None:
-        """
-        Download a file from IPFS and set component.path.
-        Uses local cache to avoid re-downloading.
+    async def download_to(self, cid: str, dest: Path) -> None:
+        """Download a file to dest. Uses signed URL for private, raises for public.
+
+        Public downloads are handled by LocalStorageClient's public gateway
+        fallback, so this method is only called for private visibility.
 
         Args:
-            component: Asset with cid set
-            dest: Optional destination path (otherwise uses cache)
+            cid: Content identifier
+            dest: Destination path to write to
         """
-        # Skip download if path is already set and file exists
-        if component.path and component.path.exists():
-            return
+        if self.visibility == "public":
+            raise ValueError(
+                "Public downloads should use the public IPFS gateway, "
+                "not signed URLs. This is a bug — LocalStorageClient "
+                "should have handled this download."
+            )
 
-        cid = component.cid
-
-        # Check local dir first
-        cache_key = cid.replace("/", "_")
-        cache_path = self.local_dir / cache_key
-
-        if cache_path.exists():
-            if dest:
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy(cache_path, dest)
-                component.path = dest
-            else:
-                component.path = cache_path
-            return
-
-        # Private files: get a signed URL via Pinata API
         download_url = await self._get_signed_url(cid)
 
         async with aiohttp.ClientSession() as session:
             async with session.get(download_url) as response:
                 response.raise_for_status()
 
-                cache_path.parent.mkdir(parents=True, exist_ok=True)
-                async with aiofiles.open(cache_path, "wb") as f:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                async with aiofiles.open(dest, "wb") as f:
                     async for chunk in response.content.iter_chunked(8192):
                         await f.write(chunk)
 
-        if dest:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(cache_path, dest)
-            component.path = dest
-        else:
-            component.path = cache_path
+    async def query(self, keyvalues: dict[str, str]) -> list[dict]:
+        """Query files by keyvalue metadata from Pinata API.
 
-    async def query(self, keyvalues: dict[str, str]) -> list[Asset]:
-        """
-        Query files by keyvalue metadata from Pinata API.
-        Paginates through all results automatically.
+        Paginates through all results automatically. Queries the private or
+        public file endpoint based on visibility.
 
         Args:
             keyvalues: Metadata key-value pairs to filter by
@@ -219,7 +188,7 @@ class PinataClient:
         Returns:
             List of matching Asset objects
         """
-        url = f"{self.API_BASE}/files/private"
+        url = f"{self.API_BASE}/files/{self.visibility}"
         params: dict = {"pageLimit": 1000, "order": "DESC"}
 
         # Add metadata filters using the correct format: metadata[key]=value
@@ -227,7 +196,7 @@ class PinataClient:
             for key, value in keyvalues.items():
                 params[f"metadata[{key}]"] = value
 
-        results: list[Asset] = []
+        results: list[dict] = []
         async with aiohttp.ClientSession() as session:
             while True:
                 async with session.get(
@@ -238,10 +207,10 @@ class PinataClient:
 
                     for f in data.get("data", {}).get("files", []):
                         results.append(
-                            Asset(
-                                cid=f["cid"],
-                                keyvalues=f.get("keyvalues", {}),
-                            )
+                            {
+                                "cid": f["cid"],
+                                "keyvalues": f.get("keyvalues", {}),
+                            }
                         )
 
                     next_token = data.get("data", {}).get("next_page_token")
@@ -252,13 +221,12 @@ class PinataClient:
         return results
 
     async def delete(self, component: Asset) -> None:
-        """
-        Delete a file from Pinata by querying for its internal ID first.
+        """Delete a file from Pinata by querying for its internal ID first.
 
         Args:
             component: Asset with cid set
         """
-        url = f"{self.API_BASE}/files/private"
+        url = f"{self.API_BASE}/files/{self.visibility}"
         params = {"cid": component.cid}
 
         async with aiohttp.ClientSession() as session:
@@ -273,7 +241,7 @@ class PinataClient:
                 file_id = files[0]["id"]
 
             async with session.delete(
-                f"{self.API_BASE}/files/private/{file_id}",
+                f"{self.API_BASE}/files/{self.visibility}/{file_id}",
                 headers=self._headers(),
             ) as response:
                 response.raise_for_status()

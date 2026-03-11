@@ -31,20 +31,20 @@ from stargazer.types.variants import (
 ASSET_REGISTRY: dict[str, type[Asset]] = Asset._registry
 
 
-def specialize(asset: Asset) -> Asset:
-    """Convert a base Asset to its derived type based on the 'asset' keyvalue.
+def specialize(record: dict) -> Asset:
+    """Construct a typed Asset subclass from a raw storage record.
 
-    Looks up the asset key in the registry and constructs the appropriate
-    subclass, preserving cid, path, and all keyvalues. Returns the original
-    instance unchanged if no matching derived type is found.
+    Looks up the 'asset' key in the record's keyvalues against the registry
+    and returns the appropriate subclass instance. Returns a base Asset if
+    no matching type is found.
     """
-    key = asset.keyvalues.get("asset", "")
-    cls = ASSET_REGISTRY.get(key)
+    kv = record.get("keyvalues", {})
+    cid = record.get("cid", "")
+    path = record.get("path")
+    cls = ASSET_REGISTRY.get(kv.get("asset", ""))
     if cls is None:
-        return asset
-    declared = set(cls._field_defaults) | set(cls._field_types)
-    field_kwargs = {k: v for k, v in asset.keyvalues.items() if k in declared}
-    return cls(cid=asset.cid, path=asset.path, **field_kwargs)
+        return Asset(cid=cid, path=path)
+    return cls.from_keyvalues(kv, cid=cid, path=path)
 
 
 __all__ = [

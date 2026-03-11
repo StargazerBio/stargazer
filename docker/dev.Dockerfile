@@ -15,6 +15,7 @@ RUN apt-get update \
     unzip \
     python3 \
     python3-pip \
+    samtools \
     openjdk-17-jre-headless \
     zsh \
     && ln -s /usr/bin/python3 /usr/bin/python \
@@ -36,7 +37,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Claude Code
-RUN npm install -g @anthropic-ai/claude-code
+RUN curl -fsSL https://claude.ai/install.sh | bash
 
 # Install OpenCode
 RUN npm install -g opencode-ai

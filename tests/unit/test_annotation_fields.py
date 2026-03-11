@@ -1,5 +1,5 @@
 """
-Tests for annotation-based field declarations on Asset subclasses.
+Tests for field declarations and storage serialization on Asset subclasses.
 """
 
 import pytest
@@ -12,44 +12,25 @@ from stargazer.types.variants import Variants
 
 
 # ---------------------------------------------------------------------------
-# Auto-derivation from annotations
+# Normal attribute access
 # ---------------------------------------------------------------------------
 
 
-def test_r1_field_defaults_all_str():
-    assert R1._field_defaults == {
-        "sample_id": "",
-        "mate_cid": "",
-        "sequencing_platform": "",
-    }
+def test_r1_field_defaults():
+    r1 = R1()
+    assert r1.sample_id == ""
+    assert r1.mate_cid == ""
+    assert r1.sequencing_platform == ""
 
 
-def test_r1_field_types_empty():
-    # All str fields → _field_types should not include them
-    assert R1._field_types == {}
+def test_alignment_bool_field_default():
+    a = Alignment()
+    assert a.duplicates_marked is False
+    assert a.bqsr_applied is False
 
 
-def test_alignment_field_types():
-    assert Alignment._field_types == {"duplicates_marked": bool, "bqsr_applied": bool}
-
-
-def test_alignment_field_defaults_all_fields():
-    fd = Alignment._field_defaults
-    expected_keys = {
-        "sample_id",
-        "format",
-        "sorted",
-        "duplicates_marked",
-        "bqsr_applied",
-        "tool",
-        "reference_cid",
-        "r1_cid",
-    }
-    assert set(fd.keys()) == expected_keys
-
-
-def test_variants_field_types():
-    assert Variants._field_types == {"sample_count": int, "source_samples": list}
+def test_variants_int_field_default():
+    assert Variants().sample_count == 0
 
 
 # ---------------------------------------------------------------------------
@@ -59,30 +40,32 @@ def test_variants_field_types():
 
 def test_unknown_key_raises_on_subclass():
     r1 = R1()
-    with pytest.raises(ValueError, match="does not allow keyvalue"):
+    with pytest.raises(AttributeError, match="has no field"):
         r1.unknown = "x"
 
 
 def test_base_asset_allows_any_key():
-    a = Asset(keyvalues={"anything": "goes"})
-    # no error — base Asset is unrestricted
+    a = Asset()
     a.other_key = "also fine"
 
 
 def test_allowed_key_works():
     a = Alignment()
     a.tool = "bwa"
-    assert a.keyvalues["tool"] == "bwa"
+    assert a.tool == "bwa"
 
 
 # ---------------------------------------------------------------------------
-# Coercion
+# to_keyvalues serialization
 # ---------------------------------------------------------------------------
 
 
-def test_bool_true_coercion():
-    a = Alignment(duplicates_marked=True)
-    assert a.keyvalues["duplicates_marked"] == "true"
+def test_bool_true_serialized():
+    assert Alignment(duplicates_marked=True).to_keyvalues()["duplicates_marked"] == "true"
+
+
+def test_bool_false_serialized():
+    assert Alignment(duplicates_marked=False).to_keyvalues()["duplicates_marked"] == "false"
 
 
 def test_bool_read_back():
@@ -90,46 +73,28 @@ def test_bool_read_back():
     assert a.duplicates_marked is True
 
 
-def test_bool_false_coercion():
-    a = Alignment(duplicates_marked=False)
-    assert a.keyvalues["duplicates_marked"] == "false"
-
-
-def test_int_coercion():
-    v = Variants(sample_count=3)
-    assert v.keyvalues["sample_count"] == "3"
+def test_int_serialized():
+    assert Variants(sample_count=3).to_keyvalues()["sample_count"] == "3"
 
 
 def test_int_read_back():
-    v = Variants(sample_count=3)
-    assert v.sample_count == 3
+    assert Variants(sample_count=3).sample_count == 3
 
 
-def test_list_none_coercion():
-    v = Variants(source_samples=None)
-    assert v.keyvalues["source_samples"] == ""
+def test_list_serialized():
+    assert Variants(source_samples=["A", "B"]).to_keyvalues()["source_samples"] == '["A", "B"]'
 
 
-def test_list_coercion():
-    v = Variants(source_samples=["A", "B"])
-    assert v.keyvalues["source_samples"] == "A,B"
+def test_list_read_back():
+    assert Variants(source_samples=["A", "B"]).source_samples == ["A", "B"]
 
 
-# ---------------------------------------------------------------------------
-# Construction
-# ---------------------------------------------------------------------------
+def test_asset_key_attr():
+    assert R1()._asset_key == "r1"
 
 
-def test_r1_kwarg_written_to_keyvalues():
-    assert R1(sample_id="NA12878").keyvalues["sample_id"] == "NA12878"
-
-
-def test_r1_kwarg_readable_as_attr():
+def test_str_field_attr():
     assert R1(sample_id="NA12878").sample_id == "NA12878"
-
-
-def test_r1_asset_keyvalue_auto_set():
-    assert R1().keyvalues["asset"] == "r1"
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +107,11 @@ def test_r1_round_trip():
     assert R1.from_dict(r1.to_dict()).sample_id == "NA12878"
 
 
+def test_alignment_bool_round_trip():
+    a = Alignment(duplicates_marked=True)
+    assert Alignment.from_dict(a.to_dict()).duplicates_marked is True
+
+
 def test_specialize_preserves_fields():
-    a = Asset(keyvalues={"asset": "r1", "sample_id": "NA12878"})
-    s = specialize(a)
+    s = specialize({"cid": "", "keyvalues": {"asset": "r1", "sample_id": "NA12878"}})
     assert s.sample_id == "NA12878"

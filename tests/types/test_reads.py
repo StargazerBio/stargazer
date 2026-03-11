@@ -5,13 +5,14 @@ Tests for R1 and R2 read asset types.
 import pytest
 from conftest import FIXTURES_DIR
 
+from stargazer.types import specialize
 from stargazer.types.reads import R1, R2
 import stargazer.utils.local_storage as _storage_mod
 
 
 @pytest.mark.asyncio
 async def test_reads_fetch(fixtures_db):
-    """Test download() resolves R1 and R2 paths from CIDs via TinyDB."""
+    """Test query + specialize resolves R1 and R2 paths from TinyDB."""
     [r1_r] = await _storage_mod.default_client.query(
         {"asset": "r1", "sample_id": "NA12829"}
     )
@@ -19,14 +20,13 @@ async def test_reads_fetch(fixtures_db):
         {"asset": "r2", "sample_id": "NA12829"}
     )
 
-    # No path set — download() must resolve via TinyDB
-    await _storage_mod.default_client.download(r1_r)
-    await _storage_mod.default_client.download(r2_r)
+    r1 = specialize(r1_r)
+    r2 = specialize(r2_r)
 
-    assert r1_r.path is not None
-    assert r1_r.path.exists()
-    assert r2_r.path is not None
-    assert r2_r.path.exists()
+    assert r1.path is not None
+    assert r1.path.exists()
+    assert r2.path is not None
+    assert r2.path.exists()
 
 
 @pytest.mark.asyncio
@@ -60,21 +60,19 @@ async def test_reads_update_components():
     r2 = R2()
     await r2.update(r2_fixture, sample_id="NA12829", sequencing_platform="ILLUMINA")
 
-    assert r1.keyvalues.get("asset") == "r1"
-    assert r1.keyvalues.get("sample_id") == "NA12829"
-    assert r1.keyvalues.get("sequencing_platform") == "ILLUMINA"
+    assert r1.sample_id == "NA12829"
+    assert r1.sequencing_platform == "ILLUMINA"
     assert r1.cid != ""
 
-    assert r2.keyvalues.get("asset") == "r2"
-    assert r2.keyvalues.get("sample_id") == "NA12829"
-    assert r2.keyvalues.get("sequencing_platform") == "ILLUMINA"
+    assert r2.sample_id == "NA12829"
+    assert r2.sequencing_platform == "ILLUMINA"
     assert r2.cid != ""
 
 
 @pytest.mark.asyncio
 async def test_r1_path_not_cached():
     """Test that path is None when asset not fetched yet."""
-    r1 = R1(cid="QmTest", keyvalues={"asset": "r1"})
+    r1 = R1(cid="QmTest")
     assert r1.path is None
 
 
@@ -83,8 +81,7 @@ async def test_r2_is_optional():
     """Test that R2 is a standalone optional asset."""
     r1 = R1(sample_id="NA12829")
     assert r1.sample_id == "NA12829"
-    assert r1.keyvalues.get("asset") == "r1"
+    assert r1._asset_key == "r1"
 
-    # R2 can be absent — no container needed
     r2 = R2()
-    assert r2.keyvalues.get("asset") == "r2"
+    assert r2._asset_key == "r2"

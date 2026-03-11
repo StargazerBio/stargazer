@@ -8,6 +8,7 @@ import pytest
 from pathlib import Path
 
 import stargazer.utils.local_storage as _storage_mod
+from stargazer.types import specialize
 from stargazer.types.reference import (
     Reference,
     ReferenceIndex,
@@ -39,19 +40,15 @@ async def test_update_components_local_only():
         bwt = AlignerIndex()
         await bwt.update(test_bwt, build="GRCh38", aligner="bwa")
 
-        # All files have local CIDs after upload
         assert fasta.cid.startswith("local_")
         assert faidx.cid.startswith("local_")
         assert bwt.cid.startswith("local_")
 
-        # Keyvalues set correctly
-        assert fasta.keyvalues.get("asset") == "reference"
-        assert fasta.keyvalues.get("build") == "GRCh38"
-        assert faidx.keyvalues.get("asset") == "reference_index"
-        assert bwt.keyvalues.get("asset") == "aligner_index"
-        assert bwt.keyvalues.get("aligner") == "bwa"
+        assert fasta.build == "GRCh38"
+        assert faidx.build == "GRCh38"
+        assert bwt.build == "GRCh38"
+        assert bwt.aligner == "bwa"
 
-        # Files exist in cache under their original names
         cache_dir = _storage_mod.default_client.local_dir
         assert (cache_dir / test_fasta.name).exists()
         assert (cache_dir / test_faidx.name).exists()
@@ -64,7 +61,7 @@ async def test_update_components_local_only():
 
 @pytest.mark.asyncio
 async def test_reference_fetch(fixtures_db):
-    """Test individual asset download() resolves paths from CIDs via TinyDB."""
+    """Test query + specialize resolves paths from TinyDB."""
     [fasta_r] = await _storage_mod.default_client.query(
         {"asset": "reference", "build": "GRCh38"}
     )
@@ -72,14 +69,13 @@ async def test_reference_fetch(fixtures_db):
         {"asset": "reference_index", "build": "GRCh38"}
     )
 
-    # Download resolves paths
-    await _storage_mod.default_client.download(fasta_r)
-    await _storage_mod.default_client.download(faidx_r)
+    fasta = specialize(fasta_r)
+    faidx = specialize(faidx_r)
 
-    assert fasta_r.path is not None
-    assert fasta_r.path.exists()
-    assert faidx_r.path is not None
-    assert faidx_r.path.exists()
+    assert fasta.path is not None
+    assert fasta.path.exists()
+    assert faidx.path is not None
+    assert faidx.path.exists()
 
 
 @pytest.mark.asyncio
@@ -90,15 +86,14 @@ async def test_reference_aligner_index_query(fixtures_db):
     )
     assert len(results) > 0
     for r in results:
-        assert r.keyvalues.get("asset") == "aligner_index"
-        assert r.keyvalues.get("aligner") == "bwa"
+        assert r["keyvalues"].get("asset") == "aligner_index"
+        assert r["keyvalues"].get("aligner") == "bwa"
 
 
 @pytest.mark.asyncio
 async def test_sequence_dict_asset():
-    """Test SequenceDict asset keyvalues."""
+    """Test SequenceDict asset fields."""
     sd = SequenceDict()
     sd.build = "GRCh38"
-    assert sd.keyvalues.get("asset") == "sequence_dict"
+    assert sd._asset_key == "sequence_dict"
     assert sd.build == "GRCh38"
-

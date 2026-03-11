@@ -1,29 +1,44 @@
 """
 ### Local filesystem storage client for Stargazer.
 
-Stores files locally with TinyDB metadata indexing. No network access required.
+Always the primary storage client. Stores files locally with TinyDB metadata
+indexing and delegates to a remote backend (PinataClient) or the public IPFS
+gateway for cache misses.
 
-spec: [docs/architecture/modes.md](../architecture/modes.md)
+Also provides the module-level factory and singleton:
+- ``get_client()``: create a ``LocalStorageClient`` based on available config
+- ``default_client``: pre-built singleton used across the application
+
+spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
 
 import hashlib
-import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import aiohttp
+import aiofiles
 from tinydb import TinyDB, Query
 
+from stargazer.config import PINATA_GATEWAY, PINATA_JWT, STARGAZER_LOCAL
 from stargazer.types.asset import Asset
+from stargazer.utils.pinata import PinataClient
 
 
 class LocalStorageClient:
-    """
-    Local filesystem storage client.
+    """Local filesystem storage client with optional remote backend.
 
-    Stores files in a local directory and indexes metadata in TinyDB.
-    No network access or API credentials required.
+    Always handles caching and TinyDB metadata. Downloads follow this order:
+
+    1. Return if file already exists at component.path
+    2. Check local cache by CID
+    3. If remote backend (PinataClient) is attached, fetch via signed URL
+    4. Fall back to public IPFS gateway
+
+    When a PinataClient remote is attached, upload/query/delete delegate to it.
+    Without a remote, upload/query/delete operate locally only.
 
     Usage:
         client = LocalStorageClient()
@@ -36,18 +51,22 @@ class LocalStorageClient:
     def __init__(
         self,
         local_dir: Optional[Path] = None,
+        remote: Optional[PinataClient] = None,
+        public_gateway: Optional[str] = None,
     ):
-        """
-        Initialize local storage client.
+        """Initialize local storage client.
 
         Args:
-            local_dir: Local directory for file storage (defaults to STARGAZER_LOCAL env var
-                       or ~/.stargazer/local)
+            local_dir: Local directory for file storage (defaults to STARGAZER_LOCAL)
+            remote: Optional PinataClient for authenticated Pinata operations
+            public_gateway: Public IPFS gateway URL (defaults to PINATA_GATEWAY)
         """
-        self.local_dir = local_dir or Path(
-            os.environ.get("STARGAZER_LOCAL", str(Path.home() / ".stargazer" / "local"))
-        )
+        self.local_dir = local_dir or STARGAZER_LOCAL
         self.local_dir.mkdir(parents=True, exist_ok=True)
+        self.remote = remote
+        self.public_gateway = (
+            public_gateway if public_gateway is not None else PINATA_GATEWAY
+        )
 
         # TinyDB for local metadata storage (lazy initialized)
         self.local_db_path = self.local_dir / "stargazer_local.json"
@@ -72,12 +91,15 @@ class LocalStorageClient:
         return self._db
 
     async def upload(self, component: Asset) -> None:
-        """
-        Copy a file to local storage, index metadata in TinyDB, and set component.cid.
+        """Upload a file. Delegates to remote if attached, otherwise stores locally.
 
         Args:
             component: Asset with path and keyvalues set
         """
+        if self.remote:
+            await self.remote.upload(component)
+            return
+
         path = component.path
         if path is None:
             raise ValueError("component.path must be set before uploading")
@@ -98,7 +120,7 @@ class LocalStorageClient:
         self.db.upsert(
             {
                 "cid": cid,
-                "keyvalues": component.keyvalues,
+                "keyvalues": component.to_keyvalues(),
                 "created_at": now.isoformat(),
                 "rel_path": path.name,
             },
@@ -108,9 +130,7 @@ class LocalStorageClient:
         component.cid = cid
 
     async def download(self, component: Asset, dest: Optional[Path] = None) -> None:
-        """
-        Resolve a local file path and set component.path. For local storage, files are
-        already on disk.
+        """Download a file by CID. Checks cache, then remote, then public gateway.
 
         Args:
             component: Asset with cid set
@@ -121,73 +141,73 @@ class LocalStorageClient:
             return
 
         cid = component.cid
-        # Check local dir first (cache key)
+
+        # 1. Check local cache by CID
         cache_key = cid.replace("/", "_")
         cache_path = self.local_dir / cache_key
 
         if cache_path.exists():
-            if dest:
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy(cache_path, dest)
-                component.path = dest
-            else:
-                component.path = cache_path
+            self._resolve_dest(component, cache_path, dest)
             return
 
-        # Look up in TinyDB for path resolution
+        # 2. Check TinyDB for local_ CIDs
         if cid.startswith("local_"):
             File = Query()
             record = self.db.get(File.cid == cid)
             if record:
                 local_path = self.local_dir / record["rel_path"]
                 if local_path.exists():
-                    if dest:
-                        dest.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy(local_path, dest)
-                        component.path = dest
-                    else:
-                        component.path = local_path
+                    self._resolve_dest(component, local_path, dest)
                     return
             raise FileNotFoundError(
                 f"Local file {cid} not found in local directory or database."
             )
 
-        raise FileNotFoundError(
-            f"File {cid} not found in local storage. "
-            "Use a PinataClient for remote files."
-        )
+        # 3. Remote backend (signed URLs for private visibility)
+        if self.remote and self.remote.visibility == "private":
+            await self.remote.download_to(cid, cache_path)
+            self._resolve_dest(component, cache_path, dest)
+            return
 
-    async def query(self, keyvalues: dict[str, str]) -> list[Asset]:
-        """
-        Query files by keyvalue metadata from TinyDB.
+        # 4. Public IPFS gateway (default for public visibility or no remote)
+        await self._fetch_public(cid, cache_path)
+        self._resolve_dest(component, cache_path, dest)
+
+    async def query(self, keyvalues: dict[str, str]) -> list[dict]:
+        """Query files by keyvalue metadata. Delegates to remote if attached.
 
         Args:
             keyvalues: Metadata key-value pairs to filter by
 
         Returns:
-            List of matching Asset objects
+            List of raw storage records with 'cid', 'path', and 'keyvalues' keys
         """
+        if self.remote:
+            return await self.remote.query(keyvalues)
+
         results = []
         for record in self.db.all():
             record_kv = record.get("keyvalues", {})
             if all(record_kv.get(k) == v for k, v in keyvalues.items()):
-                cid = record["cid"]
                 results.append(
-                    Asset(
-                        cid=cid,
-                        path=self.local_dir / record["rel_path"],
-                        keyvalues=record.get("keyvalues", {}),
-                    )
+                    {
+                        "cid": record["cid"],
+                        "path": self.local_dir / record["rel_path"],
+                        "keyvalues": record_kv,
+                    }
                 )
         return results
 
     async def delete(self, component: Asset) -> None:
-        """
-        Delete a file from local storage and TinyDB.
+        """Delete a file. Delegates to remote if attached, otherwise deletes locally.
 
         Args:
             component: Asset with cid set
         """
+        if self.remote:
+            await self.remote.delete(component)
+            return
+
         File = Query()
         record = self.db.get(File.cid == component.cid)
         if record:
@@ -195,3 +215,51 @@ class LocalStorageClient:
             if local_path.exists():
                 local_path.unlink()
             self.db.remove(File.cid == component.cid)
+
+    def _resolve_dest(
+        self, component: Asset, source: Path, dest: Optional[Path]
+    ) -> None:
+        """Set component.path, optionally copying to dest."""
+        if dest:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(source, dest)
+            component.path = dest
+        else:
+            component.path = source
+
+    async def _fetch_public(self, cid: str, dest: Path) -> None:
+        """Fetch a file from the public IPFS gateway."""
+        url = f"{self.public_gateway}/ipfs/{cid}"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                response.raise_for_status()
+
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                async with aiofiles.open(dest, "wb") as f:
+                    async for chunk in response.content.iter_chunked(8192):
+                        await f.write(chunk)
+
+
+def get_client() -> "LocalStorageClient":
+    """Create a storage client based on available credentials.
+
+    Always returns a LocalStorageClient. When PINATA_JWT is available,
+    a PinataClient remote is attached for authenticated operations (upload,
+    query, delete, private downloads). Public IPFS gateway access is always
+    available for downloading public CIDs.
+
+    Resolution logic:
+        - PINATA_JWT set -> LocalStorageClient + PinataClient remote
+        - No JWT -> LocalStorageClient (public gateway only)
+
+    Returns:
+        A LocalStorageClient, optionally with a PinataClient remote
+    """
+    if PINATA_JWT:
+        return LocalStorageClient(remote=PinataClient())
+
+    return LocalStorageClient()
+
+
+default_client: LocalStorageClient = get_client()

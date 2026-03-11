@@ -3,72 +3,52 @@
 from pathlib import Path
 
 from stargazer.types.asset import Asset
+from stargazer.types.alignment import Alignment
 
 
 class TestAssetRoundtrip:
     def test_roundtrip_with_path(self):
-        original = Asset(
+        original = Alignment(
             cid="Qm" + "a" * 44,
-            path=Path("/tmp/test.fa"),
-            keyvalues={"asset": "reference", "build": "GRCh38"},
+            path=Path("/tmp/test.bam"),
+            sample_id="NA12878",
         )
-        data = original.to_dict()
-        restored = Asset.from_dict(data)
-
+        restored = Alignment.from_dict(original.to_dict())
         assert restored.cid == original.cid
         assert restored.path == original.path
-        assert restored.keyvalues == original.keyvalues
+        assert restored.sample_id == original.sample_id
 
     def test_roundtrip_without_path(self):
-        original = Asset(
-            cid="Qm" + "b" * 44,
-            keyvalues={"asset": "alignment", "sample_id": "NA12878"},
-        )
-        data = original.to_dict()
-        restored = Asset.from_dict(data)
-
+        original = Alignment(cid="Qm" + "b" * 44, sample_id="NA12878")
+        restored = Alignment.from_dict(original.to_dict())
         assert restored.cid == original.cid
         assert restored.path is None
-        assert restored.keyvalues == original.keyvalues
+        assert restored.sample_id == original.sample_id
 
     def test_roundtrip_empty(self):
         original = Asset()
-        data = original.to_dict()
-        restored = Asset.from_dict(data)
-
+        restored = Asset.from_dict(original.to_dict())
         assert restored.cid == ""
         assert restored.path is None
-        assert restored.keyvalues == {}
 
     def test_to_dict_structure(self):
-        asset = Asset(cid="abc123", path=Path("/tmp/file.bam"), keyvalues={"k": "v"})
+        asset = Alignment(cid="abc123", path=Path("/tmp/file.bam"), sample_id="S1")
         data = asset.to_dict()
-
         assert data["cid"] == "abc123"
         assert data["path"] == "/tmp/file.bam"
-        assert data["keyvalues"] == {"k": "v"}
+        assert data["keyvalues"]["sample_id"] == "S1"
+        assert data["keyvalues"]["asset"] == "alignment"
 
     def test_to_dict_none_path(self):
         asset = Asset(cid="abc123")
         data = asset.to_dict()
         assert data["path"] is None
 
-    def test_from_dict_missing_path(self):
-        data = {"cid": "xyz", "keyvalues": {"asset": "r1"}}
-        asset = Asset.from_dict(data)
-        assert asset.cid == "xyz"
-        assert asset.path is None
-        assert asset.keyvalues == {"asset": "r1"}
-
-    def test_from_dict_preserves_keyvalues(self):
-        data = {
-            "cid": "abc",
-            "path": None,
-            "keyvalues": {"asset": "variants", "caller": "deepvariant"},
-        }
-        asset = Asset.from_dict(data)
-        assert asset.keyvalues["asset"] == "variants"
-        assert asset.keyvalues["caller"] == "deepvariant"
+    def test_from_dict_round_trips_keyvalues(self):
+        original = Alignment(cid="xyz", sample_id="S1", duplicates_marked=True)
+        restored = Alignment.from_dict(original.to_dict())
+        assert restored.sample_id == "S1"
+        assert restored.duplicates_marked is True
 
 
 class TestAssetDefaults:
@@ -78,24 +58,13 @@ class TestAssetDefaults:
     def test_default_path_is_none(self):
         assert Asset().path is None
 
-    def test_default_keyvalues_is_empty_dict(self):
-        assert Asset().keyvalues == {}
-
-    def test_keyvalues_not_shared_between_instances(self):
-        """Verify each instance gets its own keyvalues dict."""
-        a = Asset()
-        b = Asset()
-        a.keyvalues["x"] = "1"
-        assert "x" not in b.keyvalues
-
-    def test_asset_key_auto_set_in_keyvalues(self):
-        """Concrete subclasses auto-set 'asset' keyvalue in __post_init__."""
+    def test_asset_key_in_to_keyvalues(self):
+        """Concrete subclasses include 'asset' key in to_keyvalues()."""
         from stargazer.types.reference import Reference
 
         ref = Reference()
-        assert ref.keyvalues.get("asset") == "reference"
+        assert ref.to_keyvalues().get("asset") == "reference"
 
-    def test_base_asset_no_auto_keyvalue(self):
-        """Base Asset with no _asset_key does not set 'asset' keyvalue."""
-        a = Asset()
-        assert "asset" not in a.keyvalues
+    def test_base_asset_to_keyvalues_empty(self):
+        """Base Asset with no _asset_key returns empty dict from to_keyvalues()."""
+        assert Asset().to_keyvalues() == {}

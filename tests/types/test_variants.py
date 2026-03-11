@@ -5,13 +5,14 @@ Tests for Variants asset types.
 import pytest
 from conftest import FIXTURES_DIR
 
+from stargazer.types import specialize
 from stargazer.types.variants import Variants, VariantsIndex, KnownSites
 import stargazer.utils.local_storage as _storage_mod
 
 
 @pytest.mark.asyncio
 async def test_variants_fetch(fixtures_db):
-    """Test download() resolves VCF and index paths from CIDs via TinyDB."""
+    """Test query + specialize resolves VCF and index paths from TinyDB."""
     [vcf_r] = await _storage_mod.default_client.query(
         {"asset": "variants", "sample_id": "NA12829"}
     )
@@ -19,14 +20,13 @@ async def test_variants_fetch(fixtures_db):
         {"asset": "variants_index", "sample_id": "NA12829"}
     )
 
-    # No path set — download() must resolve via TinyDB
-    await _storage_mod.default_client.download(vcf_r)
-    await _storage_mod.default_client.download(idx_r)
+    vcf = specialize(vcf_r)
+    idx = specialize(idx_r)
 
-    assert vcf_r.path is not None
-    assert vcf_r.path.exists()
-    assert idx_r.path is not None
-    assert idx_r.path.exists()
+    assert vcf.path is not None
+    assert vcf.path.exists()
+    assert idx.path is not None
+    assert idx.path.exists()
 
 
 @pytest.mark.asyncio
@@ -35,11 +35,7 @@ async def test_variants_get_vcf_path():
     vcf_path = FIXTURES_DIR / "NA12829_TP53.g.vcf"
     assert vcf_path.exists()
 
-    vcf = Variants(
-        cid="test",
-        path=vcf_path,
-        keyvalues={"asset": "variants", "sample_id": "NA12829"},
-    )
+    vcf = Variants(cid="test", path=vcf_path, sample_id="NA12829")
 
     assert vcf.path == vcf_path
     assert vcf.path.exists()
@@ -65,22 +61,20 @@ async def test_variants_update_components():
     tbi = VariantsIndex()
     await tbi.update(idx_fixture, sample_id="NA12829")
 
-    assert vcf.keyvalues.get("asset") == "variants"
-    assert vcf.keyvalues.get("sample_id") == "NA12829"
-    assert vcf.keyvalues.get("caller") == "haplotypecaller"
-    assert vcf.keyvalues.get("variant_type") == "gvcf"
-    assert vcf.keyvalues.get("build") == "GRCh38"
+    assert vcf.sample_id == "NA12829"
+    assert vcf.caller == "haplotypecaller"
+    assert vcf.variant_type == "gvcf"
+    assert vcf.build == "GRCh38"
     assert vcf.cid != ""
 
-    assert tbi.keyvalues.get("asset") == "variants_index"
-    assert tbi.keyvalues.get("sample_id") == "NA12829"
+    assert tbi.sample_id == "NA12829"
     assert tbi.cid != ""
 
 
 @pytest.mark.asyncio
 async def test_variants_path_not_cached():
     """Test that path is None when asset not fetched yet."""
-    vcf = Variants(cid="QmTest", keyvalues={"asset": "variants"})
+    vcf = Variants(cid="QmTest")
     assert vcf.path is None
 
 
@@ -127,16 +121,15 @@ async def test_known_sites_standalone(fixtures_db):
     )
     assert len(results) > 0
     for r in results:
-        assert r.keyvalues.get("asset") == "known_sites"
-        assert r.keyvalues.get("build") == "GRCh38"
-        # No sample_id on known sites — reference-scoped
-        assert "sample_id" not in r.keyvalues
+        assert r["keyvalues"].get("asset") == "known_sites"
+        assert r["keyvalues"].get("build") == "GRCh38"
+        assert "sample_id" not in r["keyvalues"]
 
 
 @pytest.mark.asyncio
 async def test_known_sites_asset():
-    """Test KnownSites asset keyvalues."""
+    """Test KnownSites asset fields."""
     ks = KnownSites()
     ks.build = "GRCh38"
-    assert ks.keyvalues.get("asset") == "known_sites"
+    assert ks._asset_key == "known_sites"
     assert ks.build == "GRCh38"
