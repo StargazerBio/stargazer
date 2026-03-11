@@ -13,6 +13,7 @@ spec: [docs/architecture/mcp-server.md](../architecture/mcp-server.md)
 """
 
 import json
+import os
 import types as _types
 from pathlib import Path
 from typing import Any, get_args, get_origin
@@ -20,12 +21,12 @@ from typing import Any, get_args, get_origin
 import flyte
 from mcp.server.fastmcp import FastMCP
 
+import stargazer.config  # ensure env var defaults are set  # noqa: F401
 from stargazer.marshal import marshal_output
 from stargazer.registry import TaskInfo, TaskRegistry
 from stargazer.types import ASSET_REGISTRY
 from stargazer.types.asset import Asset
 from stargazer.types.asset import assemble
-from stargazer.config import PINATA_JWT, PINATA_VISIBILITY
 from stargazer.utils.local_storage import default_client
 
 
@@ -264,8 +265,8 @@ async def show_config() -> str:
     tasks = _registry.list_tasks(category="task")
     workflows = _registry.list_tasks(category="workflow")
     config = {
-        "pinata_jwt": "set" if PINATA_JWT else "unset",
-        "pinata_visibility": PINATA_VISIBILITY,
+        "pinata_jwt": "set" if os.environ.get("PINATA_JWT") else "unset",
+        "pinata_visibility": os.environ["PINATA_VISIBILITY"],
         "local_dir": str(default_client.local_dir),
         "tasks": len(tasks),
         "workflows": len(workflows),

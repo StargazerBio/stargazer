@@ -21,8 +21,9 @@ from typing import Optional
 import aiohttp
 import aiofiles
 
+import stargazer.config  # ensure env var defaults are set  # noqa: F401
+
 from stargazer.types.asset import Asset
-from stargazer.config import PINATA_JWT, PINATA_VISIBILITY
 
 
 class PinataClient:
@@ -64,7 +65,7 @@ class PinataClient:
             visibility: "public" or "private" (defaults to PINATA_VISIBILITY from config)
         """
         self._jwt = jwt or os.environ.get("PINATA_JWT") or None
-        self.visibility = visibility or PINATA_VISIBILITY
+        self.visibility = visibility or os.environ["PINATA_VISIBILITY"]
 
     @property
     def jwt(self) -> str:

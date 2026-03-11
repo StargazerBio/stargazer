@@ -13,6 +13,7 @@ spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
 
 import hashlib
+import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,7 +23,8 @@ import aiohttp
 import aiofiles
 from tinydb import TinyDB, Query
 
-from stargazer.config import PINATA_GATEWAY, PINATA_JWT, STARGAZER_LOCAL
+import stargazer.config  # ensure env var defaults are set  # noqa: F401
+
 from stargazer.types.asset import Asset
 from stargazer.utils.pinata import PinataClient
 
@@ -61,11 +63,11 @@ class LocalStorageClient:
             remote: Optional PinataClient for authenticated Pinata operations
             public_gateway: Public IPFS gateway URL (defaults to PINATA_GATEWAY)
         """
-        self.local_dir = local_dir or STARGAZER_LOCAL
+        self.local_dir = local_dir or Path(os.environ["STARGAZER_LOCAL"])
         self.local_dir.mkdir(parents=True, exist_ok=True)
         self.remote = remote
         self.public_gateway = (
-            public_gateway if public_gateway is not None else PINATA_GATEWAY
+            public_gateway if public_gateway is not None else os.environ["PINATA_GATEWAY"]
         )
 
         # TinyDB for local metadata storage (lazy initialized)
@@ -256,7 +258,7 @@ def get_client() -> "LocalStorageClient":
     Returns:
         A LocalStorageClient, optionally with a PinataClient remote
     """
-    if PINATA_JWT:
+    if os.environ.get("PINATA_JWT"):
         return LocalStorageClient(remote=PinataClient())
 
     return LocalStorageClient()
