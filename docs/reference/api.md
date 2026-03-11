@@ -46,7 +46,6 @@
 ::: stargazer.utils.local_storage
 ::: stargazer.utils.pinata
 ::: stargazer.utils.query
-::: stargazer.utils.storage
 ::: stargazer.utils.subprocess
 
 ## Workflows

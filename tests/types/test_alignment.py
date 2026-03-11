@@ -11,7 +11,7 @@ from stargazer.types.alignment import (
     BQSRReport,
     DuplicateMetrics,
 )
-import stargazer.utils.storage as _storage_mod
+import stargazer.utils.local_storage as _storage_mod
 
 
 @pytest.mark.asyncio

@@ -8,9 +8,7 @@ import pytest
 from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.base_recalibrator import base_recalibrator
-from stargazer.types import Reference, Alignment, KnownSites
-from stargazer.types.alignment import AlignmentFile, BQSRReport
-from stargazer.types.reference import ReferenceFile
+from stargazer.types import Alignment, BQSRReport, KnownSites, Reference
 
 
 KNOWN_SITES_VCF = "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf"
@@ -18,41 +16,32 @@ KNOWN_SITES_VCF = "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf"
 
 @pytest.mark.asyncio
 async def test_base_recalibrator_creates_report(fixtures_db):
-    """Test that base_recalibrator returns an Alignment with bqsr_report set."""
+    """Test that base_recalibrator returns a BQSRReport."""
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
-    sample_id = "NA12829_bqsr"
+    sample_id = "NA12829_TP53_markdup"
 
     alignment = Alignment(
+        path=FIXTURES_DIR / "NA12829_TP53_markdup.bam",
         sample_id=sample_id,
-        alignment=AlignmentFile(
-            path=FIXTURES_DIR / "NA12829_TP53_markdup.bam",
-            keyvalues={
-                "type": "alignment",
-                "component": "alignment",
-                "sample_id": sample_id,
-                "tool": "gatk_mark_duplicates",
-                "sorted": "coordinate",
-                "duplicates_marked": "true",
-            },
-        ),
+        format="bam",
+        sorted="coordinate",
+        duplicates_marked=True,
+        tool="gatk_mark_duplicates",
     )
 
     ref = Reference(
+        path=FIXTURES_DIR / "GRCh38_TP53.fa",
         build="GRCh38",
-        fasta=ReferenceFile(
-            path=FIXTURES_DIR / "GRCh38_TP53.fa",
-            keyvalues={"type": "reference", "component": "fasta", "build": "GRCh38"},
-        ),
     )
-
-    fixtures_db()  # checkout: switch to isolated work dir
 
     known_sites_file = KnownSites(
         path=FIXTURES_DIR / KNOWN_SITES_VCF,
-        keyvalues={"sample_id": KNOWN_SITES_VCF},
+        build="GRCh38",
     )
+
+    fixtures_db()  # checkout: switch to isolated work dir
 
     result = await base_recalibrator(
         alignment=alignment,
@@ -60,14 +49,11 @@ async def test_base_recalibrator_creates_report(fixtures_db):
         known_sites=[known_sites_file],
     )
 
-    assert isinstance(result, Alignment)
-    assert result.bqsr_report is not None
-    assert isinstance(result.bqsr_report, BQSRReport)
-    assert result.bqsr_report.keyvalues.get("type") == "alignment"
-    assert result.bqsr_report.keyvalues.get("component") == "bqsr_report"
-    assert result.bqsr_report.keyvalues.get("sample_id") == sample_id
-    # alignment and index carry through unchanged
-    assert result.alignment is alignment.alignment
+    assert isinstance(result, BQSRReport)
+    assert result.sample_id == sample_id
+    assert result.tool == "gatk_base_recalibrator"
+    assert result.path is not None
+    assert result.path.exists()
 
 
 @pytest.mark.asyncio

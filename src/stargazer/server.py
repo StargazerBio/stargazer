@@ -13,7 +13,6 @@ spec: [docs/architecture/mcp-server.md](../architecture/mcp-server.md)
 """
 
 import json
-import os
 import types as _types
 from pathlib import Path
 from typing import Any, get_args, get_origin
@@ -26,7 +25,8 @@ from stargazer.registry import TaskInfo, TaskRegistry
 from stargazer.types import ASSET_REGISTRY
 from stargazer.types.asset import Asset
 from stargazer.types.asset import assemble
-from stargazer.utils.storage import default_client
+from stargazer.config import PINATA_JWT, PINATA_VISIBILITY
+from stargazer.utils.local_storage import default_client
 
 
 def _asset_key_for_hint(hint: Any) -> str | None:
@@ -61,8 +61,7 @@ def _asset_key_for_hint(hint: Any) -> str | None:
 
 
 def _is_list_asset_hint(hint: Any) -> bool:
-    """True if the hint is list[AssetSubclass].
-    """
+    """True if the hint is list[AssetSubclass]."""
     origin = get_origin(hint)
     args = get_args(hint)
     if origin is list and args:
@@ -87,8 +86,7 @@ _registry = TaskRegistry()
 
 @mcp.tool()
 async def query_files(keyvalues: dict[str, str]) -> list[dict]:
-    """Query files by metadata key-value pairs. Returns matching files.
-    """
+    """Query files by metadata key-value pairs. Returns matching files."""
     files = await default_client.query(keyvalues)
     return [f.to_dict() for f in files]
 
@@ -121,8 +119,7 @@ async def upload_file(path: str, keyvalues: dict[str, str]) -> dict:
 
 @mcp.tool()
 async def download_file(cid: str) -> str:
-    """Download a file by CID to local cache. Returns the local path.
-    """
+    """Download a file by CID to local cache. Returns the local path."""
     comp = Asset(cid=cid)
     await default_client.download(comp)
     return str(comp.path)
@@ -130,8 +127,7 @@ async def download_file(cid: str) -> str:
 
 @mcp.tool()
 async def delete_file(cid: str) -> str:
-    """Delete a file by CID.
-    """
+    """Delete a file by CID."""
     comp = Asset(cid=cid)
     await default_client.delete(comp)
     return f"Deleted file {cid}"
@@ -242,8 +238,7 @@ async def run_workflow(workflow_name: str, inputs: dict) -> dict:
 
 
 async def _execute(info: TaskInfo, kwargs: dict) -> dict:
-    """Run a Flyte task/workflow and return marshalled output.
-    """
+    """Run a Flyte task/workflow and return marshalled output."""
     run = flyte.run(info.task_obj, **kwargs)
     run.wait()
     named = run.outputs().named_outputs  # {"o0": value, ...}
@@ -264,12 +259,12 @@ async def _execute(info: TaskInfo, kwargs: dict) -> dict:
 
 @mcp.resource("stargazer://config")
 async def show_config() -> str:
-    """Show current Stargazer configuration and available task counts.
-    """
+    """Show current Stargazer configuration and available task counts."""
     tasks = _registry.list_tasks(category="task")
     workflows = _registry.list_tasks(category="workflow")
     config = {
-        "stargazer_mode": os.environ.get("STARGAZER_MODE", "local"),
+        "pinata_jwt": "set" if PINATA_JWT else "unset",
+        "pinata_visibility": PINATA_VISIBILITY,
         "local_dir": str(default_client.local_dir),
         "tasks": len(tasks),
         "workflows": len(workflows),
@@ -283,8 +278,7 @@ async def show_config() -> str:
 
 
 def main():
-    """Run the Stargazer MCP server.
-    """
+    """Run the Stargazer MCP server."""
     import sys
 
     transport = "stdio"

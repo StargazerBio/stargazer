@@ -98,7 +98,7 @@ ref = next(a for a in assets if isinstance(a, Reference))
 
 `utils/storage.py` defines the `StorageClient` protocol with four methods: `upload()`, `download()`, `query()`, `delete()`. The module-level `default_client` is resolved at import time based on environment:
 
-- `STARGAZER_MODE=local` (default): `LocalStorageClient` (TinyDB), or `PinataClient` if `PINATA_JWT` is set
-- `STARGAZER_MODE=cloud`: `PinataClient` (requires `PINATA_JWT`)
+- No JWT: `LocalStorageClient` with public IPFS gateway for cache misses
+- `PINATA_JWT` set: `LocalStorageClient` + `PinataClient` remote for authenticated operations
 
 Tasks never call storage directly. All storage interaction flows through `Asset.fetch()` and `Asset.update()`.

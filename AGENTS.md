@@ -7,10 +7,7 @@
 - If something is changed that you didn't change, it's not a typo, it's a manual change. I do still write code occassionally..
 - Don't use the "if TYPE_CHECKING:" pattern anywhere, Flyte will always check types
 - Do not make any git commits unless explicitly requested
-
-**Git Worktrees**
-- All git worktrees must be created in the project's `wt/` directory (e.g., `git worktree add wt/my-feature -b wt/my-feature`)
-- The `wt/` directory is gitignored
+- The README is a document written exclusively BY HUMANS FOR HUMANS. Never modify the README. Notify if it is out of spec only.
 
 **Dev Process**
 - You will implement features piece by piece in a sequential fashion

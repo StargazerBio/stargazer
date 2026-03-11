@@ -43,17 +43,17 @@ This starts the MCP server over stdio. Your client spawns it as a subprocess.
 stargazer serve --http --port 8080
 ```
 
-## Modes
+## Configuration
 
-Stargazer's behavior is controlled by a single environment variable:
+Stargazer's storage behavior is controlled by two environment variables:
 
-| Mode | Storage | Execution | Setup |
-|------|---------|-----------|-------|
-| **Local** (default) | Filesystem | Flyte local | Nothing |
-| **Local + Pinata** | IPFS via Pinata | Flyte local | Set `PINATA_JWT` |
-| **Cloud** | IPFS via Pinata | Flyte remote (Union) | Set `STARGAZER_MODE=cloud`, `PINATA_JWT` |
+| Setup | Storage | Downloads | What to set |
+|-------|---------|-----------|-------------|
+| **Default** | Local filesystem | Cache + public IPFS gateway | Nothing |
+| **Pinata (public)** | Pinata (public network) | Cache + public or private IPFS gateway | `PINATA_JWT`, `PINATA_VISIBILITY=public` |
+| **Pinata (private)** | Pinata (private network) | Cache + signed URLs | `PINATA_JWT` |
 
-See [Modes](architecture/modes.md) for details.
+See [Configuration](architecture/configuration.md) for details.
 
 ## Docs
 

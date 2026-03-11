@@ -12,8 +12,7 @@ from stargazer.types.asset import Asset
 
 @dataclass
 class Variants(Asset):
-    """VCF/GVCF variant call file asset.
-    """
+    """VCF/GVCF variant call file asset."""
 
     _asset_key: ClassVar[str] = "variants"
     sample_id: str = ""

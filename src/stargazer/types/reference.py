@@ -12,8 +12,7 @@ from stargazer.types.asset import Asset
 
 @dataclass
 class Reference(Asset):
-    """Reference FASTA file asset.
-    """
+    """Reference FASTA file asset."""
 
     _asset_key: ClassVar[str] = "reference"
     build: str = ""
@@ -57,8 +56,7 @@ class ReferenceIndex(Asset):
 
 @dataclass
 class SequenceDict(Asset):
-    """Sequence dictionary (.dict) file asset.
-    """
+    """Sequence dictionary (.dict) file asset."""
 
     _asset_key: ClassVar[str] = "sequence_dict"
     build: str = ""
@@ -68,8 +66,7 @@ class SequenceDict(Asset):
 
 @dataclass
 class AlignerIndex(Asset):
-    """Aligner index file asset (one file per index file for multi-file indices).
-    """
+    """Aligner index file asset (one file per index file for multi-file indices)."""
 
     _asset_key: ClassVar[str] = "aligner_index"
     build: str = ""

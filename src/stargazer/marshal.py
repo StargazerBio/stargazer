@@ -9,8 +9,7 @@ from typing import Any
 
 
 def marshal_output(value: Any) -> Any:
-    """Convert a typed Python object to a JSON-friendly structure for MCP transport.
-    """
+    """Convert a typed Python object to a JSON-friendly structure for MCP transport."""
     if value is None:
         return None
 

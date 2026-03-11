@@ -13,7 +13,7 @@ nav = [
     { "Tasks" = "architecture/tasks.md" },
     { "Workflows" = "architecture/workflows.md" },
     { "MCP Server" = "architecture/mcp-server.md" },
-    { "Modes" = "architecture/modes.md" },
+    { "Configuration" = "architecture/configuration.md" },
     { "CLI" = "architecture/cli.md" },
   ]},
   { "Guides" = [

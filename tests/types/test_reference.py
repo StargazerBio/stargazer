@@ -2,13 +2,12 @@
 Tests for Reference asset types.
 """
 
-import os
 import tempfile
 
 import pytest
 from pathlib import Path
 
-import stargazer.utils.storage as _storage_mod
+import stargazer.utils.local_storage as _storage_mod
 from stargazer.types.reference import (
     Reference,
     ReferenceIndex,
@@ -103,31 +102,3 @@ async def test_sequence_dict_asset():
     assert sd.keyvalues.get("asset") == "sequence_dict"
     assert sd.build == "GRCh38"
 
-
-def test_stargazer_mode_resolution():
-    """Test that resolve_mode() correctly parses STARGAZER_MODE env var."""
-    from stargazer.utils.storage import resolve_mode, StargazerMode
-
-    original = os.environ.pop("STARGAZER_MODE", None)
-
-    try:
-        os.environ.pop("STARGAZER_MODE", None)
-        assert resolve_mode() == StargazerMode.LOCAL
-
-        os.environ["STARGAZER_MODE"] = "local"
-        assert resolve_mode() == StargazerMode.LOCAL
-
-        os.environ["STARGAZER_MODE"] = "cloud"
-        assert resolve_mode() == StargazerMode.CLOUD
-
-        os.environ["STARGAZER_MODE"] = "CLOUD"
-        assert resolve_mode() == StargazerMode.CLOUD
-
-        os.environ["STARGAZER_MODE"] = "invalid"
-        with pytest.raises(ValueError, match="Invalid STARGAZER_MODE"):
-            resolve_mode()
-    finally:
-        if original is not None:
-            os.environ["STARGAZER_MODE"] = original
-        else:
-            os.environ.pop("STARGAZER_MODE", None)

@@ -1,7 +1,8 @@
 - update README with CLI quickstart and bump to alpha status
+- upload public assets for quickstart workflow to pinata
 - create stargazer org ✅
 - setup GH pages ✅
-- find a way to exhaustively link docs to code for agent traversal
+- find a way to exhaustively link docs to code for agent traversal ✅
 - setup a recurring docs sync job so they never go stale
 - setup agentic PR process
 - figure out how other folks can easily fork/PR

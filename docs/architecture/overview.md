@@ -45,6 +45,6 @@ See [MCP Server](mcp-server.md) for the full server specification.
 
 Any MCP client connects to `stargazer serve` over stdio or HTTP. See [CLI](cli.md). Tasks and workflows can also be managed directly via the [Flyte CLI](cli.md#flyte-cli).
 
-## Modes
+## Configuration
 
-A single env var (`STARGAZER_MODE`) controls storage backend and execution context. See [Modes](modes.md).
+Storage backend is controlled by `PINATA_JWT` and `PINATA_VISIBILITY`. See [Configuration](configuration.md).

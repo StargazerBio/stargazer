@@ -8,9 +8,7 @@ import pytest
 from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.sort_sam import sort_sam
-from stargazer.types import Reference, Alignment
-from stargazer.types.alignment import AlignmentFile
-from stargazer.types.reference import ReferenceFile
+from stargazer.types import Alignment
 
 
 @pytest.mark.asyncio
@@ -19,50 +17,34 @@ async def test_sort_sam_sorts_bam(fixtures_db):
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
-    sample_id = "NA12829_sort"
+    sample_id = "NA12829_TP53_merged"
 
     alignment = Alignment(
+        path=FIXTURES_DIR / "NA12829_TP53_merged.bam",
         sample_id=sample_id,
-        alignment=AlignmentFile(
-            path=FIXTURES_DIR / "NA12829_TP53_merged.bam",
-            keyvalues={
-                "type": "alignment",
-                "component": "alignment",
-                "sample_id": sample_id,
-                "tool": "bwa_mem",
-            },
-        ),
-    )
-
-    ref = Reference(
-        build="GRCh38",
-        fasta=ReferenceFile(
-            path=FIXTURES_DIR / "GRCh38_TP53.fa",
-            keyvalues={"type": "reference", "component": "fasta", "build": "GRCh38"},
-        ),
+        format="bam",
+        tool="bwa_mem",
     )
 
     fixtures_db()  # checkout: switch to isolated work dir
 
-    sorted_bam = await sort_sam(alignment=alignment, ref=ref, sort_order="coordinate")
+    sorted_bam = await sort_sam(alignment=alignment, sort_order="coordinate")
 
     assert isinstance(sorted_bam, Alignment)
     assert sorted_bam.sample_id == sample_id
-
-    result_bam = sorted_bam.alignment
-    assert result_bam is not None
-    assert result_bam.keyvalues.get("sorted") == "coordinate"
-    assert result_bam.keyvalues.get("tool") == "gatk_sort_sam"
+    assert sorted_bam.sorted == "coordinate"
+    assert sorted_bam.tool == "gatk_sort_sam"
+    assert sorted_bam.path is not None
+    assert sorted_bam.path.exists()
 
 
 @pytest.mark.asyncio
 async def test_sort_sam_validates_sort_order():
     """Test that sort_sam rejects invalid sort orders."""
     alignment = Alignment(sample_id="test")
-    ref = Reference(build="test")
 
     with pytest.raises(ValueError, match="Invalid sort_order"):
-        await sort_sam(alignment=alignment, ref=ref, sort_order="invalid_order")
+        await sort_sam(alignment=alignment, sort_order="invalid_order")
 
 
 @pytest.mark.asyncio

@@ -9,8 +9,7 @@ from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.combine_gvcfs import combine_gvcfs
 from stargazer.types import Reference, Variants
-from stargazer.types.reference import ReferenceFile
-from stargazer.types.variants import VariantsFile
+
 
 SAMPLE_GVCFS = {
     "NA12829": "NA12829_TP53.g.vcf",
@@ -20,29 +19,21 @@ SAMPLE_GVCFS = {
 
 
 def make_ref() -> Reference:
+    """Build a Reference asset for the TP53 region fixture."""
     return Reference(
+        path=FIXTURES_DIR / "GRCh38_TP53.fa",
         build="GRCh38",
-        fasta=ReferenceFile(
-            path=FIXTURES_DIR / "GRCh38_TP53.fa",
-            keyvalues={"type": "reference", "component": "fasta", "build": "GRCh38"},
-        ),
     )
 
 
 def make_gvcf(sample_id: str) -> Variants:
+    """Build a Variants GVCF asset for the given sample."""
     return Variants(
+        path=FIXTURES_DIR / SAMPLE_GVCFS[sample_id],
         sample_id=sample_id,
-        vcf=VariantsFile(
-            path=FIXTURES_DIR / SAMPLE_GVCFS[sample_id],
-            keyvalues={
-                "type": "variants",
-                "component": "vcf",
-                "sample_id": sample_id,
-                "caller": "haplotypecaller",
-                "variant_type": "gvcf",
-                "build": "GRCh38",
-            },
-        ),
+        caller="haplotypecaller",
+        variant_type="gvcf",
+        build="GRCh38",
     )
 
 
@@ -62,14 +53,12 @@ async def test_combine_gvcfs_merges_samples(fixtures_db):
 
     assert isinstance(result, Variants)
     assert result.sample_id == "test_family"
-    assert result.is_gvcf
-    assert result.is_multi_sample
+    assert result.variant_type == "gvcf"
+    assert result.caller == "combine_gvcfs"
+    assert result.sample_count == 3
     assert set(result.source_samples) == set(sample_ids)
-
-    combined_file = result.vcf
-    assert combined_file is not None
-    assert combined_file.keyvalues.get("caller") == "combine_gvcfs"
-    assert combined_file.keyvalues.get("sample_count") == "3"
+    assert result.path is not None
+    assert result.path.exists()
 
 
 @pytest.mark.asyncio
@@ -82,19 +71,14 @@ async def test_combine_gvcfs_rejects_empty_list():
 @pytest.mark.asyncio
 async def test_combine_gvcfs_rejects_vcf_input():
     """Test that combine_gvcfs raises error when any input is VCF (not GVCF)."""
-    sample_id = "NA12878_vcf"
-    vcf_file = VariantsFile(
-        cid="QmTestVCFCombine",
-        keyvalues={
-            "type": "variants",
-            "component": "vcf",
-            "sample_id": sample_id,
-            "variant_type": "vcf",
-        },
+    vcf = Variants(
+        sample_id="NA12878_vcf",
+        variant_type="vcf",
+        caller="haplotypecaller",
     )
     with pytest.raises(ValueError, match="requires GVCF files"):
         await combine_gvcfs(
-            gvcfs=[Variants(sample_id=sample_id, vcf=vcf_file)],
+            gvcfs=[vcf],
             ref=Reference(build="test"),
         )
 
@@ -116,38 +100,23 @@ async def test_combine_gvcfs_single_sample(fixtures_db):
     )
 
     assert isinstance(result, Variants)
-    assert result.is_gvcf
-    assert not result.is_multi_sample
+    assert result.variant_type == "gvcf"
+    assert result.sample_count == 1
     assert result.source_samples == [sample_id]
 
 
 @pytest.mark.asyncio
-async def test_variants_multi_sample_properties():
-    """Test new multi-sample properties on Variants type."""
-    single_file = VariantsFile(
-        cid="QmSingle",
-        keyvalues={
-            "type": "variants",
-            "component": "vcf",
-            "sample_id": "NA12878",
-            "variant_type": "gvcf",
-        },
-    )
-    single_variant = Variants(sample_id="NA12878", vcf=single_file)
-    assert not single_variant.is_multi_sample
-    assert single_variant.source_samples == ["NA12878"]
+async def test_combine_gvcfs_task_is_callable():
+    """Test that combine_gvcfs is a callable task."""
+    assert callable(combine_gvcfs)
+    assert "combine_gvcfs" in str(combine_gvcfs)
 
-    multi_file = VariantsFile(
-        cid="QmMulti",
-        keyvalues={
-            "type": "variants",
-            "component": "vcf",
-            "sample_id": "cohort",
-            "variant_type": "gvcf",
-            "sample_count": "3",
-            "source_samples": "NA12878,NA12891,NA12892",
-        },
-    )
-    multi_variant = Variants(sample_id="cohort", vcf=multi_file)
-    assert multi_variant.is_multi_sample
-    assert set(multi_variant.source_samples) == {"NA12878", "NA12891", "NA12892"}
+
+class TestCombineGvcfsExports:
+    """Test that combine_gvcfs is properly exported."""
+
+    def test_combine_gvcfs_exported_from_package(self):
+        """Test that combine_gvcfs is accessible from stargazer.tasks."""
+        from stargazer.tasks import combine_gvcfs
+
+        assert callable(combine_gvcfs)

@@ -8,9 +8,7 @@ import pytest
 from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.mark_duplicates import mark_duplicates
-from stargazer.types import Reference, Alignment
-from stargazer.types.alignment import AlignmentFile
-from stargazer.types.reference import ReferenceFile
+from stargazer.types import Alignment
 
 
 @pytest.mark.asyncio
@@ -19,41 +17,26 @@ async def test_mark_duplicates_marks_duplicates(fixtures_db):
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
-    sample_id = "NA12829_markdup"
+    sample_id = "NA12829_TP53_merged"
 
     alignment = Alignment(
+        path=FIXTURES_DIR / "NA12829_TP53_merged.bam",
         sample_id=sample_id,
-        alignment=AlignmentFile(
-            path=FIXTURES_DIR / "NA12829_TP53_merged.bam",
-            keyvalues={
-                "type": "alignment",
-                "component": "alignment",
-                "sample_id": sample_id,
-                "tool": "gatk_merge_bam_alignment",
-                "sorted": "coordinate",
-            },
-        ),
-    )
-
-    ref = Reference(
-        build="GRCh38",
-        fasta=ReferenceFile(
-            path=FIXTURES_DIR / "GRCh38_TP53.fa",
-            keyvalues={"type": "reference", "component": "fasta", "build": "GRCh38"},
-        ),
+        format="bam",
+        sorted="coordinate",
+        tool="gatk_merge_bam_alignment",
     )
 
     fixtures_db()  # checkout: switch to isolated work dir
 
-    marked = await mark_duplicates(alignment=alignment, ref=ref)
+    marked = await mark_duplicates(alignment=alignment)
 
     assert isinstance(marked, Alignment)
     assert marked.sample_id == sample_id
-
-    result_bam = marked.alignment
-    assert result_bam is not None
-    assert result_bam.keyvalues.get("duplicates_marked") == "true"
-    assert result_bam.keyvalues.get("tool") == "gatk_mark_duplicates"
+    assert marked.duplicates_marked is True
+    assert marked.tool == "gatk_mark_duplicates"
+    assert marked.path is not None
+    assert marked.path.exists()
 
 
 @pytest.mark.asyncio

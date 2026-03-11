@@ -8,9 +8,7 @@ import pytest
 from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.merge_bam_alignment import merge_bam_alignment
-from stargazer.types import Reference, Alignment
-from stargazer.types.alignment import AlignmentFile
-from stargazer.types.reference import ReferenceFile
+from stargazer.types import Alignment, Reference
 
 
 @pytest.mark.asyncio
@@ -19,42 +17,26 @@ async def test_merge_bam_alignment_merges_bams(fixtures_db):
     if shutil.which("gatk") is None:
         pytest.skip("gatk not available in environment")
 
-    sample_id = "NA12829_merge"
+    sample_id = "NA12829_TP53_merge"
 
     aligned_bam = Alignment(
+        path=FIXTURES_DIR / "NA12829_TP53_bwa_aligned.bam",
         sample_id=sample_id,
-        alignment=AlignmentFile(
-            path=FIXTURES_DIR / "NA12829_TP53_bwa_aligned.bam",
-            keyvalues={
-                "type": "alignment",
-                "component": "alignment",
-                "sample_id": sample_id,
-                "tool": "bwa_mem",
-                "sorted": "unsorted",
-            },
-        ),
+        format="bam",
+        tool="bwa_mem",
     )
 
     unmapped_bam = Alignment(
+        path=FIXTURES_DIR / "NA12829_TP53_unmapped.bam",
         sample_id=sample_id,
-        alignment=AlignmentFile(
-            path=FIXTURES_DIR / "NA12829_TP53_unmapped.bam",
-            keyvalues={
-                "type": "alignment",
-                "component": "alignment",
-                "sample_id": sample_id,
-                "tool": "picard",
-                "sorted": "queryname",
-            },
-        ),
+        format="bam",
+        sorted="queryname",
+        tool="picard",
     )
 
     ref = Reference(
+        path=FIXTURES_DIR / "GRCh38_TP53.fa",
         build="GRCh38",
-        fasta=ReferenceFile(
-            path=FIXTURES_DIR / "GRCh38_TP53.fa",
-            keyvalues={"type": "reference", "component": "fasta", "build": "GRCh38"},
-        ),
     )
 
     fixtures_db()  # checkout: switch to isolated work dir
@@ -67,11 +49,10 @@ async def test_merge_bam_alignment_merges_bams(fixtures_db):
 
     assert isinstance(merged, Alignment)
     assert merged.sample_id == sample_id
-
-    bam_file = merged.alignment
-    assert bam_file is not None
-    assert bam_file.keyvalues.get("sorted") == "coordinate"
-    assert bam_file.keyvalues.get("tool") == "gatk_merge_bam_alignment"
+    assert merged.sorted == "coordinate"
+    assert merged.tool == "gatk_merge_bam_alignment"
+    assert merged.path is not None
+    assert merged.path.exists()
 
 
 @pytest.mark.asyncio

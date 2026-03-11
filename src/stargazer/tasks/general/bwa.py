@@ -7,7 +7,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 import asyncio
 import shlex
 
-import stargazer.utils.storage as _storage
+import stargazer.utils.local_storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Alignment, AlignerIndex, R1, R2, Reference
 from stargazer.config import logger

@@ -10,6 +10,7 @@ To populate expected CIDs for test files, run:
 import pytest
 from conftest import FIXTURES_DIR
 from stargazer.types.asset import Asset
+from stargazer.utils.local_storage import LocalStorageClient
 from stargazer.utils.pinata import PinataClient
 
 CIDS = {
@@ -101,8 +102,9 @@ async def test_query():
 @pytest.mark.pinata
 @pytest.mark.asyncio
 async def test_download_file(tmp_path):
-    """Test downloading a file from Pinata gateway."""
-    client = PinataClient()
+    """Test downloading a file via LocalStorageClient with PinataClient remote."""
+    remote = PinataClient()
+    client = LocalStorageClient(local_dir=tmp_path / "cache", remote=remote)
 
     # Use GRCh38_TP53.fa.fai - a small reference file known to be on Pinata
     test_file = "GRCh38_TP53.fa.fai"

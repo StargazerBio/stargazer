@@ -20,7 +20,7 @@ async def test_assemble_returns_specialized_list():
     mock_client = AsyncMock()
     mock_client.query.return_value = [raw_ref, raw_idx]
 
-    with patch("stargazer.utils.storage.default_client", mock_client):
+    with patch("stargazer.utils.local_storage.default_client", mock_client):
         assets = await assemble(build="GRCh38")
 
     assert len(assets) == 2
@@ -39,7 +39,7 @@ async def test_assemble_list_filter_issues_multiple_queries():
     mock_client = AsyncMock()
     mock_client.query.side_effect = [[r1_raw], [r2_raw]]
 
-    with patch("stargazer.utils.storage.default_client", mock_client):
+    with patch("stargazer.utils.local_storage.default_client", mock_client):
         assets = await assemble(sample_id="S1", asset=["r1", "r2"])
 
     assert mock_client.query.call_count == 2
@@ -55,7 +55,7 @@ async def test_assemble_deduplicates_by_cid():
     mock_client = AsyncMock()
     mock_client.query.side_effect = [[raw], [raw]]
 
-    with patch("stargazer.utils.storage.default_client", mock_client):
+    with patch("stargazer.utils.local_storage.default_client", mock_client):
         assets = await assemble(build="GRCh38", asset=["reference", "reference"])
 
     refs = [a for a in assets if isinstance(a, Reference)]
@@ -68,7 +68,7 @@ async def test_assemble_empty_result():
     mock_client = AsyncMock()
     mock_client.query.return_value = []
 
-    with patch("stargazer.utils.storage.default_client", mock_client):
+    with patch("stargazer.utils.local_storage.default_client", mock_client):
         assets = await assemble(build="nonexistent")
 
     assert assets == []
@@ -83,7 +83,7 @@ async def test_assemble_multiple_same_key():
     mock_client = AsyncMock()
     mock_client.query.return_value = [idx1, idx2]
 
-    with patch("stargazer.utils.storage.default_client", mock_client):
+    with patch("stargazer.utils.local_storage.default_client", mock_client):
         assets = await assemble(build="GRCh38")
 
     aligner_indices = [a for a in assets if isinstance(a, AlignerIndex)]

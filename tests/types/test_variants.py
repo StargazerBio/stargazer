@@ -6,7 +6,7 @@ import pytest
 from conftest import FIXTURES_DIR
 
 from stargazer.types.variants import Variants, VariantsIndex, KnownSites
-import stargazer.utils.storage as _storage_mod
+import stargazer.utils.local_storage as _storage_mod
 
 
 @pytest.mark.asyncio

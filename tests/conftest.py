@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 import flyte
 
-import stargazer.utils.storage as _storage_mod
+import stargazer.utils.local_storage as _storage_mod
 from stargazer.utils.local_storage import LocalStorageClient
 
 # Add tests directory to Python path for config imports

@@ -4,23 +4,13 @@
 spec: [docs/architecture/overview.md](../architecture/overview.md)
 """
 
-from stargazer.utils.storage import (
-    StorageClient,
-    StargazerMode,
-    default_client,
-    get_client,
-    resolve_mode,
-)
+from stargazer.utils.local_storage import LocalStorageClient, default_client, get_client
 from stargazer.utils.pinata import PinataClient
-from stargazer.utils.local_storage import LocalStorageClient
 from stargazer.utils.subprocess import _run
 
 __all__ = [
-    "StorageClient",
-    "StargazerMode",
     "default_client",
     "get_client",
-    "resolve_mode",
     "PinataClient",
     "LocalStorageClient",
     "_run",

@@ -12,8 +12,7 @@ from typing import Any, get_type_hints
 
 
 def _type_name(hint: Any) -> str:
-    """Convert a type hint to a human-readable string.
-    """
+    """Convert a type hint to a human-readable string."""
     origin = getattr(hint, "__origin__", None)
     args = getattr(hint, "__args__", None)
 
@@ -48,8 +47,7 @@ def _type_name(hint: Any) -> str:
 
 @dataclass
 class TaskParam:
-    """Describes a single parameter of a task.
-    """
+    """Describes a single parameter of a task."""
 
     name: str
     type_hint: Any
@@ -60,8 +58,7 @@ class TaskParam:
 
 @dataclass
 class TaskOutput:
-    """Describes a single output of a task.
-    """
+    """Describes a single output of a task."""
 
     name: str
     type_hint: Any
@@ -70,8 +67,7 @@ class TaskOutput:
 
 @dataclass
 class TaskInfo:
-    """Complete metadata about a registered task.
-    """
+    """Complete metadata about a registered task."""
 
     name: str
     category: str  # "task" or "workflow"
@@ -83,8 +79,7 @@ class TaskInfo:
 
 @dataclass
 class TaskRegistry:
-    """Discovers and provides access to all Flyte tasks and workflows.
-    """
+    """Discovers and provides access to all Flyte tasks and workflows."""
 
     _tasks: dict[str, TaskInfo] = field(default_factory=dict)
 
@@ -93,14 +88,12 @@ class TaskRegistry:
         self._discover()
 
     def _discover(self):
-        """Walk task and workflow modules to register all Flyte tasks.
-        """
+        """Walk task and workflow modules to register all Flyte tasks."""
         self._discover_tasks()
         self._discover_workflows()
 
     def _discover_tasks(self):
-        """Register all tasks from stargazer.tasks.__all__.
-        """
+        """Register all tasks from stargazer.tasks.__all__."""
         import stargazer.tasks as tasks_mod
 
         for name in tasks_mod.__all__:
@@ -110,8 +103,7 @@ class TaskRegistry:
             self._register(obj.short_name, obj, category="task")
 
     def _discover_workflows(self):
-        """Register all workflows from stargazer.workflows.__all__.
-        """
+        """Register all workflows from stargazer.workflows.__all__."""
         import stargazer.workflows as workflows_mod
 
         for name in workflows_mod.__all__:
@@ -124,8 +116,7 @@ class TaskRegistry:
             self._register(obj.short_name, obj, category="workflow")
 
     def _register(self, name: str, task_obj: Any, category: str):
-        """Register a single task by introspecting its wrapped function.
-        """
+        """Register a single task by introspecting its wrapped function."""
         func = task_obj.func
         sig = inspect.signature(func)
         hints = get_type_hints(func)
@@ -163,21 +154,18 @@ class TaskRegistry:
         )
 
     def get(self, name: str) -> TaskInfo | None:
-        """Look up a task by name.
-        """
+        """Look up a task by name."""
         return self._tasks.get(name)
 
     def list_tasks(self, category: str | None = None) -> list[TaskInfo]:
-        """List all registered tasks, optionally filtered by category.
-        """
+        """List all registered tasks, optionally filtered by category."""
         tasks = list(self._tasks.values())
         if category:
             tasks = [t for t in tasks if t.category == category]
         return tasks
 
     def to_catalog(self, category: str | None = None) -> list[dict]:
-        """Return a JSON-serializable catalog of all tasks.
-        """
+        """Return a JSON-serializable catalog of all tasks."""
         catalog = []
         for info in self.list_tasks(category=category):
             catalog.append(
@@ -205,8 +193,7 @@ class TaskRegistry:
 
 
 def _parse_outputs(return_hint: Any) -> list[TaskOutput]:
-    """Parse a return type hint into a list of TaskOutput.
-    """
+    """Parse a return type hint into a list of TaskOutput."""
     origin = getattr(return_hint, "__origin__", None)
     if origin is tuple:
         # Multi-output: tuple[A, B, ...] → o0, o1, ...
@@ -222,8 +209,7 @@ def _parse_outputs(return_hint: Any) -> list[TaskOutput]:
 
 
 def _serialize_default(value: Any) -> Any:
-    """Make default values JSON-serializable.
-    """
+    """Make default values JSON-serializable."""
     if value is None:
         return None
     if isinstance(value, (str, int, float, bool)):

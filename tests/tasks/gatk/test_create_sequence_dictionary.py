@@ -8,8 +8,7 @@ import pytest
 from conftest import FIXTURES_DIR
 
 from stargazer.tasks.gatk.create_sequence_dictionary import create_sequence_dictionary
-from stargazer.types import Reference
-from stargazer.types.reference import ReferenceFile, ReferenceIndex
+from stargazer.types import Reference, SequenceDict
 
 
 @pytest.mark.asyncio
@@ -19,35 +18,20 @@ async def test_create_sequence_dictionary_creates_dict(fixtures_db):
         pytest.skip("gatk not available in environment")
 
     ref = Reference(
+        path=FIXTURES_DIR / "GRCh38_TP53.fa",
         build="GRCh38",
-        fasta=ReferenceFile(
-            path=FIXTURES_DIR / "GRCh38_TP53.fa",
-            keyvalues={"type": "reference", "component": "fasta", "build": "GRCh38"},
-        ),
-        faidx=ReferenceIndex(
-            path=FIXTURES_DIR / "GRCh38_TP53.fa.fai",
-            keyvalues={"type": "reference", "component": "faidx", "build": "GRCh38"},
-        ),
     )
 
     fixtures_db()  # checkout: switch to isolated work dir
 
     result = await create_sequence_dictionary(ref)
 
-    assert isinstance(result, Reference)
+    assert isinstance(result, SequenceDict)
     assert result.build == "GRCh38"
-    assert result.sequence_dictionary is not None
-    assert (
-        result.sequence_dictionary.keyvalues.get("tool")
-        == "gatk_CreateSequenceDictionary"
-    )
-    assert result.sequence_dictionary.keyvalues.get("type") == "reference"
-    assert (
-        result.sequence_dictionary.keyvalues.get("component") == "sequence_dictionary"
-    )
-    assert result.sequence_dictionary.keyvalues.get("build") == "GRCh38"
-    assert result.sequence_dictionary.path is not None
-    assert result.sequence_dictionary.path.exists()
+    assert result.tool == "gatk_CreateSequenceDictionary"
+    assert result.path is not None
+    assert result.path.exists()
+    assert result.path.name.endswith(".dict")
 
 
 @pytest.mark.asyncio

@@ -6,7 +6,7 @@ Applies BQSR recalibration to BAM files using GATK ApplyBQSR.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.storage as _storage
+import stargazer.utils.local_storage as _storage
 from stargazer.config import gatk_env
 from stargazer.types import Alignment, BQSRReport, Reference
 from stargazer.config import logger
