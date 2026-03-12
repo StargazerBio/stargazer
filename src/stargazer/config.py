@@ -39,5 +39,4 @@ gatk_env = flyte.TaskEnvironment(
         cpu=4,
         memory="16Gi",
     ),
-    cache="auto",
 )

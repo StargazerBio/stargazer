@@ -15,6 +15,7 @@ RUN curl -fsSL https://github.com/conda-forge/miniforge/releases/latest/download
 # Bioinformatics tools via bioconda
 RUN mamba install -y -c bioconda -c conda-forge \
     bwa \
+    bwa-mem2 \
     samtools \
     gatk4 \
     && mamba clean -afy

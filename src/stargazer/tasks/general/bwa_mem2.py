@@ -37,7 +37,7 @@ async def bwa_mem2_index(ref: Reference) -> list[AlignerIndex]:
     if not ref_path or not ref_path.exists():
         raise FileNotFoundError(f"Reference file not found at {ref_path}")
 
-    index_extensions = [".amb", ".ann", ".bwt.2bit.64", ".pac", ".sa"]
+    index_extensions = [".0123", ".amb", ".ann", ".bwt.2bit.64", ".pac"]
     output_dir = _storage.default_client.local_dir
     base_name = ref_path.name
 
