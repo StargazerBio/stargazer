@@ -21,7 +21,7 @@ spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 
 import asyncio
 
-from stargazer.config import gatk_env
+from stargazer.config import gatk_env, log_execution
 from stargazer.types import Variants
 from stargazer.types.asset import assemble
 from stargazer.tasks import (
@@ -53,6 +53,7 @@ async def germline_short_variant_discovery(
     Returns:
         VQSR-filtered joint-genotyped Variants asset
     """
+    log_execution()
     # Assemble reference first so we can filter alignments by reference_cid
     refs = await assemble(build=build, asset="reference")
     if not refs:

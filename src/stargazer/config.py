@@ -15,7 +15,10 @@ Rules:
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
 
+import inspect
 import os
+import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 import flyte
@@ -29,6 +32,38 @@ _log_dir = Path.home() / ".stargazer" / "logs"
 _log_dir.mkdir(parents=True, exist_ok=True)
 logger.remove()
 logger.add(_log_dir / "stargazer.log", rotation="10 MB", retention=5)
+
+def log_execution() -> str:
+    """Start a per-execution log sink and return the execution ID.
+
+    Derives the workflow name from the calling function, fetches the current
+    git commit hash, and creates a dedicated logfile for this execution.
+    Warns if the git tree has uncommitted changes.
+    """
+    workflow = inspect.currentframe().f_back.f_code.co_name
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+    result = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    commit = result.stdout.strip() or "unknown"
+
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+    )
+    if status.stdout.strip():
+        commit += "-dirty"
+        logger.warning("Git tree is dirty — uncommitted changes present")
+
+    execution_id = f"{workflow}-{commit}-{timestamp}"
+    logger.add(_log_dir / f"{execution_id}.log")
+    logger.info(f"Execution started: {execution_id}")
+    return execution_id
+
 
 # GATK task environment for GATK-specific tools
 # Uses GATK image with Java runtime and GATK tools

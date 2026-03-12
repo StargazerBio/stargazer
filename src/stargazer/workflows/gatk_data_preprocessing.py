@@ -11,7 +11,7 @@ References:
 spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
-from stargazer.config import gatk_env
+from stargazer.config import gatk_env, log_execution
 from stargazer.types import Alignment, KnownSites, R1, R2, Reference
 from stargazer.types.asset import assemble
 from stargazer.tasks import (
@@ -43,6 +43,7 @@ async def prepare_reference(build: str) -> Reference:
     Returns:
         Reference asset (FASTA file)
     """
+    log_execution()
     assets = await assemble(build=build, asset="reference")
     refs = [a for a in assets if isinstance(a, Reference)]
     if not refs:
@@ -79,6 +80,7 @@ async def preprocess_sample(
     Returns:
         Alignment asset with the preprocessed BAM file
     """
+    log_execution()
     # Assemble reference
     ref_assets = await assemble(build=build, asset="reference")
     refs = [a for a in ref_assets if isinstance(a, Reference)]
