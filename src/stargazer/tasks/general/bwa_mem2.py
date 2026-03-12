@@ -1,5 +1,5 @@
 """
-### BWA tasks for reference genome indexing and alignment.
+### BWA-MEM2 tasks for reference genome indexing and alignment.
 
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
@@ -8,19 +8,18 @@ import asyncio
 import shlex
 
 import stargazer.utils.local_storage as _storage
-from stargazer.config import gatk_env
+from stargazer.config import gatk_env, logger
 from stargazer.types import Alignment, AlignerIndex, R1, R2, Reference
-from stargazer.config import logger
 from stargazer.utils import _run
 
 
 @gatk_env.task
-async def bwa_index(ref: Reference) -> list[AlignerIndex]:
+async def bwa_mem2_index(ref: Reference) -> list[AlignerIndex]:
     """
-    Create BWA index files for a reference genome using bwa index.
+    Create BWA-MEM2 index files for a reference genome.
 
     Creates the following index files:
-    - .amb, .ann, .bwt, .pac, .sa
+    - .amb, .ann, .bwt.2bit.64, .pac, .sa
 
     Args:
         ref: Reference FASTA asset
@@ -29,7 +28,7 @@ async def bwa_index(ref: Reference) -> list[AlignerIndex]:
         List of AlignerIndex assets, one per index file
 
     Reference:
-        https://bio-bwa.sourceforge.net/bwa.shtml
+        https://github.com/bwa-mem2/bwa-mem2
     """
     logger.info(ref.to_dict())
     await ref.fetch()
@@ -38,23 +37,23 @@ async def bwa_index(ref: Reference) -> list[AlignerIndex]:
     if not ref_path or not ref_path.exists():
         raise FileNotFoundError(f"Reference file not found at {ref_path}")
 
-    index_extensions = [".amb", ".ann", ".bwt", ".pac", ".sa"]
+    index_extensions = [".amb", ".ann", ".bwt.2bit.64", ".pac", ".sa"]
     output_dir = _storage.default_client.local_dir
     base_name = ref_path.name
 
-    cmd = ["bwa", "index", str(ref_path)]
-    stdout, stderr = await _run(cmd, cwd=str(output_dir))
+    cmd = ["bwa-mem2", "index", str(ref_path)]
+    await _run(cmd, cwd=str(output_dir))
 
     indices = []
     for ext in index_extensions:
         index_path = output_dir / f"{base_name}{ext}"
         if not index_path.exists():
-            raise FileNotFoundError(f"BWA index file {index_path.name} was not created")
+            raise FileNotFoundError(f"BWA-MEM2 index file {index_path.name} was not created")
 
         idx = AlignerIndex()
         await idx.update(
             index_path,
-            aligner="bwa",
+            aligner="bwa-mem2",
             build=ref.build,
             reference_cid=ref.cid,
         )
@@ -65,14 +64,14 @@ async def bwa_index(ref: Reference) -> list[AlignerIndex]:
 
 
 @gatk_env.task
-async def bwa_mem(
+async def bwa_mem2_mem(
     ref: Reference,
     r1: R1,
     r2: R2 | None = None,
     read_group: dict[str, str] | None = None,
 ) -> Alignment:
     """
-    Align FASTQ reads to reference genome using BWA-MEM.
+    Align FASTQ reads to reference genome using BWA-MEM2.
 
     Produces an unsorted BAM file that typically needs to be sorted
     before downstream processing (e.g., with sort_sam).
@@ -87,13 +86,13 @@ async def bwa_mem(
         Alignment asset containing the unsorted BAM file
 
     Reference:
-        https://bio-bwa.sourceforge.net/bwa.shtml
+        https://github.com/bwa-mem2/bwa-mem2
     """
     logger.info(ref.to_dict())
     logger.info(r1.to_dict())
     if r2:
         logger.info(r2.to_dict())
-    # fetch() downloads ref + companions (aligner indices, .fai, .dict)
+
     await ref.fetch()
     await r1.fetch()
     if r2:
@@ -116,14 +115,11 @@ async def bwa_mem(
     output_bam = output_dir / f"{sample_id}_aligned.bam"
 
     cmd = [
-        "bwa",
+        "bwa-mem2",
         "mem",
-        "-K",
-        "10000000",
-        "-R",
-        rg_string,
-        "-t",
-        "4",
+        "-K", "10000000",
+        "-R", rg_string,
+        "-t", "4",
         str(ref_path),
     ]
 
@@ -149,12 +145,12 @@ async def bwa_mem(
         stderr_text = stderr.decode() if stderr else ""
         stdout_text = stdout.decode() if stdout else ""
         raise RuntimeError(
-            f"BWA-MEM failed with return code {proc.returncode}.\n"
+            f"BWA-MEM2 failed with return code {proc.returncode}.\n"
             f"stdout: {stdout_text}\nstderr: {stderr_text}"
         )
 
     if not output_bam.exists():
-        raise FileNotFoundError(f"BWA-MEM did not create output BAM at {output_bam}")
+        raise FileNotFoundError(f"BWA-MEM2 did not create output BAM at {output_bam}")
 
     bam = Alignment()
     await bam.update(

@@ -16,8 +16,9 @@ from stargazer.types import Alignment, KnownSites, R1, R2, Reference
 from stargazer.types.asset import assemble
 from stargazer.tasks import (
     samtools_faidx,
-    bwa_index,
-    bwa_mem,
+    create_sequence_dictionary,
+    bwa_mem2_index,
+    bwa_mem2_mem,
     sort_sam,
     mark_duplicates,
     base_recalibrator,
@@ -49,7 +50,8 @@ async def prepare_reference(build: str) -> Reference:
     ref = refs[0]
 
     await samtools_faidx(ref)
-    await bwa_index(ref)
+    await create_sequence_dictionary(ref)
+    await bwa_mem2_index(ref)
 
     return ref
 
@@ -94,7 +96,7 @@ async def preprocess_sample(
     r2 = r2_list[0] if r2_list else None
 
     # Alignment pipeline — tasks call fetch() internally
-    alignment = await bwa_mem(ref=ref, r1=r1, r2=r2)
+    alignment = await bwa_mem2_mem(ref=ref, r1=r1, r2=r2)
     alignment = await sort_sam(alignment=alignment, sort_order="coordinate")
     alignment = await mark_duplicates(alignment=alignment)
 

@@ -6,6 +6,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 from stargazer.tasks.general.samtools import samtools_faidx
 from stargazer.tasks.general.bwa import bwa_index, bwa_mem
+from stargazer.tasks.general.bwa_mem2 import bwa_mem2_index, bwa_mem2_mem
 from stargazer.tasks.gatk.create_sequence_dictionary import create_sequence_dictionary
 
 # GATK tasks
@@ -27,6 +28,8 @@ __all__ = [
     "create_sequence_dictionary",
     "bwa_index",
     "bwa_mem",
+    "bwa_mem2_index",
+    "bwa_mem2_mem",
     # Data preprocessing (GATK)
     "sort_sam",
     "mark_duplicates",

@@ -1,8 +1,14 @@
 - update README with CLI quickstart and bump to alpha status
 - upload public assets for quickstart workflow to pinata
+- write a separate set of condensed context files for production use instead of dev
 - create stargazer org ✅
 - setup GH pages ✅
 - find a way to exhaustively link docs to code for agent traversal ✅
 - setup a recurring docs sync job so they never go stale
 - setup agentic PR process
 - figure out how other folks can easily fork/PR
+- more robust logging
+  - tags per task to demux?
+  - 1 logfile per workflow exec?
+  - don't flush to stdout/err because it will all get tokenized and go to context
+  - env var for log level and bool to log actual tool call output

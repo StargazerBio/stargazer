@@ -25,6 +25,11 @@ os.environ.setdefault("PINATA_GATEWAY", "https://gateway.pinata.cloud")
 os.environ.setdefault("PINATA_VISIBILITY", "private")
 os.environ.setdefault("STARGAZER_LOCAL", str(Path.home() / ".stargazer" / "local"))
 
+_log_dir = Path.home() / ".stargazer" / "logs"
+_log_dir.mkdir(parents=True, exist_ok=True)
+logger.remove()
+logger.add(_log_dir / "stargazer.log", rotation="10 MB", retention=5)
+
 # GATK task environment for GATK-specific tools
 # Uses GATK image with Java runtime and GATK tools
 gatk_env = flyte.TaskEnvironment(
