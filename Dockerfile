@@ -35,7 +35,7 @@ ENTRYPOINT ["claude"]
 FROM base AS dev
 RUN apt-get update \
     && apt-get install -y \
-    sudo jq vim git nano python3 python3-pip zsh \
+    sudo jq vim git nano python3 python3-pip zsh tmux \
     && ln -s /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 

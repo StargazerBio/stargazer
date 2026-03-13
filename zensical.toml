@@ -2,6 +2,8 @@
 site_name = "Stargazer"
 site_description = "Bioinformatics pipeline framework built on Flyte v2"
 docs_dir = "docs"
+repo_url = "https://github.com/StargazerBio/stargazer"
+repo_name = "StargazerBio/stargazer"
 dev_addr = "0.0.0.0:8001"
 
 nav = [
