@@ -88,8 +88,7 @@ _registry = TaskRegistry()
 @mcp.tool()
 async def query_files(keyvalues: dict[str, str]) -> list[dict]:
     """Query files by metadata key-value pairs. Returns matching files."""
-    files = await default_client.query(keyvalues)
-    return [f.to_dict() for f in files]
+    return await default_client.query(keyvalues)
 
 
 @mcp.tool()

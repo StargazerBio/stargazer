@@ -66,6 +66,16 @@ def log_execution() -> str:
     return execution_id
 
 
+# scRNA-seq task environment for scanpy-based single-cell analysis
+# Memory-hungry: scanpy loads full AnnData objects into RAM
+scrna_env = flyte.TaskEnvironment(
+    name="scrna",
+    resources=flyte.Resources(
+        cpu=4,
+        memory="32Gi",
+    ),
+)
+
 # GATK task environment for GATK-specific tools
 # Uses GATK image with Java runtime and GATK tools
 gatk_env = flyte.TaskEnvironment(

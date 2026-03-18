@@ -26,6 +26,7 @@ from stargazer.types.variants import (
     KnownSitesIndex,
     VQSRModel,
 )
+from stargazer.types.scrna import AnnData
 
 # Auto-populated via Asset.__init_subclass__
 ASSET_REGISTRY: dict[str, type[Asset]] = Asset._registry
@@ -74,4 +75,6 @@ __all__ = [
     "KnownSites",
     "KnownSitesIndex",
     "VQSRModel",
+    # scRNA-seq assets
+    "AnnData",
 ]

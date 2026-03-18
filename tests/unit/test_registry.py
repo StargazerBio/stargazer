@@ -41,6 +41,8 @@ def test_discovery_finds_all_workflows():
         "preprocess_sample",
         # germline_short_variant_discovery
         "germline_short_variant_discovery",
+        # scrna_clustering
+        "scrna_clustering_pipeline",
     }
     assert expected_workflows == wf_names
 

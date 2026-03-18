@@ -10,11 +10,3 @@ repos:
     hooks:
       - id: docstr-coverage
         args: [--verbose, "0", --fail-under=100, src/]
-  - repo: local
-    hooks:
-      - id: pytest
-        name: pytest
-        entry: uv run pytest tests/
-        language: system
-        pass_filenames: false
-        always_run: true

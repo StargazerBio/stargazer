@@ -15,6 +15,11 @@ dependencies = [
     "mcp[cli]>=1.0.0",
     "tinydb>=4.8.2",
     "loguru>=0.7.3",
+    "scanpy>=1.12",
+    "anndata>=0.12.10",
+    "scikit-image>=0.26.0",
+    "igraph>=1.0.0",
+    "pooch>=1.9.0",
 ]
 
 [project.scripts]
