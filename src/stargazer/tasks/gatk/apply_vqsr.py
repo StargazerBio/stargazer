@@ -46,14 +46,13 @@ async def apply_vqsr(
     logger.info(vcf.to_dict())
     logger.info(ref.to_dict())
     logger.info(vqsr_model.to_dict())
-    mode = vqsr_model.keyvalues.get("mode", "SNP")
+    mode = vqsr_model.mode or "SNP"
     if mode not in ("SNP", "INDEL"):
         raise ValueError(f"VQSRModel mode must be 'SNP' or 'INDEL', got {mode!r}")
 
-    tranches_str = vqsr_model.keyvalues.get("tranches_path")
-    if not tranches_str:
-        raise ValueError("VQSRModel is missing tranches_path in keyvalues")
-    tranches_path = Path(tranches_str)
+    if not vqsr_model.tranches_path:
+        raise ValueError("VQSRModel is missing tranches_path")
+    tranches_path = Path(vqsr_model.tranches_path)
 
     filter_level = truth_sensitivity_filter_level or _DEFAULT_FILTER_LEVEL[mode]
 
@@ -62,7 +61,7 @@ async def apply_vqsr(
     await vqsr_model.fetch()
 
     output_dir = _storage.default_client.local_dir
-    sample_id = vcf.keyvalues.get("sample_id", "cohort")
+    sample_id = vcf.sample_id or "cohort"
     output_vcf = output_dir / f"{sample_id}_vqsr_{mode.lower()}.vcf"
 
     cmd = [

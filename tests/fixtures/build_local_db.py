@@ -12,177 +12,29 @@ Run this script whenever fixtures are added or changed:
 import asyncio
 from pathlib import Path
 
+from stargazer.types.alignment import (
+    Alignment,
+    AlignmentIndex,
+    BQSRReport,
+    DuplicateMetrics,
+)
 from stargazer.types.asset import Asset
+from stargazer.types.reads import R1, R2
+from stargazer.types.reference import (
+    AlignerIndex,
+    Reference,
+    ReferenceIndex,
+    SequenceDict,
+)
+from stargazer.types.variants import (
+    KnownSites,
+    KnownSitesIndex,
+    Variants,
+    VariantsIndex,
+)
 from stargazer.utils.local_storage import LocalStorageClient
 
 FIXTURES_DIR = Path(__file__).parent
-
-# Fixture file -> keyvalues mapping
-FIXTURE_METADATA: dict[str, dict[str, str]] = {
-    # Reference: GRCh38 TP53 region
-    "GRCh38_TP53.fa": {
-        "asset": "reference",
-        "build": "GRCh38",
-    },
-    "GRCh38_TP53.fa.fai": {
-        "asset": "reference_index",
-        "build": "GRCh38",
-    },
-    "GRCh38_TP53.dict": {
-        "asset": "sequence_dict",
-        "build": "GRCh38",
-    },
-    # BWA index files
-    "GRCh38_TP53.fa.amb": {
-        "asset": "aligner_index",
-        "aligner": "bwa",
-        "build": "GRCh38",
-    },
-    "GRCh38_TP53.fa.ann": {
-        "asset": "aligner_index",
-        "aligner": "bwa",
-        "build": "GRCh38",
-    },
-    "GRCh38_TP53.fa.bwt": {
-        "asset": "aligner_index",
-        "aligner": "bwa",
-        "build": "GRCh38",
-    },
-    "GRCh38_TP53.fa.pac": {
-        "asset": "aligner_index",
-        "aligner": "bwa",
-        "build": "GRCh38",
-    },
-    "GRCh38_TP53.fa.sa": {
-        "asset": "aligner_index",
-        "aligner": "bwa",
-        "build": "GRCh38",
-    },
-    # Reads: NA12829
-    "NA12829_TP53_R1.fq.gz": {
-        "asset": "r1",
-        "sample_id": "NA12829",
-    },
-    "NA12829_TP53_R2.fq.gz": {
-        "asset": "r2",
-        "sample_id": "NA12829",
-    },
-    # Alignments: NA12829 at various pipeline stages
-    "NA12829_TP53_unmapped.bam": {
-        "asset": "alignment",
-        "sample_id": "NA12829",
-        "stage": "unmapped",
-    },
-    "NA12829_TP53_bwa_aligned.bam": {
-        "asset": "alignment",
-        "sample_id": "NA12829",
-        "stage": "bwa_aligned",
-    },
-    "NA12829_TP53_merged.bam": {
-        "asset": "alignment",
-        "sample_id": "NA12829",
-        "stage": "merged",
-    },
-    "NA12829_TP53_merged.bai": {
-        "asset": "alignment_index",
-        "sample_id": "NA12829",
-        "stage": "merged",
-    },
-    "NA12829_TP53_paired.bam": {
-        "asset": "alignment",
-        "sample_id": "NA12829",
-        "stage": "paired",
-    },
-    "NA12829_TP53_paired.bam.bai": {
-        "asset": "alignment_index",
-        "sample_id": "NA12829",
-        "stage": "paired",
-    },
-    "NA12829_TP53_sorted_coordinate.bam": {
-        "asset": "alignment",
-        "sample_id": "NA12829",
-        "stage": "sorted_coordinate",
-        "sorted": "coordinate",
-    },
-    "NA12829_TP53_sorted_coordinate.bai": {
-        "asset": "alignment_index",
-        "sample_id": "NA12829",
-        "stage": "sorted_coordinate",
-        "sorted": "coordinate",
-    },
-    "NA12829_TP53_markdup.bam": {
-        "asset": "alignment",
-        "sample_id": "NA12829",
-        "stage": "markdup",
-        "sorted": "coordinate",
-        "duplicates_marked": "true",
-    },
-    "NA12829_TP53_markdup.bai": {
-        "asset": "alignment_index",
-        "sample_id": "NA12829",
-        "stage": "markdup",
-        "sorted": "coordinate",
-        "duplicates_marked": "true",
-    },
-    "NA12829_TP53_markdup_metrics.txt": {
-        "asset": "duplicate_metrics",
-        "sample_id": "NA12829",
-        "stage": "markdup",
-    },
-    "NA12829_TP53_recalibrated.bam": {
-        "asset": "alignment",
-        "sample_id": "NA12829",
-        "stage": "recalibrated",
-        "sorted": "coordinate",
-        "duplicates_marked": "true",
-        "recalibrated": "true",
-    },
-    "NA12829_TP53_recalibrated.bai": {
-        "asset": "alignment_index",
-        "sample_id": "NA12829",
-        "stage": "recalibrated",
-        "sorted": "coordinate",
-        "duplicates_marked": "true",
-        "recalibrated": "true",
-    },
-    "NA12829_TP53_bqsr.table": {
-        "asset": "bqsr_report",
-        "sample_id": "NA12829",
-    },
-    # Known sites
-    "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf": {
-        "asset": "known_sites",
-        "build": "GRCh38",
-    },
-    "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf.idx": {
-        "asset": "variants_index",
-        "build": "GRCh38",
-    },
-    # Variants: GVCFs
-    "NA12829_TP53.g.vcf": {
-        "asset": "variants",
-        "sample_id": "NA12829",
-        "caller": "haplotypecaller",
-        "variant_type": "gvcf",
-    },
-    "NA12829_TP53.g.vcf.idx": {
-        "asset": "variants_index",
-        "sample_id": "NA12829",
-        "caller": "haplotypecaller",
-    },
-    "NA12891_TP53.g.vcf": {
-        "asset": "variants",
-        "sample_id": "NA12891",
-        "caller": "haplotypecaller",
-        "variant_type": "gvcf",
-    },
-    "NA12892_TP53.g.vcf": {
-        "asset": "variants",
-        "sample_id": "NA12892",
-        "caller": "haplotypecaller",
-        "variant_type": "gvcf",
-    },
-}
 
 
 async def build_db() -> None:
@@ -194,20 +46,230 @@ async def build_db() -> None:
 
     client = LocalStorageClient(local_dir=FIXTURES_DIR)
 
-    added = 0
-    for filename, keyvalues in FIXTURE_METADATA.items():
-        filepath = FIXTURES_DIR / filename
-        if not filepath.exists():
-            print(f"  SKIP (missing): {filename}")
-            continue
+    async def upload(asset: Asset) -> str:
+        await client.upload(asset)
+        name = asset.path.name if asset.path else "?"
+        print(f"  added: {name} → {asset.cid}")
+        return asset.cid
 
-        comp = Asset(path=filepath, keyvalues=keyvalues)
-        await client.upload(comp)
-        print(f"  added: {filename} → {comp.cid}")
-        added += 1
+    # ── Reference ──────────────────────────────────────────────────────────
+    ref = Reference(path=FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
+    reference_cid = await upload(ref)
+
+    await upload(
+        ReferenceIndex(
+            path=FIXTURES_DIR / "GRCh38_TP53.fa.fai",
+            build="GRCh38",
+            reference_cid=reference_cid,
+        )
+    )
+    await upload(
+        SequenceDict(
+            path=FIXTURES_DIR / "GRCh38_TP53.dict",
+            build="GRCh38",
+            reference_cid=reference_cid,
+        )
+    )
+
+    for ext in ("amb", "ann", "bwt", "pac", "sa"):
+        await upload(
+            AlignerIndex(
+                path=FIXTURES_DIR / f"GRCh38_TP53.fa.{ext}",
+                build="GRCh38",
+                aligner="bwa",
+                reference_cid=reference_cid,
+            )
+        )
+
+    # ── Reads ───────────────────────────────────────────────────────────────
+    r1 = R1(path=FIXTURES_DIR / "NA12829_TP53_R1.fq.gz", sample_id="NA12829")
+    r1_cid = await upload(r1)
+
+    r2 = R2(path=FIXTURES_DIR / "NA12829_TP53_R2.fq.gz", sample_id="NA12829")
+    r2_cid = await upload(r2)
+
+    # Back-fill mate CIDs now that both CIDs are known
+    r1.mate_cid = r2_cid
+    r2.mate_cid = r1_cid
+    await upload(r1)
+    await upload(r2)
+
+    # ── Known sites ─────────────────────────────────────────────────────────
+    mills = KnownSites(
+        path=FIXTURES_DIR / "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf",
+        build="GRCh38",
+        resource_name="mills",
+        training="true",
+        truth="true",
+        prior="12",
+        vqsr_mode="INDEL",
+    )
+    mills_cid = await upload(mills)
+
+    await upload(
+        KnownSitesIndex(
+            path=FIXTURES_DIR
+            / "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf.idx",
+            known_sites_cid=mills_cid,
+        )
+    )
+
+    # ── Alignments ──────────────────────────────────────────────────────────
+    unmapped = Alignment(
+        path=FIXTURES_DIR / "NA12829_TP53_unmapped.bam",
+        sample_id="NA12829",
+        format="bam",
+        r1_cid=r1_cid,
+    )
+    await upload(unmapped)
+
+    bwa_aligned = Alignment(
+        path=FIXTURES_DIR / "NA12829_TP53_bwa_aligned.bam",
+        sample_id="NA12829",
+        format="bam",
+        tool="bwa",
+        reference_cid=reference_cid,
+        r1_cid=r1_cid,
+    )
+    await upload(bwa_aligned)
+
+    merged = Alignment(
+        path=FIXTURES_DIR / "NA12829_TP53_merged.bam",
+        sample_id="NA12829",
+        format="bam",
+        tool="bwa",
+        reference_cid=reference_cid,
+        r1_cid=r1_cid,
+    )
+    merged_cid = await upload(merged)
+
+    await upload(
+        AlignmentIndex(
+            path=FIXTURES_DIR / "NA12829_TP53_merged.bai",
+            sample_id="NA12829",
+            alignment_cid=merged_cid,
+        )
+    )
+
+    paired = Alignment(
+        path=FIXTURES_DIR / "NA12829_TP53_paired.bam",
+        sample_id="NA12829",
+        format="bam",
+        tool="bwa",
+        reference_cid=reference_cid,
+        r1_cid=r1_cid,
+    )
+    paired_cid = await upload(paired)
+
+    await upload(
+        AlignmentIndex(
+            path=FIXTURES_DIR / "NA12829_TP53_paired.bam.bai",
+            sample_id="NA12829",
+            alignment_cid=paired_cid,
+        )
+    )
+
+    sorted_coord = Alignment(
+        path=FIXTURES_DIR / "NA12829_TP53_sorted_coordinate.bam",
+        sample_id="NA12829",
+        format="bam",
+        sorted="coordinate",
+        tool="samtools",
+        reference_cid=reference_cid,
+        r1_cid=r1_cid,
+    )
+    sorted_cid = await upload(sorted_coord)
+
+    await upload(
+        AlignmentIndex(
+            path=FIXTURES_DIR / "NA12829_TP53_sorted_coordinate.bai",
+            sample_id="NA12829",
+            alignment_cid=sorted_cid,
+        )
+    )
+
+    markdup = Alignment(
+        path=FIXTURES_DIR / "NA12829_TP53_markdup.bam",
+        sample_id="NA12829",
+        format="bam",
+        sorted="coordinate",
+        duplicates_marked=True,
+        tool="gatk",
+        reference_cid=reference_cid,
+        r1_cid=r1_cid,
+    )
+    markdup_cid = await upload(markdup)
+
+    await upload(
+        AlignmentIndex(
+            path=FIXTURES_DIR / "NA12829_TP53_markdup.bai",
+            sample_id="NA12829",
+            alignment_cid=markdup_cid,
+        )
+    )
+
+    await upload(
+        DuplicateMetrics(
+            path=FIXTURES_DIR / "NA12829_TP53_markdup_metrics.txt",
+            sample_id="NA12829",
+            tool="gatk",
+            alignment_cid=markdup_cid,
+        )
+    )
+
+    recalibrated = Alignment(
+        path=FIXTURES_DIR / "NA12829_TP53_recalibrated.bam",
+        sample_id="NA12829",
+        format="bam",
+        sorted="coordinate",
+        duplicates_marked=True,
+        bqsr_applied=True,
+        tool="gatk",
+        reference_cid=reference_cid,
+        r1_cid=r1_cid,
+    )
+    recalibrated_cid = await upload(recalibrated)
+
+    await upload(
+        AlignmentIndex(
+            path=FIXTURES_DIR / "NA12829_TP53_recalibrated.bai",
+            sample_id="NA12829",
+            alignment_cid=recalibrated_cid,
+        )
+    )
+
+    await upload(
+        BQSRReport(
+            path=FIXTURES_DIR / "NA12829_TP53_bqsr.table",
+            sample_id="NA12829",
+            tool="gatk",
+            alignment_cid=markdup_cid,
+        )
+    )
+
+    # ── Variants (GVCFs) ────────────────────────────────────────────────────
+    for sample_id in ("NA12829", "NA12891", "NA12892"):
+        vcf = Variants(
+            path=FIXTURES_DIR / f"{sample_id}_TP53.g.vcf",
+            sample_id=sample_id,
+            caller="haplotypecaller",
+            variant_type="gvcf",
+            build="GRCh38",
+        )
+        vcf_cid = await upload(vcf)
+
+        idx_path = FIXTURES_DIR / f"{sample_id}_TP53.g.vcf.idx"
+        if idx_path.exists():
+            await upload(
+                VariantsIndex(
+                    path=idx_path,
+                    sample_id=sample_id,
+                    variants_cid=vcf_cid,
+                )
+            )
 
     client.db.close()
-    print(f"\nWrote {db_path} with {added} records")
+    print(f"\nWrote {db_path}")
 
 
 if __name__ == "__main__":

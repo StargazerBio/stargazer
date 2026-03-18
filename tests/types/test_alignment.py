@@ -19,13 +19,13 @@ import stargazer.utils.local_storage as _storage_mod
 async def test_alignment_fetch(fixtures_db):
     """Test query + specialize resolves BAM and BAI paths from TinyDB."""
     [bam_r] = await _storage_mod.default_client.query(
-        {"asset": "alignment", "sample_id": "NA12829", "stage": "paired"}
+        {"asset": "alignment", "sample_id": "NA12829", "bqsr_applied": "true"}
     )
-    [idx_r] = await _storage_mod.default_client.query(
-        {"asset": "alignment_index", "sample_id": "NA12829", "stage": "paired"}
-    )
-
     bam = specialize(bam_r)
+
+    [idx_r] = await _storage_mod.default_client.query(
+        {"asset": "alignment_index", "alignment_cid": bam.cid}
+    )
     idx = specialize(idx_r)
 
     assert bam.path is not None

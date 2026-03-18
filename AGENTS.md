@@ -1,6 +1,7 @@
 # Stargazer
 
 **General Guidelines**
+- Always call `ToolSearch` to fetch the schema of any deferred MCP tool before invoking it.
 - When I say task, I am referring to a Flyte V2 task, not a raw python function
 - Tasks are collected into workflows which are just regular tasks calling other tasks, sync or async
 - This project uses UV so the appropriate commands are `uv add` and `uv pip install -e .`

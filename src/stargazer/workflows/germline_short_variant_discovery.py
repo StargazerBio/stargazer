@@ -1,17 +1,13 @@
 """
 ### GATK Best Practices: Germline Short Variant Discovery (SNPs + Indels)
 
-Implements the full GATK pipeline from preprocessed BAMs:
+Implements the GATK pipeline from preprocessed BAMs:
     1. HaplotypeCaller  — per-sample GVCF (parallel)
     2. joint_call_gvcfs — GenomicsDBImport + GenotypeGVCFs in one task
-    3. VariantRecalibrator (INDEL) — build VQSR model
-    4. ApplyVQSR INDEL — filter indels → final VCF
 
 Prerequisites:
     Reference and sample alignments must already be in storage (run prepare_reference
-    and preprocess_sample first). VQSR training resources (HapMap, omni, 1000G,
-    mills, dbSNP) must be stored with build, resource_name, known, training,
-    truth, and prior keyvalues, tagged with vqsr_mode=INDEL.
+    and preprocess_sample first).
 
 Reference:
     https://gatk.broadinstitute.org/hc/en-us/articles/360035535932-Germline-short-variant-discovery-SNPs-Indels
@@ -27,8 +23,6 @@ from stargazer.types.asset import assemble
 from stargazer.tasks import (
     haplotype_caller,
     joint_call_gvcfs,
-    variant_recalibrator,
-    apply_vqsr,
 )
 
 
@@ -41,7 +35,7 @@ async def germline_short_variant_discovery(
     Germline short variant discovery from preprocessed BAMs.
 
     Assembles all BQSR-applied alignments and reference from storage, then runs
-    the full GATK Best Practices pipeline through VQSR filtering.
+    HaplotypeCaller and joint genotyping.
 
     Expects preprocess_sample to have been run first — alignments must have
     bqsr_applied=true.
@@ -51,7 +45,7 @@ async def germline_short_variant_discovery(
         cohort_id: Identifier for the cohort output (default: "cohort")
 
     Returns:
-        VQSR-filtered joint-genotyped Variants asset
+        Joint-genotyped Variants asset
     """
     log_execution()
     # Assemble reference first so we can filter alignments by reference_cid
@@ -60,9 +54,8 @@ async def germline_short_variant_discovery(
         raise ValueError(f"No reference found for build={build!r}")
     ref = refs[0]
 
-    alignments, indel_resources = await asyncio.gather(
-        assemble(reference_cid=ref.cid, asset="alignment", bqsr_applied="true"),
-        assemble(build=build, asset="known_sites", vqsr_mode="INDEL"),
+    alignments = await assemble(
+        reference_cid=ref.cid, asset="alignment", bqsr_applied="true"
     )
 
     if not alignments:
@@ -70,9 +63,6 @@ async def germline_short_variant_discovery(
             f"No BQSR-applied alignments found for build={build!r}. "
             "Run preprocess_sample first."
         )
-
-    if not indel_resources:
-        raise ValueError(f"No INDEL VQSR resources for build={build!r}")
 
     # 1. HaplotypeCaller — per-sample GVCFs in parallel
     gvcfs = list(
@@ -82,14 +72,6 @@ async def germline_short_variant_discovery(
     )
 
     # 2. GenomicsDBImport + GenotypeGVCFs — joint calling
-    raw_vcf = await joint_call_gvcfs(
+    return await joint_call_gvcfs(
         gvcfs=gvcfs, ref=ref, intervals=ref.contigs, cohort_id=cohort_id
     )
-
-    # 3. VariantRecalibrator — INDEL model
-    indel_model = await variant_recalibrator(
-        vcf=raw_vcf, ref=ref, resources=indel_resources, mode="INDEL"
-    )
-
-    # 4. ApplyVQSR — INDEL
-    return await apply_vqsr(vcf=raw_vcf, ref=ref, vqsr_model=indel_model)

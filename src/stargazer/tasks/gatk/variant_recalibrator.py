@@ -59,7 +59,7 @@ async def variant_recalibrator(
         await r.fetch()
 
     output_dir = _storage.default_client.local_dir
-    sample_id = vcf.keyvalues.get("sample_id", "cohort")
+    sample_id = vcf.sample_id or "cohort"
     output_recal = output_dir / f"{sample_id}_{mode.lower()}.recal"
     output_tranches = output_dir / f"{sample_id}_{mode.lower()}.tranches"
 
@@ -81,11 +81,11 @@ async def variant_recalibrator(
     ]
 
     for r in resources:
-        name = r.keyvalues.get("resource_name", "unknown")
-        known = r.keyvalues.get("known", "false")
-        training = r.keyvalues.get("training", "false")
-        truth = r.keyvalues.get("truth", "false")
-        prior = r.keyvalues.get("prior", "10")
+        name = r.resource_name or "unknown"
+        known = r.known or "false"
+        training = r.training or "false"
+        truth = r.truth or "false"
+        prior = r.prior or "10"
         cmd.extend(
             [
                 f"--resource:{name},known={known},training={training},truth={truth},prior={prior}",
