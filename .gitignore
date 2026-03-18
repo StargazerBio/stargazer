@@ -1,5 +1,6 @@
-# Scratch directory for one of testing
+# Scratch directory for one off testing
 scratch/*
+test_data/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

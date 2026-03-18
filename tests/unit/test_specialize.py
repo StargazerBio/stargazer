@@ -24,7 +24,9 @@ class TestSpecialize:
     """specialize() converts a raw storage record to the correct derived type."""
 
     def test_reference(self):
-        result = specialize(record("Qmfasta", Path("/tmp/ref.fa"), asset="reference", build="GRCh38"))
+        result = specialize(
+            record("Qmfasta", Path("/tmp/ref.fa"), asset="reference", build="GRCh38")
+        )
         assert type(result) is Reference
         assert result.cid == "Qmfasta"
         assert result.path == Path("/tmp/ref.fa")
@@ -45,13 +47,15 @@ class TestSpecialize:
         assert result.aligner == "bwa"
 
     def test_alignment(self):
-        result = specialize(record(
-            "Qmbam",
-            asset="alignment",
-            sample_id="NA12878",
-            duplicates_marked="true",
-            bqsr_applied="false",
-        ))
+        result = specialize(
+            record(
+                "Qmbam",
+                asset="alignment",
+                sample_id="NA12878",
+                duplicates_marked="true",
+                bqsr_applied="false",
+            )
+        )
         assert type(result) is Alignment
         assert result.sample_id == "NA12878"
         assert result.duplicates_marked is True
@@ -62,13 +66,15 @@ class TestSpecialize:
         assert type(result) is AlignmentIndex
 
     def test_variants(self):
-        result = specialize(record(
-            "Qmvcf",
-            asset="variants",
-            sample_id="S1",
-            sample_count="3",
-            source_samples='["S1", "S2", "S3"]',
-        ))
+        result = specialize(
+            record(
+                "Qmvcf",
+                asset="variants",
+                sample_id="S1",
+                sample_count="3",
+                source_samples='["S1", "S2", "S3"]',
+            )
+        )
         assert type(result) is Variants
         assert result.sample_count == 3
         assert result.source_samples == ["S1", "S2", "S3"]
@@ -95,11 +101,13 @@ class TestSpecialize:
 
     def test_unknown_keyvalues_dropped_on_specialize(self):
         """Undeclared keyvalues are silently dropped during specialization."""
-        result = specialize(record(
-            "Qm123",
-            asset="alignment",
-            sample_id="NA12878",
-            custom_field="custom_value",
-        ))
+        result = specialize(
+            record(
+                "Qm123",
+                asset="alignment",
+                sample_id="NA12878",
+                custom_field="custom_value",
+            )
+        )
         assert result.sample_id == "NA12878"
         assert not hasattr(result, "custom_field")

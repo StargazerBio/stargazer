@@ -1,10 +1,11 @@
 FROM ubuntu AS base
 
-ENV PATH="/root/.local/bin:/usr/local/bin:/home/coder/.local/bin:/opt/conda/bin:${PATH}"
+ENV VIRTUAL_ENV="/stargazer/.venv"
+ENV PATH="/stargazer/.venv/bin:/usr/local/bin:/opt/conda/bin:/home/ubuntu/.local/bin:${PATH}"
 
 # System packages
 RUN apt-get update \
-    && apt-get install -y curl wget unzip \
+    && apt-get install -y curl wget unzip git \
     && rm -rf /var/lib/apt/lists/*
 
 # Mamba (miniforge)
@@ -20,14 +21,21 @@ RUN mamba install -y -c bioconda -c conda-forge \
     gatk4 \
     && mamba clean -afy
 
-# uv + Claude Code
-RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
-RUN curl -fsSL https://claude.ai/install.sh | bash
+# uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && install -m 755 /root/.local/bin/uv /usr/local/bin/uv \
+    && install -m 755 /root/.local/bin/uvx /usr/local/bin/uvx
+
+# Claude Code
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+    && install -m 755 /root/.local/bin/claude /usr/local/bin/claude
+
+WORKDIR /stargazer
+COPY pyproject.toml uv.lock ./
 
 # --- Quickstart target ---
 FROM base AS quickstart
-WORKDIR /stargazer
-COPY . .
+COPY src/ src/
 RUN uv sync
 ENTRYPOINT ["claude"]
 
@@ -35,7 +43,7 @@ ENTRYPOINT ["claude"]
 FROM base AS dev
 RUN apt-get update \
     && apt-get install -y \
-    sudo jq vim git nano python3 python3-pip zsh tmux \
+    sudo jq vim git nano python3 python3-pip tmux \
     && ln -s /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
@@ -48,13 +56,7 @@ RUN npm install -g opencode-ai
 # Convenience
 RUN curl -fsSL https://starship.rs/install.sh | sh -s -- --yes
 
-# Install code-server
-RUN curl -fsSL https://code-server.dev/install.sh | sh
+USER ubuntu
 
-ARG USER=coder
-RUN useradd --groups sudo --no-create-home --shell /bin/zsh ${USER} \
-    && echo "${USER} ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/${USER} \
-    && chmod 0440 /etc/sudoers.d/${USER}
-USER ${USER}
-WORKDIR /home/${USER}
-ENTRYPOINT ["/bin/zsh"]
+# uv sync then launch bash with the venv active.
+ENTRYPOINT ["bash", "-c", "uv sync --group dev && exec bash"]

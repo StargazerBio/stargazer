@@ -108,6 +108,7 @@ async def upload_file(path: str, keyvalues: dict[str, str]) -> dict:
     cls = ASSET_REGISTRY[asset_key]
     import dataclasses
     from stargazer.types.asset import _BASE_FIELDS
+
     declared = {f.name for f in dataclasses.fields(cls)} - _BASE_FIELDS
     unknown = set(keyvalues) - declared - {"asset"}
     if unknown:

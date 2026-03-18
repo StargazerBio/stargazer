@@ -13,6 +13,8 @@ def test_discovery_finds_all_tasks():
         "create_sequence_dictionary",
         "bwa_index",
         "bwa_mem",
+        "bwa_mem2_index",
+        "bwa_mem2_mem",
         "sort_sam",
         "mark_duplicates",
         "merge_bam_alignment",

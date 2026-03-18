@@ -67,7 +67,9 @@ class LocalStorageClient:
         self.local_dir.mkdir(parents=True, exist_ok=True)
         self.remote = remote
         self.public_gateway = (
-            public_gateway if public_gateway is not None else os.environ["PINATA_GATEWAY"]
+            public_gateway
+            if public_gateway is not None
+            else os.environ["PINATA_GATEWAY"]
         )
 
         # TinyDB for local metadata storage (lazy initialized)

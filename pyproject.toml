@@ -13,26 +13,12 @@ dependencies = [
     "aiofiles>=24.1.0",
     "flyte[tui]>=2.0.3",
     "mcp[cli]>=1.0.0",
-    "pytest>=9.0.1",
-    "pre-commit>=4.5.1",
     "tinydb>=4.8.2",
-    "zensical>=0.0.24",
     "loguru>=0.7.3",
 ]
 
 [project.scripts]
 stargazer = "stargazer.server:main"
-
-[project.optional-dependencies]
-dev = [
-    "pre-commit>=4.5.0",
-    "ruff>=0.14.0",
-]
-test = [
-    "pytest>=7.4.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-cov>=4.1.0",
-]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -51,5 +37,10 @@ filterwarnings = [
 [dependency-groups]
 dev = [
     "mkdocstrings[python]>=1.0.3",
+    "pre-commit>=4.5.0",
+    "pytest>=9.0.1",
     "pytest-asyncio>=1.3.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.14.0",
+    "zensical>=0.0.24",
 ]

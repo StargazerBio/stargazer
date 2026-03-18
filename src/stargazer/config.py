@@ -33,6 +33,7 @@ _log_dir.mkdir(parents=True, exist_ok=True)
 logger.remove()
 logger.add(_log_dir / "stargazer.log", rotation="10 MB", retention=5)
 
+
 def log_execution() -> str:
     """Start a per-execution log sink and return the execution ID.
 

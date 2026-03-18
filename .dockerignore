@@ -1,6 +1,5 @@
-tests/
-docs/
 scratch/
-wt/
-.opencode/
-*.md
+__pycache__/
+UNKNOWN.egg-info
+.venv/
+.ruff_cache

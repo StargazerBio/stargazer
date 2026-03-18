@@ -32,9 +32,6 @@ def test_log_execution_clean_repo(tmp_path):
 
 def test_log_execution_dirty_repo(tmp_path, capfd):
     """Tags commit with -dirty and warns when git tree is unclean."""
-    dirty_status = patch(
-        "stargazer.config.subprocess.run",
-    )
     with (
         patch("stargazer.config._log_dir", tmp_path),
         patch("stargazer.config.subprocess.run") as mock_run,

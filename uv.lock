@@ -1924,27 +1924,18 @@ dependencies = [
     { name = "flyte", extra = ["tui"] },
     { name = "loguru" },
     { name = "mcp", extra = ["cli"] },
-    { name = "pre-commit" },
-    { name = "pytest" },
     { name = "tinydb" },
-    { name = "zensical" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pre-commit" },
-    { name = "ruff" },
-]
-test = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "mkdocstrings", extra = ["python"] },
+    { name = "pre-commit" },
+    { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "zensical" },
 ]
 
 [package.metadata]
@@ -1954,22 +1945,18 @@ requires-dist = [
     { name = "flyte", extras = ["tui"], specifier = ">=2.0.3" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.0.0" },
-    { name = "pre-commit", specifier = ">=4.5.1" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.5.0" },
-    { name = "pytest", specifier = ">=9.0.1" },
-    { name = "pytest", marker = "extra == 'test'", specifier = ">=7.4.0" },
-    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.21.0" },
-    { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.1.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.0" },
     { name = "tinydb", specifier = ">=4.8.2" },
-    { name = "zensical", specifier = ">=0.0.24" },
 ]
-provides-extras = ["dev", "test"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0.3" },
+    { name = "pre-commit", specifier = ">=4.5.0" },
+    { name = "pytest", specifier = ">=9.0.1" },
     { name = "pytest-asyncio", specifier = ">=1.3.0" },
+    { name = "pytest-cov", specifier = ">=4.1.0" },
+    { name = "ruff", specifier = ">=0.14.0" },
+    { name = "zensical", specifier = ">=0.0.24" },
 ]
 
 [[package]]

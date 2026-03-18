@@ -61,11 +61,16 @@ def test_allowed_key_works():
 
 
 def test_bool_true_serialized():
-    assert Alignment(duplicates_marked=True).to_keyvalues()["duplicates_marked"] == "true"
+    assert (
+        Alignment(duplicates_marked=True).to_keyvalues()["duplicates_marked"] == "true"
+    )
 
 
 def test_bool_false_serialized():
-    assert Alignment(duplicates_marked=False).to_keyvalues()["duplicates_marked"] == "false"
+    assert (
+        Alignment(duplicates_marked=False).to_keyvalues()["duplicates_marked"]
+        == "false"
+    )
 
 
 def test_bool_read_back():
@@ -82,7 +87,10 @@ def test_int_read_back():
 
 
 def test_list_serialized():
-    assert Variants(source_samples=["A", "B"]).to_keyvalues()["source_samples"] == '["A", "B"]'
+    assert (
+        Variants(source_samples=["A", "B"]).to_keyvalues()["source_samples"]
+        == '["A", "B"]'
+    )
 
 
 def test_list_read_back():

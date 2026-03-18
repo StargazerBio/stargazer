@@ -42,7 +42,8 @@ async def bwa_index(ref: Reference) -> list[AlignerIndex]:
     output_dir = _storage.default_client.local_dir
     base_name = ref_path.name
 
-    cmd = ["bwa", "index", str(ref_path)]
+    prefix = output_dir / base_name
+    cmd = ["bwa", "index", "-p", str(prefix), str(ref_path)]
     stdout, stderr = await _run(cmd, cwd=str(output_dir))
 
     indices = []
@@ -108,9 +109,9 @@ async def bwa_mem(
         rg = {"ID": sample_id, "SM": sample_id}
         rg.update(read_group)
         rg_parts = [f"{k}:{v}" for k, v in rg.items()]
-        rg_string = "@RG\\t" + "\\t".join(rg_parts)
+        rg_string = r"@RG\t" + r"\t".join(rg_parts)
     else:
-        rg_string = f"@RG\\tID:{sample_id}\\tSM:{sample_id}\\tLB:lib\\tPL:ILLUMINA"
+        rg_string = rf"@RG\tID:{sample_id}\tSM:{sample_id}\tLB:lib\tPL:ILLUMINA"
 
     output_dir = _storage.default_client.local_dir
     output_bam = output_dir / f"{sample_id}_aligned.bam"
@@ -118,8 +119,6 @@ async def bwa_mem(
     cmd = [
         "bwa",
         "mem",
-        "-K",
-        "10000000",
         "-R",
         rg_string,
         "-t",
