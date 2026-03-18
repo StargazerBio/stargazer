@@ -48,6 +48,9 @@ RUN npm install -g opencode-ai
 # Convenience
 RUN curl -fsSL https://starship.rs/install.sh | sh -s -- --yes
 
+# Install code-server
+RUN curl -fsSL https://code-server.dev/install.sh | sh
+
 ARG USER=coder
 RUN useradd --groups sudo --no-create-home --shell /bin/zsh ${USER} \
     && echo "${USER} ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/${USER} \
