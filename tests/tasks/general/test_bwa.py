@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from conftest import FIXTURES_DIR
+from conftest import GENERAL_FIXTURES_DIR
 
 from stargazer.tasks.general.bwa import bwa_index
 from stargazer.types import AlignerIndex, Reference
@@ -18,7 +18,7 @@ async def test_bwa_index(fixtures_db):
     if shutil.which("bwa") is None:
         pytest.skip("bwa not available in environment")
 
-    ref = Reference(path=FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
+    ref = Reference(path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
 
     fixtures_db()  # checkout: switch to isolated work dir
 

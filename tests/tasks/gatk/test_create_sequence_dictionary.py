@@ -5,7 +5,7 @@ Tests for create_sequence_dictionary task.
 import shutil
 
 import pytest
-from conftest import FIXTURES_DIR
+from conftest import GENERAL_FIXTURES_DIR
 
 from stargazer.tasks.gatk.create_sequence_dictionary import create_sequence_dictionary
 from stargazer.types import Reference, SequenceDict
@@ -18,7 +18,7 @@ async def test_create_sequence_dictionary_creates_dict(fixtures_db):
         pytest.skip("gatk not available in environment")
 
     ref = Reference(
-        path=FIXTURES_DIR / "GRCh38_TP53.fa",
+        path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa",
         build="GRCh38",
     )
 

@@ -5,7 +5,7 @@ Tests for merge_bam_alignment task.
 import shutil
 
 import pytest
-from conftest import FIXTURES_DIR
+from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
 
 from stargazer.tasks.gatk.merge_bam_alignment import merge_bam_alignment
 from stargazer.types import Alignment, Reference
@@ -20,14 +20,14 @@ async def test_merge_bam_alignment_merges_bams(fixtures_db):
     sample_id = "NA12829_TP53_merge"
 
     aligned_bam = Alignment(
-        path=FIXTURES_DIR / "NA12829_TP53_bwa_aligned.bam",
+        path=GATK_FIXTURES_DIR / "NA12829_TP53_bwa_aligned.bam",
         sample_id=sample_id,
         format="bam",
         tool="bwa_mem",
     )
 
     unmapped_bam = Alignment(
-        path=FIXTURES_DIR / "NA12829_TP53_unmapped.bam",
+        path=GATK_FIXTURES_DIR / "NA12829_TP53_unmapped.bam",
         sample_id=sample_id,
         format="bam",
         sorted="queryname",
@@ -35,7 +35,7 @@ async def test_merge_bam_alignment_merges_bams(fixtures_db):
     )
 
     ref = Reference(
-        path=FIXTURES_DIR / "GRCh38_TP53.fa",
+        path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa",
         build="GRCh38",
     )
 

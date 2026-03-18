@@ -35,6 +35,8 @@ from stargazer.types.variants import (
 from stargazer.utils.local_storage import LocalStorageClient
 
 FIXTURES_DIR = Path(__file__).parent
+GENERAL_DIR = FIXTURES_DIR / "general"
+GATK_DIR = FIXTURES_DIR / "gatk"
 
 
 async def build_db() -> None:
@@ -53,19 +55,19 @@ async def build_db() -> None:
         return asset.cid
 
     # ── Reference ──────────────────────────────────────────────────────────
-    ref = Reference(path=FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
+    ref = Reference(path=GENERAL_DIR / "GRCh38_TP53.fa", build="GRCh38")
     reference_cid = await upload(ref)
 
     await upload(
         ReferenceIndex(
-            path=FIXTURES_DIR / "GRCh38_TP53.fa.fai",
+            path=GENERAL_DIR / "GRCh38_TP53.fa.fai",
             build="GRCh38",
             reference_cid=reference_cid,
         )
     )
     await upload(
         SequenceDict(
-            path=FIXTURES_DIR / "GRCh38_TP53.dict",
+            path=GENERAL_DIR / "GRCh38_TP53.dict",
             build="GRCh38",
             reference_cid=reference_cid,
         )
@@ -74,7 +76,7 @@ async def build_db() -> None:
     for ext in ("amb", "ann", "bwt", "pac", "sa"):
         await upload(
             AlignerIndex(
-                path=FIXTURES_DIR / f"GRCh38_TP53.fa.{ext}",
+                path=GENERAL_DIR / f"GRCh38_TP53.fa.{ext}",
                 build="GRCh38",
                 aligner="bwa",
                 reference_cid=reference_cid,
@@ -82,10 +84,10 @@ async def build_db() -> None:
         )
 
     # ── Reads ───────────────────────────────────────────────────────────────
-    r1 = R1(path=FIXTURES_DIR / "NA12829_TP53_R1.fq.gz", sample_id="NA12829")
+    r1 = R1(path=GENERAL_DIR / "NA12829_TP53_R1.fq.gz", sample_id="NA12829")
     r1_cid = await upload(r1)
 
-    r2 = R2(path=FIXTURES_DIR / "NA12829_TP53_R2.fq.gz", sample_id="NA12829")
+    r2 = R2(path=GENERAL_DIR / "NA12829_TP53_R2.fq.gz", sample_id="NA12829")
     r2_cid = await upload(r2)
 
     # Back-fill mate CIDs now that both CIDs are known
@@ -96,7 +98,7 @@ async def build_db() -> None:
 
     # ── Known sites ─────────────────────────────────────────────────────────
     mills = KnownSites(
-        path=FIXTURES_DIR / "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf",
+        path=GATK_DIR / "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf",
         build="GRCh38",
         resource_name="mills",
         training="true",
@@ -108,15 +110,14 @@ async def build_db() -> None:
 
     await upload(
         KnownSitesIndex(
-            path=FIXTURES_DIR
-            / "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf.idx",
+            path=GATK_DIR / "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf.idx",
             known_sites_cid=mills_cid,
         )
     )
 
     # ── Alignments ──────────────────────────────────────────────────────────
     unmapped = Alignment(
-        path=FIXTURES_DIR / "NA12829_TP53_unmapped.bam",
+        path=GATK_DIR / "NA12829_TP53_unmapped.bam",
         sample_id="NA12829",
         format="bam",
         r1_cid=r1_cid,
@@ -124,7 +125,7 @@ async def build_db() -> None:
     await upload(unmapped)
 
     bwa_aligned = Alignment(
-        path=FIXTURES_DIR / "NA12829_TP53_bwa_aligned.bam",
+        path=GATK_DIR / "NA12829_TP53_bwa_aligned.bam",
         sample_id="NA12829",
         format="bam",
         tool="bwa",
@@ -134,7 +135,7 @@ async def build_db() -> None:
     await upload(bwa_aligned)
 
     merged = Alignment(
-        path=FIXTURES_DIR / "NA12829_TP53_merged.bam",
+        path=GATK_DIR / "NA12829_TP53_merged.bam",
         sample_id="NA12829",
         format="bam",
         tool="bwa",
@@ -145,14 +146,14 @@ async def build_db() -> None:
 
     await upload(
         AlignmentIndex(
-            path=FIXTURES_DIR / "NA12829_TP53_merged.bai",
+            path=GATK_DIR / "NA12829_TP53_merged.bai",
             sample_id="NA12829",
             alignment_cid=merged_cid,
         )
     )
 
     paired = Alignment(
-        path=FIXTURES_DIR / "NA12829_TP53_paired.bam",
+        path=GATK_DIR / "NA12829_TP53_paired.bam",
         sample_id="NA12829",
         format="bam",
         tool="bwa",
@@ -163,14 +164,14 @@ async def build_db() -> None:
 
     await upload(
         AlignmentIndex(
-            path=FIXTURES_DIR / "NA12829_TP53_paired.bam.bai",
+            path=GATK_DIR / "NA12829_TP53_paired.bam.bai",
             sample_id="NA12829",
             alignment_cid=paired_cid,
         )
     )
 
     sorted_coord = Alignment(
-        path=FIXTURES_DIR / "NA12829_TP53_sorted_coordinate.bam",
+        path=GATK_DIR / "NA12829_TP53_sorted_coordinate.bam",
         sample_id="NA12829",
         format="bam",
         sorted="coordinate",
@@ -182,14 +183,14 @@ async def build_db() -> None:
 
     await upload(
         AlignmentIndex(
-            path=FIXTURES_DIR / "NA12829_TP53_sorted_coordinate.bai",
+            path=GATK_DIR / "NA12829_TP53_sorted_coordinate.bai",
             sample_id="NA12829",
             alignment_cid=sorted_cid,
         )
     )
 
     markdup = Alignment(
-        path=FIXTURES_DIR / "NA12829_TP53_markdup.bam",
+        path=GATK_DIR / "NA12829_TP53_markdup.bam",
         sample_id="NA12829",
         format="bam",
         sorted="coordinate",
@@ -202,7 +203,7 @@ async def build_db() -> None:
 
     await upload(
         AlignmentIndex(
-            path=FIXTURES_DIR / "NA12829_TP53_markdup.bai",
+            path=GATK_DIR / "NA12829_TP53_markdup.bai",
             sample_id="NA12829",
             alignment_cid=markdup_cid,
         )
@@ -210,7 +211,7 @@ async def build_db() -> None:
 
     await upload(
         DuplicateMetrics(
-            path=FIXTURES_DIR / "NA12829_TP53_markdup_metrics.txt",
+            path=GATK_DIR / "NA12829_TP53_markdup_metrics.txt",
             sample_id="NA12829",
             tool="gatk",
             alignment_cid=markdup_cid,
@@ -218,7 +219,7 @@ async def build_db() -> None:
     )
 
     recalibrated = Alignment(
-        path=FIXTURES_DIR / "NA12829_TP53_recalibrated.bam",
+        path=GATK_DIR / "NA12829_TP53_recalibrated.bam",
         sample_id="NA12829",
         format="bam",
         sorted="coordinate",
@@ -232,7 +233,7 @@ async def build_db() -> None:
 
     await upload(
         AlignmentIndex(
-            path=FIXTURES_DIR / "NA12829_TP53_recalibrated.bai",
+            path=GATK_DIR / "NA12829_TP53_recalibrated.bai",
             sample_id="NA12829",
             alignment_cid=recalibrated_cid,
         )
@@ -240,7 +241,7 @@ async def build_db() -> None:
 
     await upload(
         BQSRReport(
-            path=FIXTURES_DIR / "NA12829_TP53_bqsr.table",
+            path=GATK_DIR / "NA12829_TP53_bqsr.table",
             sample_id="NA12829",
             tool="gatk",
             alignment_cid=markdup_cid,
@@ -250,7 +251,7 @@ async def build_db() -> None:
     # ── Variants (GVCFs) ────────────────────────────────────────────────────
     for sample_id in ("NA12829", "NA12891", "NA12892"):
         vcf = Variants(
-            path=FIXTURES_DIR / f"{sample_id}_TP53.g.vcf",
+            path=GATK_DIR / f"{sample_id}_TP53.g.vcf",
             sample_id=sample_id,
             caller="haplotypecaller",
             variant_type="gvcf",
@@ -258,7 +259,7 @@ async def build_db() -> None:
         )
         vcf_cid = await upload(vcf)
 
-        idx_path = FIXTURES_DIR / f"{sample_id}_TP53.g.vcf.idx"
+        idx_path = GATK_DIR / f"{sample_id}_TP53.g.vcf.idx"
         if idx_path.exists():
             await upload(
                 VariantsIndex(

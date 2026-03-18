@@ -5,7 +5,7 @@ Tests for mark_duplicates task.
 import shutil
 
 import pytest
-from conftest import FIXTURES_DIR
+from conftest import GATK_FIXTURES_DIR
 
 from stargazer.tasks.gatk.mark_duplicates import mark_duplicates
 from stargazer.types import Alignment
@@ -20,7 +20,7 @@ async def test_mark_duplicates_marks_duplicates(fixtures_db):
     sample_id = "NA12829_TP53_merged"
 
     alignment = Alignment(
-        path=FIXTURES_DIR / "NA12829_TP53_merged.bam",
+        path=GATK_FIXTURES_DIR / "NA12829_TP53_merged.bam",
         sample_id=sample_id,
         format="bam",
         sorted="coordinate",

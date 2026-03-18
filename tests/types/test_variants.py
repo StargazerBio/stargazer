@@ -3,7 +3,7 @@ Tests for Variants asset types.
 """
 
 import pytest
-from conftest import FIXTURES_DIR
+from conftest import GATK_FIXTURES_DIR
 
 from stargazer.types import specialize
 from stargazer.types.variants import Variants, VariantsIndex, KnownSites
@@ -32,7 +32,7 @@ async def test_variants_fetch(fixtures_db):
 @pytest.mark.asyncio
 async def test_variants_get_vcf_path():
     """Test direct access to variants asset returns correct path."""
-    vcf_path = FIXTURES_DIR / "NA12829_TP53.g.vcf"
+    vcf_path = GATK_FIXTURES_DIR / "NA12829_TP53.g.vcf"
     assert vcf_path.exists()
 
     vcf = Variants(cid="test", path=vcf_path, sample_id="NA12829")
@@ -44,8 +44,8 @@ async def test_variants_get_vcf_path():
 @pytest.mark.asyncio
 async def test_variants_update_components():
     """Test asset update() uploads files and sets metadata."""
-    vcf_fixture = FIXTURES_DIR / "NA12829_TP53.g.vcf"
-    idx_fixture = FIXTURES_DIR / "NA12829_TP53.g.vcf.idx"
+    vcf_fixture = GATK_FIXTURES_DIR / "NA12829_TP53.g.vcf"
+    idx_fixture = GATK_FIXTURES_DIR / "NA12829_TP53.g.vcf.idx"
     assert vcf_fixture.exists()
     assert idx_fixture.exists()
 

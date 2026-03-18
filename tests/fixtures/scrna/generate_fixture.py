@@ -1,6 +1,6 @@
 """Script to generate a small synthetic scRNA-seq .h5ad fixture for testing.
 
-Run with: python tests/assets/scrna/generate_fixture.py
+Run with: python tests/fixtures/scrna/generate_fixture.py
 """
 
 from pathlib import Path

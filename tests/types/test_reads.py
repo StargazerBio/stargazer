@@ -3,7 +3,7 @@ Tests for R1 and R2 read asset types.
 """
 
 import pytest
-from conftest import FIXTURES_DIR
+from conftest import GENERAL_FIXTURES_DIR
 
 from stargazer.types import specialize
 from stargazer.types.reads import R1, R2
@@ -32,8 +32,8 @@ async def test_reads_fetch(fixtures_db):
 @pytest.mark.asyncio
 async def test_reads_get_paths():
     """Test direct access to r1 and r2 paths when set locally."""
-    r1_path = FIXTURES_DIR / "NA12829_TP53_R1.fq.gz"
-    r2_path = FIXTURES_DIR / "NA12829_TP53_R2.fq.gz"
+    r1_path = GENERAL_FIXTURES_DIR / "NA12829_TP53_R1.fq.gz"
+    r2_path = GENERAL_FIXTURES_DIR / "NA12829_TP53_R2.fq.gz"
     assert r1_path.exists()
     assert r2_path.exists()
 
@@ -49,8 +49,8 @@ async def test_reads_get_paths():
 @pytest.mark.asyncio
 async def test_reads_update_components():
     """Test asset update() uploads files and sets metadata."""
-    r1_fixture = FIXTURES_DIR / "NA12829_TP53_R1.fq.gz"
-    r2_fixture = FIXTURES_DIR / "NA12829_TP53_R2.fq.gz"
+    r1_fixture = GENERAL_FIXTURES_DIR / "NA12829_TP53_R1.fq.gz"
+    r2_fixture = GENERAL_FIXTURES_DIR / "NA12829_TP53_R2.fq.gz"
     assert r1_fixture.exists()
     assert r2_fixture.exists()
 

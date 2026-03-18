@@ -19,6 +19,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 FIXTURES_DB = FIXTURES_DIR / "stargazer_local.json"
+GENERAL_FIXTURES_DIR = FIXTURES_DIR / "general"
+GATK_FIXTURES_DIR = FIXTURES_DIR / "gatk"
+SCRNA_FIXTURES_DIR = FIXTURES_DIR / "scrna"
 SECRETS_DIR = Path(__file__).parent / ".secrets"
 
 

@@ -5,7 +5,7 @@ Tests for combine_gvcfs task.
 import shutil
 
 import pytest
-from conftest import FIXTURES_DIR
+from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
 
 from stargazer.tasks.gatk.combine_gvcfs import combine_gvcfs
 from stargazer.types import Reference, Variants
@@ -21,7 +21,7 @@ SAMPLE_GVCFS = {
 def make_ref() -> Reference:
     """Build a Reference asset for the TP53 region fixture."""
     return Reference(
-        path=FIXTURES_DIR / "GRCh38_TP53.fa",
+        path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa",
         build="GRCh38",
     )
 
@@ -29,7 +29,7 @@ def make_ref() -> Reference:
 def make_gvcf(sample_id: str) -> Variants:
     """Build a Variants GVCF asset for the given sample."""
     return Variants(
-        path=FIXTURES_DIR / SAMPLE_GVCFS[sample_id],
+        path=GATK_FIXTURES_DIR / SAMPLE_GVCFS[sample_id],
         sample_id=sample_id,
         caller="haplotypecaller",
         variant_type="gvcf",

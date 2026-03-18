@@ -3,7 +3,7 @@ Tests for Alignment asset types.
 """
 
 import pytest
-from conftest import FIXTURES_DIR
+from conftest import GATK_FIXTURES_DIR
 
 from stargazer.types import specialize
 from stargazer.types.alignment import (
@@ -37,7 +37,7 @@ async def test_alignment_fetch(fixtures_db):
 @pytest.mark.asyncio
 async def test_alignment_get_bam_path():
     """Test direct access to alignment asset returns correct path."""
-    bam_path = FIXTURES_DIR / "NA12829_TP53_paired.bam"
+    bam_path = GATK_FIXTURES_DIR / "NA12829_TP53_paired.bam"
     assert bam_path.exists()
 
     bam = Alignment(cid="test", path=bam_path, sample_id="NA12829")
@@ -49,7 +49,7 @@ async def test_alignment_get_bam_path():
 @pytest.mark.asyncio
 async def test_alignment_get_bai_path():
     """Test direct access to alignment index asset returns correct path."""
-    bai_path = FIXTURES_DIR / "NA12829_TP53_paired.bam.bai"
+    bai_path = GATK_FIXTURES_DIR / "NA12829_TP53_paired.bam.bai"
     assert bai_path.exists()
 
     idx = AlignmentIndex(cid="test", path=bai_path, sample_id="NA12829")
@@ -61,8 +61,8 @@ async def test_alignment_get_bai_path():
 @pytest.mark.asyncio
 async def test_alignment_update_components():
     """Test asset update() uploads files and sets metadata."""
-    bam_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam"
-    bai_fixture = FIXTURES_DIR / "NA12829_TP53_paired.bam.bai"
+    bam_fixture = GATK_FIXTURES_DIR / "NA12829_TP53_paired.bam"
+    bai_fixture = GATK_FIXTURES_DIR / "NA12829_TP53_paired.bam.bai"
     assert bam_fixture.exists()
     assert bai_fixture.exists()
 

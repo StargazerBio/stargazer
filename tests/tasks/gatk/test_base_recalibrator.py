@@ -5,7 +5,7 @@ Tests for base_recalibrator task.
 import shutil
 
 import pytest
-from conftest import FIXTURES_DIR
+from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
 
 from stargazer.tasks.gatk.base_recalibrator import base_recalibrator
 from stargazer.types import Alignment, BQSRReport, KnownSites, Reference
@@ -23,7 +23,7 @@ async def test_base_recalibrator_creates_report(fixtures_db):
     sample_id = "NA12829_TP53_markdup"
 
     alignment = Alignment(
-        path=FIXTURES_DIR / "NA12829_TP53_markdup.bam",
+        path=GATK_FIXTURES_DIR / "NA12829_TP53_markdup.bam",
         sample_id=sample_id,
         format="bam",
         sorted="coordinate",
@@ -32,12 +32,12 @@ async def test_base_recalibrator_creates_report(fixtures_db):
     )
 
     ref = Reference(
-        path=FIXTURES_DIR / "GRCh38_TP53.fa",
+        path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa",
         build="GRCh38",
     )
 
     known_sites_file = KnownSites(
-        path=FIXTURES_DIR / KNOWN_SITES_VCF,
+        path=GATK_FIXTURES_DIR / KNOWN_SITES_VCF,
         build="GRCh38",
     )
 

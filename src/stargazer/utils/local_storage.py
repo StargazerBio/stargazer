@@ -116,8 +116,13 @@ class LocalStorageClient:
         md5_hash = h.hexdigest()
         cid = f"local_{md5_hash}"
 
-        # Copy to local dir using original filename
-        local_path = self.local_dir / path.name
+        # Determine relative path: preserve subdirectory if file is inside local_dir
+        try:
+            rel_path = path.resolve().relative_to(self.local_dir.resolve())
+        except ValueError:
+            rel_path = Path(path.name)
+
+        local_path = self.local_dir / rel_path
         local_path.parent.mkdir(parents=True, exist_ok=True)
         if path.resolve() != local_path.resolve():
             shutil.copy2(path, local_path)
@@ -130,7 +135,7 @@ class LocalStorageClient:
                 "cid": cid,
                 "keyvalues": component.to_keyvalues(),
                 "created_at": now.isoformat(),
-                "rel_path": path.name,
+                "rel_path": str(rel_path),
             },
             File.cid == cid,
         )

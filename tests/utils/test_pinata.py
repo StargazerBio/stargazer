@@ -8,7 +8,7 @@ To populate expected CIDs for test files, run:
 """
 
 import pytest
-from conftest import FIXTURES_DIR
+from conftest import FIXTURES_DIR, GENERAL_FIXTURES_DIR
 from stargazer.types.asset import Asset
 from stargazer.utils.local_storage import LocalStorageClient
 from stargazer.utils.pinata import PinataClient
@@ -100,7 +100,7 @@ async def test_download_file(tmp_path):
     test_cid = CIDS.get(test_file)
     assert test_cid, f"CID for {test_file} not found in config"
 
-    expected_content = FIXTURES_DIR.joinpath(test_file).read_text()
+    expected_content = GENERAL_FIXTURES_DIR.joinpath(test_file).read_text()
 
     comp = Asset(cid=test_cid)
 

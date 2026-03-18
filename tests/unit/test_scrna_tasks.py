@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 FIXTURE_PATH = (
-    Path(__file__).parent.parent / "assets" / "scrna" / "synthetic_200x500.h5ad"
+    Path(__file__).parent.parent / "fixtures" / "scrna" / "synthetic_200x500.h5ad"
 )
 
 

@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from conftest import FIXTURES_DIR
+from conftest import GENERAL_FIXTURES_DIR
 
 from stargazer.tasks.general.samtools import samtools_faidx
 from stargazer.types import Reference, ReferenceIndex
@@ -18,7 +18,7 @@ async def test_samtools_faidx(fixtures_db):
     if shutil.which("samtools") is None:
         pytest.skip("samtools not available in environment")
 
-    ref = Reference(path=FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
+    ref = Reference(path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
 
     fixtures_db()  # checkout: switch to isolated work dir
 
@@ -38,7 +38,7 @@ async def test_samtools_faidx_idempotent(fixtures_db):
     if shutil.which("samtools") is None:
         pytest.skip("samtools not available in environment")
 
-    ref = Reference(path=FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
+    ref = Reference(path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
 
     fixtures_db()  # checkout
 
