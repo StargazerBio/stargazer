@@ -1,6 +1,6 @@
 FROM ubuntu AS base
 
-ENV PATH="/root/.local/bin:/usr/local/bin:/opt/conda/bin:${PATH}"
+ENV PATH="/root/.local/bin:/usr/local/bin:/home/coder/.local/bin:/opt/conda/bin:${PATH}"
 
 # System packages
 RUN apt-get update \

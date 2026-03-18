@@ -106,8 +106,12 @@ class LocalStorageClient:
         if path is None:
             raise ValueError("component.path must be set before uploading")
 
-        # Generate MD5 hash of file content
-        md5_hash = hashlib.md5(path.read_bytes()).hexdigest()
+        # Generate MD5 hash of file content (streamed to handle large files)
+        h = hashlib.md5()
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(8 * 1024 * 1024), b""):
+                h.update(chunk)
+        md5_hash = h.hexdigest()
         cid = f"local_{md5_hash}"
 
         # Copy to local dir using original filename
