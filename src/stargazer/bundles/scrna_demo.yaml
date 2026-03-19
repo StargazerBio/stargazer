@@ -1,0 +1,17 @@
+name: scrna_demo
+description: Sample scRNA-seq mouse brain data (10x Genomics) for demo workflows
+files:
+  - cid: bafybeibis4clv26nm2l6ljw5kp7gg4itqkd7sfce2nxpzkogckgvhc3key
+    keyvalues:
+      asset: anndata
+      bundle: scrna_demo
+      sample_id: s1d1
+      stage: raw
+      organism: mouse
+  - cid: bafybeiazqkd7qc2wydvuobcv6t5ubwdjyvwhhspxjppyo3e7x74ztwi7oa
+    keyvalues:
+      asset: anndata
+      bundle: scrna_demo
+      sample_id: s1d3
+      stage: raw
+      organism: mouse

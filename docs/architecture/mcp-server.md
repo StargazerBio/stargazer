@@ -45,6 +45,15 @@ Tasks and workflows are not registered as individual MCP tools. The client disco
 
 `upload_file` validates that `keyvalues["asset"]` is a registered asset key and that all other keys are declared fields on that asset subclass.
 
+### Bundles
+
+| Tool | Description | Inputs |
+|------|-------------|--------|
+| `list_bundles` | List available resource bundles | (none) |
+| `fetch_resource_bundle` | Download a predefined bundle into local storage | `bundle_name: str` |
+
+Bundles are curated sets of files defined as YAML manifests in the codebase. Each file carries a `bundle` keyvalue for queryability. `fetch_resource_bundle` downloads bytes by CID via the standard path. In local mode (no JWT), it also seeds TinyDB with the manifest's keyvalues so `assemble()` can discover them. In remote mode (JWT set), metadata already exists in Pinata. See [Configuration — Resource Bundles](configuration.md#resource-bundles).
+
 ## Resources
 
 | Resource | URI | Description |

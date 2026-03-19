@@ -96,9 +96,11 @@ ref = next(a for a in assets if isinstance(a, Reference))
 
 ## Storage Layer
 
-`utils/storage.py` defines the `StorageClient` protocol with four methods: `upload()`, `download()`, `query()`, `delete()`. The module-level `default_client` is resolved at import time based on environment:
+`utils/local_storage.py` defines `LocalStorageClient` with four methods: `upload()`, `download()`, `query()`, `delete()`. The module-level `default_client` is resolved at import time based on environment:
 
-- No JWT: `LocalStorageClient` with public IPFS gateway for cache misses
+- No JWT: `LocalStorageClient` with TinyDB for metadata, public IPFS gateway for cache misses
 - `PINATA_JWT` set: `LocalStorageClient` + `PinataClient` remote for authenticated operations
+
+The two modes are explicit: with a JWT, Pinata owns metadata and TinyDB is not involved. Without a JWT, TinyDB is the source of truth. Upload, query, and delete each go to one backend, never both.
 
 Tasks never call storage directly. All storage interaction flows through `Asset.fetch()` and `Asset.update()`.

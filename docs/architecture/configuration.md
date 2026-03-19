@@ -59,11 +59,50 @@ All storage operations go through `LocalStorageClient`:
 
 ```
 StorageClient
-├── upload(component)       → remote or local
+├── upload(component)       → remote or local (never both)
 ├── download(component)     → cache → remote (private) → public gateway
 ├── query(keyvalues)        → remote or local TinyDB
 └── delete(component)       → remote or local
 ```
+
+The two modes are explicit and separate:
+
+- **JWT set (remote mode):** Pinata owns metadata and bytes. TinyDB is not involved. Upload, query, and delete go to Pinata. Downloads fetch bytes by CID via signed URL or public gateway, cached locally as bytes only.
+- **No JWT (local mode):** TinyDB owns metadata. Local filesystem stores bytes. Downloads check TinyDB, then fall back to the public IPFS gateway for cache misses on bytes.
+
+## Resource Bundles
+
+Bundles are curated sets of files (reference genomes, demo datasets) defined as YAML manifests in `src/stargazer/bundles/`. Each manifest lists CIDs and their keyvalues, with a `bundle` keyvalue on each file for queryability.
+
+### Hydration Flow
+
+`fetch_resource_bundle(bundle_name)` downloads files by CID:
+
+```
+1. Load YAML manifest by name
+2. Check mode:
+   - JWT set?  → files are already registered in Pinata with bundle keyvalue.
+                  Download bytes by CID via standard path. No TinyDB writes.
+   - No JWT?   → seed TinyDB with manifest keyvalues so assemble() can find them.
+                  Download bytes from public IPFS gateway.
+```
+
+### Bundle Format
+
+```yaml
+name: scrna_demo
+description: Sample scRNA-seq mouse brain data for demo workflows
+files:
+  - cid: QmABC...
+    keyvalues:
+      asset: anndata
+      bundle: scrna_demo
+      sample_id: s1d1
+      stage: raw
+      organism: mouse
+```
+
+After hydration, bundled assets are queryable via `assemble()` and `query_files` like any other asset.
 
 ## Testing
 

@@ -136,6 +136,45 @@ async def delete_file(cid: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Bundle tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def list_bundles() -> list[dict]:
+    """List available resource bundles.
+
+    Returns:
+        List of bundles with name, description, and file_count.
+    """
+    from stargazer.bundles import list_bundles as _list_bundles
+
+    return _list_bundles()
+
+
+@mcp.tool()
+async def fetch_resource_bundle(bundle_name: str) -> list[dict]:
+    """Download a predefined resource bundle into local storage.
+
+    Bundles are curated sets of files (e.g. reference genomes, demo datasets)
+    defined in the codebase. Each file is identified by CID and downloaded
+    via the standard storage path (signed URL with JWT, or public IPFS gateway).
+
+    When PINATA_JWT is set, remote metadata is authoritative and overwrites
+    local records. Without a JWT, the bundle manifest provides the metadata.
+
+    Args:
+        bundle_name: Name of the bundle (from list_bundles).
+
+    Returns:
+        List of fetched files with cid, keyvalues, and local path.
+    """
+    from stargazer.bundles import fetch_bundle
+
+    return await fetch_bundle(bundle_name)
+
+
+# ---------------------------------------------------------------------------
 # Dynamic task tools
 # ---------------------------------------------------------------------------
 

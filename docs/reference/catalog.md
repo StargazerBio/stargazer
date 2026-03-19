@@ -8,6 +8,8 @@
 | `create_sequence_dictionary` | Create a sequence dictionary (.dict file) using GATK CreateSequenceDictionary. | `ref` (Reference) |
 | `bwa_index` | Create BWA index files for a reference genome using bwa index. | `ref` (Reference) |
 | `bwa_mem` | Align FASTQ reads to reference genome using BWA-MEM. | `ref` (Reference), `r1` (R1), `r2` (R2 | NoneType), `read_group` (dict[str, str] | NoneType) |
+| `bwa_mem2_index` | Create BWA-MEM2 index files for a reference genome. | `ref` (Reference) |
+| `bwa_mem2_mem` | Align FASTQ reads to reference genome using BWA-MEM2. | `ref` (Reference), `r1` (R1), `r2` (R2 | NoneType), `read_group` (dict[str, str] | NoneType) |
 | `sort_sam` | Sort a SAM/BAM file. | `alignment` (Alignment), `sort_order` (str) |
 | `mark_duplicates` | Mark duplicate reads in a BAM file. | `alignment` (Alignment) |
 | `merge_bam_alignment` | Merge alignment data from aligned BAM with data in unmapped BAM. | `aligned_bam` (Alignment), `unmapped_bam` (Alignment), `ref` (Reference) |
@@ -27,6 +29,7 @@
 | `prepare_reference` | Prepare reference genome for alignment and variant calling. | `build` (str) |
 | `preprocess_sample` | Pre-process a single sample's reads for variant calling. | `build` (str), `sample_id` (str), `run_bqsr` (bool) |
 | `germline_short_variant_discovery` | Germline short variant discovery from preprocessed BAMs. | `build` (str), `cohort_id` (str) |
+| `scrna_clustering_pipeline` | End-to-end scRNA-seq clustering pipeline. | `sample_id` (str), `organism` (str), `n_top_genes` (int), `resolution` (float), `max_pct_mt` (float) |
 
 ## Asset Types
 
@@ -35,6 +38,7 @@
 | `aligner_index` | `AlignerIndex` | `types/reference.py` | `aligner`, `build`, `reference_cid` |
 | `alignment` | `Alignment` | `types/alignment.py` | `bqsr_applied`, `duplicates_marked`, `format`, `r1_cid`, `reference_cid`, `sample_id`, `sorted`, `tool` |
 | `alignment_index` | `AlignmentIndex` | `types/alignment.py` | `alignment_cid`, `sample_id` |
+| `anndata` | `AnnData` | `types/scrna.py` | `n_obs`, `n_vars`, `organism`, `sample_id`, `source_cid`, `stage` |
 | `bqsr_report` | `BQSRReport` | `types/alignment.py` | `alignment_cid`, `sample_id`, `tool` |
 | `duplicate_metrics` | `DuplicateMetrics` | `types/alignment.py` | `alignment_cid`, `sample_id`, `tool` |
 | `known_sites` | `KnownSites` | `types/variants.py` | `build`, `known`, `prior`, `resource_name`, `training`, `truth`, `vqsr_mode` |
@@ -47,3 +51,9 @@
 | `variants` | `Variants` | `types/variants.py` | `build`, `caller`, `sample_count`, `sample_id`, `source_samples`, `variant_type`, `vqsr_mode` |
 | `variants_index` | `VariantsIndex` | `types/variants.py` | `sample_id`, `variants_cid` |
 | `vqsr_model` | `VQSRModel` | `types/variants.py` | `build`, `mode`, `sample_id`, `tranches_path`, `variants_cid` |
+
+## Bundles
+
+| Name | Description | Files |
+|------|-------------|-------|
+| `scrna_demo` | Sample scRNA-seq mouse brain data (10x Genomics) for demo workflows | 2 |

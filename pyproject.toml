@@ -20,6 +20,7 @@ dependencies = [
     "scikit-image>=0.26.0",
     "igraph>=1.0.0",
     "pooch>=1.9.0",
+    "pyyaml>=6.0.3",
 ]
 
 [project.scripts]
@@ -38,6 +39,9 @@ filterwarnings = [
     # Ignore Pydantic deprecation warnings from flyte package (third-party)
     "ignore:Support for class-based `config` is deprecated:pydantic.warnings.PydanticDeprecatedSince20",
 ]
+
+[tool.setuptools.package-data]
+stargazer = ["bundles/*.yaml"]
 
 [dependency-groups]
 dev = [

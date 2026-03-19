@@ -7,10 +7,13 @@ Usage:
     uv run python docs/gen_catalog.py
 """
 
+import dataclasses
 from pathlib import Path
 
+from stargazer.bundles import list_bundles
 from stargazer.registry import TaskRegistry
 from stargazer.types import ASSET_REGISTRY
+from stargazer.types.asset import _BASE_FIELDS
 
 DOCS = Path(__file__).parent
 registry = TaskRegistry()
@@ -39,11 +42,26 @@ def _asset_table() -> str:
     ]
     for asset_key, cls in sorted(ASSET_REGISTRY.items()):
         module = cls.__module__.split(".")[-1]
-        fields = sorted(set(cls._field_defaults) | set(cls._field_types))
+        fields = sorted(
+            f.name for f in dataclasses.fields(cls) if f.name not in _BASE_FIELDS
+        )
         field_str = ", ".join(f"`{f}`" for f in fields) if fields else "—"
         rows.append(
             f"| `{asset_key}` | `{cls.__name__}` | `types/{module}.py` | {field_str} |"
         )
+    return "\n".join(rows)
+
+
+def _bundle_table() -> str:
+    bundles = list_bundles()
+    if not bundles:
+        return "*No bundles defined.*"
+    rows = [
+        "| Name | Description | Files |",
+        "|------|-------------|-------|",
+    ]
+    for b in bundles:
+        rows.append(f"| `{b['name']}` | {b['description']} | {b['file_count']} |")
     return "\n".join(rows)
 
 
@@ -85,6 +103,10 @@ def build() -> None:
         "## Asset Types",
         "",
         _asset_table(),
+        "",
+        "## Bundles",
+        "",
+        _bundle_table(),
         "",
     ]
     catalog_path = ref_dir / "catalog.md"
