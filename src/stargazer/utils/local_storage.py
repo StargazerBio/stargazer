@@ -142,12 +142,18 @@ class LocalStorageClient:
 
         component.cid = cid
 
-    async def download(self, component: Asset, dest: Optional[Path] = None) -> None:
+    async def download(
+        self,
+        component: Asset,
+        dest: Optional[Path] = None,
+        name: Optional[str] = None,
+    ) -> None:
         """Download a file by CID. Checks cache, then remote, then public gateway.
 
         Args:
             component: Asset with cid set
             dest: Optional destination path (copies file there)
+            name: Optional filename to use instead of the CID
         """
         # Skip if path is already set and file exists
         if component.path and component.path.exists():
@@ -155,8 +161,8 @@ class LocalStorageClient:
 
         cid = component.cid
 
-        # 1. Check local cache by CID
-        cache_key = cid.replace("/", "_")
+        # 1. Check local cache by name or CID
+        cache_key = name if name else cid.replace("/", "_")
         cache_path = self.local_dir / cache_key
 
         if cache_path.exists():
@@ -205,6 +211,7 @@ class LocalStorageClient:
                 results.append(
                     {
                         "cid": record["cid"],
+                        "name": record.get("name", ""),
                         "path": self.local_dir / record["rel_path"],
                         "keyvalues": record_kv,
                     }

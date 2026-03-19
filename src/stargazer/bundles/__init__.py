@@ -78,15 +78,19 @@ async def fetch_bundle(bundle_name: str) -> list[dict]:
         cid = entry["cid"]
         manifest_kv = entry["keyvalues"]
 
+        name = entry.get("name", "")
+
         # Local mode: seed TinyDB so assemble() can find these assets
         if is_local:
-            _upsert_local(cid, manifest_kv, default_client)
+            _upsert_local(cid, manifest_kv, name, default_client)
 
         # Download bytes via standard path (cache → remote → public gateway)
         comp = Asset(cid=cid)
-        await default_client.download(comp)
+        await default_client.download(comp, name=name or None)
 
-        results.append({"cid": cid, "keyvalues": manifest_kv, "path": str(comp.path)})
+        results.append(
+            {"cid": cid, "name": name, "keyvalues": manifest_kv, "path": str(comp.path)}
+        )
 
     return results
 
@@ -120,7 +124,7 @@ def _read_name(path: Path) -> str:
     return data.get("name", path.stem)
 
 
-def _upsert_local(cid: str, keyvalues: dict[str, str], client) -> None:
+def _upsert_local(cid: str, keyvalues: dict[str, str], name: str, client) -> None:
     """Upsert a CID + keyvalues record into TinyDB.
 
     Only called in local mode (no JWT) to seed metadata for assemble().
@@ -128,6 +132,7 @@ def _upsert_local(cid: str, keyvalues: dict[str, str], client) -> None:
     Args:
         cid: Content identifier.
         keyvalues: Metadata to store.
+        name: Human-readable filename for the asset.
         client: LocalStorageClient instance.
     """
     now = datetime.now(timezone.utc)
@@ -135,9 +140,10 @@ def _upsert_local(cid: str, keyvalues: dict[str, str], client) -> None:
     client.db.upsert(
         {
             "cid": cid,
+            "name": name,
             "keyvalues": keyvalues,
             "created_at": now.isoformat(),
-            "rel_path": "",
+            "rel_path": name,
         },
         File.cid == cid,
     )

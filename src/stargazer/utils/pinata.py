@@ -210,6 +210,7 @@ class PinataClient:
                         results.append(
                             {
                                 "cid": f["cid"],
+                                "name": f.get("name", ""),
                                 "keyvalues": f.get("keyvalues", {}),
                             }
                         )
