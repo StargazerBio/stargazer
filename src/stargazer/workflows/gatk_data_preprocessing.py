@@ -12,7 +12,7 @@ spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
 from stargazer.config import gatk_env, log_execution
-from stargazer.types import Alignment, KnownSites, R1, R2, Reference
+from stargazer.types import Alignment, R1, R2, Reference
 from stargazer.types.asset import assemble
 from stargazer.tasks import (
     samtools_faidx,
@@ -21,8 +21,6 @@ from stargazer.tasks import (
     bwa_mem2_mem,
     sort_sam,
     mark_duplicates,
-    base_recalibrator,
-    apply_bqsr,
 )
 
 
@@ -61,7 +59,6 @@ async def prepare_reference(build: str) -> Reference:
 async def preprocess_sample(
     build: str,
     sample_id: str,
-    run_bqsr: bool = True,
 ) -> Alignment:
     """
     Pre-process a single sample's reads for variant calling.
@@ -70,12 +67,10 @@ async def preprocess_sample(
     1. BWA-MEM alignment
     2. Coordinate sort (GATK SortSam)
     3. Mark duplicates (GATK MarkDuplicates)
-    4. BQSR (optional, GATK BaseRecalibrator + ApplyBQSR)
 
     Args:
         build: Reference genome build identifier
-        sample_id: Sample identifier used to query reads and known sites
-        run_bqsr: Whether to apply BQSR (default: True)
+        sample_id: Sample identifier used to query reads
 
     Returns:
         Alignment asset with the preprocessed BAM file
@@ -101,24 +96,5 @@ async def preprocess_sample(
     alignment = await bwa_mem2_mem(ref=ref, r1=r1, r2=r2)
     alignment = await sort_sam(alignment=alignment, sort_order="coordinate")
     alignment = await mark_duplicates(alignment=alignment)
-
-    if run_bqsr:
-        known_assets = await assemble(build=build, asset="known_sites")
-        known_sites = [a for a in known_assets if isinstance(a, KnownSites)]
-        if not known_sites:
-            raise ValueError(
-                f"run_bqsr=True but no known_sites found for build={build!r}"
-            )
-
-        bqsr_report = await base_recalibrator(
-            alignment=alignment,
-            ref=ref,
-            known_sites=known_sites,
-        )
-        alignment = await apply_bqsr(
-            alignment=alignment,
-            ref=ref,
-            bqsr_report=bqsr_report,
-        )
 
     return alignment

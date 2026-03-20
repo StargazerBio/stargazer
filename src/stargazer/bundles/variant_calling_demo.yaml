@@ -1,0 +1,18 @@
+name: variant_calling_demo
+description: TP53 region test fixtures (reference and paired reads) for GRCh38
+files:
+  - cid: bafkreib6vj3os7l4lqqytaw5vju46iorcknttfiwfnlbizjcqn7xd5hrvy
+    name: GRCh38_TP53.fa
+    keyvalues:
+      asset: reference
+      build: GRCh38_TP53
+  - cid: bafybeia3lsmhibzqk3uo5phryz4wurlj26pn74klczwbmnxq3pf5q3iyy4
+    name: NA12829_TP53_R1.fq.gz
+    keyvalues:
+      asset: r1
+      sample_id: NA12829
+  - cid: bafybeihd3nqlci7mlotdbbxrstxchesmafsytcsltaa2jdfgppeawh3cui
+    name: NA12829_TP53_R2.fq.gz
+    keyvalues:
+      asset: r2
+      sample_id: NA12829
