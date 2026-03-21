@@ -6,7 +6,7 @@ os.environ directly rather than importing named values from this module.
 
 Rules:
 - PINATA_JWT: No default — absence means no authenticated Pinata.
-- PINATA_GATEWAY: Defaults to ipfs.io if unset.
+- PINATA_GATEWAY: Defaults to dweb.link if unset.
   Set to empty string to force a failure on public downloads.
 - PINATA_VISIBILITY: Defaults to "private" if unset.
   Only evaluated by PinataClient — if JWT is unset, downloads are always public.
@@ -24,7 +24,7 @@ from pathlib import Path
 import flyte
 from loguru import logger as logger  # noqa: PLC0414
 
-os.environ.setdefault("PINATA_GATEWAY", "https://ipfs.io")
+os.environ.setdefault("PINATA_GATEWAY", "https://dweb.link")
 os.environ.setdefault("PINATA_VISIBILITY", "private")
 os.environ.setdefault("STARGAZER_LOCAL", str(Path.home() / ".stargazer" / "local"))
 

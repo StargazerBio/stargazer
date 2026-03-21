@@ -86,10 +86,16 @@ async def fetch_bundle(bundle_name: str) -> list[dict]:
 
         # Download bytes via standard path (cache → remote → public gateway)
         comp = Asset(cid=cid)
-        await default_client.download(comp, name=name or None)
+        cached = await default_client.download(comp, name=name or None)
 
         results.append(
-            {"cid": cid, "name": name, "keyvalues": manifest_kv, "path": str(comp.path)}
+            {
+                "cid": cid,
+                "name": name,
+                "keyvalues": manifest_kv,
+                "path": str(comp.path),
+                "cached": cached,
+            }
         )
 
     return results

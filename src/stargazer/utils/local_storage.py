@@ -147,17 +147,20 @@ class LocalStorageClient:
         component: Asset,
         dest: Optional[Path] = None,
         name: Optional[str] = None,
-    ) -> None:
+    ) -> bool:
         """Download a file by CID. Checks cache, then remote, then public gateway.
 
         Args:
             component: Asset with cid set
             dest: Optional destination path (copies file there)
             name: Optional filename to use instead of the CID
+
+        Returns:
+            True if the file was already cached, False if freshly downloaded.
         """
         # Skip if path is already set and file exists
         if component.path and component.path.exists():
-            return
+            return True
 
         cid = component.cid
 
@@ -167,7 +170,7 @@ class LocalStorageClient:
 
         if cache_path.exists():
             self._resolve_dest(component, cache_path, dest)
-            return
+            return True
 
         # 2. Check TinyDB for local_ CIDs
         if cid.startswith("local_"):
@@ -177,7 +180,7 @@ class LocalStorageClient:
                 local_path = self.local_dir / record["rel_path"]
                 if local_path.exists():
                     self._resolve_dest(component, local_path, dest)
-                    return
+                    return True
             raise FileNotFoundError(
                 f"Local file {cid} not found in local directory or database."
             )
@@ -186,11 +189,12 @@ class LocalStorageClient:
         if self.remote and self.remote.visibility == "private":
             await self.remote.download_to(cid, cache_path)
             self._resolve_dest(component, cache_path, dest)
-            return
+            return False
 
         # 4. Public IPFS gateway (default for public visibility or no remote)
         await self._fetch_public(cid, cache_path)
         self._resolve_dest(component, cache_path, dest)
+        return False
 
     async def query(self, keyvalues: dict[str, str]) -> list[dict]:
         """Query files by keyvalue metadata. Delegates to remote if attached.
