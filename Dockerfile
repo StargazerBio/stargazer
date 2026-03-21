@@ -31,12 +31,16 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
     && install -m 755 /root/.local/bin/claude /usr/local/bin/claude
 
 WORKDIR /stargazer
-COPY pyproject.toml uv.lock ./
+COPY --chown=ubuntu:ubuntu pyproject.toml uv.lock ./
+COPY --chown=ubuntu:ubuntu .mcp.json .mcp.json
+COPY --chown=ubuntu:ubuntu .claude/settings.local.json .claude/settings.local.json
 
 # --- Quickstart target ---
 FROM base AS quickstart
-COPY src/ src/
-RUN uv sync
+COPY --chown=ubuntu:ubuntu src/ src/
+RUN uv sync && chown -R ubuntu:ubuntu /stargazer
+USER ubuntu
+RUN flyte create config --local-persistence
 ENTRYPOINT ["claude"]
 
 # --- Dev target ---
@@ -56,7 +60,8 @@ RUN npm install -g opencode-ai
 # Convenience
 RUN curl -fsSL https://starship.rs/install.sh | sh -s -- --yes
 
+RUN chown ubuntu:ubuntu /stargazer
 USER ubuntu
 
 # uv sync then launch bash with the venv active.
-ENTRYPOINT ["bash", "-c", "uv sync --group dev && exec bash"]
+ENTRYPOINT ["bash", "-c", "uv sync --group dev && exec bash --login"]

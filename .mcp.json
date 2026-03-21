@@ -5,6 +5,7 @@
       "command": "uv",
       "args": [
         "run",
+        "--no-sync",
         "stargazer"
       ],
       "env": {}
