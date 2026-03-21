@@ -174,7 +174,8 @@ Thumbs.db
 *.bak
 
 # Local configuration
-.claude/
+.claude/*
+!.claude/settings.json
 *.local.*
 wt/
 

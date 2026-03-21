@@ -33,7 +33,7 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
 WORKDIR /stargazer
 COPY --chown=ubuntu:ubuntu pyproject.toml uv.lock ./
 COPY --chown=ubuntu:ubuntu .mcp.json .mcp.json
-COPY --chown=ubuntu:ubuntu .claude/settings.local.json .claude/settings.local.json
+COPY --chown=ubuntu:ubuntu .claude/settings.json .claude/settings.json
 
 # --- Quickstart target ---
 FROM base AS quickstart

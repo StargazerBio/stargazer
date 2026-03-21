@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run python:*)",
+      "WebFetch(domain:www.union.ai)"
+    ]
+  },
+  "sandbox": {
+    "network": {
+      "allowedDomains": [
+        "ipfs.io",
+        "gateway.ipfs.io"
+      ]
+    }
+  }
+}
