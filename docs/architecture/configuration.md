@@ -33,7 +33,7 @@ All env vars are centralized in `utils/config.py`. If set (even to empty string)
 |----------|---------|---------|----------|
 | `STARGAZER_LOCAL` | Local storage directory | `~/.stargazer/local` | No |
 | `PINATA_JWT` | Pinata API authentication | None (unset) | Only for authenticated operations |
-| `PINATA_GATEWAY` | Public IPFS gateway URL | `https://gateway.pinata.cloud` | No (set to empty string to disable) |
+| `PINATA_GATEWAY` | Public IPFS gateway URL | `https://dweb.link` | No (set to empty string to disable) |
 | `PINATA_VISIBILITY` | `public` or `private` | `private` | No |
 
 ## Resolution Logic
@@ -60,7 +60,7 @@ All storage operations go through `LocalStorageClient`:
 ```
 StorageClient
 ├── upload(component)       → remote or local (never both)
-├── download(component)     → cache → remote (private) → public gateway
+├── download(component)     → bool (True=cached) | cache → remote (private) → public gateway
 ├── query(keyvalues)        → remote or local TinyDB
 └── delete(component)       → remote or local
 ```
@@ -104,6 +104,3 @@ files:
 
 After hydration, bundled assets are queryable via `assemble()` and `query_files` like any other asset.
 
-## Testing
-
-Tests run with no `PINATA_JWT`. The test harness points `LocalStorageClient` at a temporary directory and never mutates client internals. Tests that need Pinata behavior mock the API or skip.

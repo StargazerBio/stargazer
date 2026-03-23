@@ -18,4 +18,5 @@ Stargazer is used through the MCP server — bring your own MCP-compatible clien
 - [Getting Started](getting-started.md) — go from zero to running your first workflow
 - [Architecture](architecture/overview.md) — how the system is designed and why
 - [Guides](guides/writing-a-task.md) — step-by-step walkthroughs for common tasks
+- [Contributing](guides/contributing.md) — set up a dev environment and run tests
 - [API Reference](reference/api.md) — auto-generated from docstrings

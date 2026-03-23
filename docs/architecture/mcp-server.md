@@ -1,13 +1,13 @@
 # MCP Server
 
-Stargazer exposes its bioinformatics capabilities through a [Model Context Protocol](https://modelcontextprotocol.io/) server. Any MCP-compatible client can consume it — Claude Code, OpenCode, Claude Desktop, Cursor, or any other MCP host.
+Stargazer exposes its bioinformatics capabilities through a [Model Context Protocol](https://modelcontextprotocol.io/) server, consumed by Claude Code or OpenCode.
 
 ## Transport Modes
 
 | Transport | Client | Use Case |
 |-----------|--------|----------|
-| **stdio** (default) | Claude Code, OpenCode, Claude Desktop | Local. Client spawns `stargazer serve` as a subprocess. |
-| **Streamable HTTP** | Remote MCP clients, MCP Inspector | Remote. `stargazer serve --http`. |
+| **stdio** (default) | Claude Code, OpenCode | Local. Client spawns `stargazer serve` as a subprocess. |
+| **Streamable HTTP** | Remote MCP clients | Remote. `stargazer serve --http`. |
 
 The same server implementation supports both transports, selected at startup via CLI flag.
 

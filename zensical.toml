@@ -22,6 +22,7 @@ nav = [
     { "Writing a Task" = "guides/writing-a-task.md" },
     { "Writing a Workflow" = "guides/writing-a-workflow.md" },
     { "Using the MCP Server" = "guides/mcp-server.md" },
+    { "Contributing" = "guides/contributing.md" },
   ]},
   { "Reference" = [
     { "Catalog" = "reference/catalog.md" },

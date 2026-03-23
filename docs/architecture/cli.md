@@ -1,6 +1,6 @@
 # CLI Interface
 
-Stargazer does not ship a custom terminal UI. CLI users connect to the MCP server using whichever MCP-compatible client they prefer.
+Stargazer does not ship a custom terminal UI. CLI users connect to the MCP server via Claude Code or OpenCode.
 
 The MCP server (`stargazer serve`) is the single interface between any frontend and the Python backend. Building a custom TUI would duplicate what battle-tested tools already provide — streaming, tool call rendering, input handling — with no domain-specific value.
 
@@ -12,9 +12,6 @@ Any MCP host that supports stdio or streamable HTTP transport:
 |--------|-----------|-------|
 | Claude Code | stdio | `stargazer serve` as MCP server in project config |
 | OpenCode | stdio | Configure in `.opencode/` |
-| Claude Desktop | stdio | Add to `claude_desktop_config.json` |
-| Cursor / Windsurf | stdio | IDE MCP server configuration |
-| MCP Inspector | stdio | Development and debugging |
 
 ## Setup
 

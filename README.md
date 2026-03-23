@@ -10,15 +10,16 @@
 
 Stargazer is an open-science initiative to broaden access to bioinformatics tools, foster collaboration, and align incentives in service of biomedical progress.
 
-## Status: Under Construction 🏗️
-Collecting early feedback on direction and architecture. There's still work to do to get the quickstart going.
+## Status: Alpha 🏗️
+Collecting early feedback on direction and architecture. Try the quickstart!
 
 ## Quickstart
 
-- `git clone https://github.com/pryce-turner/stargazer.git`
-- `cd stargazer`
-- `opencode` or `claude`
-- "Run the GATK preprocessing workflow"
+- `docker run -it ghcr.io/stargazerbio/stargazer`
+- "Download the scrna_demo bundle"
+- "Run the scrna workflow"
+
+Stargazer is an agent-first project - you'll need to login with Claude before interacting with the MCP server. However, everything is just a Flyte workflow under the hood, feel free to start the container with `--entrypoint bash` and run any workflows or check out the [TUI](https://www.union.ai/docs/v2/flyte/user-guide/running-locally/#terminal-ui) from there.
 
 ## Why Stargazer?
 
@@ -44,15 +45,10 @@ A familiar interface where researchers express intent. The LLM has access to a r
 [Flyte V2's](https://www.union.ai/docs/v2/flyte/user-guide/overview/) pure-Python and async-native orchestration engine does the heavy-lifting of each Stargazer execution. Everything runs in a container with task resource requirements and dependencies declared in-line. Tasks can be nested arbitrarily and executed async with standard Python patterns. Types are enforced at the task boundary and capture inputs and outputs with all necessary metadata.
 
 ### Storage - IPFS via Pinata
-Every file in Stargazer is content-addressable on [IPFS](https://docs.ipfs.tech/concepts/how-ipfs-works/) and self-describing via [Pinata](https://pinata.cloud/blog/using-file-centric-architecture-to-build-simple-and-capable-apps/). This powerful combination means that workflows interact with data via their attributes, not their location. Moreover, reproducibility becomes intrinsic as data is identified by an immutable, cryptographic commitment to its content.
+Every file in Stargazer is content-addressable on [IPFS](https://docs.ipfs.tech/concepts/how-ipfs-works/) and self-describing via [Pinata](https://pinata.cloud/blog/using-file-centric-architecture-to-build-simple-and-capable-apps/). This powerful combination means that workflows interact with data via key-value attributes, not their location. Moreover, reproducibility becomes intrinsic as data is identified by an immutable, cryptographic commitment to its content.
 
 ## Execution Modes
-Stargazer has a few execution modes to control exactly where data is processed and stored:
-| Configuration | Execution | Storage |
-|---|---|---|
-| STARGAZER_MODE=local | Local | Local |
-| STARGAZER_MODE=local + PINATA_JWT=xxx | Local | Pinata |
-| STARGAZER_MODE=cloud | Union | Cloud-hosted (no JWT needed) |
+Stargazer has a few execution modes to control exactly where data is processed and stored. The default is fully local compute and storage. By adding a PINATA_JWT env var, you can push and pull assets from IPFS via Pinata, either publicly or privately. This is the persistence layer for hosted compute (coming soon!) and an integral part of Stargazer's collaboration strategy. Details are available in the configuration [docs](https://docs.stargazer.bio/architecture/configuration/).
 
 ## (Over)engineered for an Open-Future
 I've been thinking about and building this before agentic-development for [some time now](https://www.youtube.com/watch?v=F7UUm78iito), and I acknowledge that some of the foundational patterns may be appear rather heavy. Stargazer aims to accomodate as many computational approaches, tools, and lines-of-inquiry as possible and has therefore made every attempt to be flexible and [open](LICENSE) with an opinionated core. Within this framework, every user naturally becomes a contributor. My hope is that anyone who derives value from Stargazer will kindly let their reasoning, workflows, and results flow into the public domain. In doing so, they will add momentum to the flywheel of perpetual progress.
