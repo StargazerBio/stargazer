@@ -70,19 +70,32 @@ def log_execution() -> str:
 # Memory-hungry: scanpy loads full AnnData objects into RAM
 scrna_env = flyte.TaskEnvironment(
     name="scrna",
+    description="scanpy-based single-cell RNA analysis; memory-intensive AnnData workloads",
+    image=flyte.Image.from_debian_base().with_pip_packages("scanpy>=1.12"),
     resources=flyte.Resources(
         cpu=4,
         memory="32Gi",
     ),
+    env_vars={
+        "PINATA_GATEWAY": os.environ.get("PINATA_GATEWAY", "https://dweb.link"),
+        "PINATA_VISIBILITY": os.environ.get("PINATA_VISIBILITY", "private"),
+    },
+    secrets=flyte.Secret(key="PINATA_JWT", as_env_var="PINATA_JWT"),
 )
 
-# GATK task environment for GATK-specific tools
-# Uses GATK image with Java runtime and GATK tools
+# GATK/alignment task environment for GATK, BWA, and samtools tools
+# Uses GATK image with Java runtime, BWA, and samtools pre-installed
 gatk_env = flyte.TaskEnvironment(
     name="gatk",
+    description="GATK, BWA, and samtools alignment and variant-calling workloads",
     image=flyte.Image.from_base("broadinstitute/gatk"),
     resources=flyte.Resources(
         cpu=4,
         memory="16Gi",
     ),
+    env_vars={
+        "PINATA_GATEWAY": os.environ.get("PINATA_GATEWAY", "https://dweb.link"),
+        "PINATA_VISIBILITY": os.environ.get("PINATA_VISIBILITY", "private"),
+    },
+    secrets=flyte.Secret(key="PINATA_JWT", as_env_var="PINATA_JWT"),
 )
