@@ -26,6 +26,7 @@ def test_discovery_finds_all_tasks():
         "joint_call_gvcfs",
         "variant_recalibrator",
         "apply_vqsr",
+        "index_feature_file",
     }
     assert expected_tasks == task_names
 

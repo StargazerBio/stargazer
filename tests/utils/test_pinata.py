@@ -73,7 +73,7 @@ async def test_query():
         )
 
     print("\nQuerying files by keyvalue (type=reference)...")
-    found_files = await client.query({"type": "reference"})
+    found_files = await client.query({"asset": "reference"})
     print(found_files)
 
     assert len(found_files) >= len(test_files), (
