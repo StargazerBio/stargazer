@@ -27,9 +27,9 @@ Implement single-purpose Flyte tasks that wrap bioinformatics tools following th
 When implementing a task:
 
 1. **Research First**:
-   - Check `.opencode/context/tool_refs/` for tool documentation
-   - Review `.opencode/context/sdk_examples_concise.md` for Flyte v2 patterns
-   - Look at `.opencode/context/stargazer_flyte_v1/tasks/` for v1 reference (adapt, don't copy)
+   - Check `.opencode/reference/tool_refs/` for tool documentation
+   - Review `.opencode/reference/sdk_examples_concise.md` for Flyte v2 patterns
+   - Look at existing tasks in `src/stargazer/tasks/` for established patterns
 
 2. **Define Types**:
    - Create or update dataclasses in `src/stargazer/types/`
@@ -61,14 +61,11 @@ from datetime import datetime
 from pathlib import Path
 
 from stargazer.types import {InputType}, {OutputType}
-from stargazer.config import pb_env
+from stargazer.config import gatk_env  # or scrna_env for scRNA tasks
 from stargazer.utils import _run
 
 
-@pb_env.task(
-    requests={"cpu": "4", "mem": "16Gi"},
-    limits={"cpu": "8", "mem": "32Gi"}
-)
+@gatk_env.task  # resources are set on the TaskEnvironment in config.py
 async def {action}_{tool}(input_data: {InputType}) -> {OutputType}:
     """
     {Brief description of what this task does}.
@@ -84,18 +81,21 @@ async def {action}_{tool}(input_data: {InputType}) -> {OutputType}:
     Reference:
         {URL to tool documentation}
     """
-    # Fetch inputs from cache/IPFS
-    local_path = await input_data.fetch()
-    
-    # Prepare command
-    cmd = ["{tool}", "arg1", "arg2", str(local_path)]
-    
+    # Fetch inputs (downloads from Pinata if not cached locally)
+    await input_data.fetch()
+
+    # Prepare command (convert Path to str at subprocess boundary)
+    cmd = ["{tool}", "arg1", "arg2", str(input_data.path)]
+
     # Run command
-    stdout, stderr = await _run(cmd, cwd=str(local_path.parent))
-    
-    # Package outputs
-    output = {OutputType}(...)
-    
+    stdout, stderr = await _run(cmd, cwd=str(input_data.path.parent))
+
+    # Package outputs with provenance
+    output = {OutputType}(
+        sample_id=input_data.sample_id,
+        tool="{tool}",
+    )
+
     return output
 ```
 
@@ -103,11 +103,10 @@ async def {action}_{tool}(input_data: {InputType}) -> {OutputType}:
 
 ```python
 import flyte                    # Main SDK
-from flyte.io import File, Dir  # I/O types (NOT flytekit!)
 
 from stargazer.types import {YourTypes}
-from stargazer.config import pb_env  # TaskEnvironment
-from stargazer.utils import _run     # Subprocess helper
+from stargazer.config import gatk_env  # or scrna_env — TaskEnvironment defined in config.py
+from stargazer.utils import _run       # Subprocess helper
 ```
 
 ## Resource Guidelines

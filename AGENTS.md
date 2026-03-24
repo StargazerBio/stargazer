@@ -103,19 +103,30 @@ The `spec:` line is **module-level only** — class and function docstrings do n
 
 The project follows this structure:
 - `src/stargazer/` - Main package
-  - `tasks/` - Flyte task definitions (one module per tool/function)
+  - `__init__.py` - Package root, re-exports key symbols
+  - `config.py` - Centralized configuration, env var defaults, TaskEnvironment definitions (`gatk_env`, `scrna_env`), logger setup
+  - `server.py` - MCP server implementation
+  - `marshal.py` - Serialization helpers for MCP transport
+  - `registry.py` - Task/workflow registry for MCP discovery
+  - `tasks/` - Flyte task definitions, organized by domain subdirectory
+    - `gatk/` - GATK tool tasks (haplotype_caller, mark_duplicates, sort_sam, etc.)
+    - `general/` - General bioinformatics tasks (bwa, bwa_mem2, samtools)
+    - `scrna/` - Single-cell RNA-seq tasks (cluster, normalize, qc_filter, etc.)
   - `workflows/` - Flyte workflow definitions (one module per pipeline)
-  - `types/` - Custom Flyte types and dataclasses
-  - `utils/` - Utility functions
+  - `types/` - Asset dataclasses (all inherit from `Asset` base class)
+  - `utils/` - Utility functions (subprocess, pinata, local_storage, query)
+  - `bundles/` - Predefined workflow input bundles (YAML configs)
 - `tests/` - Test directory
-  - `conftest.py` - Pytest configuration
-  - `assets/` - Test fixtures and small data files
+  - `conftest.py` - Pytest configuration (Flyte init, Pinata JWT injection, fixture paths)
+  - `fixtures/` - Test fixtures organized by domain (`gatk/`, `general/`, `scrna/`)
   - `unit/` - Unit tests
-  - `integration/` - Integration tests
+  - `tasks/` - Task-level tests mirroring `src/stargazer/tasks/` structure
+  - `helpers.py` - Shared test helper functions
 - `docs/` - Project documentation
   - `architecture/` - System design and contracts
+  - `workflows/` - Workflow-specific documentation (e.g., scRNA-seq)
   - `guides/` - Step-by-step walkthroughs with code examples
-  - `reference/` - Auto-generated API reference
+  - `reference/` - API reference (catalog of tasks and types)
 - `.opencode/reference/` - Agent-facing reference materials (Flyte docs, tool refs)
 - `scratch/` - Scratch materials
 
@@ -124,8 +135,9 @@ The project follows this structure:
 **Purpose:** Define all input and output dataclasses used across tasks and workflows.
 
 **Guidelines:**
-- Create separate modules for different domains (e.g., `reference.py`, `alignment.py`, `variant_calling.py`)
-- Use descriptive dataclass names (e.g., `Alignments`, `Variants`)
+- Create separate modules for different domains (e.g., `reference.py`, `alignment.py`, `variants.py`, `reads.py`, `scrna.py`)
+- All types inherit from the `Asset` base class (`asset.py`) which provides `cid`, `path`, `to_keyvalues()`, `from_keyvalues()`, and registry mechanics
+- Use descriptive dataclass names (e.g., `Alignment`, `Variants`, `Reference`)
 - Group related types in the same module
 - Use Python dataclasses with type annotations
 
@@ -134,10 +146,10 @@ The project follows this structure:
 **Purpose:** Define individual Flyte tasks that perform specific operations.
 
 **Guidelines:**
-- **Modular Organization:** Separate tasks by tool or functional domain (e.g., `bwa_tasks.py`, `samtools_tasks.py`)
+- **Modular Organization:** Tasks are organized into domain subdirectories (`gatk/`, `general/`, `scrna/`) with one file per tool (e.g., `gatk/haplotype_caller.py`, `general/bwa.py`)
 - **Naming Convention:** Use descriptive, action-oriented names
-  - Task files: `{tool}.py` or `{function}.py`
-  - Task functions: `{action}_{tool}` (e.g., `align_with_bwa`, `sort_bam`)
+  - Task files: `{tool}.py` or `{function}.py` within domain subdirectories
+  - Task functions: `{action}_{tool}` (e.g., `bwa_mem`, `haplotype_caller`, `sort_sam`)
 - **One Task Per Function:** Each task should do one thing well
 - **Use Structured I/O:** Leverage dataclasses from `types/` for inputs/outputs
 - **Resource Specification:** Define appropriate resource requests (CPU, memory, GPU)
@@ -157,10 +169,12 @@ The project follows this structure:
 ### Core Concepts
 
 - Main SDK import: `import flyte`
-- Task environments: `flyte.TaskEnvironment(name="my_env")`
+- Task environments are defined in `config.py`: `gatk_env` (GATK/BWA/samtools) and `scrna_env` (scanpy-based scRNA)
+- Decorate tasks with `@gatk_env.task` or `@scrna_env.task` (not a generic `pb_env`)
 - Async tasks are preferred for I/O operations
 - In v2, there is no separate `@workflow` decorator - workflows are tasks that call other tasks
 - Use `asyncio.gather` for parallel execution
+- All types inherit from `Asset` base class, which provides `cid`/`path` fields, `to_keyvalues()`/`from_keyvalues()` serialization, and an auto-registry via `_asset_key`
 
 ## Style and Conventions
 
@@ -169,4 +183,3 @@ The project follows this structure:
 - **Imports:** Use the `stargazer` package name, not relative imports across packages. Module level imports should be at the top of the file!!
 - **Documentation:** Include docstrings explaining purpose and behavior
 - **Resource Awareness:** Specify appropriate resource requests for bioinformatics workloads
-- **Learn from V1:** Use `stargazer_flyte_v1/` for workflow logic, but adapt to v2 API
