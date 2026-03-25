@@ -2,14 +2,14 @@
 
 Stargazer is organized around four layers:
 
-```mermaid
-flowchart TD
-    MCP("MCP Server\ninterface — tools, resources, prompts")
-    WF("Workflows\ncomposition — tasks orchestrated into pipelines")
-    T("Tasks\nexecution — atomic bioinformatics operations")
-    A[("Asset / Storage\ntyped metadata + content-addressed files")]
-
-    MCP --> WF --> T --> A
+```
+MCP Server         (interface — tools, resources, prompts)
+    ↓
+Workflows          (composition — tasks orchestrated into pipelines)
+    ↓
+Tasks              (execution — atomic bioinformatics operations)
+    ↓
+Asset / Storage    (data — typed metadata + content-addressed files)
 ```
 
 ## Asset System

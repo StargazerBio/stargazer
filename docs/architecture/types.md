@@ -11,14 +11,12 @@ Every file in Stargazer carries structured keyvalue metadata that describes its 
 
 ## Architecture
 
-```mermaid
-flowchart TD
-    SC("Asset Subclasses\nschema — typed Python fields via keyvalues")
-    KV("Asset.keyvalues\ntransport — flat dict[str, str]")
-    ST[("StorageClient\npersistence — local TinyDB or Pinata")]
-
-    SC <-->|"__getattr__ / __setattr__ coercion"| KV
-    KV <-->|"upload() / query()"| ST
+```
+Asset subclasses   (schema — typed Python fields via keyvalues)
+      ↕  __getattr__ / __setattr__ coercion
+  Asset.keyvalues  (transport — flat dict[str, str])
+      ↕  upload() / query()
+  StorageClient    (persistence — local TinyDB or Pinata)
 ```
 
 There is no separate "storage primitive" layer. `Asset` is both the typed schema and the storage identity.

@@ -45,31 +45,24 @@ Always returns `LocalStorageClient`. The remote is optional.
 
 ## Download Flow
 
-```mermaid
-flowchart TD
-    Start([Download requested]) --> A{path exists?}
-    A -->|Yes| Done([Return])
-    A -->|No| B{CID in local cache?}
-    B -->|Yes| Done
-    B -->|No| C{local_ CID?}
-    C -->|Yes| D("Look up TinyDB") --> Done
-    C -->|No| E{Remote + private\nvisibility?}
-    E -->|Yes| F("Signed URL download → cache") --> Done
-    E -->|No| G("Public IPFS gateway → fetch + cache") --> Done
+```
+1. component.path exists?           → return
+2. CID in local cache?              → return
+3. local_ CID?                      → look up TinyDB → return
+4. Remote + private visibility?     → signed URL download → cache → return
+5. Public IPFS gateway              → fetch → cache → return
 ```
 
 ## Storage Client Protocol
 
 All storage operations go through `LocalStorageClient`:
 
-```mermaid
-flowchart LR
-    C[("LocalStorageClient")]
-
-    C --> U("upload(component)\nremote or local — never both")
-    C --> D("download(component)\nbool — cache → remote (private) → public gateway")
-    C --> Q("query(keyvalues)\nremote or local TinyDB")
-    C --> X("delete(component)\nremote or local")
+```
+StorageClient
+├── upload(component)       → remote or local (never both)
+├── download(component)     → bool (True=cached) | cache → remote (private) → public gateway
+├── query(keyvalues)        → remote or local TinyDB
+└── delete(component)       → remote or local
 ```
 
 The two modes are explicit and separate:
@@ -85,14 +78,13 @@ Bundles are curated sets of files (reference genomes, demo datasets) defined as 
 
 `fetch_resource_bundle(bundle_name)` downloads files by CID:
 
-```mermaid
-flowchart TD
-    Start([fetch_resource_bundle]) --> A("Load YAML manifest by name")
-    A --> B{JWT set?}
-    B -->|Yes| C("Files already registered in Pinata\nDownload bytes by CID\nNo TinyDB writes")
-    B -->|No| D("Seed TinyDB with manifest keyvalues\nDownload bytes from public IPFS gateway")
-    C --> Done([Assets queryable via assemble])
-    D --> Done
+```
+1. Load YAML manifest by name
+2. Check mode:
+   - JWT set?  → files are already registered in Pinata with bundle keyvalue.
+                  Download bytes by CID via standard path. No TinyDB writes.
+   - No JWT?   → seed TinyDB with manifest keyvalues so assemble() can find them.
+                  Download bytes from public IPFS gateway.
 ```
 
 ### Bundle Format
