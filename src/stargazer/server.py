@@ -24,9 +24,9 @@ from mcp.server.fastmcp import FastMCP
 import stargazer.config  # ensure env var defaults are set  # noqa: F401
 from stargazer.marshal import marshal_output
 from stargazer.registry import TaskInfo, TaskRegistry
-from stargazer.types import ASSET_REGISTRY
-from stargazer.types.asset import Asset
-from stargazer.types.asset import assemble
+from stargazer.assets import ASSET_REGISTRY
+from stargazer.assets.asset import Asset
+from stargazer.assets.asset import assemble
 from stargazer.utils.local_storage import default_client
 
 
@@ -106,7 +106,7 @@ async def upload_file(path: str, keyvalues: dict[str, str]) -> dict:
         raise ValueError(f"Invalid asset key {asset_key!r}. Valid keys: {valid}")
     cls = ASSET_REGISTRY[asset_key]
     import dataclasses
-    from stargazer.types.asset import _BASE_FIELDS
+    from stargazer.assets.asset import _BASE_FIELDS
 
     declared = {f.name for f in dataclasses.fields(cls)} - _BASE_FIELDS
     unknown = set(keyvalues) - declared - {"asset"}

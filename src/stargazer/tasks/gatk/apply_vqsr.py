@@ -10,7 +10,7 @@ from pathlib import Path
 
 import stargazer.utils.local_storage as _storage
 from stargazer.config import gatk_env
-from stargazer.types import Reference, Variants, VariantsIndex, VQSRModel
+from stargazer.assets import Reference, Variants, VariantsIndex, VQSRModel
 from stargazer.config import logger
 from stargazer.utils import _run
 

@@ -8,7 +8,7 @@ We're replacing this with typed `ComponentFile` subclasses. Metadata is defined 
 
 ## Phase 1: ComponentFile Base Class
 
-**New file: `src/stargazer/types/base.py`**
+**New file: `src/stargazer/assets/base.py`**
 
 ```python
 @dataclass
@@ -111,7 +111,7 @@ class AlignmentFile(ComponentFile):
 
 `from_dict` is inherited from base — `keyvalues` is restored, properties work immediately.
 
-### `src/stargazer/types/reference.py`
+### `src/stargazer/assets/reference.py`
 
 | Class | type | component | Properties |
 |-------|------|-----------|------------|
@@ -120,14 +120,14 @@ class AlignmentFile(ComponentFile):
 | `SequenceDict` | reference | sequence_dictionary | `build: str`, `tool: str \| None` |
 | `AlignerIndex` | reference | aligner_index | `build: str`, `aligner: str` |
 
-### `src/stargazer/types/alignment.py`
+### `src/stargazer/assets/alignment.py`
 
 | Class | type | component | Properties |
 |-------|------|-----------|------------|
 | `AlignmentFile` | alignment | alignment | `sample_id: str`, `format: str \| None`, `sorted: str \| None`, `duplicates_marked: bool`, `bqsr_applied: bool`, `tool: str \| None` |
 | `AlignmentIndex` | alignment | index | `sample_id: str` |
 
-### `src/stargazer/types/reads.py`
+### `src/stargazer/assets/reads.py`
 
 | Class | type | component | Properties |
 |-------|------|-----------|------------|
@@ -136,7 +136,7 @@ class AlignmentFile(ComponentFile):
 
 Two classes (not one with variable component) so `__post_init__` can hardcode the component value.
 
-### `src/stargazer/types/variants.py`
+### `src/stargazer/assets/variants.py`
 
 | Class | type | component | Properties |
 |-------|------|-----------|------------|
@@ -193,7 +193,7 @@ Caller access changes (proxy properties removed, go through the component):
 - `variants.source_samples` -> `variants.vcf.source_samples or [variants.sample_id]`
 - `*.path` replaces all old `*.ipfile.local_path` / `*.get_*_path()` patterns
 
-**Update `src/stargazer/types/__init__.py`** — export all component classes.
+**Update `src/stargazer/assets/__init__.py`** — export all component classes.
 
 ## Phase 4: Update Tasks
 
@@ -280,15 +280,15 @@ Rewrite to use the component pattern. `vcf.get_vcf_path()` -> `vcf.vcf.path`, `r
 | File | Action |
 |------|--------|
 | `src/stargazer/utils/ipfile.py` | **Delete** |
-| `src/stargazer/types/base.py` | **New** — `ComponentFile` base |
+| `src/stargazer/assets/base.py` | **New** — `ComponentFile` base |
 | `src/stargazer/utils/storage.py` | Replace `IpFile` with `ComponentFile` |
 | `src/stargazer/utils/pinata.py` | Replace `IpFile` with `ComponentFile` |
 | `src/stargazer/utils/local_storage.py` | Replace `IpFile` with `ComponentFile` |
-| `src/stargazer/types/reference.py` | Add `ReferenceFile`, `ReferenceIndex`, `SequenceDict`, `AlignerIndex`; strip `Reference` |
-| `src/stargazer/types/alignment.py` | Add `AlignmentFile`, `AlignmentIndex`; strip `Alignment` |
-| `src/stargazer/types/reads.py` | Add `R1File`, `R2File`; strip `Reads` |
-| `src/stargazer/types/variants.py` | Add `VariantsFile`, `VariantsIndex`; strip `Variants` |
-| `src/stargazer/types/__init__.py` | Export new classes |
+| `src/stargazer/assets/reference.py` | Add `ReferenceFile`, `ReferenceIndex`, `SequenceDict`, `AlignerIndex`; strip `Reference` |
+| `src/stargazer/assets/alignment.py` | Add `AlignmentFile`, `AlignmentIndex`; strip `Alignment` |
+| `src/stargazer/assets/reads.py` | Add `R1File`, `R2File`; strip `Reads` |
+| `src/stargazer/assets/variants.py` | Add `VariantsFile`, `VariantsIndex`; strip `Variants` |
+| `src/stargazer/assets/__init__.py` | Export new classes |
 | `src/stargazer/tasks/general/samtools.py` | Use `ReferenceIndex().update()` |
 | `src/stargazer/tasks/general/bwa.py` | Use `AlignerIndex().update()`, `AlignmentFile().update()` |
 | `src/stargazer/tasks/gatk/create_sequence_dictionary.py` | Use `SequenceDict().update()` |

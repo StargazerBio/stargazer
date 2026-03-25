@@ -71,7 +71,7 @@ For tasks with custom types, call tasks directly and use simple Path objects:
 ```python
 import pytest
 from pathlib import Path
-from stargazer.types import Reference
+from stargazer.assets import Reference
 from stargazer.tasks.samtools import samtools_faidx
 
 @pytest.mark.asyncio

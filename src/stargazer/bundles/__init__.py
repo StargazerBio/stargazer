@@ -67,7 +67,7 @@ async def fetch_bundle(bundle_name: str) -> list[dict]:
     Raises:
         ValueError: If the bundle name is not found.
     """
-    from stargazer.types.asset import Asset
+    from stargazer.assets.asset import Asset
     from stargazer.utils.local_storage import default_client
 
     manifest = _load_manifest(bundle_name)

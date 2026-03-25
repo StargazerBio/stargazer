@@ -4,7 +4,7 @@ This guide walks through adding a new bioinformatics task to Stargazer.
 
 ## 1. Define the Asset Type (if needed)
 
-If your task produces a new kind of output, add an asset subclass in `src/stargazer/types/`:
+If your task produces a new kind of output, add an asset subclass in `src/stargazer/assets/`:
 
 ```python
 class MyOutput(Asset):
@@ -22,8 +22,8 @@ Add a file in `src/stargazer/tasks/` named after the tool (e.g., `my_tool.py`):
 import asyncio
 import flyte
 
-from stargazer.types.reference import Reference
-from stargazer.types.alignment import Alignment
+from stargazer.assets.reference import Reference
+from stargazer.assets.alignment import Alignment
 
 tool_env = flyte.TaskEnvironment(name="my_tool")
 

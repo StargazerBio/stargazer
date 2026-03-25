@@ -18,10 +18,10 @@ A module-level `default_client = PinataClient()` singleton is imported by all 4 
 
 | File | Methods Used |
 |------|-------------|
-| `src/stargazer/types/reference.py` | `upload_file`, `download_file`, `local_dir` |
-| `src/stargazer/types/alignment.py` | `upload_file`, `download_file`, `local_dir` |
-| `src/stargazer/types/reads.py` | `upload_file`, `download_file`, `local_dir` |
-| `src/stargazer/types/variants.py` | `upload_file`, `download_file`, `local_dir` |
+| `src/stargazer/assets/reference.py` | `upload_file`, `download_file`, `local_dir` |
+| `src/stargazer/assets/alignment.py` | `upload_file`, `download_file`, `local_dir` |
+| `src/stargazer/assets/reads.py` | `upload_file`, `download_file`, `local_dir` |
+| `src/stargazer/assets/variants.py` | `upload_file`, `download_file`, `local_dir` |
 | `src/stargazer/tasks/general/hydrate.py` | `query_files` |
 | `src/stargazer/tasks/gatk/apply_bqsr.py` | `download_file` |
 | `src/stargazer/tasks/gatk/base_recalibrator.py` | `query_files`, `download_file`, `upload_file` |
@@ -148,10 +148,10 @@ Update `.opencode/specs/filesystem_spec.md` to reflect the new storage abstracti
 | `src/stargazer/utils/pinata.py` | **Modified** — remove IpFile, remove local_only branches, remove TinyDB |
 | `src/stargazer/utils/__init__.py` | **Modified** — update exports |
 | `src/stargazer/__init__.py` | **Modified** — update exports |
-| `src/stargazer/types/reference.py` | **Modified** — import path |
-| `src/stargazer/types/alignment.py` | **Modified** — import path |
-| `src/stargazer/types/reads.py` | **Modified** — import path |
-| `src/stargazer/types/variants.py` | **Modified** — import path |
+| `src/stargazer/assets/reference.py` | **Modified** — import path |
+| `src/stargazer/assets/alignment.py` | **Modified** — import path |
+| `src/stargazer/assets/reads.py` | **Modified** — import path |
+| `src/stargazer/assets/variants.py` | **Modified** — import path |
 | `src/stargazer/tasks/general/hydrate.py` | **Modified** — import path |
 | `src/stargazer/tasks/gatk/apply_bqsr.py` | **Modified** — import path |
 | `src/stargazer/tasks/gatk/base_recalibrator.py` | **Modified** — import path |

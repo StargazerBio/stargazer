@@ -13,7 +13,7 @@ Implement a Stargazer MCP server in Python using FastMCP that exposes all storag
 
 - All bioinformatics tasks and workflows exist in Python under `src/stargazer/tasks/` and `src/stargazer/workflows/`
 - Storage layer exists in `src/stargazer/utils/pinata.py` (will be refactored per prior plan)
-- Type system exists in `src/stargazer/types/`
+- Type system exists in `src/stargazer/assets/`
 - No MCP server, no CLI entry point
 
 ## Target State

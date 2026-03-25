@@ -5,8 +5,8 @@ Tests for Variants asset types.
 import pytest
 from conftest import GATK_FIXTURES_DIR
 
-from stargazer.types import specialize
-from stargazer.types.variants import Variants, VariantsIndex, KnownSites
+from stargazer.assets import specialize
+from stargazer.assets.variants import Variants, VariantsIndex, KnownSites
 import stargazer.utils.local_storage as _storage_mod
 
 

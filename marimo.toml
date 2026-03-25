@@ -8,7 +8,7 @@ Tasks are async Flyte v2 functions that perform a single bioinformatics operatio
 
 ```python
 from stargazer.config import gatk_env  # or scrna_env
-from stargazer.types import Reference, Alignment
+from stargazer.assets import Reference, Alignment
 from stargazer.utils import _run
 
 @gatk_env.task
@@ -28,7 +28,7 @@ Rules:
 - Always fetch() inputs before accessing paths
 - Always update() outputs to register in storage
 - Use pathlib.Path for filesystem ops, convert to str only at subprocess boundary
-- Import from stargazer.types, stargazer.config, stargazer.utils (never flytekit)
+- Import from stargazer.assets, stargazer.config, stargazer.utils (never flytekit)
 - No TYPE_CHECKING blocks — Flyte always checks types
 - Resources (CPU, memory, GPU) are set on the TaskEnvironment in config.py, not per-task
 
@@ -42,7 +42,7 @@ class MyOutput(Asset):
     sample_id: str
 ```
 
-- Define types in src/stargazer/types/
+- Define types in src/stargazer/assets/
 - Use descriptive names (Alignment, Variants, AnnData)
 - Fields become keyvalues in storage — keep them flat strings/ints
 
@@ -70,6 +70,6 @@ Rules:
 
 - src/stargazer/tasks/ — one module per tool (bwa.py, samtools.py)
 - src/stargazer/workflows/ — one module per pipeline
-- src/stargazer/types/ — asset dataclasses by domain
+- src/stargazer/assets/ — asset dataclasses by domain
 - src/stargazer/config.py — TaskEnvironments (gatk_env, scrna_env) and shared config
 """

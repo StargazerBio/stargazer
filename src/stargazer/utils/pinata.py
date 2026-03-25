@@ -23,7 +23,7 @@ import aiofiles
 
 import stargazer.config  # ensure env var defaults are set  # noqa: F401
 
-from stargazer.types.asset import Asset
+from stargazer.assets.asset import Asset
 
 
 class PinataClient:

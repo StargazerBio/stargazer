@@ -4,29 +4,29 @@
 spec: [docs/architecture/types.md](../architecture/types.md)
 """
 
-from stargazer.types.asset import Asset
-from stargazer.types.asset import assemble
-from stargazer.types.reference import (
+from stargazer.assets.asset import Asset
+from stargazer.assets.asset import assemble
+from stargazer.assets.reference import (
     Reference,
     ReferenceIndex,
     SequenceDict,
     AlignerIndex,
 )
-from stargazer.types.reads import R1, R2
-from stargazer.types.alignment import (
+from stargazer.assets.reads import R1, R2
+from stargazer.assets.alignment import (
     Alignment,
     AlignmentIndex,
     BQSRReport,
     DuplicateMetrics,
 )
-from stargazer.types.variants import (
+from stargazer.assets.variants import (
     Variants,
     VariantsIndex,
     KnownSites,
     KnownSitesIndex,
     VQSRModel,
 )
-from stargazer.types.scrna import AnnData
+from stargazer.assets.scrna import AnnData
 
 # Auto-populated via Asset.__init_subclass__
 ASSET_REGISTRY: dict[str, type[Asset]] = Asset._registry

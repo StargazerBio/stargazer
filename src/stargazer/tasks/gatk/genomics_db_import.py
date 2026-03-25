@@ -9,7 +9,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 from pathlib import Path
 
 from stargazer.config import gatk_env
-from stargazer.types import Variants
+from stargazer.assets import Variants
 from stargazer.config import logger
 from stargazer.utils import _run
 

@@ -64,7 +64,7 @@ import asyncio
 import flyte
 
 from stargazer.config import gatk_env  # or scrna_env
-from stargazer.types import {InputType}, {OutputType}
+from stargazer.assets import {InputType}, {OutputType}
 from stargazer.tasks.{tool1} import {task1}
 from stargazer.tasks.{tool2} import {task2}
 
@@ -195,7 +195,7 @@ import asyncio  # For parallelism
 import flyte    # Main SDK
 
 from stargazer.config import gatk_env  # or scrna_env
-from stargazer.types import {YourTypes}
+from stargazer.assets import {YourTypes}
 from stargazer.tasks.{module} import {tasks}
 ```
 

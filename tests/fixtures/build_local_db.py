@@ -12,21 +12,21 @@ Run this script whenever fixtures are added or changed:
 import asyncio
 from pathlib import Path
 
-from stargazer.types.alignment import (
+from stargazer.assets.alignment import (
     Alignment,
     AlignmentIndex,
     BQSRReport,
     DuplicateMetrics,
 )
-from stargazer.types.asset import Asset
-from stargazer.types.reads import R1, R2
-from stargazer.types.reference import (
+from stargazer.assets.asset import Asset
+from stargazer.assets.reads import R1, R2
+from stargazer.assets.reference import (
     AlignerIndex,
     Reference,
     ReferenceIndex,
     SequenceDict,
 )
-from stargazer.types.variants import (
+from stargazer.assets.variants import (
     KnownSites,
     KnownSitesIndex,
     Variants,

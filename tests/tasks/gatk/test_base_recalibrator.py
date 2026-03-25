@@ -8,7 +8,7 @@ import pytest
 from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
 
 from stargazer.tasks.gatk.base_recalibrator import base_recalibrator
-from stargazer.types import Alignment, BQSRReport, KnownSites, Reference
+from stargazer.assets import Alignment, BQSRReport, KnownSites, Reference
 
 
 KNOWN_SITES_VCF = "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf"

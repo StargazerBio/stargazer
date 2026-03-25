@@ -5,7 +5,7 @@ import scanpy as sc
 from conftest import SCRNA_FIXTURES_DIR
 
 from stargazer.tasks.scrna.find_markers import find_markers
-from stargazer.types.scrna import AnnData
+from stargazer.assets.scrna import AnnData
 
 CLUSTERED_FIXTURE = SCRNA_FIXTURES_DIR / "clustered.h5ad"
 
@@ -35,8 +35,8 @@ class TestScrnaExports:
     """Test that scRNA-seq tasks and types are properly exported."""
 
     def test_anndata_type_exported(self):
-        """AnnData type is accessible from stargazer.types."""
-        from stargazer.types import AnnData
+        """AnnData type is accessible from stargazer.assets."""
+        from stargazer.assets import AnnData
 
         assert AnnData._asset_key == "anndata"
 

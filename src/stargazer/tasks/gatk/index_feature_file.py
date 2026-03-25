@@ -6,7 +6,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 import stargazer.utils.local_storage as _storage
 from stargazer.config import gatk_env, logger
-from stargazer.types import KnownSites, KnownSitesIndex
+from stargazer.assets import KnownSites, KnownSitesIndex
 from stargazer.utils import _run
 
 

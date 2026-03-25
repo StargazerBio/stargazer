@@ -12,8 +12,8 @@ from pathlib import Path
 
 from stargazer.bundles import list_bundles
 from stargazer.registry import TaskRegistry
-from stargazer.types import ASSET_REGISTRY
-from stargazer.types.asset import _BASE_FIELDS
+from stargazer.assets import ASSET_REGISTRY
+from stargazer.assets.asset import _BASE_FIELDS
 
 DOCS = Path(__file__).parent
 registry = TaskRegistry()

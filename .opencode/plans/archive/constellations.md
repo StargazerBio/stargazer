@@ -24,7 +24,7 @@ Types system only — no changes to tasks, workflows, or MCP server.
 
 ## Steps
 
-### 1. Rename and redesign `ComponentFile` → `Asset` (`src/stargazer/types/component.py` → `src/stargazer/types/asset.py`)
+### 1. Rename and redesign `ComponentFile` → `Asset` (`src/stargazer/assets/component.py` → `src/stargazer/assets/asset.py`)
 
 **Changes:**
 - Rename file and class: `ComponentFile` → `Asset`
@@ -61,7 +61,7 @@ Each file keeps its asset subclasses but drops the BioType class. Assets gain re
 - `VariantsIndex` links via `variants_cid`
 - `KnownSites` is a standalone asset with `build` and `source` fields — no container needed (like an Arvados collection that stands alone with its own metadata)
 
-### 3. Create `Constellation` class and `assemble()` (`src/stargazer/types/constellation.py`)
+### 3. Create `Constellation` class and `assemble()` (`src/stargazer/assets/constellation.py`)
 
 New file replacing `biotype.py`. A Constellation is a **dynamic query-result namespace**, not a base class for subclassing. It is populated by `assemble()` which queries storage, specializes results, and groups them by `_asset_key`.
 
@@ -123,7 +123,7 @@ The user-facing workflow signature is just `(build: str, sample_id: str)`. The w
 **fetch() on Constellation:**
 Downloads all contained components to local cache, same as BioType.fetch() today.
 
-### 4. Update `specialize()` and `__init__.py` (`src/stargazer/types/__init__.py`)
+### 4. Update `specialize()` and `__init__.py` (`src/stargazer/assets/__init__.py`)
 
 - `ASSET_REGISTRY` becomes `dict[str, type[Asset]]` keyed by `_asset_key`
 - `specialize()` looks up by `asset` keyvalue only (single key, not tuple)
@@ -158,14 +158,14 @@ No longer needed — `Constellation` replaces it entirely.
 
 | File | Action |
 |------|--------|
-| `src/stargazer/types/component.py` → `src/stargazer/types/asset.py` | **Rename** + edit (→ `Asset`, drop `_type_key`, single-key registry) |
-| `src/stargazer/types/constellation.py` | **Create** (replaces `biotype.py`) |
-| `src/stargazer/types/reference.py` | Edit (rename classes, drop BioType) |
-| `src/stargazer/types/reads.py` | Edit (rename classes, drop BioType) |
-| `src/stargazer/types/alignment.py` | Edit (drop BioType) |
-| `src/stargazer/types/variants.py` | Edit (rename classes, drop BioType) |
-| `src/stargazer/types/__init__.py` | Edit (new exports, single-key registry) |
-| `src/stargazer/types/biotype.py` | **Delete** |
+| `src/stargazer/assets/component.py` → `src/stargazer/assets/asset.py` | **Rename** + edit (→ `Asset`, drop `_type_key`, single-key registry) |
+| `src/stargazer/assets/constellation.py` | **Create** (replaces `biotype.py`) |
+| `src/stargazer/assets/reference.py` | Edit (rename classes, drop BioType) |
+| `src/stargazer/assets/reads.py` | Edit (rename classes, drop BioType) |
+| `src/stargazer/assets/alignment.py` | Edit (drop BioType) |
+| `src/stargazer/assets/variants.py` | Edit (rename classes, drop BioType) |
+| `src/stargazer/assets/__init__.py` | Edit (new exports, single-key registry) |
+| `src/stargazer/assets/biotype.py` | **Delete** |
 | `src/stargazer/utils/hydrate.py` | **Delete** (replaced by `assemble()`) |
 | `tests/unit/test_component_file.py` → `tests/unit/test_asset.py` | **Rename** + edit |
 | `tests/unit/test_specialize.py` | Edit |
@@ -179,7 +179,7 @@ No longer needed — `Constellation` replaces it entirely.
 
 1. `uv run pytest tests/unit/test_asset.py tests/unit/test_specialize.py` — base class works
 2. `uv run pytest tests/types/` — all type + constellation tests pass
-3. `uv run ruff check src/stargazer/types/` — no lint errors
+3. `uv run ruff check src/stargazer/assets/` — no lint errors
 
 ## References
 

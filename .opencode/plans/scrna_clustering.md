@@ -20,7 +20,7 @@ Implement a scanpy-based scRNA-seq clustering workflow as Flyte v2 tasks in Star
 
 ---
 
-## Step 1: Types — `src/stargazer/types/scrna.py`
+## Step 1: Types — `src/stargazer/assets/scrna.py`
 
 Create Asset subclass for AnnData files:
 
@@ -36,7 +36,7 @@ class AnnData(Asset):
     source_cid: str = ""     # provenance: input anndata CID
 ```
 
-Register in `src/stargazer/types/__init__.py` — add import + `__all__` entry.
+Register in `src/stargazer/assets/__init__.py` — add import + `__all__` entry.
 
 ---
 
@@ -175,8 +175,8 @@ async def scrna_clustering_pipeline(
 
 | Action | Path |
 |--------|------|
-| Create | `src/stargazer/types/scrna.py` |
-| Modify | `src/stargazer/types/__init__.py` |
+| Create | `src/stargazer/assets/scrna.py` |
+| Modify | `src/stargazer/assets/__init__.py` |
 | Modify | `src/stargazer/config.py` |
 | Create | `src/stargazer/tasks/scrna/__init__.py` |
 | Create | `src/stargazer/tasks/scrna/qc_filter.py` |
@@ -194,6 +194,6 @@ async def scrna_clustering_pipeline(
 ## Verification
 
 1. `uv sync` — deps install cleanly
-2. `ruff check --fix src/stargazer/tasks/scrna/ src/stargazer/types/scrna.py src/stargazer/workflows/scrna_clustering.py`
+2. `ruff check --fix src/stargazer/tasks/scrna/ src/stargazer/assets/scrna.py src/stargazer/workflows/scrna_clustering.py`
 3. `pytest tests/unit/test_scrna_tasks.py -v` — all unit tests pass
 4. `pytest tests/integration/test_scrna_workflow.py -v` — end-to-end pipeline completes

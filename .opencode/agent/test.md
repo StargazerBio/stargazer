@@ -66,7 +66,7 @@ import pytest
 from pathlib import Path
 
 from stargazer.tasks.{tool} import {task_name}
-from stargazer.types import {InputType}, {OutputType}
+from stargazer.assets import {InputType}, {OutputType}
 
 
 class Test{TaskName}:
@@ -128,7 +128,7 @@ import pytest
 from pathlib import Path
 
 from stargazer.workflows.{pipeline} import {workflow_name}
-from stargazer.types import {InputType}
+from stargazer.assets import {InputType}
 
 
 class Test{WorkflowName}:

@@ -180,7 +180,7 @@ variants_cid: str = ""
 
 ## Changes
 
-### 1. `src/stargazer/types/asset.py`
+### 1. `src/stargazer/assets/asset.py`
 
 **`__init_subclass__`** — after registering `_asset_key`, scan annotations:
 
@@ -269,7 +269,7 @@ def from_dict(cls, data: dict) -> Self:
     )
 ```
 
-### 2. `src/stargazer/types/__init__.py`
+### 2. `src/stargazer/assets/__init__.py`
 
 **`specialize`** — same unpacking pattern:
 
@@ -486,4 +486,4 @@ New file `tests/unit/test_annotation_fields.py`. Write before implementing.
 - [ ] Update `variants.py` — annotation syntax per inventory
 - [ ] `uv run pytest tests/unit/test_annotation_fields.py -v` — all pass
 - [ ] `uv run pytest tests/ -v` — full suite passes
-- [ ] `ruff --fix src/stargazer/types/ src/stargazer/server.py`
+- [ ] `ruff --fix src/stargazer/assets/ src/stargazer/server.py`

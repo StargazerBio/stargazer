@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from stargazer.marshal import marshal_output
-from stargazer.types import Reference
+from stargazer.assets import Reference
 
 
 # ---------------------------------------------------------------------------

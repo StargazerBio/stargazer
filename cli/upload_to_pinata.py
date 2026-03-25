@@ -15,7 +15,7 @@ from pathlib import Path
 # Add parent directory to path to import stargazer modules
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from stargazer.types.component import ComponentFile
+from stargazer.assets.component import ComponentFile
 from stargazer.utils.pinata import PinataClient
 
 

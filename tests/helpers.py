@@ -1,7 +1,7 @@
 """Shared test helpers for creating mock data via hydration."""
 
 from stargazer.utils.hydrate import hydrate
-from stargazer.types import Reference, Alignment, Variants, Reads
+from stargazer.assets import Reference, Alignment, Variants, Reads
 from stargazer.utils.local_storage import default_client
 
 

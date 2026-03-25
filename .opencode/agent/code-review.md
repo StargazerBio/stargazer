@@ -26,7 +26,7 @@ Stargazer follows a strict layered architecture:
 Types (dataclasses) → Tasks (single-purpose) → Workflows (composition)
 ```
 
-- **Types**: Content-addressed dataclasses in `src/stargazer/types/` with IPFS metadata
+- **Types**: Content-addressed dataclasses in `src/stargazer/assets/` with IPFS metadata
 - **Tasks**: Single-purpose async Flyte v2 tasks in `src/stargazer/tasks/`
 - **Workflows**: Composed pipelines in `src/stargazer/workflows/`
 - **Utils**: Shared helpers in `src/stargazer/utils/` (subprocess, pinata, query)
@@ -105,7 +105,7 @@ from typing import TYPE_CHECKING   # No TYPE_CHECKING blocks
 import flyte
 from stargazer.config import gatk_env  # or scrna_env
 from stargazer.utils.subprocess import _run
-from stargazer.types import Reference, Alignment, Variants, R1, R2
+from stargazer.assets import Reference, Alignment, Variants, R1, R2
 ```
 
 ### Async/Await Patterns
@@ -169,7 +169,7 @@ step2 = await task_b(step1)  # Depends on step1
 - [ ] Provenance CID links missing (e.g., `reference_cid`, `alignment_cid`)
 - [ ] Fields not populated before storage (will serialize as empty strings)
 
-**Key provenance fields per type (check `src/stargazer/types/`):**
+**Key provenance fields per type (check `src/stargazer/assets/`):**
 - `Reference`: `ref_name`, `build`, `tool`
 - `R1`/`R2`: `sample_id`
 - `Alignment`: `sample_id`, `format`, `sorted`, `duplicates_marked`, `bqsr_applied`, `tool`, `reference_cid`, `r1_cid`

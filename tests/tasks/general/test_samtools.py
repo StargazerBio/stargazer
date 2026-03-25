@@ -9,7 +9,7 @@ import pytest
 from conftest import GENERAL_FIXTURES_DIR
 
 from stargazer.tasks.general.samtools import samtools_faidx
-from stargazer.types import Reference, ReferenceIndex
+from stargazer.assets import Reference, ReferenceIndex
 
 
 @pytest.mark.asyncio

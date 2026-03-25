@@ -5,8 +5,8 @@ Tests for Alignment asset types.
 import pytest
 from conftest import GATK_FIXTURES_DIR
 
-from stargazer.types import specialize
-from stargazer.types.alignment import (
+from stargazer.assets import specialize
+from stargazer.assets.alignment import (
     Alignment,
     AlignmentIndex,
     BQSRReport,

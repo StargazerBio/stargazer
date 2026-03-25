@@ -108,7 +108,7 @@ def _(mo):
 
         ```python
         from stargazer.tasks import bwa_mem
-        from stargazer.types import Reference, R1
+        from stargazer.assets import Reference, R1
 
         ref = Reference(cid="Qm...")
         r1 = R1(cid="Qm...")

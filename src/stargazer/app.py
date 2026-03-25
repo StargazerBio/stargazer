@@ -38,7 +38,7 @@ marimo_env = flyte.app.AppEnvironment(
 def main():
     """Deploy the Marimo notebook app to Flyte."""
     flyte.init_from_config()
-    result = flyte.deploy(marimo_env)
+    result = flyte.serve(marimo_env)
     print(result[0])
 
 

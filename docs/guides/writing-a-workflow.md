@@ -10,9 +10,9 @@ Add a file in `src/stargazer/workflows/` named after the analysis type:
 import asyncio
 import flyte
 
-from stargazer.types.asset import assemble
-from stargazer.types.reference import Reference
-from stargazer.types.reads import R1, R2
+from stargazer.assets.asset import assemble
+from stargazer.assets.reference import Reference
+from stargazer.assets.reads import R1, R2
 from stargazer.tasks.bwa import align_with_bwa
 
 pipeline_env = flyte.TaskEnvironment(name="my_pipeline")

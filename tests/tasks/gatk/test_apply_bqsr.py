@@ -8,7 +8,7 @@ import pytest
 from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
 
 from stargazer.tasks.gatk.apply_bqsr import apply_bqsr
-from stargazer.types import Alignment, BQSRReport, Reference
+from stargazer.assets import Alignment, BQSRReport, Reference
 
 
 @pytest.mark.asyncio

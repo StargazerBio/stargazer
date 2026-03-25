@@ -4,7 +4,7 @@ import pytest
 from conftest import SCRNA_FIXTURES_DIR
 
 from stargazer.tasks.scrna.qc_filter import qc_filter
-from stargazer.types.scrna import AnnData
+from stargazer.assets.scrna import AnnData
 
 RAW_FIXTURE = SCRNA_FIXTURES_DIR / "synthetic_200x500.h5ad"
 

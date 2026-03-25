@@ -103,7 +103,7 @@ Replace deprecated `pinata_hydrate` class method calls with the general `hydrate
 **Change pattern:**
 ```python
 # Before
-from stargazer.types import Reference, Reads
+from stargazer.assets import Reference, Reads
 
 ref = await Reference.pinata_hydrate(ref_name=ref_name)
 reads = await Reads.pinata_hydrate(sample_id=sample_id)
@@ -252,7 +252,7 @@ Create a shared module `tests/helpers.py` with reusable async helpers:
 
 from pathlib import Path
 from stargazer.tasks import hydrate
-from stargazer.types import Reference, Alignment, Variants, Reads
+from stargazer.assets import Reference, Alignment, Variants, Reads
 from stargazer.utils.pinata import default_client
 
 

@@ -4,11 +4,11 @@ Tests for field declarations and storage serialization on Asset subclasses.
 
 import pytest
 
-from stargazer.types import specialize
-from stargazer.types.asset import Asset
-from stargazer.types.alignment import Alignment
-from stargazer.types.reads import R1
-from stargazer.types.variants import Variants
+from stargazer.assets import specialize
+from stargazer.assets.asset import Asset
+from stargazer.assets.alignment import Alignment
+from stargazer.assets.reads import R1
+from stargazer.assets.variants import Variants
 
 
 # ---------------------------------------------------------------------------

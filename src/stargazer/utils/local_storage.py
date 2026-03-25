@@ -25,7 +25,7 @@ from tinydb import TinyDB, Query
 
 import stargazer.config  # ensure env var defaults are set  # noqa: F401
 
-from stargazer.types.asset import Asset
+from stargazer.assets.asset import Asset
 from stargazer.utils.pinata import PinataClient
 
 

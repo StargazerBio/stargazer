@@ -18,7 +18,7 @@ Implement single-purpose Flyte tasks that wrap bioinformatics tools following th
 
 1. **One Task, One Purpose**: Each task should do exactly one thing well
 2. **Async by Default**: Use async tasks for I/O-heavy bioinformatics operations
-3. **Structured I/O**: Use dataclasses from `src/stargazer/types/` for inputs/outputs
+3. **Structured I/O**: Use dataclasses from `src/stargazer/assets/` for inputs/outputs
 4. **Resource Specification**: Define appropriate CPU, memory, and GPU requests
 5. **Type Safety**: Use proper type annotations throughout
 
@@ -32,7 +32,7 @@ When implementing a task:
    - Look at existing tasks in `src/stargazer/tasks/` for established patterns
 
 2. **Define Types**:
-   - Create or update dataclasses in `src/stargazer/types/`
+   - Create or update dataclasses in `src/stargazer/assets/`
    - Use descriptive names (e.g., `Alignments`, `Variants`)
    - Import Flyte I/O types from `flyte.io` (NOT flytekit!)
 
@@ -60,7 +60,7 @@ When implementing a task:
 from datetime import datetime
 from pathlib import Path
 
-from stargazer.types import {InputType}, {OutputType}
+from stargazer.assets import {InputType}, {OutputType}
 from stargazer.config import gatk_env  # or scrna_env for scRNA tasks
 from stargazer.utils import _run
 
@@ -104,7 +104,7 @@ async def {action}_{tool}(input_data: {InputType}) -> {OutputType}:
 ```python
 import flyte                    # Main SDK
 
-from stargazer.types import {YourTypes}
+from stargazer.assets import {YourTypes}
 from stargazer.config import gatk_env  # or scrna_env — TaskEnvironment defined in config.py
 from stargazer.utils import _run       # Subprocess helper
 ```

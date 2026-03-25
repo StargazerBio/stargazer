@@ -8,7 +8,7 @@ import pytest
 from conftest import GENERAL_FIXTURES_DIR
 
 from stargazer.tasks.gatk.create_sequence_dictionary import create_sequence_dictionary
-from stargazer.types import Reference, SequenceDict
+from stargazer.assets import Reference, SequenceDict
 
 
 @pytest.mark.asyncio

@@ -5,8 +5,8 @@ Tests for R1 and R2 read asset types.
 import pytest
 from conftest import GENERAL_FIXTURES_DIR
 
-from stargazer.types import specialize
-from stargazer.types.reads import R1, R2
+from stargazer.assets import specialize
+from stargazer.assets.reads import R1, R2
 import stargazer.utils.local_storage as _storage_mod
 
 

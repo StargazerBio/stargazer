@@ -8,8 +8,8 @@ import pytest
 from pathlib import Path
 
 import stargazer.utils.local_storage as _storage_mod
-from stargazer.types import specialize
-from stargazer.types.reference import (
+from stargazer.assets import specialize
+from stargazer.assets.reference import (
     Reference,
     ReferenceIndex,
     AlignerIndex,

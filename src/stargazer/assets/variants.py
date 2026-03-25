@@ -7,7 +7,7 @@ spec: [docs/architecture/types.md](../architecture/types.md)
 from dataclasses import dataclass
 from typing import ClassVar
 
-from stargazer.types.asset import Asset
+from stargazer.assets.asset import Asset
 
 
 @dataclass

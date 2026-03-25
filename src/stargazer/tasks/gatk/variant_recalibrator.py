@@ -8,7 +8,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 import stargazer.utils.local_storage as _storage
 from stargazer.config import gatk_env
-from stargazer.types import KnownSites, Reference, Variants, VQSRModel
+from stargazer.assets import KnownSites, Reference, Variants, VQSRModel
 from stargazer.config import logger
 from stargazer.utils import _run
 

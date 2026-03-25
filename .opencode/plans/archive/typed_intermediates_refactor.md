@@ -75,7 +75,7 @@ passed to `apply_vqsr` could differ from the mode used to build the model.
 
 ## New Files
 
-### `src/stargazer/types/reports.py`
+### `src/stargazer/assets/reports.py`
 
 ```python
 """
@@ -87,7 +87,7 @@ Defines ComponentFile subclasses for GATK intermediate report files.
 from dataclasses import dataclass
 from typing import ClassVar
 
-from stargazer.types.component import ComponentFile
+from stargazer.assets.component import ComponentFile
 
 
 @dataclass
@@ -108,7 +108,7 @@ class DuplicateMetrics(ComponentFile):
     _field_defaults = {"sample_id": ""}
 ```
 
-### `src/stargazer/types/vqsr.py`
+### `src/stargazer/assets/vqsr.py`
 
 Check current contents first — it may already define some of these classes. Adopt what is
 there rather than overwriting. If creating from scratch:
@@ -124,8 +124,8 @@ for GATK VariantRecalibrator outputs.
 from dataclasses import dataclass
 from typing import ClassVar
 
-from stargazer.types.component import ComponentFile
-from stargazer.types.biotype import BioType
+from stargazer.assets.component import ComponentFile
+from stargazer.assets.biotype import BioType
 
 
 @dataclass
@@ -174,8 +174,8 @@ class RecalibrationModel(BioType):
 
 Add imports after the variants import:
 ```python
-from stargazer.types.reports import BQSRReport, DuplicateMetrics
-from stargazer.types.vqsr import RecalibrationModel, RecalFile, TranchesFile
+from stargazer.assets.reports import BQSRReport, DuplicateMetrics
+from stargazer.assets.vqsr import RecalibrationModel, RecalFile, TranchesFile
 ```
 
 Add to `__all__`:
@@ -197,7 +197,7 @@ Add to `__all__`:
 
 Before:
 ```python
-from stargazer.types.component import ComponentFile
+from stargazer.assets.component import ComponentFile
 async def base_recalibrator(...) -> ComponentFile:
     recal_comp = ComponentFile(
         path=output_recal,
@@ -209,27 +209,27 @@ async def base_recalibrator(...) -> ComponentFile:
 
 After:
 ```python
-from stargazer.types.reports import BQSRReport
+from stargazer.assets.reports import BQSRReport
 async def base_recalibrator(...) -> BQSRReport:
     recal_comp = BQSRReport()
     await recal_comp.update(output_recal, sample_id=alignment.sample_id, tool="gatk_base_recalibrator")
     return recal_comp
 ```
 
-Remove `from stargazer.types.component import ComponentFile` if it becomes unused.
+Remove `from stargazer.assets.component import ComponentFile` if it becomes unused.
 
 ### `apply_bqsr` (`tasks/gatk/apply_bqsr.py`)
 
 Before:
 ```python
-from stargazer.types.component import ComponentFile
+from stargazer.assets.component import ComponentFile
 async def apply_bqsr(alignment, ref, recal_report: ComponentFile) -> Alignment:
     await _storage.default_client.download(recal_report)
 ```
 
 After:
 ```python
-from stargazer.types.reports import BQSRReport
+from stargazer.assets.reports import BQSRReport
 async def apply_bqsr(alignment, ref, recal_report: BQSRReport) -> Alignment:
     await _storage.default_client.download(recal_report)
 ```
@@ -251,7 +251,7 @@ async def analyze_covariates(before_report: Path, after_report: Path | None = No
 After:
 ```python
 import stargazer.utils.storage as _storage
-from stargazer.types.reports import BQSRReport
+from stargazer.assets.reports import BQSRReport
 async def analyze_covariates(
     before_report: BQSRReport,
     after_report: BQSRReport | None = None,
@@ -287,7 +287,7 @@ async def variant_recalibrator(...) -> tuple[Path, Path]:
 
 After:
 ```python
-from stargazer.types.vqsr import RecalibrationModel, RecalFile, TranchesFile
+from stargazer.assets.vqsr import RecalibrationModel, RecalFile, TranchesFile
 async def variant_recalibrator(...) -> RecalibrationModel:
     ...
     recal = RecalFile()
@@ -325,7 +325,7 @@ async def apply_vqsr(
 
 After:
 ```python
-from stargazer.types.vqsr import RecalibrationModel
+from stargazer.assets.vqsr import RecalibrationModel
 async def apply_vqsr(
     vcf: Variants,
     model: RecalibrationModel,
@@ -348,7 +348,7 @@ async def apply_vqsr(
 
 Before:
 ```python
-from stargazer.types.component import ComponentFile
+from stargazer.assets.component import ComponentFile
 if metrics_file.exists():
     metrics_comp = ComponentFile(
         path=metrics_file,
@@ -359,7 +359,7 @@ if metrics_file.exists():
 
 After:
 ```python
-from stargazer.types.reports import DuplicateMetrics
+from stargazer.assets.reports import DuplicateMetrics
 if metrics_file.exists():
     metrics_comp = DuplicateMetrics()
     await metrics_comp.update(metrics_file, sample_id=alignment.sample_id, tool="gatk_mark_duplicates")
@@ -449,12 +449,12 @@ Write before implementing. Verify:
 Change the assertion:
 ```python
 # Before
-from stargazer.types.component import ComponentFile
+from stargazer.assets.component import ComponentFile
 assert isinstance(recal_report, ComponentFile)
 assert recal_report.keyvalues.get("type") == "bqsr_report"
 
 # After
-from stargazer.types.reports import BQSRReport
+from stargazer.assets.reports import BQSRReport
 assert isinstance(recal_report, BQSRReport)
 assert recal_report.keyvalues.get("type") == "bqsr_report"
 assert recal_report.keyvalues.get("component") == "report"
@@ -465,11 +465,11 @@ assert recal_report.keyvalues.get("component") == "report"
 Change the `recal_file` fixture construction:
 ```python
 # Before
-from stargazer.types.component import ComponentFile
+from stargazer.assets.component import ComponentFile
 recal_file = ComponentFile(path=FIXTURES_DIR / "NA12829_TP53_bqsr.table", keyvalues={"type": "bqsr_report", ...})
 
 # After
-from stargazer.types.reports import BQSRReport
+from stargazer.assets.reports import BQSRReport
 recal_file = BQSRReport(path=FIXTURES_DIR / "NA12829_TP53_bqsr.table", keyvalues={"sample_id": ..., "tool": "..."})
 ```
 
@@ -498,14 +498,14 @@ Minimal set:
 Each phase must leave all existing tests passing before the next phase starts.
 
 ### Phase 1 — New type modules (no task changes yet)
-- [x] Check existing `src/stargazer/types/vqsr.py` — adopt or replace
-- [x] Create `src/stargazer/types/reports.py` with `BQSRReport`, `DuplicateMetrics`
+- [x] Check existing `src/stargazer/assets/vqsr.py` — adopt or replace
+- [x] Create `src/stargazer/assets/reports.py` with `BQSRReport`, `DuplicateMetrics`
   - NOTE: `BQSRReport._type_key="alignment"`, `_component_key="bqsr_report"` (not standalone)
   - NOTE: `DuplicateMetrics._type_key="alignment"`, `_component_key="markdup_metrics"`
   - NOTE: `Alignment` BioType gains `bqsr_report: BQSRReport | None = None` field
 - [x] Write `tests/unit/test_reports.py` — run and pass
 - [ ] Write `tests/unit/test_vqsr_types.py` — run and pass
-- [x] Update `src/stargazer/types/__init__.py` — add imports and `__all__` entries
+- [x] Update `src/stargazer/assets/__init__.py` — add imports and `__all__` entries
 - [x] `uv run pytest tests/unit/ -v` — all pass
 
 ### Phase 2 — BQSR task updates
@@ -554,9 +554,9 @@ Each phase must leave all existing tests passing before the next phase starts.
 
 | File | Action |
 |------|--------|
-| `src/stargazer/types/reports.py` | **New** — `BQSRReport`, `DuplicateMetrics` |
-| `src/stargazer/types/vqsr.py` | **New or adopt** — `RecalFile`, `TranchesFile`, `RecalibrationModel` |
-| `src/stargazer/types/__init__.py` | Add imports + `__all__` entries for all new types |
+| `src/stargazer/assets/reports.py` | **New** — `BQSRReport`, `DuplicateMetrics` |
+| `src/stargazer/assets/vqsr.py` | **New or adopt** — `RecalFile`, `TranchesFile`, `RecalibrationModel` |
+| `src/stargazer/assets/__init__.py` | Add imports + `__all__` entries for all new types |
 | `src/stargazer/tasks/gatk/base_recalibrator.py` | Return `BQSRReport` |
 | `src/stargazer/tasks/gatk/apply_bqsr.py` | Accept `BQSRReport` |
 | `src/stargazer/tasks/gatk/analyze_covariates.py` | Accept `BQSRReport`; download before use |

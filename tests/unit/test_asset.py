@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from stargazer.types.asset import Asset
-from stargazer.types.alignment import Alignment
+from stargazer.assets.asset import Asset
+from stargazer.assets.alignment import Alignment
 
 
 class TestAssetRoundtrip:
@@ -60,7 +60,7 @@ class TestAssetDefaults:
 
     def test_asset_key_in_to_keyvalues(self):
         """Concrete subclasses include 'asset' key in to_keyvalues()."""
-        from stargazer.types.reference import Reference
+        from stargazer.assets.reference import Reference
 
         ref = Reference()
         assert ref.to_keyvalues().get("asset") == "reference"

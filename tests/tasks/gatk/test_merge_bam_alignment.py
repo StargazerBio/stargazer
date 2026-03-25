@@ -8,7 +8,7 @@ import pytest
 from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
 
 from stargazer.tasks.gatk.merge_bam_alignment import merge_bam_alignment
-from stargazer.types import Alignment, Reference
+from stargazer.assets import Alignment, Reference
 
 
 @pytest.mark.asyncio

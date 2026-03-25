@@ -9,7 +9,7 @@ import pytest
 from conftest import GENERAL_FIXTURES_DIR
 
 from stargazer.tasks.general.bwa import bwa_index
-from stargazer.types import AlignerIndex, Reference
+from stargazer.assets import AlignerIndex, Reference
 
 
 @pytest.mark.asyncio

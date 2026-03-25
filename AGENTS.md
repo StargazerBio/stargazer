@@ -130,7 +130,7 @@ The project follows this structure:
 - `.opencode/reference/` - Agent-facing reference materials (Flyte docs, tool refs)
 - `scratch/` - Scratch materials
 
-### Types Directory (`src/stargazer/types/`)
+### Types Directory (`src/stargazer/assets/`)
 
 **Purpose:** Define all input and output dataclasses used across tasks and workflows.
 

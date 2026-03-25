@@ -15,8 +15,8 @@ spec: [docs/workflows/scrna.md](../workflows/scrna.md)
 """
 
 from stargazer.config import scrna_env, log_execution
-from stargazer.types.scrna import AnnData
-from stargazer.types.asset import assemble
+from stargazer.assets.scrna import AnnData
+from stargazer.assets.asset import assemble
 from stargazer.tasks.scrna import (
     qc_filter,
     normalize,

@@ -12,8 +12,8 @@ spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
 from stargazer.config import gatk_env, log_execution
-from stargazer.types import Alignment, R1, R2, Reference
-from stargazer.types.asset import assemble
+from stargazer.assets import Alignment, R1, R2, Reference
+from stargazer.assets.asset import assemble
 from stargazer.tasks import (
     samtools_faidx,
     create_sequence_dictionary,

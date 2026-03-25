@@ -166,7 +166,7 @@ async def assemble(**filters: Any) -> list["Asset"]:
         r1 = next(a for a in assets if isinstance(a, R1))
     """
     import stargazer.utils.local_storage as _storage
-    from stargazer.types import specialize
+    from stargazer.assets import specialize
     from stargazer.utils.query import generate_query_combinations
 
     query_combinations = generate_query_combinations(base_query={}, filters=filters)

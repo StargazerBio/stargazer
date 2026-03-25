@@ -42,12 +42,12 @@
 
 ## Types
 
-::: stargazer.types.alignment
-::: stargazer.types.asset
-::: stargazer.types.reads
-::: stargazer.types.reference
-::: stargazer.types.scrna
-::: stargazer.types.variants
+::: stargazer.assets.alignment
+::: stargazer.assets.asset
+::: stargazer.assets.reads
+::: stargazer.assets.reference
+::: stargazer.assets.scrna
+::: stargazer.assets.variants
 
 ## Utils
 
