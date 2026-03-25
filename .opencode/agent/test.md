@@ -36,20 +36,22 @@ The Stargazer project follows this process:
 ```
 tests/
 ├── __init__.py
-├── conftest.py              # Shared fixtures
-├── assets/                  # Test data files
-│   ├── small_genome.fa
-│   ├── sample_R1.fastq.gz
-│   └── ...
+├── conftest.py              # Shared fixtures (Flyte init, Pinata JWT, fixture paths)
+├── helpers.py               # Shared test helper functions
+├── fixtures/                # Test fixtures organized by domain
+│   ├── gatk/                # GATK-specific test data
+│   ├── general/             # General bioinformatics test data
+│   ├── scrna/               # scRNA-seq test data
+│   └── stargazer_local.json # Local storage fixture DB
 ├── unit/                    # Unit tests
 │   ├── __init__.py
-│   ├── test_bwa_tasks.py
-│   ├── test_samtools_tasks.py
+│   ├── test_asset.py
+│   ├── test_marshal.py
 │   └── ...
-└── integration/             # Integration tests
-    ├── __init__.py
-    ├── test_alignment_pipeline.py
-    └── ...
+└── tasks/                   # Task-level tests (mirrors src/stargazer/tasks/)
+    ├── gatk/
+    ├── general/
+    └── scrna/
 ```
 
 ## Unit Test Template
@@ -117,7 +119,7 @@ class Test{TaskName}:
 ## Integration Test Template
 
 ```python
-# tests/integration/test_{pipeline}_workflow.py
+# tests/tasks/{domain}/test_{pipeline}_workflow.py
 """
 Integration tests for {pipeline} workflow.
 """
@@ -186,29 +188,14 @@ class Test{WorkflowName}:
 ### Common Fixtures (conftest.py)
 
 ```python
-# tests/conftest.py
+# tests/conftest.py — see the actual conftest.py for current fixtures
 import pytest
 from pathlib import Path
 
-
-@pytest.fixture(scope="session")
-def test_assets():
-    """Path to test assets directory."""
-    return Path(__file__).parent / "assets"
-
-
-@pytest.fixture(scope="session")
-def small_reference(test_assets: Path):
-    """Small reference genome for quick tests."""
-    return test_assets / "small_genome.fa"
-
-
-@pytest.fixture
-def tmp_working_dir(tmp_path: Path):
-    """Temporary working directory for tests."""
-    working_dir = tmp_path / "work"
-    working_dir.mkdir()
-    return working_dir
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+GATK_FIXTURES_DIR = FIXTURES_DIR / "gatk"
+GENERAL_FIXTURES_DIR = FIXTURES_DIR / "general"
+SCRNA_FIXTURES_DIR = FIXTURES_DIR / "scrna"
 ```
 
 ## Test Asset Generation
@@ -305,7 +292,7 @@ async def test_async_task():
 
 3. **Fixtures for Reuse**: Share common test data via fixtures
 
-4. **Assets Directory**: Store pre-generated test files in `tests/assets/`
+4. **Assets Directory**: Store pre-generated test files in `tests/fixtures/`
 
 ## What to Test
 
@@ -337,8 +324,8 @@ pytest
 # Unit tests only (fast)
 pytest tests/unit/
 
-# Integration tests
-pytest tests/integration/
+# Task tests
+pytest tests/tasks/
 
 # Skip slow tests
 pytest -m "not slow"

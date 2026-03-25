@@ -33,64 +33,61 @@ Types (dataclasses) → Tasks (single-purpose) → Workflows (composition)
 
 ### Critical Configuration Parameters
 
-You MUST scrutinize how code handles these environment-driven behaviors:
+You MUST scrutinize how code handles these environment-driven behaviors (see `config.py`):
 
-#### IPFS Storage Modes
+#### Storage & Network
 ```
-STARGAZER_LOCAL_ONLY=true   → Skip IPFS uploads, use only local cache
-STARGAZER_PUBLIC=true       → Upload to public IPFS (default: private)
-PINATA_JWT                  → Required for IPFS operations (unless local-only)
-PINATA_GATEWAY              → Custom gateway URL
-STARGAZER_CACHE             → Local cache directory (~/.stargazer/cache)
-```
-
-**Edge cases to catch:**
-- [ ] Code that assumes IPFS is always available
-- [ ] Missing validation when `PINATA_JWT` is unset but `LOCAL_ONLY` is false
-- [ ] Hard-coded cache paths instead of using config
-- [ ] Assuming files exist locally without checking cache first
-- [ ] Not handling the case where fetch() returns a path that doesn't exist
-- [ ] Uploads that ignore `STARGAZER_PUBLIC` setting
-
-#### Task Execution Environment
-```
-@pb_env.task with GPU: Requires NVIDIA Parabricks, A100 GPUs
-Resource specs: cpu, mem, gpu as STRINGS not integers
+PINATA_JWT                  → Required for authenticated Pinata uploads/downloads (no default)
+PINATA_GATEWAY              → Download gateway URL (default: https://dweb.link)
+PINATA_VISIBILITY           → "private" or "public" (default: "private")
+STARGAZER_LOCAL             → Local storage directory (default: ~/.stargazer/local)
 ```
 
 **Edge cases to catch:**
-- [ ] Resource specs as integers instead of strings
+- [ ] Code that assumes Pinata is always available (JWT may be absent)
+- [ ] Hard-coded storage paths instead of using `STARGAZER_LOCAL`
+- [ ] Assuming files exist locally without calling `fetch()` first
+- [ ] Not handling the case where `fetch()` returns a path that doesn't exist
+- [ ] Uploads that ignore `PINATA_VISIBILITY` setting
+
+#### Task Execution Environments
+```
+@gatk_env.task   → GATK, BWA, samtools workloads (broadinstitute/gatk image)
+@scrna_env.task  → scanpy-based scRNA analysis (Debian + scanpy image)
+```
+Resources are set on the TaskEnvironment in `config.py`, not per-task.
+
+**Edge cases to catch:**
+- [ ] Using wrong environment for a task (e.g., GATK tool under scrna_env)
 - [ ] GPU tasks without proper GPU resource requests
-- [ ] Assuming Parabricks tools are always available
-- [ ] Not handling when GPU tasks run on CPU-only systems
+- [ ] Assuming bioinformatics tools are always available in every environment
 
 ### Type System Rules
 
-All types follow this pattern:
+All types inherit from `Asset` (in `types/asset.py`) and follow this pattern:
 ```python
 @dataclass
-class TypeName:
-    sample_id: str
-    main_file_name: str
-    files: list[IpFile] = field(default_factory=list)
+class TypeName(Asset):
+    _asset_key: ClassVar[str] = "type_name"  # Registry key
+    sample_id: str = ""
+    tool: str = ""
+    # ... domain-specific fields with defaults
 
-    # Properties read from IpFile.keyvalues metadata
-    @property
-    def tracked_property(self) -> str: ...
-
-    # Lifecycle methods
-    async def add_files(self, file_paths: list[Path], keyvalues: dict) -> None
-    async def fetch(self) -> Path
-    def get_*_path(self) -> Path
+    # Inherited from Asset:
+    # cid: str = ""           — content identifier
+    # path: Path | None = None — local filesystem path (set after fetch/upload)
+    # to_keyvalues() → dict[str, str]  — serialize fields for storage
+    # from_keyvalues(cls, kv) → Self    — reconstruct from storage
+    # to_dict() → dict                  — full dict representation
 ```
 
 **Review checklist for types:**
-- [ ] Properties read from `keyvalues` metadata, not stored separately
-- [ ] `add_files()` called with appropriate keyvalues for queryability
-- [ ] `fetch()` called before accessing paths
+- [ ] Inherits from `Asset` and sets `_asset_key` ClassVar
+- [ ] All fields have defaults (required by dataclass inheritance)
+- [ ] `fetch()` called before accessing `path`
 - [ ] Return types are properly annotated
 - [ ] No mutable default arguments (use `field(default_factory=...)`)
-- [ ] Type has all required metadata for downstream querying
+- [ ] Fields support serialization via `to_keyvalues()` (str fields pass through, others use json)
 
 ### Import Discipline
 
@@ -106,21 +103,19 @@ from typing import TYPE_CHECKING   # No TYPE_CHECKING blocks
 ```python
 # ALWAYS USE:
 import flyte
-from flyte.io import File, Dir
-from stargazer.config import pb_env
+from stargazer.config import gatk_env  # or scrna_env
 from stargazer.utils.subprocess import _run
-from stargazer.types import Reference, Alignment, Variants, Reads
+from stargazer.types import Reference, Alignment, Variants, R1, R2
 ```
 
 ### Async/Await Patterns
 
 **Every task and workflow must be async:**
 ```python
-@pb_env.task
+@gatk_env.task
 async def task_name(...) -> ...:
     await input.fetch()           # Fetch before accessing paths
     await _run(cmd, cwd=...)      # Async subprocess
-    await output.add_files(...)   # Async upload
     return output
 ```
 
@@ -166,30 +161,19 @@ step2 = await task_b(step1)  # Depends on step1
 
 ### 2. Data Provenance Violations
 
-**Every file must be trackable:**
+**Every file must be trackable via Asset fields:**
 
-- [ ] Outputs missing required keyvalues metadata
-- [ ] Metadata doesn't enable future queries
-- [ ] sample_id not propagated through pipeline
-- [ ] tool/caller not recorded in variant outputs
-- [ ] Missing file_type, build, or other query-critical fields
+- [ ] Outputs missing required provenance fields
+- [ ] `sample_id` not propagated through pipeline
+- [ ] `tool` not recorded on output assets
+- [ ] Provenance CID links missing (e.g., `reference_cid`, `alignment_cid`)
+- [ ] Fields not populated before storage (will serialize as empty strings)
 
-**Required keyvalues for each type:**
-```python
-# Reference
-{"type": "reference", "ref_name": "...", "build": "...", "tool": "fasta|bwa|bwa2"}
-
-# Reads
-{"type": "reads", "sample_id": "...", "read_type": "paired|single"}
-
-# Alignment
-{"type": "alignment", "sample_id": "...", "sorted": "true|false",
- "duplicates_marked": "true|false", "bqsr_applied": "true|false"}
-
-# Variants
-{"type": "variants", "sample_id": "...", "caller": "...",
- "is_gvcf": "true|false", "is_multi_sample": "true|false"}
-```
+**Key provenance fields per type (check `src/stargazer/types/`):**
+- `Reference`: `ref_name`, `build`, `tool`
+- `R1`/`R2`: `sample_id`
+- `Alignment`: `sample_id`, `format`, `sorted`, `duplicates_marked`, `bqsr_applied`, `tool`, `reference_cid`, `r1_cid`
+- `Variants`: `sample_id`, `caller`, `is_gvcf`, `is_multi_sample`
 
 ### 3. Error Handling Violations
 
@@ -204,16 +188,16 @@ step2 = await task_b(step1)  # Depends on step1
 
 **Proper error handling pattern:**
 ```python
-@pb_env.task
+@gatk_env.task
 async def task_name(input: InputType) -> OutputType:
     # Validate inputs FIRST
-    if not input.files:
-        raise ValueError(f"No files provided for {input.sample_id}")
+    if not input.cid:
+        raise ValueError(f"No CID set for {input.sample_id}")
 
     # Fetch and verify
-    local_path = await input.fetch()
-    if not local_path.exists():
-        raise FileNotFoundError(f"Failed to fetch {input.main_file_name} for sample {input.sample_id}")
+    await input.fetch()
+    if not input.path or not input.path.exists():
+        raise FileNotFoundError(f"Failed to fetch asset for sample {input.sample_id}")
 
     # Run tool
     stdout, stderr = await _run(cmd, cwd=str(working_dir))
@@ -225,32 +209,27 @@ async def task_name(input: InputType) -> OutputType:
     return output
 ```
 
-### 4. Resource Specification Violations
+### 4. Resource & Environment Violations
 
-**Resources must match workload:**
+**Resources are defined on TaskEnvironments in `config.py`, not per-task:**
 
 ```python
-# WRONG - integers instead of strings
-requests={"cpu": 4, "mem": 16}
-
-# CORRECT - strings
-requests={"cpu": "4", "mem": "16Gi"}
-```
-
-**GPU tasks require explicit GPU allocation:**
-```python
-@pb_env.task(
-    requests={"cpu": "8", "mem": "32Gi", "gpu": "1"},
-    limits={"cpu": "8", "mem": "32Gi", "gpu": "1"}
+# Resources set on the environment definition:
+gatk_env = flyte.TaskEnvironment(
+    name="gatk",
+    resources=flyte.Resources(cpu=4, memory="16Gi"),
+    ...
 )
-async def gpu_task(...): ...
+
+# Tasks just reference the environment:
+@gatk_env.task
+async def my_task(...): ...
 ```
 
 **Common issues:**
-- [ ] Lightweight tasks over-requesting resources
-- [ ] Heavy tasks under-requesting (will OOM)
-- [ ] GPU tasks missing gpu specification
-- [ ] Memory without "Gi" suffix
+- [ ] Task using wrong environment for its tool domain
+- [ ] GPU tasks missing gpu specification on the environment
+- [ ] Task requiring tools not available in its environment's image
 
 ### 5. Documentation Violations
 
@@ -304,8 +283,8 @@ Check for absolute violations that require immediate rejection:
 
 1. **Import violations**: Any `flytekit`, relative imports, or `TYPE_CHECKING`
 2. **Sync functions**: Missing `async` on tasks/workflows
-3. **Wrong decorators**: Using `@workflow` instead of `@pb_env.task`
-4. **Resource type errors**: Integers instead of strings
+3. **Wrong decorators**: Using `@workflow` instead of `@gatk_env.task` / `@scrna_env.task`
+4. **Wrong environment**: Task using an environment that doesn't have its required tools
 
 ### Phase 2: Structural Review
 
@@ -404,7 +383,7 @@ Clarifying questions about design decisions.
 ### Major Issues
 
 1. **No PINATA_JWT validation** (line 1-50)
-   If user runs with LOCAL_ONLY=false but no JWT, they'll get a cryptic error
+   If user runs without JWT set, they'll get a cryptic error
    during upload. Should fail fast with clear message.
 
 2. **Incomplete keyvalues metadata** (line 72)

@@ -27,7 +27,7 @@ Compose individual tasks into end-to-end bioinformatics pipelines following Flyt
 When implementing a workflow:
 
 1. **Understand the Pipeline**:
-   - Review `.opencode/context/stargazer_flyte_v1/workflows/` for v1 logic
+   - Review existing workflows in `src/stargazer/workflows/` for established patterns
    - Understand the biological/computational purpose
    - Identify task dependencies and parallelization opportunities
 
@@ -63,13 +63,13 @@ This workflow chains together:
 import asyncio
 import flyte
 
-from stargazer.config import pb_env
+from stargazer.config import gatk_env  # or scrna_env
 from stargazer.types import {InputType}, {OutputType}
 from stargazer.tasks.{tool1} import {task1}
 from stargazer.tasks.{tool2} import {task2}
 
 
-@pb_env.task
+@gatk_env.task
 async def {pipeline_name}(
     input_param: {InputType}
 ) -> {OutputType}:
@@ -132,7 +132,7 @@ if __name__ == "__main__":
 
 ### Sequential Execution
 ```python
-@pb_env.task
+@gatk_env.task
 async def sequential_workflow(data: InputType) -> OutputType:
     # Each step depends on the previous
     step1 = await task1(data)
@@ -143,7 +143,7 @@ async def sequential_workflow(data: InputType) -> OutputType:
 
 ### Parallel Execution
 ```python
-@pb_env.task
+@gatk_env.task
 async def parallel_workflow(data: InputType) -> OutputType:
     # Independent operations run concurrently
     results = await asyncio.gather(
@@ -157,7 +157,7 @@ async def parallel_workflow(data: InputType) -> OutputType:
 
 ### Conditional Execution
 ```python
-@pb_env.task
+@gatk_env.task
 async def conditional_workflow(data: InputType, mode: str) -> OutputType:
     preprocessed = await preprocess(data)
     
@@ -171,7 +171,7 @@ async def conditional_workflow(data: InputType, mode: str) -> OutputType:
 
 ### Fan-out/Fan-in
 ```python
-@pb_env.task
+@gatk_env.task
 async def fanout_workflow(files: list[File]) -> CombinedOutput:
     # Process each file independently
     results = await asyncio.gather(*[
@@ -194,7 +194,7 @@ async def fanout_workflow(files: list[File]) -> CombinedOutput:
 import asyncio  # For parallelism
 import flyte    # Main SDK
 
-from stargazer.config import pb_env
+from stargazer.config import gatk_env  # or scrna_env
 from stargazer.types import {YourTypes}
 from stargazer.tasks.{module} import {tasks}
 ```
@@ -213,7 +213,7 @@ from stargazer.tasks.{module} import {tasks}
 ```python
 from stargazer.tasks import hydrate
 
-@pb_env.task
+@gatk_env.task
 async def index_reference_workflow(ref_name: str) -> Reference:
     refs = await hydrate({"type": "reference", "build": ref_name})
     ref = next((r for r in refs if isinstance(r, Reference)), None)
@@ -226,7 +226,7 @@ async def index_reference_workflow(ref_name: str) -> Reference:
 
 ### Alignment Pipeline
 ```python
-@pb_env.task
+@gatk_env.task
 async def alignment_workflow(
     fastq: Fastq,
     ref: Reference
@@ -239,7 +239,7 @@ async def alignment_workflow(
 
 ### Variant Calling
 ```python
-@pb_env.task
+@gatk_env.task
 async def variant_calling_workflow(
     alignment: Alignment,
     ref: Reference
