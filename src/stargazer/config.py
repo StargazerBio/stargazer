@@ -34,6 +34,14 @@ logger.remove()
 logger.add(_log_dir / "stargazer.log", rotation="10 MB", retention=5)
 
 
+STARGAZER_ENV_VARS = {
+    "PINATA_GATEWAY": os.environ.get("PINATA_GATEWAY", "https://dweb.link"),
+    "PINATA_VISIBILITY": os.environ.get("PINATA_VISIBILITY", "private"),
+}
+
+STARGAZER_SECRETS = flyte.Secret(key="PINATA_JWT", as_env_var="PINATA_JWT")
+
+
 def log_execution() -> str:
     """Start a per-execution log sink and return the execution ID.
 
@@ -76,11 +84,8 @@ scrna_env = flyte.TaskEnvironment(
         cpu=4,
         memory="32Gi",
     ),
-    env_vars={
-        "PINATA_GATEWAY": os.environ.get("PINATA_GATEWAY", "https://dweb.link"),
-        "PINATA_VISIBILITY": os.environ.get("PINATA_VISIBILITY", "private"),
-    },
-    secrets=flyte.Secret(key="PINATA_JWT", as_env_var="PINATA_JWT"),
+    env_vars=STARGAZER_ENV_VARS,
+    secrets=STARGAZER_SECRETS,
 )
 
 # GATK/alignment task environment for GATK, BWA, and samtools tools
@@ -93,9 +98,6 @@ gatk_env = flyte.TaskEnvironment(
         cpu=4,
         memory="16Gi",
     ),
-    env_vars={
-        "PINATA_GATEWAY": os.environ.get("PINATA_GATEWAY", "https://dweb.link"),
-        "PINATA_VISIBILITY": os.environ.get("PINATA_VISIBILITY", "private"),
-    },
-    secrets=flyte.Secret(key="PINATA_JWT", as_env_var="PINATA_JWT"),
+    env_vars=STARGAZER_ENV_VARS,
+    secrets=STARGAZER_SECRETS,
 )

@@ -76,6 +76,7 @@ Architecture docs live in `docs/architecture/` and describe WHAT the system does
 
 - **No Code in Architecture Docs**: Describe contracts, not implementations
 - **Code in Guides Only**: Step-by-step walkthroughs with examples
+- **Use Mermaid Diagrams**: For architecture docs, use mermaid fenced code blocks (`\`\`\`mermaid`) to illustrate data flows, layer relationships, and system interactions. Prefer `flowchart TD` for pipelines/hierarchies and `flowchart LR` for protocol/interface diagrams. Keep diagrams focused — one concept per diagram.
 - **Use Tables**: For structured data like field definitions
 - **Stay Current**: Update docs when implementations change
 - **Be Concise**: Link to code for implementation details
@@ -117,6 +118,7 @@ Every module in `src/` carries a `spec:` line at the bottom of its docstring poi
 3. Do **not** add `spec:` lines to class or function docstrings
 4. After implementation, re-read the linked doc and update any stale descriptions
 5. If a new module doesn't fit an existing spec, create the spec first, then write the code
+6. After creating or renaming a doc, ensure it has a corresponding entry in the `nav` section of `zensical.toml`. Every doc must be reachable from the site navigation.
 
 ### What warrants a doc update vs. not
 

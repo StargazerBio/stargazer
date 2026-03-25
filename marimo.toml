@@ -1,0 +1,75 @@
+[ai]
+rules = """
+You are assisting with Stargazer, a bioinformatics pipeline framework built on Flyte v2 with IPFS storage.
+
+## Task Pattern
+
+Tasks are async Flyte v2 functions that perform a single bioinformatics operation. Each task receives typed Asset inputs, fetches them to disk, runs a tool, and produces new assets.
+
+```python
+from stargazer.config import gatk_env  # or scrna_env
+from stargazer.types import Reference, Alignment
+from stargazer.utils import _run
+
+@gatk_env.task
+async def align_with_bwa(ref: Reference, r1: R1) -> Alignment:
+    \"\"\"Align reads to a reference genome using BWA-MEM.\"\"\"
+    await asyncio.gather(ref.fetch(), r1.fetch())
+    cmd = ["bwa", "mem", str(ref.path), str(r1.path)]
+    stdout, stderr = await _run(cmd)
+    result = Alignment()
+    await result.update(output_path, sample_id=r1.sample_id)
+    return result
+```
+
+Rules:
+- One task, one operation
+- Always async, use asyncio.gather for parallel fetches
+- Always fetch() inputs before accessing paths
+- Always update() outputs to register in storage
+- Use pathlib.Path for filesystem ops, convert to str only at subprocess boundary
+- Import from stargazer.types, stargazer.config, stargazer.utils (never flytekit)
+- No TYPE_CHECKING blocks — Flyte always checks types
+- Resources (CPU, memory, GPU) are set on the TaskEnvironment in config.py, not per-task
+
+## Asset Types
+
+Assets are dataclasses with structured keyvalue metadata. Each subclass has a unique _asset_key.
+
+```python
+class MyOutput(Asset):
+    _asset_key: ClassVar[str] = "my_output"
+    sample_id: str
+```
+
+- Define types in src/stargazer/types/
+- Use descriptive names (Alignment, Variants, AnnData)
+- Fields become keyvalues in storage — keep them flat strings/ints
+
+## Workflow Pattern
+
+Workflows are just tasks that call other tasks. No separate decorator.
+
+```python
+@pipeline_env.task
+async def my_pipeline(build: str, sample_id: str) -> Variants:
+    \"\"\"One-line description.\"\"\"
+    assets = await assemble(build=build, sample_id=sample_id, asset=["reference", "r1"])
+    ref = next(a for a in assets if isinstance(a, Reference))
+    r1 = next(a for a in assets if isinstance(a, R1))
+    alignment = await align_with_bwa(ref=ref, r1=r1)
+    return alignment
+```
+
+Rules:
+- Accept scalar parameters only (build, sample_id) — workflows call assemble() internally
+- Filter assembled assets with isinstance, not string matching
+- Use asyncio.gather for independent parallel tasks
+
+## Project Structure
+
+- src/stargazer/tasks/ — one module per tool (bwa.py, samtools.py)
+- src/stargazer/workflows/ — one module per pipeline
+- src/stargazer/types/ — asset dataclasses by domain
+- src/stargazer/config.py — TaskEnvironments (gatk_env, scrna_env) and shared config
+"""

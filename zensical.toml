@@ -17,6 +17,7 @@ nav = [
     { "MCP Server" = "architecture/mcp-server.md" },
     { "Configuration" = "architecture/configuration.md" },
     { "CLI" = "architecture/cli.md" },
+    { "Notebooks" = "architecture/notebook.md" },
   ]},
   { "Guides" = [
     { "Writing a Task" = "guides/writing-a-task.md" },
