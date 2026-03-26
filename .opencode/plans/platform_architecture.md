@@ -46,9 +46,16 @@ Marimo's built-in chat panel supports custom rules via `marimo.toml` `[ai] rules
 
 **Not using custom MCP server in marimo** — marimo doesn't yet support custom MCP server configuration (only built-in presets). When this ships upstream, the stargazer MCP server can be wired in as a one-line config change. Until then, the MCP server serves developers via coding tools.
 
-### Notebooks Never Export
+### Packaging Boundary
 
-The dependency graph is strictly one-directional. Notebooks import from `stargazer.*` but are never a dependency of production code. This keeps the module graph clean and means notebook changes cannot break tasks or workflows.
+In production (Flyte deploy), stargazer is installed as a proper package via `with_pip_packages("stargazer")` — not an editable install. This creates a clean separation:
+
+- **Package code** (`src/stargazer/tasks/`, `workflows/`, `types/`) is curated, tested, and versioned. Available in production notebooks automatically.
+- **Notebook code** is exploratory. Tasks defined in notebook cells work locally but are not available in production until explicitly promoted into the package.
+
+This means the dependency graph is strictly one-directional. Notebooks import from `stargazer.*` but are never a dependency of production code. The module graph stays clean and notebook changes cannot break tasks or workflows.
+
+Locally (editable install via `uv pip install -e .`), this boundary is blurred — researchers can experiment freely. The guardrail kicks in at deploy time.
 
 ## MCP Server
 
@@ -69,11 +76,19 @@ Researcher runs a task, gets results, publishes to IPFS. No git, no PR, no revie
 
 ### Code Contributions (structured)
 
-Researcher prototypes a task in a notebook cell. To contribute it back:
+Two personas, two paths — unified by the same API and PR review process:
 
-1. **Export** from marimo — bundles cell logic + metadata into a structured artifact
-2. **Submit** — server-side flow uses the researcher's GitHub OAuth token to fork, run `promote-task` extraction, create a branch, and open a PR
-3. **Review** happens on GitHub — first-class tooling already exists, no need to rebuild
+**Dev contributors** author tasks directly in `src/stargazer/tasks/` and PR into the package. No notebook involvement. They have full dev environments and follow project conventions from the start.
+
+**Researchers** prototype task logic in notebook cells using proper Flyte decorators, asset types, and async signatures. Tasks defined in notebooks are real tasks — they use `@gatk_env.task`, structured I/O, and run against real data. To contribute back:
+
+1. **Promote** from marimo — the notebook file is Python, so promotion is mostly mechanical: strip the `@app.cell` wrapper, extract the function, drop it into the right `src/stargazer/tasks/` subdirectory
+2. **Submit** — server-side flow uses the researcher's GitHub OAuth token to fork, create a branch with the extracted task module, and open a PR
+3. **Review** happens on GitHub — a code-review agent picks up the PR and suggests changes to fit project conventions (docstrings, naming, test coverage, etc.)
+
+The key insight: researchers don't need to know every project convention upfront. They write a working task in a notebook cell. The promotion step does the mechanical extraction, and the PR review layer (human + agent) adds the project polish. Convention enforcement happens at review time, not authoring time.
+
+**Persona transition**: once a promoted task needs refinement beyond what the review agent suggests, the researcher either puts on a dev hat (full environment) or hands off to a dev contributor. This boundary is deliberate — the notebook is the prototyping surface, not a second editing environment for production code.
 
 The notebook never becomes a git client. It produces a well-shaped artifact. A server-side process handles the GitHub mechanics. GitHub handles review.
 
@@ -96,8 +111,7 @@ Users log in to the hosted version (Union) with GitHub OAuth. This gives us:
 
 ## Open Questions
 
-- **Scratch notebook persistence**: Where do per-user notebooks live in the hosted environment? Tied to GitHub username? Union user workspace?
-- **Minimum viable export**: What metadata does the structured artifact need? Just the function body + description? Or types and test hints too?
+- **Scratch notebook persistence**: Where do per-user notebooks live in the hosted environment? Tied to GitHub username? Union user workspace? Note: the promotion path does not depend on persistence — the notebook is always available on disk when the researcher hits promote.
 - **Community namespace**: Is there a `contrib/` tier for lower-bar contributions, or does everything go through full review?
 
 ## Implementation Phases
@@ -110,15 +124,15 @@ Users log in to the hosted version (Union) with GitHub OAuth. This gives us:
 - [ ] Link out to Union UI from task execution results
 - [ ] Getting started notebook covers core workflows
 
-### Phase 2: Export and promote
-- [ ] `stargazer promote-task` CLI for cell-to-module extraction
-- [ ] Structured export format definition
-
-### Phase 3: GitHub contribution flow
-- [ ] Server-side PR creation using GitHub OAuth token
-- [ ] Fork management (create or reuse)
-- [ ] Branch + commit + PR from exported artifact
+### Phase 2: Promote and review
+- [ ] `stargazer promote-task` — mechanical extraction: strip `@app.cell` wrapper, extract function into `src/stargazer/tasks/` module
+- [ ] Generate skeleton test in `tests/unit/`
+- [ ] Server-side PR creation using GitHub OAuth token (fork, branch, commit, open PR)
+- [ ] Code-review agent picks up PR automatically — suggests convention fixes (docstrings, naming, types, test coverage)
 - [ ] Link back to PR from marimo
+
+### Phase 3: Platform integration
+- [ ] "View PR" link in marimo after promotion
 
 ### Phase 4: Hosted platform polish
 - [ ] Per-user scratch notebook persistence

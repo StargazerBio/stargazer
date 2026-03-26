@@ -275,6 +275,15 @@ if apply_bqsr:
 - [ ] Missing validation that tests would catch
 - [ ] No example inputs in docstrings
 
+### 8. Notebook Violations
+
+**Every notebook in `src/stargazer/notebooks/` must have a smoke test:**
+- [ ] Notebook must import without errors and expose a `marimo.App` object
+- [ ] A corresponding parametrized test case must exist in `tests/notebooks/test_notebook_smoke.py` (auto-discovered via `pkgutil.iter_modules`, so adding the `.py` file is sufficient)
+- [ ] Async cells must use `async def`, never `asyncio.get_event_loop().run_until_complete()`
+- [ ] Notebooks must only import from `stargazer.*` public APIs — never define production tasks or types inline
+- [ ] Every cell function must have a docstring
+
 ## Review Process
 
 ### Phase 1: Immediate Rejections

@@ -8,11 +8,17 @@ and visualize results — bridging exploratory work and production workflows.
 Local development:
     marimo edit src/stargazer/notebooks/getting_started.py
 
+Run locally via Flyte:
+    python src/stargazer/app.py
+
 Deploy to Flyte:
     stargazer-app
 
 spec: [docs/architecture/notebook.md](../docs/architecture/notebook.md)
 """
+
+import sys
+from pathlib import Path
 
 import flyte
 import flyte.app
@@ -25,7 +31,7 @@ marimo_env = flyte.app.AppEnvironment(
         "marimo>=0.10.0",
         "stargazer",
     ),
-    command="marimo run src/stargazer/notebooks/getting_started.py --port 8080 --host 0.0.0.0 --include-code",
+    args=[sys.executable, "src/stargazer/app.py", "--server"],
     port=8080,
     include=["src/stargazer/notebooks/"],
     resources=flyte.Resources(cpu=2, memory="4Gi"),
@@ -35,12 +41,51 @@ marimo_env = flyte.app.AppEnvironment(
 )
 
 
+def _run_server():
+    """Start the Marimo notebook server, replacing this process."""
+    import os
+    import shutil
+
+    marimo_bin = shutil.which("marimo")
+    if not marimo_bin:
+        raise FileNotFoundError("marimo not found on PATH")
+
+    os.execv(
+        marimo_bin,
+        [
+            "marimo",
+            "edit",
+            "src/stargazer/notebooks/getting_started.py",
+            "--port",
+            "8080",
+            "--host",
+            "0.0.0.0",
+            "--headless",
+            "--no-token",
+        ],
+    )
+
+
 def main():
     """Deploy the Marimo notebook app to Flyte."""
-    flyte.init_from_config()
-    result = flyte.serve(marimo_env)
-    print(result[0])
+    import signal
+
+    flyte.init_from_config(root_dir=Path(__file__).parent)
+    app = flyte.serve(marimo_env)
+    print(f"App URL: {app.url}")
+
+    def _shutdown(signum, frame):
+        """Handle SIGINT/SIGTERM by deactivating the app."""
+        app.deactivate(wait=True)
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
+    app._process.wait()
 
 
 if __name__ == "__main__":
-    main()
+    if "--server" in sys.argv:
+        _run_server()
+    else:
+        main()

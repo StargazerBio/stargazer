@@ -44,19 +44,32 @@ Notebooks are free to experiment, prototype, and visualize — but they are neve
 3. Import from `stargazer` public APIs (tasks, workflows, types, utils)
 4. To include in the deployed app, update the `command` in `stargazer.app.marimo_env` or use `create_asgi_app().with_dynamic_directory()` for multi-notebook serving
 
-## Notebook Authoring and Task Promotion
+## Packaging Boundary
 
-Researchers will often prototype new task logic in notebook cells before it becomes a production task. The intended workflow:
+In production, stargazer is installed as a proper package (not editable) via the AppEnvironment's `with_pip_packages("stargazer")`. This means:
 
-1. **Prototype** in `notebooks/scratch/` — iterate on parameters, visualize intermediate results, validate against known outputs
-2. **Promote** the working logic into a proper module in `tasks/` with types, docstrings, and tests
-3. **Replace** the notebook prototype cell with an import from the new task module
+- **Package tasks** in `src/stargazer/tasks/` are available in production notebooks automatically.
+- **Notebook-defined tasks** work locally (editable install) but are not available in production until promoted into the package.
 
-Marimo's `.py` format makes this natural — cells are plain Python functions, so extracting logic into a module is straightforward copy-paste. Step 2 is currently manual.
+This is a feature — it prevents untested code from silently ending up in production. The boundary is blurred in local dev (editable install) so researchers can experiment freely.
+
+## Task Authoring and Promotion
+
+Researchers define tasks directly in notebook cells using proper Flyte conventions — `@gatk_env.task`, asset types, async signatures. These are real tasks that run against real data in the notebook.
+
+The promotion pathway:
+
+1. **Author** in a notebook cell — use proper decorators, structured I/O, async patterns. The task works in the notebook as-is.
+2. **Promote** — mechanical extraction: strip the `@app.cell` wrapper, move the function into the right `src/stargazer/tasks/` subdirectory, generate a skeleton test.
+3. **Review** — a code-review agent picks up the PR and suggests changes to fit project conventions (docstrings, naming, test coverage). Convention enforcement happens at review time, not authoring time.
+
+Researchers don't need to know every project convention upfront. They write a working task. The promotion step does the mechanical extraction, and the PR review layer adds the project polish.
+
+Once a promoted task needs refinement beyond what the review agent suggests, the researcher either puts on a dev hat (full environment) or hands off to a dev contributor. The notebook is the prototyping surface, not a second editing environment for production code.
 
 ### Roadmap: `stargazer promote-task`
 
-A future CLI command to reduce friction in the prototype-to-production loop:
+A CLI command for the mechanical extraction step:
 
 ```
 stargazer promote-task notebooks/scratch/experiment.py::cell_name --to tasks/deepvariant.py
@@ -64,9 +77,9 @@ stargazer promote-task notebooks/scratch/experiment.py::cell_name --to tasks/dee
 
 This would:
 - Extract the cell function body using `ast` (marimo files are valid Python)
-- Scaffold a task module with the correct Flyte decorator, type annotations, and docstring template
+- Drop it into the target module with the existing decorator and types intact
 - Generate a skeleton test in `tests/unit/`
-- Leave a note in the source notebook cell pointing to the new module
+- Open a PR via the server-side GitHub flow
 
 Not yet implemented — waiting for real usage patterns to inform the exact UX.
 
