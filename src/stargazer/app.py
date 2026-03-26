@@ -68,6 +68,7 @@ def _run_server():
 
 def main():
     """Deploy the Marimo notebook app to Flyte."""
+    import os
     import signal
 
     flyte.init_from_config(root_dir=Path(__file__).parent)
@@ -75,7 +76,13 @@ def main():
     print(f"App URL: {app.url}")
 
     def _shutdown(signum, frame):
-        """Handle SIGINT/SIGTERM by deactivating the app."""
+        """Handle SIGINT/SIGTERM by killing the entire process group."""
+        pid = app._process.pid
+        try:
+            # Kill the whole process group (marimo + its children)
+            os.killpg(os.getpgid(pid), signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
         app.deactivate(wait=True)
         sys.exit(0)
 

@@ -20,6 +20,7 @@ def _():
     import warnings
 
     warnings.filterwarnings("ignore", message="Variable names are not unique")
+    warnings.filterwarnings("ignore", category=RuntimeWarning, module="scanpy")
 
     import marimo as mo
     import flyte
@@ -419,7 +420,12 @@ def _(annotated_ad, mo, np, plt):
         for _gi, _gene in enumerate(_top_genes):
             if _gene in annotated_ad.var_names:
                 _gene_idx = list(annotated_ad.var_names).index(_gene)
-                _vals = np.asarray(_X[_mask, _gene_idx]).flatten()
+                _col = _X[_mask, _gene_idx]
+                _vals = (
+                    np.asarray(_col.todense()).flatten()
+                    if hasattr(_col, "todense")
+                    else np.asarray(_col).flatten()
+                )
                 _mean_expr[_ci, _gi] = np.mean(_vals)
                 _frac_expr[_ci, _gi] = np.mean(_vals > 0)
 
