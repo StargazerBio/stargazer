@@ -43,7 +43,12 @@ See [MCP Server](mcp-server.md) for the full server specification.
 
 ## Interface
 
-Any MCP client connects to `stargazer serve` over stdio or HTTP. See [CLI](cli.md). Tasks and workflows can also be managed directly via the [Flyte CLI](cli.md#flyte-cli).
+Stargazer is accessed through two Docker images:
+
+- **`stargazer:note`** — Marimo notebook in edit mode, for running pipelines and exploring data. See [Notebook App](notebook.md).
+- **`stargazer:chat`** — agentic dev harness with Claude Code and OpenCode, for building tasks and workflows. See [Contributing](../guides/contributing.md).
+
+Both include the MCP server over stdio. Any MCP client connects to `stargazer serve`. Tasks and workflows can also be managed directly via the [Flyte CLI](cli.md#flyte-cli).
 
 ## Configuration
 

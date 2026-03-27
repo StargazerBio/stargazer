@@ -1,19 +1,29 @@
 # Getting Started
 
-## Quickstart
+Stargazer ships two Docker images for different workflows:
+
+- **`stargazer:note`** — if you want to run pipelines, explore data, and visualize results in a notebook
+- **`stargazer:chat`** — if you want to build new tasks and workflows with an agentic dev harness
+
+## Note — Notebook Interface
 
 ```bash
-docker run -it ghcr.io/stargazerbio/stargazer
+docker run -p 8080:8080 ghcr.io/stargazerbio/stargazer:note
 ```
 
-The container starts the MCP server over stdio. Connect your MCP client, then ask it to:
+Opens a [Marimo](https://marimo.io/) notebook at `http://localhost:8080` in edit mode. From there you can import stargazer tasks, run workflows, and visualize results interactively. This is the same image used in production.
 
-1. "Download the scrna_demo bundle"
-2. "Run the scrna workflow"
+## Chat — Dev Harness
 
-## Client Configuration
+```bash
+docker run -it -v $(pwd):/stargazer ghcr.io/stargazerbio/stargazer:chat
+```
 
-Point your MCP client at the Docker image:
+Mount your local clone into the container. The entrypoint syncs dependencies and drops you into a shell with Claude Code, OpenCode, and standard dev tooling. See [Contributing](guides/contributing.md) for the full dev setup.
+
+## MCP Client Configuration
+
+Both images include the MCP server. Point your MCP client at the Docker image:
 
 **Claude Code** — add to `.claude/settings.json`:
 
@@ -22,7 +32,7 @@ Point your MCP client at the Docker image:
   "mcpServers": {
     "stargazer": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "ghcr.io/stargazerbio/stargazer"]
+      "args": ["run", "-i", "--rm", "ghcr.io/stargazerbio/stargazer:note"]
     }
   }
 }
@@ -41,26 +51,14 @@ Pass environment variables with `-e` to control storage behavior:
 | **Pinata (private)** — uploads to private network | `PINATA_JWT` |
 
 ```bash
-docker run -i --rm -e PINATA_JWT=your_jwt ghcr.io/stargazerbio/stargazer
+docker run -p 8080:8080 -e PINATA_JWT=your_jwt ghcr.io/stargazerbio/stargazer:note
 ```
 
 See [Configuration](architecture/configuration.md) for details.
 
-## Exploring Directly
-
-To drop into a shell instead of starting the MCP server:
-
-```bash
-docker run -it --entrypoint bash ghcr.io/stargazerbio/stargazer
-```
-
-From there you can run workflows directly or use the [Flyte TUI](https://www.union.ai/docs/v2/flyte/user-guide/running-locally/#terminal-ui).
-
 ## Installing from Source
 
-For development or contributing:
-
-**Prerequisites:** Python 3.11+, [uv](https://docs.astral.sh/uv/)
+**Prerequisites:** Python 3.13+, [uv](https://docs.astral.sh/uv/)
 
 ```bash
 git clone <repo-url>

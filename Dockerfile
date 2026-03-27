@@ -35,16 +35,22 @@ COPY --chown=ubuntu:ubuntu pyproject.toml uv.lock ./
 COPY --chown=ubuntu:ubuntu .mcp.json .mcp.json
 COPY --chown=ubuntu:ubuntu .claude/settings.json .claude/settings.json
 
-# --- Quickstart target ---
-FROM base AS quickstart
+# --- Note target (production notebook) ---
+# Tighter image for researchers comfortable with notebooks and light CLI.
+# Entrypoint launches marimo in edit mode on localhost.
+# Same image serves local use and hosted production.
+FROM base AS note
 COPY --chown=ubuntu:ubuntu src/ src/
 RUN uv sync && chown -R ubuntu:ubuntu /stargazer
 USER ubuntu
 RUN flyte create config --local-persistence
-ENTRYPOINT ["claude"]
+ENTRYPOINT ["marimo", "edit", "src/stargazer/notebooks/getting_started.py", \
+    "--port", "8080", "--host", "0.0.0.0", "--headless", "--no-token"]
 
-# --- Dev target ---
-FROM base AS dev
+# --- Chat target (agentic dev harness) ---
+# For contributors who mount the repo from the host and work in editable mode.
+# Ships with Claude Code, OpenCode, and standard dev tooling.
+FROM base AS chat
 RUN apt-get update \
     && apt-get install -y \
     sudo jq vim git nano python3 python3-pip tmux \

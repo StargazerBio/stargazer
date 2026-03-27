@@ -2,21 +2,21 @@
 
 ## Setup
 
-Clone the repo and build the dev Docker image:
+Clone the repo and build the `chat` image:
 
 ```bash
 git clone <repo-url>
 cd stargazer
-docker build --target dev -t stargazer-dev .
+docker build --target chat -t stargazer:chat .
 ```
 
 Mount your local checkout into the container so edits are reflected immediately:
 
 ```bash
-docker run -it -v $(pwd):/stargazer stargazer-dev
+docker run -it -v $(pwd):/stargazer stargazer:chat
 ```
 
-The dev entrypoint runs `uv sync --group dev` then drops you into a shell. The package is installed in editable mode, so changes to `src/` take effect without reinstalling.
+The entrypoint runs `uv sync --group dev` then drops you into a shell with Claude Code, OpenCode, and standard dev tooling. The package is installed in editable mode, so changes to `src/` take effect without reinstalling.
 
 ## Running Tests
 
