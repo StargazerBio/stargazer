@@ -4,7 +4,7 @@
 
 # Stargazer
 
-**The perpetual progress machine for computational biology.**
+**The perpetual progress machine for computational biology**
 
 ---
 
@@ -50,7 +50,11 @@ Every file in Stargazer is content-addressable on [IPFS](https://docs.ipfs.tech/
 ## Execution Modes
 Stargazer has a few execution modes to control exactly where data is processed and stored. The default is fully local compute and storage. By adding a PINATA_JWT env var, you can push and pull assets from IPFS via Pinata, either publicly or privately. This is the persistence layer for hosted compute (coming soon!) and an integral part of Stargazer's collaboration strategy. Details are available in the configuration [docs](https://docs.stargazer.bio/architecture/configuration/).
 
-## (Over)engineered for an Open-Future
-I've been thinking about and building this before agentic-development for [some time now](https://www.youtube.com/watch?v=F7UUm78iito), and I acknowledge that some of the foundational patterns may be appear rather heavy. Stargazer aims to accomodate as many computational approaches, tools, and lines-of-inquiry as possible and has therefore made every attempt to be flexible and [open](LICENSE) with an opinionated core. Within this framework, every user naturally becomes a contributor. My hope is that anyone who derives value from Stargazer will kindly let their reasoning, workflows, and results flow into the public domain. In doing so, they will add momentum to the flywheel of perpetual progress.
+## Perpetual progress machine?
+Never before has there been a greater opportunity to converge the fragmented landscape of Bioinformatics tools and techniques. Frontier models enable integrating the plurality of inputs and contributions faster and more fairly than ever before. Stargazer doesn't aim to be yet another standard, but an organic substrate that evolves and responds to the needs of discovery in real-time.
+
+The foundational patterns of this project [predate](https://www.youtube.com/watch?v=F7UUm78iito) the agentic development era, and they are a divergence from the norm. Stargazer aims to accommodate as many computational approaches, tools, and lines-of-inquiry as possible and has therefore made every attempt to be flexible and [open](LICENSE) with an opinionated core.
+
+Within this framework, every user naturally becomes a contributor. My hope is that anyone who derives value from Stargazer will kindly let their reasoning, workflows, and results graduate into the public domain. In doing so, they will add momentum to the flywheel of perpetual progress.
 
 > ⚠️ AI Use Disclaimer: If you're going to take the time to README, I'm going to take the time to WRITEIT. Every word of this README was typed out by a human. Additionally, every line of code was reviewed by a human and will continue to be. However, Stargazer is an AI-native project and we intend to leverage these impressive models where they shine while relying on human oversight and expertise to guide them.
