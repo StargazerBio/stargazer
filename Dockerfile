@@ -69,5 +69,5 @@ RUN curl -fsSL https://starship.rs/install.sh | sh -s -- --yes
 RUN chown ubuntu:ubuntu /stargazer
 USER ubuntu
 
-# uv sync then launch bash with the venv active.
-ENTRYPOINT ["bash", "-c", "uv sync --group dev && exec bash --login"]
+# uv sync then launch Claude Code.
+ENTRYPOINT ["bash", "-c", "uv sync --group dev && exec claude"]
