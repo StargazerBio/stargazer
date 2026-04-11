@@ -21,6 +21,8 @@ Collecting early feedback on direction and architecture. Try the quickstart!
 
 Stargazer is an agent-first project - you'll need to login with Claude before interacting with the MCP server. However, everything is just a Flyte workflow under the hood, feel free to start the container with `--entrypoint bash` and run any workflows or check out the [TUI](https://www.union.ai/docs/v2/flyte/user-guide/running-locally/#terminal-ui) from there.
 
+Additional quickstart options and details are available in the [docs](https://docs.stargazer.bio/getting-started/).
+
 ## Why Stargazer?
 
 Many researchers are experts in their specific niche; they have then become proficient bioinformaticians through necessity. On the other side of the spectrum, well-resourced organizations with their own bioinformatics and devops teams will each have their _specific_ way of running Nextflow pipelines on their Slurm cluster and organizing the filesystem. 
