@@ -37,7 +37,7 @@ def _():
         Adjust parameters with the controls and re-run cells to iterate.
         """
     )
-    return flyte, mo, plt
+    return mo, plt
 
 
 @app.cell
@@ -67,12 +67,8 @@ def _(mo):
         ## 1. Load Raw Data
 
         Assemble a raw AnnData from local storage by sample ID.
-        If no data is found, fetch the demo bundle first:
-
-        ```python
-        from stargazer.utils.local_storage import default_client
-        await default_client.fetch_bundle("scrna_demo")
-        ```
+        If nothing is cached locally, the `scrna_demo` bundle is
+        fetched automatically.
         """
     )
 
@@ -83,19 +79,27 @@ def _(mo):
 
 @app.cell
 async def _(mo, sample_id_input):
-    """Assemble raw AnnData from storage."""
+    """Assemble raw AnnData, fetching the demo bundle on a cache miss."""
     import scanpy as sc
     from stargazer.assets.asset import assemble
+    from stargazer.bundles import fetch_bundle
 
     _assets = await assemble(
         sample_id=sample_id_input.value, asset="anndata", stage="raw"
     )
     if not _assets:
+        with mo.status.spinner(title="Fetching scrna_demo bundle..."):
+            await fetch_bundle("scrna_demo")
+        _assets = await assemble(
+            sample_id=sample_id_input.value, asset="anndata", stage="raw"
+        )
+
+    if not _assets:
         mo.stop(
             True,
             mo.md(
-                f"No raw AnnData found for **{sample_id_input.value}**. "
-                "Fetch the demo bundle first (see above)."
+                f"Sample **{sample_id_input.value}** is not in the "
+                "`scrna_demo` bundle. Try `s1d1`."
             ),
         )
 
@@ -371,11 +375,11 @@ async def _(mo, np, plt, reduced_asset, resolution_slider, sc):
 
     mo.md(f"Found **{_n_clusters}** clusters")
     _fig
-    return clustered_ad, clustered_asset
+    return (clustered_asset,)
 
 
 @app.cell
-async def _(clustered_asset, mo, np, plt, sc):
+async def _(clustered_asset, mo, sc):
     """Find marker genes and display top markers per cluster."""
     from stargazer.tasks.scrna import find_markers
 
@@ -473,7 +477,7 @@ def _(annotated_ad, mo, np, plt):
 
 
 @app.cell
-def _(annotated_ad, mo, np, plt):
+def _(annotated_ad, plt):
     """Cluster composition summary."""
     _clusters = annotated_ad.obs["leiden"].astype(int)
     _counts = _clusters.value_counts().sort_index()
