@@ -181,3 +181,6 @@ wt/
 
 # Test secrets (JWT tokens, API keys)
 tests/.secrets/
+
+# Marimo cache
+src/stargazer/notebooks/__marimo__/
