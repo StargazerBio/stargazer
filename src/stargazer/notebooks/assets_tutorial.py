@@ -588,10 +588,16 @@ def _(mo):
         | `assemble(**filters)` | Discovery by metadata, not folders |
         | Companion pattern via `<key>_cid` | Index/data pairs travel together |
 
-        That's the whole system. The next notebook —
-        `tasks_tutorial` — picks up from here, showing how Stargazer
-        tasks consume and produce these typed assets, and how those
-        tasks compose into Flyte workflows.
+        That's the whole system.
+
+        ### → Next: `tasks_tutorial.py`
+
+        The follow-on notebook (`src/stargazer/notebooks/tasks_tutorial.py`)
+        picks up exactly where this one ends. It re-uses the
+        `SampleSheet` you defined here, wraps a Flyte task around it,
+        composes that task into a fan-out workflow, and ends with the
+        local→remote execution toggle that needs no code changes —
+        only a swap in `.flyte/config.yaml`. Open it next.
         """
     )
     return
