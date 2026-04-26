@@ -26,7 +26,9 @@ def _():
     import flyte
     import matplotlib.pyplot as plt
 
-    flyte.init_from_config()
+    from stargazer.init import init
+
+    init()
 
     mo.md(
         """

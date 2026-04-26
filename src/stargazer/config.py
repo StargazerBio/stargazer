@@ -41,6 +41,18 @@ STARGAZER_ENV_VARS = {
 
 STARGAZER_SECRETS = flyte.Secret(key="PINATA_JWT", as_env_var="PINATA_JWT")
 
+LANDING_SECRETS = [
+    flyte.Secret(key="GITHUB_CLIENT_ID", as_env_var="GITHUB_CLIENT_ID"),
+    flyte.Secret(key="GITHUB_CLIENT_SECRET", as_env_var="GITHUB_CLIENT_SECRET"),
+    flyte.Secret(key="SESSION_SECRET", as_env_var="SESSION_SECRET"),
+    flyte.Secret(key="ADMIN_API_KEY", as_env_var="ADMIN_API_KEY"),
+]
+
+USER_NOTEBOOK_SECRETS = [
+    STARGAZER_SECRETS,
+    flyte.Secret(key="ADMIN_API_KEY", as_env_var="FLYTE_API_KEY"),
+]
+
 
 def log_execution() -> str:
     """Start a per-execution log sink and return the execution ID.

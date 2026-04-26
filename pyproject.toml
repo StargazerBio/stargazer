@@ -12,22 +12,28 @@ dependencies = [
     "aiohttp>=3.9.0",
     "aiofiles>=24.1.0",
     "flyte[tui]>=2.0.3",
-    "mcp[cli]>=1.0.0",
-    "tinydb>=4.8.2",
     "loguru>=0.7.3",
+    "pyyaml>=6.0.3",
+]
+
+[project.optional-dependencies]
+bio = [
     "scanpy>=1.12",
     "anndata>=0.12.10",
     "scikit-image>=0.26.0",
     "igraph>=1.0.0",
     "pooch>=1.9.0",
-    "pyyaml>=6.0.3",
-    "mkdocstrings[python]>=1.0.3",
-    "marimo>=0.10.0",
 ]
+notebook = ["marimo>=0.10.0"]
+mcp = ["mcp[cli]>=1.0.0", "tinydb>=4.8.2"]
+landing = ["fastapi>=0.115", "uvicorn>=0.34", "itsdangerous>=2.1"]
+docs = ["mkdocstrings[python]>=1.0.3"]
+all = ["stargazer[bio,notebook,mcp,landing,docs]"]
 
 [project.scripts]
 stargazer = "stargazer.server:main"
 stargazer-app = "stargazer.app:main"
+stargazer-landing = "stargazer.landing.app:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -44,7 +50,7 @@ filterwarnings = [
 ]
 
 [tool.setuptools.package-data]
-stargazer = ["bundles/*.yaml", "notebooks/*.py"]
+stargazer = ["bundles/*.yaml", "notebooks/*.py", "landing/*.py"]
 
 [dependency-groups]
 dev = [

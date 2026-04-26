@@ -28,8 +28,7 @@ from stargazer.config import STARGAZER_ENV_VARS, STARGAZER_SECRETS
 marimo_env = flyte.app.AppEnvironment(
     name="stargazer-notebooks",
     image=flyte.Image.from_debian_base(python_version=(3, 13)).with_pip_packages(
-        "marimo>=0.10.0",
-        "stargazer",
+        "stargazer[bio,notebook]",
     ),
     args=[sys.executable, "src/stargazer/app.py", "--server"],
     port=8080,
@@ -71,7 +70,9 @@ def main():
     import os
     import signal
 
-    flyte.init_from_config(root_dir=Path(__file__).parent)
+    from stargazer.init import init
+
+    init(root_dir=Path(__file__).parent)
     app = flyte.serve(marimo_env)
     print(f"App URL: {app.url}")
 
