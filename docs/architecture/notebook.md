@@ -1,9 +1,9 @@
 # Notebook App
 
-The `stargazer:note` image is the primary interface for researchers who want to run pipelines, explore data, and visualize results. It launches a [Marimo](https://marimo.io/) notebook in edit mode — the same image serves both local use and hosted production.
+The `stargazer-note` image is the primary interface for researchers who want to run pipelines, explore data, and visualize results. It launches a [Marimo](https://marimo.io/) notebook in edit mode — the same image serves both local use and hosted production.
 
 ```bash
-docker run -p 8080:8080 ghcr.io/stargazerbio/stargazer:note
+docker run -p 8080:8080 ghcr.io/stargazerbio/stargazer-note:latest
 ```
 
 For building new tasks and workflows, see the [`chat` image](../guides/contributing.md) instead.
@@ -12,7 +12,7 @@ For building new tasks and workflows, see the [`chat` image](../guides/contribut
 
 ```mermaid
 flowchart TD
-    R([Researcher - browser]) --> M[Marimo App<br/>stargazer:note, port 8080]
+    R([Researcher - browser]) --> M[Marimo App<br/>stargazer-note, port 8080]
     M --> I[Direct imports<br/>stargazer.tasks / workflows / types]
     I --> F[flyte.run<br/>TaskEnvironment - gatk_env / scrna_env]
     M --> C[Chat panel<br/>built-in AI with custom rules]
@@ -25,7 +25,7 @@ Notebooks import and call Stargazer tasks directly — the same code runs in not
 
 | Mode | Command | Use case |
 |------|---------|----------|
-| **Edit** | `stargazer:note` default entrypoint | Local exploration and hosted production |
+| **Edit** | `stargazer-note` default entrypoint | Local exploration and hosted production |
 | **Run** | `marimo run ... --include-code` | Read-only shareable view (Flyte App) |
 
 ## Execution Context

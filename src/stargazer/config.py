@@ -101,11 +101,14 @@ _BIOCONDA_PATH = {
 # scRNA-seq task environment for scanpy-based single-cell analysis.
 # Lean image: scanpy on top of the Flyte debian base. Memory-hungry at
 # runtime because scanpy loads full AnnData objects into RAM.
+_REGISTRY = "ghcr.io/stargazerbio"
+
+
 scrna_env = flyte.TaskEnvironment(
     name="scrna",
     description="scanpy-based single-cell RNA analysis; memory-intensive AnnData workloads",
     image=(
-        flyte.Image.from_debian_base()
+        flyte.Image.from_debian_base(registry=_REGISTRY, name="stargazer-scrna")
         .with_apt_packages("ca-certificates")
         .with_pip_packages("scanpy>=1.12")
     ),
@@ -120,7 +123,9 @@ scrna_env = flyte.TaskEnvironment(
 gatk_env = flyte.TaskEnvironment(
     name="gatk",
     description="GATK, BWA, and samtools alignment and variant-calling workloads",
-    image=flyte.Image.from_base("broadinstitute/gatk"),
+    image=flyte.Image.from_base("broadinstitute/gatk").clone(
+        registry=_REGISTRY, name="stargazer-gatk"
+    ),
     resources=flyte.Resources(cpu=4, memory="16Gi"),
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,
@@ -134,7 +139,9 @@ note_env = flyte.app.AppEnvironment(
     name="stargazer-notebooks",
     description="Marimo notebook server preloaded with stargazer deps and bioconda tools",
     image=(
-        flyte.Image.from_debian_base(python_version=(3, 13))
+        flyte.Image.from_debian_base(
+            python_version=(3, 13), registry=_REGISTRY, name="stargazer-note"
+        )
         .with_apt_packages("ca-certificates", "curl", "wget", "unzip", "git", "bzip2")
         .with_commands(_BIOCONDA_INSTALL)
         .with_env_vars(_BIOCONDA_PATH)
@@ -166,7 +173,9 @@ chat_env = flyte.TaskEnvironment(
     name="chat",
     description="Agentic interface to the Stargazer MCP server",
     image=(
-        flyte.Image.from_debian_base(python_version=(3, 13))
+        flyte.Image.from_debian_base(
+            python_version=(3, 13), registry=_REGISTRY, name="stargazer-chat"
+        )
         .with_apt_packages("ca-certificates", "curl", "wget", "unzip", "git", "bzip2")
         .with_commands(
             _BIOCONDA_INSTALL

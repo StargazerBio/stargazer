@@ -13,8 +13,8 @@ Stargazer is a bioinformatics pipeline framework built on [Flyte v2](https://fly
 
 Stargazer ships two end-user Docker images:
 
-- **`stargazer:note`** — a Marimo notebook for running pipelines and exploring data
-- **`stargazer:chat`** — a pre-wired agentic interface (Claude Code + OpenCode) to the Stargazer MCP server
+- **`stargazer-note`** — a Marimo notebook for running pipelines and exploring data
+- **`stargazer-chat`** — a pre-wired agentic interface (Claude Code + OpenCode) to the Stargazer MCP server
 
 Both include the MCP server, which can also be connected to any MCP-compatible client (Claude Code, OpenCode, Cursor, etc.). Source contributors work natively against the repo — see [Contributing](guides/contributing.md).
 

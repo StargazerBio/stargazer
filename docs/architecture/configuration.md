@@ -79,7 +79,7 @@ The two modes are explicit and separate:
 
 ## Container Images
 
-Every Stargazer container image is declared as a `flyte.Environment` in `src/stargazer/config.py`. There is no separate `Dockerfile` source of truth — the env definitions are authoritative. The `stargazer-build-images` console script (see `src/stargazer/build_images.py`) calls `flyte.build_images()` against each env in turn and pushes the result to whatever registry `.flyte/config.yaml` resolves.
+Every Stargazer container image is declared as a `flyte.Environment` in `src/stargazer/config.py`. There is no separate `Dockerfile` source of truth — the env definitions are authoritative. Each image is pushed to `ghcr.io/stargazerbio/stargazer-{scrna,gatk,note,chat}` — the registry is set on each `flyte.Image` via the `_REGISTRY` constant in `config.py`. The `stargazer-build-images` console script (see `src/stargazer/build_images.py`) calls `flyte.build_images()` against each env in turn, then attaches a `:latest` tag via `docker buildx imagetools create` so end-user pull URLs stay stable across builds (Flyte itself only tags with a content hash).
 
 | Env | Type | Image shape | Where it runs |
 |-----|------|-------------|---------------|
@@ -97,8 +97,8 @@ Shared image layers (mamba + bwa, bwa-mem2, samtools, gatk4) are factored into t
 ### Building and pushing
 
 ```bash
-docker login <registry>     # required when image.builder = local
-stargazer-build-images       # builds and pushes scrna, gatk, note, chat
+docker login ghcr.io         # required when image.builder = local
+stargazer-build-images       # builds + pushes scrna, gatk, note, chat (and retags each as :latest)
 ```
 
 Or per-env via the underlying CLI:

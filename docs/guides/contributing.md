@@ -5,7 +5,7 @@ Stargazer has multiple contributor shapes — researchers writing notebooks, age
 ## Setup
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/StargazerBio/stargazer.git
 cd stargazer
 mamba install -y -c bioconda -c conda-forge bwa bwa-mem2 samtools gatk4
 uv sync --group dev
@@ -49,9 +49,11 @@ When you do need to rebuild, do it natively from your host shell — the chat co
 **Local Docker** (default — `image.builder: local` in `.flyte/config.yaml`):
 
 ```bash
-docker login <registry>
+docker login ghcr.io
 stargazer-build-images
 ```
+
+This builds and pushes `ghcr.io/stargazerbio/stargazer-{scrna,gatk,note,chat}` and retags each as `:latest` so the docs' pull URLs stay stable. The registry is set in `src/stargazer/config.py` (`_REGISTRY`); change it there if you fork.
 
 **Remote (Union ImageBuilder):** set `image.builder: remote` in `.flyte/config.yaml`, then `stargazer-build-images`. No local Docker needed; only available against a Union backend.
 
