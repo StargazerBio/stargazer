@@ -48,11 +48,11 @@ Notebooks are free to experiment, prototype, and visualize — but they are neve
 1. Create a new `.py` file in `src/stargazer/notebooks/`
 2. Use the standard Marimo format: `import marimo`, `app = marimo.App()`, `@app.cell`
 3. Import from `stargazer` public APIs (tasks, workflows, types, utils)
-4. To include in the deployed app, update the `command` in `stargazer.app.marimo_env` or use `create_asgi_app().with_dynamic_directory()` for multi-notebook serving
+4. To include in the deployed app, update the `args` or `include` in `stargazer.config.note_env` (the `AppEnvironment` that backs the notebook server) or use `create_asgi_app().with_dynamic_directory()` for multi-notebook serving
 
 ## Packaging Boundary
 
-In production, stargazer is installed as a proper package (not editable) via the AppEnvironment's `with_pip_packages("stargazer")`. This means:
+In production, stargazer is installed as a proper package (not editable) via the AppEnvironment's `with_uv_project(pyproject_file=..., project_install_mode="install_project")`, which resolves all dependencies from `uv.lock` and bakes the stargazer package into the image. This means:
 
 - **Package tasks** in `src/stargazer/tasks/` are available in production notebooks automatically.
 - **Notebook-defined tasks** work locally (editable install) but are not available in production until promoted into the package.

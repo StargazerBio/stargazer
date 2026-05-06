@@ -4,15 +4,15 @@ import ast
 from pathlib import Path
 
 
-def test_marimo_env_is_valid_app_environment():
-    """marimo_env is a properly configured AppEnvironment."""
-    from stargazer.app import marimo_env
-
+def test_note_env_is_valid_app_environment():
+    """note_env is a properly configured AppEnvironment."""
     from flyte.app import AppEnvironment
 
-    assert isinstance(marimo_env, AppEnvironment)
-    assert marimo_env.name == "stargazer-notebooks"
-    assert marimo_env.get_port().port == 8080
+    from stargazer.config import note_env
+
+    assert isinstance(note_env, AppEnvironment)
+    assert note_env.name == "stargazer-notebooks"
+    assert note_env.get_port().port == 8080
 
 
 def test_main_function_exists():

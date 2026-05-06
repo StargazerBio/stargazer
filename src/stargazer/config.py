@@ -4,6 +4,11 @@
 Sets environment variable defaults at import time. Consumers read
 os.environ directly rather than importing named values from this module.
 
+Also the single source of truth for every Stargazer container image:
+the lean per-task envs (`scrna_env`, `gatk_env`) and the heavy host envs
+(`note_env`, `chat_env`). `stargazer-build-images` builds and pushes
+all of them in one shot.
+
 Rules:
 - PINATA_JWT: No default — absence means no authenticated Pinata.
 - PINATA_GATEWAY: Defaults to dweb.link if unset.
@@ -18,11 +23,15 @@ spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 import inspect
 import os
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 import flyte
+import flyte.app
 from loguru import logger as logger  # noqa: PLC0414
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 os.environ.setdefault("PINATA_GATEWAY", "https://dweb.link")
 os.environ.setdefault("PINATA_VISIBILITY", "private")
@@ -74,30 +83,108 @@ def log_execution() -> str:
     return execution_id
 
 
-# scRNA-seq task environment for scanpy-based single-cell analysis
-# Memory-hungry: scanpy loads full AnnData objects into RAM
+# Shared mamba/bioconda layer used by the heavy `note` and `chat` images.
+# Mirrors the `base` stage of the legacy Dockerfile so notebooks and the dev
+# harness ship with bwa, bwa-mem2, samtools, and gatk4 preinstalled.
+_BIOCONDA_INSTALL = [
+    'curl -fsSL "https://github.com/conda-forge/miniforge/releases/latest/download/'
+    'Miniforge3-Linux-$(uname -m).sh" -o /tmp/miniforge.sh '
+    "&& bash /tmp/miniforge.sh -b -p /opt/conda && rm /tmp/miniforge.sh",
+    "/opt/conda/bin/mamba install -y -c bioconda -c conda-forge "
+    "bwa bwa-mem2 samtools gatk4 && /opt/conda/bin/mamba clean -afy",
+]
+_BIOCONDA_PATH = {
+    "PATH": "/opt/conda/bin:/opt/conda/condabin:/usr/local/bin:/usr/bin:/bin",
+}
+
+
+# scRNA-seq task environment for scanpy-based single-cell analysis.
+# Lean image: scanpy on top of the Flyte debian base. Memory-hungry at
+# runtime because scanpy loads full AnnData objects into RAM.
 scrna_env = flyte.TaskEnvironment(
     name="scrna",
     description="scanpy-based single-cell RNA analysis; memory-intensive AnnData workloads",
-    image=flyte.Image.from_debian_base().with_pip_packages("scanpy>=1.12"),
-    resources=flyte.Resources(
-        cpu=4,
-        memory="32Gi",
+    image=(
+        flyte.Image.from_debian_base()
+        .with_apt_packages("ca-certificates")
+        .with_pip_packages("scanpy>=1.12")
     ),
+    resources=flyte.Resources(cpu=4, memory="32Gi"),
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,
 )
 
-# GATK/alignment task environment for GATK, BWA, and samtools tools
-# Uses GATK image with Java runtime, BWA, and samtools pre-installed
+# GATK/alignment task environment for GATK, BWA, and samtools tools.
+# Lean image: leans on the upstream broadinstitute/gatk container, which
+# ships the JVM, samtools, and bwa.
 gatk_env = flyte.TaskEnvironment(
     name="gatk",
     description="GATK, BWA, and samtools alignment and variant-calling workloads",
     image=flyte.Image.from_base("broadinstitute/gatk"),
-    resources=flyte.Resources(
-        cpu=4,
-        memory="16Gi",
+    resources=flyte.Resources(cpu=4, memory="16Gi"),
+    env_vars=STARGAZER_ENV_VARS,
+    secrets=STARGAZER_SECRETS,
+)
+
+# Heavy notebook runtime — replaces the Dockerfile `note` target.
+# Used by `flyte serve` to host the marimo notebook UI; preloads bioconda
+# CLIs and the full stargazer dependency tree (incl. the project itself)
+# so tutorials run end-to-end without pip-installing on the fly.
+note_env = flyte.app.AppEnvironment(
+    name="stargazer-notebooks",
+    description="Marimo notebook server preloaded with stargazer deps and bioconda tools",
+    image=(
+        flyte.Image.from_debian_base(python_version=(3, 13))
+        .with_apt_packages("ca-certificates", "curl", "wget", "unzip", "git", "bzip2")
+        .with_commands(_BIOCONDA_INSTALL)
+        .with_env_vars(_BIOCONDA_PATH)
+        .with_uv_project(
+            pyproject_file=PROJECT_ROOT / "pyproject.toml",
+            project_install_mode="install_project",
+        )
     ),
+    args=[sys.executable, "src/stargazer/app.py", "--server"],
+    port=8080,
+    include=["src/stargazer/notebooks/"],
+    resources=flyte.Resources(cpu=2, memory="4Gi"),
+    requires_auth=False,
+    env_vars=STARGAZER_ENV_VARS,
+    secrets=STARGAZER_SECRETS,
+)
+
+# Heavy agentic interface to the Stargazer MCP server — replaces the
+# Dockerfile `chat` target. End users pull this image to drive Stargazer
+# through Claude Code or OpenCode with the MCP server pre-wired. Bundles
+# bioconda CLIs, Node.js + opencode, Claude Code, and the stargazer
+# runtime deps so the agent can run pipelines (e.g. the scrna workflow)
+# locally or dispatch heavier ones to a remote Flyte backend. No tasks
+# decorate against it; it exists as a `flyte.Environment` so
+# `stargazer-build-images` builds and pushes it alongside the others.
+# Source contributors install natively (`uv sync --group dev`) — chat is
+# not a dev shell.
+chat_env = flyte.TaskEnvironment(
+    name="chat",
+    description="Agentic interface to the Stargazer MCP server",
+    image=(
+        flyte.Image.from_debian_base(python_version=(3, 13))
+        .with_apt_packages("ca-certificates", "curl", "wget", "unzip", "git", "bzip2")
+        .with_commands(
+            _BIOCONDA_INSTALL
+            + [
+                "curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - "
+                "&& apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*",
+                "npm install -g opencode-ai",
+                "curl -fsSL https://claude.ai/install.sh | bash "
+                "&& install -m 755 /root/.local/bin/claude /usr/local/bin/claude",
+            ]
+        )
+        .with_env_vars(_BIOCONDA_PATH)
+        .with_uv_project(
+            pyproject_file=PROJECT_ROOT / "pyproject.toml",
+            project_install_mode="install_project",
+        )
+    ),
+    resources=flyte.Resources(cpu=2, memory="8Gi"),
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,
 )

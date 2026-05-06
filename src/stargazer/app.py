@@ -1,9 +1,10 @@
 """
-### Marimo notebook Flyte App.
+### Marimo notebook Flyte App entrypoint.
 
-Defines the AppEnvironment for deploying Stargazer's interactive notebook
-interface. Researchers use Marimo notebooks to explore data, run tasks,
-and visualize results — bridging exploratory work and production workflows.
+Glue between the `note_env` AppEnvironment (declared in stargazer.config)
+and the marimo notebook server. Researchers use Marimo notebooks to
+explore data, run tasks, and visualize results — bridging exploratory
+work and production workflows.
 
 Local development:
     marimo edit src/stargazer/notebooks/getting_started.py
@@ -21,24 +22,8 @@ import sys
 from pathlib import Path
 
 import flyte
-import flyte.app
 
-from stargazer.config import STARGAZER_ENV_VARS, STARGAZER_SECRETS
-
-marimo_env = flyte.app.AppEnvironment(
-    name="stargazer-notebooks",
-    image=flyte.Image.from_debian_base(python_version=(3, 13)).with_pip_packages(
-        "marimo>=0.10.0",
-        "stargazer",
-    ),
-    args=[sys.executable, "src/stargazer/app.py", "--server"],
-    port=8080,
-    include=["src/stargazer/notebooks/"],
-    resources=flyte.Resources(cpu=2, memory="4Gi"),
-    requires_auth=False,
-    env_vars=STARGAZER_ENV_VARS,
-    secrets=STARGAZER_SECRETS,
-)
+from stargazer.config import note_env
 
 
 def _run_server():
@@ -72,7 +57,7 @@ def main():
     import signal
 
     flyte.init_from_config(root_dir=Path(__file__).parent)
-    app = flyte.serve(marimo_env)
+    app = flyte.serve(note_env)
     print(f"App URL: {app.url}")
 
     def _shutdown(signum, frame):

@@ -18,7 +18,7 @@
 - Implementation will be tightly scoped so it can be understood
 - Tests will run until they pass
 - All necessary CLI tools e.g. parabricks, bwa etc, are available in PATH. Use them to generate test assets as needed and alert the user if they are not available.
-- When adding a task that wraps a new CLI tool, check the `Dockerfile` bioconda install block to confirm the tool is listed. If it is missing, add it and notify the user.
+- When adding a task that wraps a new CLI tool, check the `TaskEnvironment` it is decorated against in `src/stargazer/config.py` and confirm the tool is layered onto that env's `flyte.Image` (via `with_apt_packages`, `with_commands`, or the bioconda block in `_BIOCONDA_INSTALL`). If it is missing, add it and notify the user.
 - **CRITICAL** Do not consider backwards compatibility unless explicitly requested!
 - Run `ruff --fix` after every set of changes to satisfy the pre-commit
 

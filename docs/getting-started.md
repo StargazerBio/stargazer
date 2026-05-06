@@ -1,9 +1,11 @@
 # Getting Started
 
-Stargazer ships two Docker images for different workflows:
+Stargazer ships two end-user Docker images:
 
-- **`stargazer:note`** — if you want to run pipelines, explore data, and visualize results in a notebook
-- **`stargazer:chat`** — if you want to build new tasks and workflows with an agentic dev harness
+- **`stargazer:note`** — for running pipelines and exploring data in a notebook
+- **`stargazer:chat`** — for driving Stargazer through a pre-wired AI agent (Claude Code + OpenCode + MCP server)
+
+If you want to add tasks or workflows to Stargazer itself, see [Contributing](guides/contributing.md) for the native setup. The two images below are for using Stargazer, not editing it.
 
 ## Note — Notebook Interface
 
@@ -13,13 +15,13 @@ docker run -p 8080:8080 ghcr.io/stargazerbio/stargazer:note
 
 Opens a [Marimo](https://marimo.io/) notebook at `http://localhost:8080` in edit mode. From there you can import stargazer tasks, run workflows, and visualize results interactively. This is the same image used in production.
 
-## Chat — Dev Harness
+## Chat — Agentic Interface
 
 ```bash
-docker run -it -v $(pwd):/stargazer ghcr.io/stargazerbio/stargazer:chat
+docker run -it ghcr.io/stargazerbio/stargazer:chat
 ```
 
-Mount your local clone into the container. The entrypoint syncs dependencies and drops you into a shell with Claude Code, OpenCode, and standard dev tooling. See [Contributing](guides/contributing.md) for the full dev setup.
+Drops you into a shell with Claude Code and OpenCode pre-wired against the Stargazer MCP server. Ask the agent to list tasks, run a workflow, query stored files — it dispatches via MCP. The image carries the runtime deps for the scrna pipeline, so the agent can run that workflow locally; heavier pipelines (gatk, alignment) dispatch to whatever backend `.flyte/config.yaml` points at.
 
 ## MCP Client Configuration
 

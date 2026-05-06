@@ -1,5 +1,13 @@
 # API Reference
 
+## App
+
+::: stargazer.app
+
+## Build Images
+
+::: stargazer.build_images
+
 ## Config
 
 ::: stargazer.config
