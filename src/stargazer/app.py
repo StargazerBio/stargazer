@@ -7,17 +7,19 @@ explore data, run tasks, and visualize results — bridging exploratory
 work and production workflows.
 
 Local development:
-    marimo edit src/stargazer/notebooks/getting_started.py
+    marimo edit src/stargazer/notebooks/byod.py
 
-Run locally via Flyte:
-    python src/stargazer/app.py
+Run locally as a `docker run` container:
+    docker run -p 8080:8080 ghcr.io/stargazerbio/stargazer-note:latest
 
-Deploy to Flyte:
+Deploy hosted to Flyte:
     stargazer-app
 
 spec: [docs/architecture/notebook.md](../docs/architecture/notebook.md)
 """
 
+import os
+import signal
 import sys
 from pathlib import Path
 
@@ -26,36 +28,8 @@ import flyte
 from stargazer.config import note_env
 
 
-def _run_server():
-    """Start the Marimo notebook server, replacing this process."""
-    import os
-    import shutil
-
-    marimo_bin = shutil.which("marimo")
-    if not marimo_bin:
-        raise FileNotFoundError("marimo not found on PATH")
-
-    os.execv(
-        marimo_bin,
-        [
-            "marimo",
-            "edit",
-            "src/stargazer/notebooks/getting_started.py",
-            "--port",
-            "8080",
-            "--host",
-            "0.0.0.0",
-            "--headless",
-            "--no-token",
-        ],
-    )
-
-
 def main():
     """Deploy the Marimo notebook app to Flyte."""
-    import os
-    import signal
-
     flyte.init_from_config(root_dir=Path(__file__).parent)
     app = flyte.serve(note_env)
     print(f"App URL: {app.url}")
@@ -77,7 +51,4 @@ def main():
 
 
 if __name__ == "__main__":
-    if "--server" in sys.argv:
-        _run_server()
-    else:
-        main()
+    main()

@@ -42,19 +42,23 @@ Pre-commit enforces `ruff` formatting and `docstr-coverage` (100% module-level d
 
 ## Building Images
 
-Image rebuilds are only needed when you change `config.py` (a system tool, a new env, etc.). Routine code work doesn't need this — `uv add` covers Python deps via the lockfile, and contributors pulling your branch pick the change up automatically on their next `uv sync`.
+Image rebuilds are only needed when you change `config.py` (a Flyte task tool/env) or the `Dockerfile` (a system tool in the human-runnable note/chat images). Routine code work doesn't need this — `uv add` covers Python deps via the lockfile, and contributors pulling your branch pick the change up automatically on their next `uv sync`. See [Configuration → Container Images](../architecture/configuration.md#container-images) for the split between Flyte task images and human-runnable images.
 
-When you do need to rebuild, do it natively from your host shell — the chat container is not in the loop.
+All builds below stay local — nothing is pushed to a registry, so you don't need `docker login` or write access to `ghcr.io/stargazerbio`. CI will handle publishing on merge to main.
 
-**Local Docker** (default — `image.builder: local` in `.flyte/config.yaml`):
+**Flyte task images (`stargazer-scrna`, `stargazer-gatk`):**
 
 ```bash
-docker login ghcr.io
-stargazer-build-images
+stargazer-build-images   # builds scrna and gatk into the local docker cache
 ```
 
-This builds and pushes `ghcr.io/stargazerbio/stargazer-{scrna,gatk,note,chat}` and retags each as `:latest` so the docs' pull URLs stay stable. The registry is set in `src/stargazer/config.py` (`_REGISTRY`); change it there if you fork.
+`image.builder: local` in `.flyte/config.yaml` is the default (needs a working Docker daemon). The Flyte images have no `registry=` set in `config.py`, so the docker builder uses `--load` and the results land in `docker images` rather than being pushed. For Union backends you can flip to `image.builder: remote` and the build runs on the cluster instead.
 
-**Remote (Union ImageBuilder):** set `image.builder: remote` in `.flyte/config.yaml`, then `stargazer-build-images`. No local Docker needed; only available against a Union backend.
+**Human-runnable images (`stargazer-note`, `stargazer-chat`):**
 
-> **Migration note:** the legacy `Dockerfile` is still present until the new flow is verified end-to-end. While it lives, `docker build --target chat -t stargazer:chat .` is a working fallback. Once signed off, the `Dockerfile` will be removed.
+```bash
+docker build --target note -t ghcr.io/stargazerbio/stargazer-note:latest .
+docker build --target chat -t ghcr.io/stargazerbio/stargazer-chat:latest .
+```
+
+Tag both with the published `ghcr.io/stargazerbio/...` URL even though you're not pushing — that way `flyte.serve(note_env)` resolves the tag from your local cache (`note_env.image` references that URL), and `docker run` works for the same reason. The shared `base` stage (bioconda CLIs + uv + project venv) is reused between targets, so the second `docker build` is mostly cache hits.

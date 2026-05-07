@@ -4,10 +4,11 @@
 Sets environment variable defaults at import time. Consumers read
 os.environ directly rather than importing named values from this module.
 
-Also the single source of truth for every Stargazer container image:
-the lean per-task envs (`scrna_env`, `gatk_env`) and the heavy host envs
-(`note_env`, `chat_env`). `stargazer-build-images` builds and pushes
-all of them in one shot.
+Also the source of truth for the lean per-task Flyte environments
+(`scrna_env`, `gatk_env`) and the thin AppEnvironment that hosts the
+Marimo notebook UI (`note_env`). The human-runnable images (note, chat)
+are built from the project's `Dockerfile` — `note_env` consumes the
+pre-built `stargazer-note` image as its base.
 
 Rules:
 - PINATA_JWT: No default — absence means no authenticated Pinata.
@@ -23,7 +24,6 @@ spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 import inspect
 import os
 import subprocess
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -83,32 +83,24 @@ def log_execution() -> str:
     return execution_id
 
 
-# Shared mamba/bioconda layer used by the heavy `note` and `chat` images.
-# Mirrors the `base` stage of the legacy Dockerfile so notebooks and the dev
-# harness ship with bwa, bwa-mem2, samtools, and gatk4 preinstalled.
-_BIOCONDA_INSTALL = [
-    'curl -fsSL "https://github.com/conda-forge/miniforge/releases/latest/download/'
-    'Miniforge3-Linux-$(uname -m).sh" -o /tmp/miniforge.sh '
-    "&& bash /tmp/miniforge.sh -b -p /opt/conda && rm /tmp/miniforge.sh",
-    "/opt/conda/bin/mamba install -y -c bioconda -c conda-forge "
-    "bwa bwa-mem2 samtools gatk4 && /opt/conda/bin/mamba clean -afy",
-]
-_BIOCONDA_PATH = {
-    "PATH": "/opt/conda/bin:/opt/conda/condabin:/usr/local/bin:/usr/bin:/bin",
-}
+# Image registry / name notes:
+#   No `registry=` is set on the Flyte task images (scrna, gatk) so
+#   `flyte.build_images` builds with `--load` (local docker only, no push).
+#   That keeps contributor flow free of registry credentials. CI is
+#   expected to take over publishing to a hosted registry on merge.
+#   `note_env` consumes a Dockerfile-built image by URL — contributors who
+#   want to run `flyte.serve(note_env)` locally should tag their `--target
+#   note` build with this URL so docker resolves it from the local cache.
 
 
 # scRNA-seq task environment for scanpy-based single-cell analysis.
 # Lean image: scanpy on top of the Flyte debian base. Memory-hungry at
 # runtime because scanpy loads full AnnData objects into RAM.
-_REGISTRY = "ghcr.io/stargazerbio"
-
-
 scrna_env = flyte.TaskEnvironment(
     name="scrna",
     description="scanpy-based single-cell RNA analysis; memory-intensive AnnData workloads",
     image=(
-        flyte.Image.from_debian_base(registry=_REGISTRY, name="stargazer-scrna")
+        flyte.Image.from_debian_base(name="stargazer-scrna")
         .with_apt_packages("ca-certificates")
         .with_pip_packages("scanpy>=1.12")
     ),
@@ -123,77 +115,38 @@ scrna_env = flyte.TaskEnvironment(
 gatk_env = flyte.TaskEnvironment(
     name="gatk",
     description="GATK, BWA, and samtools alignment and variant-calling workloads",
-    image=flyte.Image.from_base("broadinstitute/gatk").clone(
-        registry=_REGISTRY, name="stargazer-gatk"
-    ),
+    image=flyte.Image.from_base("broadinstitute/gatk").clone(name="stargazer-gatk"),
     resources=flyte.Resources(cpu=4, memory="16Gi"),
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,
 )
 
-# Heavy notebook runtime — replaces the Dockerfile `note` target.
-# Used by `flyte serve` to host the marimo notebook UI; preloads bioconda
-# CLIs and the full stargazer dependency tree (incl. the project itself)
-# so tutorials run end-to-end without pip-installing on the fly.
+# Hosted Marimo notebook UI. Consumes the Dockerfile-built `stargazer-note`
+# image — see the `note` target in `/Dockerfile`. The same image serves
+# local `docker run` (via the image's ENTRYPOINT) and `flyte.serve(note_env)`-
+# hosted production. For the hosted case, k8s container.command is overridden
+# to flyte's `fserve` bootstrap, which runs `args` below after pulling the
+# code bundle declared by `include` — so the marimo argv has to be repeated
+# here even though the image already bakes it.
 note_env = flyte.app.AppEnvironment(
     name="stargazer-notebooks",
-    description="Marimo notebook server preloaded with stargazer deps and bioconda tools",
-    image=(
-        flyte.Image.from_debian_base(
-            python_version=(3, 13), registry=_REGISTRY, name="stargazer-note"
-        )
-        .with_apt_packages("ca-certificates", "curl", "wget", "unzip", "git", "bzip2")
-        .with_commands(_BIOCONDA_INSTALL)
-        .with_env_vars(_BIOCONDA_PATH)
-        .with_uv_project(
-            pyproject_file=PROJECT_ROOT / "pyproject.toml",
-            project_install_mode="install_project",
-        )
-    ),
-    args=[sys.executable, "src/stargazer/app.py", "--server"],
+    description="Marimo notebook UI; consumes the Dockerfile-built stargazer-note image",
+    image=flyte.Image.from_base("ghcr.io/stargazerbio/stargazer-note:latest"),
+    args=[
+        "marimo",
+        "edit",
+        "src/stargazer/notebooks/byod.py",
+        "--port",
+        "8080",
+        "--host",
+        "0.0.0.0",
+        "--headless",
+        "--no-token",
+    ],
     port=8080,
     include=["src/stargazer/notebooks/"],
     resources=flyte.Resources(cpu=2, memory="4Gi"),
     requires_auth=False,
-    env_vars=STARGAZER_ENV_VARS,
-    secrets=STARGAZER_SECRETS,
-)
-
-# Heavy agentic interface to the Stargazer MCP server — replaces the
-# Dockerfile `chat` target. End users pull this image to drive Stargazer
-# through Claude Code or OpenCode with the MCP server pre-wired. Bundles
-# bioconda CLIs, Node.js + opencode, Claude Code, and the stargazer
-# runtime deps so the agent can run pipelines (e.g. the scrna workflow)
-# locally or dispatch heavier ones to a remote Flyte backend. No tasks
-# decorate against it; it exists as a `flyte.Environment` so
-# `stargazer-build-images` builds and pushes it alongside the others.
-# Source contributors install natively (`uv sync --group dev`) — chat is
-# not a dev shell.
-chat_env = flyte.TaskEnvironment(
-    name="chat",
-    description="Agentic interface to the Stargazer MCP server",
-    image=(
-        flyte.Image.from_debian_base(
-            python_version=(3, 13), registry=_REGISTRY, name="stargazer-chat"
-        )
-        .with_apt_packages("ca-certificates", "curl", "wget", "unzip", "git", "bzip2")
-        .with_commands(
-            _BIOCONDA_INSTALL
-            + [
-                "curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - "
-                "&& apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*",
-                "npm install -g opencode-ai",
-                "curl -fsSL https://claude.ai/install.sh | bash "
-                "&& install -m 755 /root/.local/bin/claude /usr/local/bin/claude",
-            ]
-        )
-        .with_env_vars(_BIOCONDA_PATH)
-        .with_uv_project(
-            pyproject_file=PROJECT_ROOT / "pyproject.toml",
-            project_install_mode="install_project",
-        )
-    ),
-    resources=flyte.Resources(cpu=2, memory="8Gi"),
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,
 )

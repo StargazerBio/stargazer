@@ -26,36 +26,24 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && install -m 755 /root/.local/bin/uv /usr/local/bin/uv \
     && install -m 755 /root/.local/bin/uvx /usr/local/bin/uvx
 
-# Claude Code
-RUN curl -fsSL https://claude.ai/install.sh | bash \
-    && install -m 755 /root/.local/bin/claude /usr/local/bin/claude
-
 WORKDIR /stargazer
 COPY --chown=ubuntu:ubuntu pyproject.toml uv.lock ./
-COPY --chown=ubuntu:ubuntu .mcp.json .mcp.json
-COPY --chown=ubuntu:ubuntu .claude/settings.json .claude/settings.json
-
-# --- Note target (production notebook) ---
-# Tighter image for researchers comfortable with notebooks and light CLI.
-# Entrypoint launches marimo in edit mode on localhost.
-# Same image serves local use and hosted production.
-FROM base AS note
 COPY --chown=ubuntu:ubuntu src/ src/
 RUN uv sync && chown -R ubuntu:ubuntu /stargazer
+
+# --- Note target (Marimo notebook UI) ---
+# Same image serves local `docker run` and hosted production via
+# `flyte.serve(note_env)` (note_env consumes this image as its base).
+FROM base AS note
 USER ubuntu
 RUN flyte create config --local-persistence
-ENTRYPOINT ["marimo", "edit", "src/stargazer/notebooks/getting_started.py", \
+ENTRYPOINT ["marimo", "edit", "src/stargazer/notebooks/byod.py", \
     "--port", "8080", "--host", "0.0.0.0", "--headless", "--no-token"]
 
-# --- Chat target (agentic dev harness) ---
-# For contributors who mount the repo from the host and work in editable mode.
-# Ships with Claude Code, OpenCode, and standard dev tooling.
+# --- Chat target (agentic interface to the MCP server) ---
+# End-user image: Claude Code + OpenCode pre-wired against the Stargazer
+# MCP server. Not a contributor dev shell.
 FROM base AS chat
-RUN apt-get update \
-    && apt-get install -y \
-    sudo jq vim git nano python3 python3-pip tmux \
-    && ln -s /usr/bin/python3 /usr/bin/python \
-    && rm -rf /var/lib/apt/lists/*
 
 # Node.js LTS + OpenCode
 RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
@@ -63,11 +51,12 @@ RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 RUN npm install -g opencode-ai
 
-# Convenience
-RUN curl -fsSL https://starship.rs/install.sh | sh -s -- --yes
+# Claude Code
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+    && install -m 755 /root/.local/bin/claude /usr/local/bin/claude
 
-RUN chown ubuntu:ubuntu /stargazer
+COPY --chown=ubuntu:ubuntu .mcp.json .mcp.json
+COPY --chown=ubuntu:ubuntu .claude/settings.json .claude/settings.json
+
 USER ubuntu
-
-# uv sync then launch Claude Code.
-ENTRYPOINT ["bash", "-c", "uv sync --group dev && exec claude"]
+ENTRYPOINT ["claude"]

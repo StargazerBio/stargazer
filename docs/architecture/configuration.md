@@ -79,40 +79,50 @@ The two modes are explicit and separate:
 
 ## Container Images
 
-Every Stargazer container image is declared as a `flyte.Environment` in `src/stargazer/config.py`. There is no separate `Dockerfile` source of truth — the env definitions are authoritative. Each image is pushed to `ghcr.io/stargazerbio/stargazer-{scrna,gatk,note,chat}` — the registry is set on each `flyte.Image` via the `_REGISTRY` constant in `config.py`. The `stargazer-build-images` console script (see `src/stargazer/build_images.py`) calls `flyte.build_images()` against each env in turn, then attaches a `:latest` tag via `docker buildx imagetools create` so end-user pull URLs stay stable across builds (Flyte itself only tags with a content hash).
+Stargazer ships four container images on `ghcr.io/stargazerbio`. They split along a sharp line: **task images** (run only by Flyte) are declared as `flyte.Image` / `flyte.Environment` in `src/stargazer/config.py`; **human-runnable images** (used via `docker run` and hosted via `flyte.serve`) are built from the project's multi-stage `Dockerfile`.
 
-| Env | Type | Image shape | Where it runs |
-|-----|------|-------------|---------------|
-| `scrna_env` | `TaskEnvironment` | Lean — debian base + scanpy | scRNA-seq tasks (`tasks/scrna/`) |
-| `gatk_env` | `TaskEnvironment` | Lean — `broadinstitute/gatk` base | GATK + alignment tasks (`tasks/gatk/`, `tasks/general/`) |
-| `note_env` | `AppEnvironment` | Heavy — debian + bioconda CLIs + full project deps via `with_uv_project(install_project)` | Marimo notebook server (`stargazer-app`) |
-| `chat_env` | `TaskEnvironment` | Heavy — `note` payload + Node.js, Claude Code, OpenCode | Pre-wired agentic interface to the MCP server (end-user image; **not** a contributor dev shell) |
+| Image | Source | Type | Where it runs |
+|-------|--------|------|---------------|
+| `stargazer-scrna` | `config.py` (`scrna_env`) | `flyte.TaskEnvironment` | scRNA-seq tasks (`tasks/scrna/`) |
+| `stargazer-gatk` | `config.py` (`gatk_env`) | `flyte.TaskEnvironment` | GATK + alignment tasks (`tasks/gatk/`, `tasks/general/`) |
+| `stargazer-note` | `Dockerfile` (`--target note`) | Marimo notebook | Local `docker run`; hosted via `flyte.serve(note_env)` |
+| `stargazer-chat` | `Dockerfile` (`--target chat`) | Claude Code + OpenCode + MCP | Local `docker run` only |
 
-Lean envs ship only what each task family actually needs so cold-start stays fast. The two heavy envs replace what used to be the multi-stage `Dockerfile` (`note` and `chat` targets) and consolidate the marimo notebook image — there is now exactly one notebook image, declared alongside the task envs.
+Why the split: task images need nothing but Flyte's contract (an entrypoint Flyte injects, a content-hash tag Flyte pins by) — perfectly served by the SDK. Human-runnable images need a real `ENTRYPOINT`, baked-in source, and a stable `:latest` tag — none of which the Flyte Image SDK exposes. Rather than reinvent the Dockerfile via post-build wrapping, we just use a Dockerfile.
 
-Source contributors install Stargazer natively (`uv sync --group dev` + a host-level `mamba install` for bioconda CLIs) — see [Contributing](../guides/contributing.md). The `chat` image carries no `dev` group and no shell extras; it is for end users driving the MCP server through an AI agent.
+`note_env` is the one bridge: it's an `AppEnvironment` declared in `config.py` that consumes the Dockerfile-built `stargazer-note:latest` image as its base. `flyte.serve(note_env)` deploys the notebook UI to a Flyte cluster; locally you'd run the same image via `docker run`. The marimo argv is repeated in `note_env.args` because Flyte's `fserve` bootstrap overrides the image's `ENTRYPOINT` for hosted deploys (it runs `args` after pulling the code bundle declared by `include`).
 
-Shared image layers (mamba + bwa, bwa-mem2, samtools, gatk4) are factored into the module-private `_BIOCONDA_INSTALL` and `_BIOCONDA_PATH` constants so `note_env` and `chat_env` share the bioconda payload without copy-paste.
+### Building locally
 
-### Building and pushing
+Contributor builds stay on the host. Nothing is pushed to a registry — no `docker login` needed, no write access to `ghcr.io/stargazerbio` required. CI is responsible for publishing to `ghcr.io/stargazerbio` on merge to main.
+
+**Flyte task images** (no `registry=` is set on the Flyte Images, so the docker builder falls through to `--load` instead of `--push` — see `docker_builder.py:617-620`):
 
 ```bash
-docker login ghcr.io         # required when image.builder = local
-stargazer-build-images       # builds + pushes scrna, gatk, note, chat (and retags each as :latest)
+stargazer-build-images       # builds scrna and gatk into the local docker cache
 ```
 
 Or per-env via the underlying CLI:
 
 ```bash
 flyte build src/stargazer/config.py scrna_env
-flyte build src/stargazer/config.py note_env
+flyte build src/stargazer/config.py gatk_env
 ```
 
 The builder is selected in `.flyte/config.yaml` — `local` requires a working Docker daemon, `remote` (Union only) builds on the cluster.
 
+**Human-runnable images:**
+
+```bash
+docker build --target note -t ghcr.io/stargazerbio/stargazer-note:latest .
+docker build --target chat -t ghcr.io/stargazerbio/stargazer-chat:latest .
+```
+
+Tag both with the published `ghcr.io/stargazerbio/...` URL even when local-only — `note_env.image` is `Image.from_base("ghcr.io/stargazerbio/stargazer-note:latest")`, so docker resolves it from the local cache by that name when you `flyte.serve(note_env)`. Both targets share a `base` stage with bioconda CLIs (bwa, bwa-mem2, samtools, gatk4), uv, and the synced project venv — so the second `docker build` is mostly cache hits.
+
 ### Adding a tool
 
-When a new task wraps a new CLI tool, layer it onto the `TaskEnvironment` it is decorated against in `config.py`:
+When a new Flyte task wraps a new CLI tool, layer it onto the `TaskEnvironment` it is decorated against in `config.py`:
 
 ```python
 gatk_env = flyte.TaskEnvironment(
@@ -121,7 +131,7 @@ gatk_env = flyte.TaskEnvironment(
 )
 ```
 
-For bioconda installs that should appear in both heavy envs, extend the shared `_BIOCONDA_INSTALL` block.
+For tools that should be available in the human-runnable note/chat images, edit the bioconda block in the Dockerfile's `base` stage instead.
 
 ## Resource Bundles
 
