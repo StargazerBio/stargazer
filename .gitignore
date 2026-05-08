@@ -184,3 +184,4 @@ tests/.secrets/
 
 # Marimo cache
 src/stargazer/notebooks/__marimo__/
+.codex/config.toml

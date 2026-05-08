@@ -15,7 +15,7 @@ Collecting early feedback on direction and architecture. Try the quickstart!
 
 ## Quickstart
 
-- `docker run -it ghcr.io/stargazerbio/stargazer:chat`
+- `docker run -it ghcr.io/stargazerbio/stargazer-chat`
 - "Download the scrna_demo bundle"
 - "Run the scrna workflow"
 
