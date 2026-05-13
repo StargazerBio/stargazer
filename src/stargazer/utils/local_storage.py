@@ -146,14 +146,14 @@ class LocalStorageClient:
         self,
         component: Asset,
         dest: Optional[Path] = None,
-        name: Optional[str] = None,
     ) -> bool:
         """Download a file by CID. Checks cache, then remote, then public gateway.
 
         Args:
-            component: Asset with cid set
+            component: Asset with cid set. When ``component.path`` is set,
+                its filename is used for the local cache file (so the file
+                lands on disk with its real extension).
             dest: Optional destination path (copies file there)
-            name: Optional filename to use instead of the CID
 
         Returns:
             True if the file was already cached, False if freshly downloaded.
@@ -164,8 +164,17 @@ class LocalStorageClient:
 
         cid = component.cid
 
-        # 1. Check local cache by name or CID
-        cache_key = name if name else cid.replace("/", "_")
+        # No usable source: nothing on disk and no CID to fetch from. Fail
+        # fast here rather than hitting the public gateway with an empty CID
+        # (which 500s) or returning False with no file written.
+        if not cid:
+            raise FileNotFoundError(
+                f"Asset has no cid and path does not exist: {component.path}"
+            )
+
+        # 1. Cache filename: prefer the caller-supplied path name (preserves
+        # extension), fall back to the CID for unnamed downloads.
+        cache_key = component.path.name if component.path else cid.replace("/", "_")
         cache_path = self.local_dir / cache_key
 
         if cache_path.exists():
@@ -286,4 +295,24 @@ def get_client() -> "LocalStorageClient":
     return LocalStorageClient()
 
 
-default_client: LocalStorageClient = get_client()
+class _LazyClient:
+    """Lazy singleton proxy for the storage client.
+
+    Why: PINATA_JWT is injected by Flyte just before a task runs, so
+    eagerly constructing the client at module-import time misses the env
+    var and silently degrades to local-only TinyDB. Deferring construction
+    until first attribute access guarantees we see the populated env.
+    """
+
+    _instance: Optional[LocalStorageClient] = None
+
+    def _resolve(self) -> LocalStorageClient:
+        if self._instance is None:
+            self._instance = get_client()
+        return self._instance
+
+    def __getattr__(self, name: str):
+        return getattr(self._resolve(), name)
+
+
+default_client: LocalStorageClient = _LazyClient()  # type: ignore[assignment]

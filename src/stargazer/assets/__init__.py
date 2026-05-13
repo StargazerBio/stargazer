@@ -38,10 +38,19 @@ def specialize(record: dict) -> Asset:
     Looks up the 'asset' key in the record's keyvalues against the registry
     and returns the appropriate subclass instance. Returns a base Asset if
     no matching type is found.
+
+    Pinata query records carry the file's original ``name`` but no local
+    ``path``; we resolve that name against the storage client's local_dir so
+    the eventual download lands on disk with the correct extension (tools
+    like GATK refuse CID-named inputs).
     """
+    from stargazer.utils.local_storage import get_client
+
     kv = record.get("keyvalues", {})
     cid = record.get("cid", "")
     path = record.get("path")
+    if path is None and record.get("name"):
+        path = get_client().local_dir / record["name"]
     cls = ASSET_REGISTRY.get(kv.get("asset", ""))
     if cls is None:
         return Asset(cid=cid, path=path)

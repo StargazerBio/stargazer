@@ -8,11 +8,17 @@ the JWT injected from tests/.secrets/pinata_jwt at runtime.
 import os
 import sys
 from pathlib import Path
-import pytest
-import flyte
 
-import stargazer.utils.local_storage as _storage_mod
-from stargazer.utils.local_storage import LocalStorageClient
+# Strip PINATA_JWT before importing stargazer so the lazy storage client
+# resolves to a local-only LocalStorageClient. Pinata-marked tests inject
+# the JWT at setup and reset the singleton so the next access re-resolves.
+os.environ.pop("PINATA_JWT", None)
+
+import pytest  # noqa: E402
+import flyte  # noqa: E402
+
+import stargazer.utils.local_storage as _storage_mod  # noqa: E402
+from stargazer.utils.local_storage import LocalStorageClient, _LazyClient  # noqa: E402
 
 # Add tests directory to Python path for config imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -32,6 +38,13 @@ def init_flyte_context():
     yield
 
 
+def _reset_default_client() -> None:
+    """Drop the lazy singleton's cached client so the next access re-resolves
+    against current os.environ (toggles PinataClient remote on/off)."""
+    if isinstance(_storage_mod.default_client, _LazyClient):
+        _storage_mod.default_client._instance = None
+
+
 def pytest_runtest_setup(item):
     """Inject PINATA_JWT for tests marked @pytest.mark.pinata.
 
@@ -46,12 +59,14 @@ def pytest_runtest_setup(item):
         if not jwt:
             pytest.skip(f"Pinata JWT file is empty: {jwt_file}")
         os.environ["PINATA_JWT"] = jwt
+        _reset_default_client()
 
 
 def pytest_runtest_teardown(item, nextitem):
     """Remove PINATA_JWT after pinata-marked tests."""
     if item.get_closest_marker("pinata"):
         os.environ.pop("PINATA_JWT", None)
+        _reset_default_client()
 
 
 @pytest.fixture

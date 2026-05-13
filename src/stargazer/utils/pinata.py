@@ -192,19 +192,31 @@ class PinataClient:
         url = f"{self.API_BASE}/files/{self.visibility}"
         params: dict = {"pageLimit": 1000, "order": "DESC"}
 
-        # Add metadata filters using the correct format: metadata[key]=value
+        # Add metadata filters using Pinata's documented format: keyvalues[key]=value
+        # https://docs.pinata.cloud/files/listing-files#keyvalues
         if keyvalues:
             for key, value in keyvalues.items():
-                params[f"metadata[{key}]"] = value
+                params[f"keyvalues[{key}]"] = value
 
+        print(
+            f"[PinataClient.query] visibility={self.visibility} "
+            f"jwt_len={len(self._jwt or '')} url={url} params={params}",
+            flush=True,
+        )
         results: list[dict] = []
         async with aiohttp.ClientSession() as session:
             while True:
                 async with session.get(
                     url, headers=self._headers(), params=params
                 ) as response:
+                    body = await response.text()
+                    print(
+                        f"[PinataClient.query] status={response.status} "
+                        f"body[:400]={body[:400]!r}",
+                        flush=True,
+                    )
                     response.raise_for_status()
-                    data = await response.json()
+                    data = json.loads(body)
 
                     for f in data.get("data", {}).get("files", []):
                         results.append(

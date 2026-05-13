@@ -84,9 +84,14 @@ async def fetch_bundle(bundle_name: str) -> list[dict]:
         if is_local:
             _upsert_local(cid, manifest_kv, name, default_client)
 
-        # Download bytes via standard path (cache → remote → public gateway)
-        comp = Asset(cid=cid)
-        cached = await default_client.download(comp, name=name or None)
+        # Download bytes via standard path (cache → remote → public gateway).
+        # Pre-setting path with the manifest's name lands the file on disk
+        # with its real extension so downstream tools can detect format.
+        comp = Asset(
+            cid=cid,
+            path=default_client.local_dir / name if name else None,
+        )
+        cached = await default_client.download(comp)
 
         results.append(
             {

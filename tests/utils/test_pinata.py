@@ -58,35 +58,23 @@ async def test_upload_and_delete_file():
 @pytest.mark.pinata
 @pytest.mark.asyncio
 async def test_query():
-    """Upload all reference files, query by CID, and verify they match expected CIDs."""
+    """Query Pinata by keyvalues and verify the filter narrows to the right file.
+
+    Uses the build=GRCh38_TP53 keyvalue to pin the result to exactly one file —
+    if the filter is being ignored, this returns more than one and fails.
+    """
     client = PinataClient()
 
-    test_files = [
-        "GRCh38_TP53.fa",
-        "GRCh38_TP53.fa.fai",
-    ]
+    expected_cid = CIDS["GRCh38_TP53.fa"]
 
-    if not all(CIDS.get(f) for f in test_files):
-        pytest.skip(
-            "CIDs not populated for TP53 files. "
-            "Run upload_reference_files.py to upload files and populate CIDs."
-        )
+    found = await client.query({"asset": "reference", "build": "GRCh38_TP53"})
 
-    print("\nQuerying files by keyvalue (type=reference)...")
-    found_files = await client.query({"asset": "reference"})
-    print(found_files)
-
-    assert len(found_files) >= len(test_files), (
-        f"Should find at least {len(test_files)} files, found {len(found_files)}"
+    assert len(found) == 1, (
+        f"Expected exactly 1 file matching build=GRCh38_TP53, got {len(found)}: {found}"
     )
-    print(f"Found {len(found_files)} reference test files")
-
-    found_cids = {f["cid"] for f in found_files}
-    for test_file in test_files:
-        assert CIDS.get(test_file) in found_cids, (
-            f"Uploaded file {test_file} (CID: {CIDS.get(test_file)}) not found in query results"
-        )
-        print(f"Verified {test_file} in query results")
+    assert found[0]["cid"] == expected_cid, (
+        f"CID mismatch: expected {expected_cid}, got {found[0]['cid']}"
+    )
 
 
 @pytest.mark.pinata
