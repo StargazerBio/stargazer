@@ -1,5 +1,5 @@
 scratch/
 __pycache__/
-UNKNOWN.egg-info
+*.egg-info
 .venv/
 .ruff_cache

@@ -37,7 +37,7 @@ RUN uv sync && chown -R ubuntu:ubuntu /stargazer
 FROM base AS note
 USER ubuntu
 RUN flyte create config --local-persistence
-ENTRYPOINT ["marimo", "edit", "src/stargazer/notebooks/byod.py", \
+ENTRYPOINT ["marimo", "edit", "src/stargazer/notebooks/tutorials/scrna_tutorial.py", \
     "--port", "8080", "--host", "0.0.0.0", "--headless", "--no-token"]
 
 # --- Chat target (agentic interface to the MCP server) ---

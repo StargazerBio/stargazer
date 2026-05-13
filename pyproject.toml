@@ -28,7 +28,6 @@ dependencies = [
 [project.scripts]
 stargazer = "stargazer.server:main"
 stargazer-app = "stargazer.app:main"
-stargazer-build-images = "stargazer.build_images:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
