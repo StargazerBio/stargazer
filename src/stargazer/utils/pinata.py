@@ -180,59 +180,46 @@ class PinataClient:
     async def query(self, keyvalues: dict[str, str]) -> list[dict]:
         """Query files by keyvalue metadata from Pinata API.
 
-        Paginates through all results automatically. Queries the private or
-        public file endpoint based on visibility.
+        Checks both private and public Pinata endpoints and merges results
+        by CID so files are found regardless of which network they were
+        uploaded to.
 
         Args:
             keyvalues: Metadata key-value pairs to filter by
 
         Returns:
-            List of matching Asset objects
+            List of matching file records with cid, name, and keyvalues
         """
-        url = f"{self.API_BASE}/files/{self.visibility}"
-        params: dict = {"pageLimit": 1000, "order": "DESC"}
+        seen: dict[str, dict] = {}
+        for visibility in ("private", "public"):
+            url = f"{self.API_BASE}/files/{visibility}"
+            params: dict = {"pageLimit": 1000, "order": "DESC"}
+            if keyvalues:
+                for key, value in keyvalues.items():
+                    params[f"keyvalues[{key}]"] = value
 
-        # Add metadata filters using Pinata's documented format: keyvalues[key]=value
-        # https://docs.pinata.cloud/files/listing-files#keyvalues
-        if keyvalues:
-            for key, value in keyvalues.items():
-                params[f"keyvalues[{key}]"] = value
+            async with aiohttp.ClientSession() as session:
+                while True:
+                    async with session.get(
+                        url, headers=self._headers(), params=params
+                    ) as response:
+                        response.raise_for_status()
+                        data = json.loads(await response.text())
 
-        print(
-            f"[PinataClient.query] visibility={self.visibility} "
-            f"jwt_len={len(self._jwt or '')} url={url} params={params}",
-            flush=True,
-        )
-        results: list[dict] = []
-        async with aiohttp.ClientSession() as session:
-            while True:
-                async with session.get(
-                    url, headers=self._headers(), params=params
-                ) as response:
-                    body = await response.text()
-                    print(
-                        f"[PinataClient.query] status={response.status} "
-                        f"body[:400]={body[:400]!r}",
-                        flush=True,
-                    )
-                    response.raise_for_status()
-                    data = json.loads(body)
+                        for f in data.get("data", {}).get("files", []):
+                            if f["cid"] not in seen:
+                                seen[f["cid"]] = {
+                                    "cid": f["cid"],
+                                    "name": f.get("name", ""),
+                                    "keyvalues": f.get("keyvalues", {}),
+                                }
 
-                    for f in data.get("data", {}).get("files", []):
-                        results.append(
-                            {
-                                "cid": f["cid"],
-                                "name": f.get("name", ""),
-                                "keyvalues": f.get("keyvalues", {}),
-                            }
-                        )
+                        next_token = data.get("data", {}).get("next_page_token")
+                        if not next_token:
+                            break
+                        params["pageToken"] = next_token
 
-                    next_token = data.get("data", {}).get("next_page_token")
-                    if not next_token:
-                        break
-                    params["pageToken"] = next_token
-
-        return results
+        return list(seen.values())
 
     async def delete(self, component: Asset) -> None:
         """Delete a file from Pinata by querying for its internal ID first.

@@ -16,6 +16,7 @@ async def qc_filter(
     min_cells: int = 3,
     max_pct_mt: float = 20.0,
     batch_key: str = "",
+    organism: str = "human",
 ) -> AnnData:
     """Filter low-quality cells and genes from raw scRNA-seq data.
 
@@ -28,6 +29,7 @@ async def qc_filter(
         min_cells: Minimum number of cells a gene must be expressed in
         max_pct_mt: Maximum mitochondrial gene percentage allowed per cell
         batch_key: Column in .obs to use as batch for scrublet (empty = no batch)
+        organism: Organism name ("human" or "mouse") for gene prefix selection
 
     Returns:
         Filtered AnnData asset with QC metrics in .obs
@@ -41,10 +43,15 @@ async def qc_filter(
     sc.pp.filter_cells(ad, min_genes=min_genes)
     sc.pp.filter_genes(ad, min_cells=min_cells)
 
-    # Annotate mitochondrial, ribosomal, and hemoglobin genes
-    ad.var["mt"] = ad.var_names.str.startswith("MT-")
-    ad.var["ribo"] = ad.var_names.str.startswith(("RPS", "RPL"))
-    ad.var["hb"] = ad.var_names.str.contains("^HB[^(P)]")
+    # Annotate mitochondrial, ribosomal, and hemoglobin genes (organism-aware)
+    if organism.lower() == "mouse":
+        ad.var["mt"] = ad.var_names.str.startswith("mt-")
+        ad.var["ribo"] = ad.var_names.str.startswith(("Rps", "Rpl"))
+        ad.var["hb"] = ad.var_names.str.contains("^Hb[^(p)]")
+    else:
+        ad.var["mt"] = ad.var_names.str.startswith("MT-")
+        ad.var["ribo"] = ad.var_names.str.startswith(("RPS", "RPL"))
+        ad.var["hb"] = ad.var_names.str.contains("^HB[^(P)]")
 
     sc.pp.calculate_qc_metrics(
         ad, qc_vars=["mt", "ribo", "hb"], inplace=True, log1p=True

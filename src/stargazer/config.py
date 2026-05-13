@@ -120,7 +120,9 @@ scrna_env = flyte.TaskEnvironment(
         )
         .with_apt_packages("ca-certificates")
         .with_pip_packages("scanpy>=1.12")
+        .with_uv_project(PROJECT_ROOT / "pyproject.toml")
     ),
+    resources=flyte.Resources(memory=("2Gi", "6Gi")),
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,
 )

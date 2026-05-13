@@ -16,6 +16,8 @@ Files are stored on the local filesystem under `STARGAZER_LOCAL` (defaults to `~
 
 Downloads check the local cache first. On a cache miss, the public IPFS gateway is used to fetch the file — no credentials needed for public CIDs.
 
+> **Note — public Pinata files require JWT to query:** Downloading a public CID works without credentials (any IPFS gateway can serve it), but *querying* Pinata's file index — even `/files/public` — requires a JWT. Without `PINATA_JWT`, `assemble()` searches only the local TinyDB; public files pinned to your Pinata account are invisible to it.
+
 ### With JWT
 
 When `PINATA_JWT` is present, a `PinataClient` remote is attached. This enables upload, query, and delete via the Pinata API. `PINATA_VISIBILITY` controls whether files are uploaded to the public or private network:
