@@ -194,13 +194,26 @@ class LocalStorageClient:
                 f"Local file {cid} not found in local directory or database."
             )
 
-        # 3. Remote backend (signed URLs for private visibility)
+        # 3. Remote backend (signed URLs for private visibility).
+        # On 403 (CID is public, or gateway plan limit hit) attempt the public
+        # IPFS gateway. If that also fails, re-raise the original 403 so the
+        # caller sees a meaningful error rather than a gateway timeout.
         if self.remote and self.remote.visibility == "private":
-            await self.remote.download_to(cid, cache_path)
-            self._resolve_dest(component, cache_path, dest)
-            return False
+            try:
+                await self.remote.download_to(cid, cache_path)
+                self._resolve_dest(component, cache_path, dest)
+                return False
+            except aiohttp.ClientResponseError as exc:
+                if exc.status != 403:
+                    raise
+                try:
+                    await self._fetch_public(cid, cache_path)
+                    self._resolve_dest(component, cache_path, dest)
+                    return False
+                except aiohttp.ClientResponseError:
+                    raise exc
 
-        # 4. Public IPFS gateway (default for public visibility or no remote)
+        # 4. Public IPFS gateway (public visibility or no remote)
         await self._fetch_public(cid, cache_path)
         self._resolve_dest(component, cache_path, dest)
         return False

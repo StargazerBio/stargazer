@@ -50,13 +50,9 @@ def list_bundles() -> list[dict]:
 async def fetch_bundle(bundle_name: str) -> list[dict]:
     """Fetch a resource bundle by downloading files by CID.
 
-    In remote mode (JWT set), files are assumed to be registered in Pinata
-    with a ``bundle`` keyvalue. Only bytes are downloaded — no local metadata
-    writes.
-
-    In local mode (no JWT), the manifest's keyvalues are seeded into TinyDB
-    so ``assemble()`` can discover them. Bytes are fetched from the public
-    IPFS gateway.
+    Bundle files are always public; downloads use the public IPFS gateway
+    unconditionally so the fetch works with or without a JWT. TinyDB is
+    seeded so ``assemble()`` can discover assets via local queries.
 
     Args:
         bundle_name: Name of the bundle (matches the 'name' field in a YAML file).
@@ -68,30 +64,25 @@ async def fetch_bundle(bundle_name: str) -> list[dict]:
         ValueError: If the bundle name is not found.
     """
     from stargazer.assets.asset import Asset
-    from stargazer.utils.local_storage import default_client
+    from stargazer.utils.local_storage import LocalStorageClient, default_client
 
     manifest = _load_manifest(bundle_name)
-    is_local = default_client.remote is None
+    # No remote — bundle CIDs are public; bypass any authenticated path.
+    public_client = LocalStorageClient(local_dir=default_client.local_dir)
     results = []
 
     for entry in manifest["files"]:
         cid = entry["cid"]
         manifest_kv = entry["keyvalues"]
-
         name = entry.get("name", "")
 
-        # Local mode: seed TinyDB so assemble() can find these assets
-        if is_local:
-            _upsert_local(cid, manifest_kv, name, default_client)
+        _upsert_local(cid, manifest_kv, name, public_client)
 
-        # Download bytes via standard path (cache → remote → public gateway).
-        # Pre-setting path with the manifest's name lands the file on disk
-        # with its real extension so downstream tools can detect format.
         comp = Asset(
             cid=cid,
-            path=default_client.local_dir / name if name else None,
+            path=public_client.local_dir / name if name else None,
         )
-        cached = await default_client.download(comp)
+        cached = await public_client.download(comp)
 
         results.append(
             {
