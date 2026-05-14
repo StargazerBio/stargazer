@@ -437,18 +437,13 @@ def _(annotated_ads, annotated_assets, mo):
 @app.cell
 def _(mo):
     """Links to the assets and tasks tutorials."""
-    mo.vstack(
-        [
-            mo.md("## Next Steps"),
-            mo.nav_menu(
-                {
-                    "Tutorials": {
-                        "/tutorials/assets_tutorial": "Assets & Types",
-                        "/tutorials/tasks_tutorial": "Tasks & Workflows",
-                    }
-                }
-            ),
-        ]
+    mo.md(
+        """
+        ## Next Steps
+
+        - [Assets & Types](/tutorials/assets_tutorial)
+        - [Tasks & Workflows](/tutorials/tasks_tutorial)
+        """
     )
     return
 

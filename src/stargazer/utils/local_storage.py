@@ -274,17 +274,24 @@ class LocalStorageClient:
             component.path = source
 
     async def _fetch_public(self, cid: str, dest: Path) -> None:
-        """Fetch a file from the public IPFS gateway."""
+        """Fetch a file from the public IPFS gateway.
+
+        Writes to a .tmp sibling first and renames on completion so an
+        interrupted download never leaves a truncated file in the cache.
+        """
         url = f"{self.public_gateway}/ipfs/{cid}"
+        tmp = dest.with_suffix(dest.suffix + ".tmp")
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 response.raise_for_status()
 
                 dest.parent.mkdir(parents=True, exist_ok=True)
-                async with aiofiles.open(dest, "wb") as f:
+                async with aiofiles.open(tmp, "wb") as f:
                     async for chunk in response.content.iter_chunked(8192):
                         await f.write(chunk)
+
+        tmp.rename(dest)
 
 
 def get_client() -> "LocalStorageClient":
