@@ -18,36 +18,17 @@ Deploy hosted to Flyte:
 spec: [docs/architecture/notebook.md](../docs/architecture/notebook.md)
 """
 
-import os
-import signal
-import sys
-from pathlib import Path
 
 import flyte
 
-from stargazer.config import note_env
+from stargazer.config import PROJECT_ROOT, note_env
 
 
 def main():
     """Deploy the Marimo notebook app to Flyte."""
-    flyte.init_from_config(root_dir=Path(__file__).parent)
+    flyte.init_from_config(root_dir=PROJECT_ROOT)
     app = flyte.serve(note_env)
     print(f"App URL: {app.url}")
-
-    def _shutdown(signum, frame):
-        """Handle SIGINT/SIGTERM by killing the entire process group."""
-        pid = app._process.pid
-        try:
-            # Kill the whole process group (marimo + its children)
-            os.killpg(os.getpgid(pid), signal.SIGTERM)
-        except (ProcessLookupError, PermissionError):
-            pass
-        app.deactivate(wait=True)
-        sys.exit(0)
-
-    signal.signal(signal.SIGINT, _shutdown)
-    signal.signal(signal.SIGTERM, _shutdown)
-    app._process.wait()
 
 
 if __name__ == "__main__":

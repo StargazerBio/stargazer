@@ -97,14 +97,6 @@ def log_execution() -> str:
     return execution_id
 
 
-# Image registry / name notes:
-#   No `registry=` is set on the Flyte task images (scrna, gatk) so
-#   `flyte.build_images` builds with `--load` (local docker only, no push).
-#   That keeps contributor flow free of registry credentials. CI is
-#   expected to take over publishing to a hosted registry on merge.
-#   `note_env` consumes a Dockerfile-built image by URL — contributors who
-#   want to run `flyte.serve(note_env)` locally should tag their `--target
-#   note` build with this URL so docker resolves it from the local cache.
 
 
 # scRNA-seq task environment for scanpy-based single-cell analysis.
@@ -169,21 +161,33 @@ gatk_env = flyte.TaskEnvironment(
     secrets=STARGAZER_SECRETS,
 )
 
-# Hosted Marimo notebook UI. Consumes the Dockerfile-built `stargazer-note`
-# image — see the `note` target in `/Dockerfile`. The same image serves
-# local `docker run` (via the image's ENTRYPOINT) and `flyte.serve(note_env)`-
-# hosted production. For the hosted case, k8s container.command is overridden
-# to flyte's `fserve` bootstrap, which runs `args` below after pulling the
-# code bundle declared by `include` — so the marimo argv has to be repeated
-# here even though the image already bakes it.
+# Hosted Marimo tutorial notebook UI. Lean Debian base with only the
+# Python deps required by the tutorial workflows (marimo, flyte, scanpy,
+# matplotlib, numpy, and the stargazer package) — no conda/bioconda tools.
+# For the hosted case, k8s container.command is overridden to flyte's
+# `fserve` bootstrap, which runs `args` below after pulling the code bundle
+# declared by `include` — so the marimo argv has to be repeated here even
+# though the image bakes it.
 note_env = flyte.app.AppEnvironment(
     name="stargazer-notebooks",
-    description="Marimo notebook UI; consumes the Dockerfile-built stargazer-note image",
-    image=flyte.Image.from_base("ghcr.io/stargazerbio/stargazer-note:latest"),
+    description="Marimo tutorial UI; lean Debian base, no bioconda tooling",
+    image=(
+        flyte.Image.from_debian_base(
+            name="stargazer-note",
+            registry=os.environ["STARGAZER_REGISTRY"],
+            platform=("linux/amd64", "linux/arm64"),
+        )
+        .with_apt_packages("ca-certificates", "git")
+        .with_uv_project(
+            PROJECT_ROOT / "pyproject.toml",
+            project_install_mode="install_project",
+        )
+        .with_commands(["flyte create config --local-persistence"])
+    ),
     args=[
         "marimo",
         "edit",
-        "src/stargazer/notebooks/byod.py",
+        "src/stargazer/notebooks/tutorials/scrna_tutorial.py",
         "--port",
         "8080",
         "--host",
@@ -192,7 +196,7 @@ note_env = flyte.app.AppEnvironment(
         "--no-token",
     ],
     port=8080,
-    include=["src/stargazer/notebooks/"],
+    include=["notebooks/"],
     requires_auth=False,
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,
