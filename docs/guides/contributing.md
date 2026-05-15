@@ -19,6 +19,12 @@ You now have:
 
 If you don't have mamba/conda on your host, install [miniforge](https://github.com/conda-forge/miniforge) first. The bioconda step is skippable if you only intend to work on `scrna` tasks (pure Python) or the MCP server.
 
+## Running on the Devbox
+
+Use `flyte start devbox` to spin up a local Flyte cluster for development. See the [official devbox docs](https://www.union.ai/docs/v2/flyte/user-guide/run-modes/running-devbox/) for setup instructions.
+
+This environment is much closer to production and lets you actually test your task and app environments.
+
 ## Running Tests
 
 ```bash
