@@ -1,5 +1,6 @@
 scratch/
 __pycache__/
+__marimo__/
 *.egg-info
 .venv/
 .ruff_cache
