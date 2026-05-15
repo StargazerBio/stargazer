@@ -64,11 +64,10 @@ async def fetch_bundle(bundle_name: str) -> list[dict]:
         ValueError: If the bundle name is not found.
     """
     from stargazer.assets.asset import Asset
-    from stargazer.utils.local_storage import LocalStorageClient, default_client
+    from stargazer.utils.local_storage import default_client
 
     manifest = _load_manifest(bundle_name)
-    # No remote — bundle CIDs are public; bypass any authenticated path.
-    public_client = LocalStorageClient(local_dir=default_client.local_dir)
+    client = default_client
     results = []
 
     for entry in manifest["files"]:
@@ -76,13 +75,14 @@ async def fetch_bundle(bundle_name: str) -> list[dict]:
         manifest_kv = entry["keyvalues"]
         name = entry.get("name", "")
 
-        _upsert_local(cid, manifest_kv, name, public_client)
+        if not client.remote:
+            _upsert_local(cid, manifest_kv, name, client)
 
         comp = Asset(
             cid=cid,
-            path=public_client.local_dir / name if name else None,
+            path=client.local_dir / name if name else None,
         )
-        cached = await public_client.download(comp)
+        cached = await client.download(comp)
 
         results.append(
             {
