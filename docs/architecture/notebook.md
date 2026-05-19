@@ -48,7 +48,7 @@ Notebooks are free to experiment, prototype, and visualize — but they are neve
 1. Create a new `.py` file in `src/stargazer/notebooks/`
 2. Use the standard Marimo format: `import marimo`, `app = marimo.App()`, `@app.cell`
 3. Import from `stargazer` public APIs (tasks, workflows, types, utils)
-4. To include in the deployed app, update the `include` list in `stargazer.config.note_env` (the `AppEnvironment` that backs the notebook server) — it pulls the listed paths into the code bundle that `fserve` mounts at runtime. To change which notebook the entrypoint opens, edit the `note` target's `ENTRYPOINT` in the project `Dockerfile` (and `note_env.args` in `config.py` to keep hosted deploys aligned).
+4. To include in the deployed app, update the `include` list on `app.notebook_app.notebook_env` (the `AppEnvironment` deployed per user by the admin app — see [App architecture](app.md)) — it pulls the listed paths into the code bundle that `fserve` mounts at runtime. To change which notebook the entrypoint opens, edit `_NOTEBOOK_PATH_IN_IMAGE` in `app/notebook_app.py` (and the matching `ENTRYPOINT` in the `note` target of the project `Dockerfile` if you want `docker run` to default to it too).
 
 ## Packaging Boundary
 

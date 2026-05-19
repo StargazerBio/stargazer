@@ -88,6 +88,7 @@ The `spec:` line is **module-level only** — class and function docstrings do n
 
 - **`.opencode/reference/flyte_v2_docs.md`** - Official Flyte v2 documentation
 - **`.opencode/reference/sdk_examples_concise.md`** - Flyte SDK v2 examples
+- **`.opencode/reference/devbox_workarounds.md`** - Known devbox-specific quirks and workarounds (signed-URL host, App pod secrets webhook, in-cluster init, rustfs DNS, node memory budget, code-bundle non-Python assets). Check first when deploying/debugging against the local devbox cluster. Append any new devbox quirk you diagnose.
 - **`.opencode/reference/tool_refs/`** - Bioinformatics tool documentation, use as the source of truth for tool parameters and behavior
 - **`docs/`** - Project documentation (architecture, guides, reference)
   - **Critical**: Docs must be updated as the project evolves to stay in sync with the current state

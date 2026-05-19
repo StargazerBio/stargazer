@@ -35,6 +35,7 @@ RUN uv sync && chown -R ubuntu:ubuntu /stargazer
 # Same image serves local `docker run` and hosted production via
 # `flyte.serve(note_env)` (note_env consumes this image as its base).
 FROM base AS note
+RUN uv sync --extra notebook && chown -R ubuntu:ubuntu /stargazer
 USER ubuntu
 RUN flyte create config --local-persistence
 ENTRYPOINT ["marimo", "edit", "src/stargazer/notebooks/tutorials/scrna_tutorial.py", \

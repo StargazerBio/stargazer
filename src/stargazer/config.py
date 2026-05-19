@@ -5,10 +5,8 @@ Sets environment variable defaults at import time. Consumers read
 os.environ directly rather than importing named values from this module.
 
 Also the source of truth for the lean per-task Flyte environments
-(`scrna_env`, `gatk_env`) and the thin AppEnvironment that hosts the
-Marimo notebook UI (`note_env`). The human-runnable images (note, chat)
-are built from the project's `Dockerfile` — `note_env` consumes the
-pre-built `stargazer-note` image as its base.
+(`scrna_env`, `gatk_env`). The user-facing AppEnvironment lives in
+`infra/app.py` alongside the FastAPI application it deploys.
 
 Rules:
 - PINATA_JWT: No default — absence means no authenticated Pinata.
@@ -29,7 +27,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import flyte
-import flyte.app
 from loguru import logger as logger  # noqa: PLC0414
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -161,43 +158,3 @@ gatk_env = flyte.TaskEnvironment(
     secrets=STARGAZER_SECRETS,
 )
 
-# Hosted Marimo tutorial notebook UI. Lean Debian base with only the
-# Python deps required by the tutorial workflows (marimo, flyte, scanpy,
-# matplotlib, numpy, and the stargazer package) — no conda/bioconda tools.
-# For the hosted case, k8s container.command is overridden to flyte's
-# `fserve` bootstrap, which runs `args` below after pulling the code bundle
-# declared by `include` — so the marimo argv has to be repeated here even
-# though the image bakes it.
-note_env = flyte.app.AppEnvironment(
-    name="stargazer-notebooks",
-    description="Marimo tutorial UI; lean Debian base, no bioconda tooling",
-    image=(
-        flyte.Image.from_debian_base(
-            name="stargazer-note",
-            registry=os.environ["STARGAZER_REGISTRY"],
-            platform=("linux/amd64", "linux/arm64"),
-        )
-        .with_apt_packages("ca-certificates", "git")
-        .with_uv_project(
-            PROJECT_ROOT / "pyproject.toml",
-            project_install_mode="install_project",
-        )
-        .with_commands(["flyte create config --local-persistence"])
-    ),
-    args=[
-        "marimo",
-        "edit",
-        "src/stargazer/notebooks/tutorials/scrna_tutorial.py",
-        "--port",
-        "8080",
-        "--host",
-        "0.0.0.0",
-        "--headless",
-        "--no-token",
-    ],
-    port=8080,
-    include=["notebooks/"],
-    requires_auth=False,
-    env_vars=STARGAZER_ENV_VARS,
-    secrets=STARGAZER_SECRETS,
-)

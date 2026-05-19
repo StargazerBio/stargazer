@@ -87,12 +87,12 @@ Stargazer ships four container images on `ghcr.io/stargazerbio`. They split alon
 |-------|--------|------|---------------|
 | `stargazer-scrna` | `config.py` (`scrna_env`) | `flyte.TaskEnvironment` | scRNA-seq tasks (`tasks/scrna/`) |
 | `stargazer-gatk` | `config.py` (`gatk_env`) | `flyte.TaskEnvironment` | GATK + alignment tasks (`tasks/gatk/`, `tasks/general/`) |
-| `stargazer-note` | `Dockerfile` (`--target note`) | Marimo notebook | Local `docker run`; hosted via `flyte.serve(note_env)` |
+| `stargazer-note` | `Dockerfile` (`--target note`) | Marimo notebook | Local `docker run`; hosted via `app.notebook_app.notebook_env` |
 | `stargazer-chat` | `Dockerfile` (`--target chat`) | Claude Code + OpenCode + MCP | Local `docker run` only |
 
 Why the split: task images need nothing but Flyte's contract (an entrypoint Flyte injects, a content-hash tag Flyte pins by) — perfectly served by the SDK. Human-runnable images need a real `ENTRYPOINT`, baked-in source, and a stable `:latest` tag — none of which the Flyte Image SDK exposes. Rather than reinvent the Dockerfile via post-build wrapping, we just use a Dockerfile.
 
-`note_env` is the one bridge: it's an `AppEnvironment` declared in `config.py` that consumes the Dockerfile-built `stargazer-note:latest` image as its base. `flyte.serve(note_env)` deploys the notebook UI to a Flyte cluster; locally you'd run the same image via `docker run`. The marimo argv is repeated in `note_env.args` because Flyte's `fserve` bootstrap overrides the image's `ENTRYPOINT` for hosted deploys (it runs `args` after pulling the code bundle declared by `include`).
+`notebook_env` (defined in `app/notebook_app.py`, see [App architecture](app.md)) is the bridge for hosted deploys: it's an `AppEnvironment` whose `image` is the string URI `stargazer-note:latest`, deployed once per user project by the admin app. The marimo argv is repeated in `notebook_env.args` because Flyte's `fserve` bootstrap overrides the image's `ENTRYPOINT` for hosted deploys.
 
 ### Building locally
 
@@ -120,7 +120,7 @@ docker build --target note -t ghcr.io/stargazerbio/stargazer-note:latest .
 docker build --target chat -t ghcr.io/stargazerbio/stargazer-chat:latest .
 ```
 
-Tag both with the published `ghcr.io/stargazerbio/...` URL even when local-only — `note_env.image` is `Image.from_base("ghcr.io/stargazerbio/stargazer-note:latest")`, so docker resolves it from the local cache by that name when you `flyte.serve(note_env)`. Both targets share a `base` stage with bioconda CLIs (bwa, bwa-mem2, samtools, gatk4), uv, and the synced project venv — so the second `docker build` is mostly cache hits.
+Tag both with the published `ghcr.io/stargazerbio/...` URL even when local-only — `notebook_env.image` references that URL string, so docker resolves it from the local cache by that name when the cluster pulls it. For devbox the same image is pushed to `localhost:30000` (the in-cluster registry); `app.admin_app:main` handles the build-and-push step as part of `python -m app.admin_app`. Both `note` and `chat` targets share a `base` stage with bioconda CLIs (bwa, bwa-mem2, samtools, gatk4), uv, and the synced project venv — so the second `docker build` is mostly cache hits.
 
 ### Adding a tool
 
