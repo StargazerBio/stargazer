@@ -1,9 +1,5 @@
 # API Reference
 
-## App
-
-::: stargazer.app
-
 ## Config
 
 ::: stargazer.config
