@@ -9,8 +9,9 @@ then forwards HTTP + websocket traffic to marimo on `127.0.0.1:8081`.
 Two reserved paths the proxy handles itself instead of forwarding:
 
 - `GET  /__sg__/workspace/list` — directory listing of the user's
-  workspace from the locally-mounted PVC. Admin app queries this on
-  dashboard render so workspace state is read straight off disk.
+  workspace from the pod-local `/workspace` clone of their fork. Admin
+  app queries this on dashboard render so workspace state is read
+  straight off disk.
 - `POST /__sg__/workspace/sync` — `git add` + `git commit` + `git push`
   against the user's fork using the `GITHUB_TOKEN`/`FORK_OWNER` baked
   into env_vars at deploy time. Called by the launch script's SIGTERM

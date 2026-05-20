@@ -5,9 +5,9 @@ Two-app architecture:
 
 - `app.admin_app.app_env` — shared FastAPI service. Hosts the
   unauthenticated landing + GitHub OAuth, runs per-user provisioning
-  (Flyte project + workspace PVC + GitHub fork), renders the post-login
-  dashboard tile grid, and brokers Edit/Run clicks into per-notebook
-  apps via `app.per_notebook.per_notebook_env(...)`.
+  (Flyte project + GitHub fork), renders the post-login dashboard tile
+  grid, and brokers Edit/Run clicks into per-notebook apps via
+  `app.per_notebook.per_notebook_env(...)`.
 - `app.per_notebook.per_notebook_env(...)` — factory for per-notebook
   AppEnvironments, spawned by the admin app's `/launch` handler. The
   image is `stargazer-note` (uv + marimo + system tools + cookie-

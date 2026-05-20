@@ -5,14 +5,14 @@ Shared, single deployment. Handles three roles in one FastAPI service:
 
 1. **Unauthenticated landing + GitHub OAuth.** Users sign in with GitHub;
    the callback forks the upstream stargazer repo into their account,
-   ensures their Flyte project + workspace PVC exist, then drops them
-   onto the dashboard.
+   ensures their Flyte project exists, then drops them onto the
+   dashboard.
 
 2. **Per-user dashboard.** Renders three sections of notebook tiles —
    Tutorials, Community (both shipped in the per-notebook image),
-   Workspace (lives on the user's per-user PVC and is listed either via
-   a running per-notebook pod or, as a cold-case fallback, via the
-   GitHub Contents API).
+   Workspace (lives in the user's GitHub fork and is listed either via
+   a running per-notebook pod's local clone or, as a cold-case fallback,
+   via the GitHub Contents API).
 
 3. **Launch broker.** `POST /launch?slug=…&mode=…` builds a per-notebook
    AppEnvironment via `app.per_notebook.per_notebook_env(...)`, serves
