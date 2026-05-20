@@ -18,3 +18,9 @@ repos:
         language: system
         pass_filenames: false
         files: ^(docs/.*\.md|src/.*\.py|app/.*\.py|zensical\.toml|pyproject\.toml)$
+      - id: mcp-server-import
+        name: mcp server import check
+        entry: uv run --extra mcp python -c "from stargazer.server import mcp"
+        language: system
+        pass_filenames: false
+        files: ^(src/stargazer/(server|registry|marshal)\.py|src/stargazer/assets/.*\.py|pyproject\.toml)$

@@ -1,35 +1,30 @@
 """
-### Per-user Flyte project provisioning.
+### Per-user provisioning called from the admin app's OAuth callback.
 
-On each GitHub login, ensure a `sg-<github-username>` Flyte project exists
-and deploy the user's own marimo notebook into it. Project creation is
-idempotent (existence check via `Project.get.aio` first); the notebook
-`serve.aio()` is re-run every login — Flyte/Knative roll a new revision.
+One idempotent step per login: ensure the user's Flyte project
+(`sg-<username>`) exists. Workspace state used to live on a per-user
+PVC, but Flyte v2 doesn't support pod templates on AppEnvironments yet,
+so we hold workspace state in each per-notebook pod's ephemeral
+storage and push back to the user's GitHub fork on shutdown.
 
-The Flyte v2 docs claim the Python SDK provides read-only access to
-projects, but `flyte.remote.Project.create()` exists and works (the
-`flyte create project` CLI just wraps the same gRPC call). We use the SDK
-directly because the CLI subprocess does not inherit the in-pod
-`_U_EP_OVERRIDE` init context and fails with `InitializationError`.
+We use `flyte.remote.Project.create()` directly because shelling out to 
+`flyte create project` from the admin pod fails:
+the subprocess does not inherit the pod's `_U_EP_OVERRIDE` init context
+and `ensure_client()` raises before any work is done. See
+`.opencode/reference/devbox_workarounds.md`.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import re
 
-import flyte
 from flyte.remote import Project
 
 from stargazer.config import logger
 
-from app.notebook_app import notebook_env
-
-
-DOMAIN = "development"
-
 
 def sanitize_project_id(github_username: str) -> str:
-    """Convert a GitHub username to a valid Flyte project id.
+    """Convert a GitHub username to a valid Flyte project / k8s namespace id.
 
     Lowercases, replaces invalid characters with hyphens, collapses runs,
     and prefixes `sg-` to avoid colliding with system projects.
@@ -51,30 +46,15 @@ async def _ensure_project(project_id: str, github_username: str) -> None:
     logger.info(f"Creating project {project_id!r} for {github_username!r}")
     await Project.create.aio(
         id=project_id,
-        name=f"Stargazer: {github_username}",
+        name=github_username,
         description=f"Per-user notebook workspace for GitHub user {github_username}",
         labels={"managed-by": "stargazer-landing", "github-user": github_username},
     )
 
 
-async def provision_user(github_username: str) -> str:
-    """Ensure project + notebook app for the user; return the notebook URL."""
+async def provision_user(*, github_username: str) -> None:
+    """Ensure the user's Flyte project exists. Idempotent."""
     project_id = sanitize_project_id(github_username)
     logger.info(f"Provisioning {github_username!r} → project {project_id!r}")
-
     await _ensure_project(project_id, github_username)
-
-    # Bake the user's project into the notebook pod's env so the tutorial can
-    # call `flyte.init_in_cluster(project=..., domain=...)` and submit runs
-    # to the right project. `with_servecontext(project=...)` controls where
-    # the App pod is deployed, not what its in-pod client points at.
-    notebook_env.env_vars["FLYTE_PROJECT"] = project_id
-
-    app = await flyte.with_servecontext(project=project_id, domain=DOMAIN).serve.aio(
-        notebook_env
-    )
-
-    # `App.endpoint` is the user-facing public URL; `App.url` is the in-cluster
-    # Flyte console URL (mis-named in the SDK).
-    logger.info(f"Provisioned {github_username!r}: {app.endpoint}")
-    return app.endpoint
+    logger.info(f"Provisioned {github_username!r}")

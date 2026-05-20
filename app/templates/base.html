@@ -13,8 +13,9 @@
             color: #c9d1d9;
             min-height: 100vh;
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: center;
+            padding: 2rem 1rem;
         }
         .card {
             background: #161b22;
@@ -25,22 +26,51 @@
             width: 100%;
             text-align: center;
         }
+        .dashboard {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 2rem 2.5rem;
+            max-width: 1100px;
+            width: 100%;
+        }
         h1 { color: #f0f6fc; margin-bottom: 0.5rem; font-size: 1.6rem; }
-        p { margin-bottom: 1.5rem; line-height: 1.5; font-size: 0.95rem; }
+        h2 { color: #f0f6fc; margin: 1.5rem 0 0.75rem; font-size: 1.15rem; }
+        h3 { color: #f0f6fc; margin-bottom: 0.25rem; font-size: 1rem; }
+        p { margin-bottom: 1rem; line-height: 1.5; font-size: 0.95rem; }
+        section { margin-bottom: 1.5rem; }
+        code { background: #0d1117; padding: 0.1rem 0.3rem; border-radius: 4px; font-size: 0.85rem; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 0.75rem;
+        }
+        .tile {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: left;
+        }
+        .tile p { font-size: 0.85rem; color: #8b949e; margin-bottom: 0.75rem; min-height: 2.5em; }
+        .empty { font-size: 0.85rem; color: #8b949e; }
         .btn {
             display: inline-block;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
+            padding: 0.4rem 0.9rem;
+            border-radius: 6px;
             text-decoration: none;
             font-weight: 600;
-            font-size: 0.95rem;
+            font-size: 0.85rem;
+            border: none;
+            cursor: pointer;
             transition: opacity 0.15s;
+            margin-right: 0.3rem;
         }
         .btn:hover { opacity: 0.85; }
         .btn-github { background: #238636; color: #fff; }
         .btn-notebook { background: #1f6feb; color: #fff; }
         .user-info {
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
             font-size: 0.9rem;
             color: #8b949e;
         }
@@ -60,8 +90,6 @@
     </style>
 </head>
 <body>
-    <div class="card">
-        $body
-    </div>
+    $body
 </body>
 </html>

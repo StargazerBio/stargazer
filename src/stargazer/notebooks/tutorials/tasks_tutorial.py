@@ -1,3 +1,13 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "marimo",
+#   "stargazer",
+# ]
+#
+# [tool.uv.sources]
+# stargazer = { path = "/stargazer", editable = true }
+# ///
 """
 ### Stargazer tasks and workflows tutorial.
 

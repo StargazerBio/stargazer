@@ -1,3 +1,16 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "marimo",
+#   "matplotlib",
+#   "scanpy>=1.12",
+#   "anndata",
+#   "stargazer",
+# ]
+#
+# [tool.uv.sources]
+# stargazer = { path = "/stargazer", editable = true }
+# ///
 """
 ### Stargazer scRNA-seq preprocessing tutorial.
 

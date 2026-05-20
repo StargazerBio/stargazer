@@ -2,8 +2,13 @@
 ### HTML template loaders.
 
 Reads templates from `app/templates/` and substitutes placeholders using
-`string.Template` (`$name` syntax — leaves CSS `{...}` untouched). No Jinja
-dependency; templates are loaded once at module import.
+`string.Template` (`$name` syntax — leaves CSS `{...}` untouched). Two
+helpers in play:
+
+- `login_html()` — admin app's unauthenticated landing page.
+- `dashboard_html(username, body)` — admin app's post-login dashboard
+  chrome; `body` is the three-section tile grid rendered by
+  `app.admin_app._render_tiles(...)`.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -16,7 +21,6 @@ _TEMPLATES = Path(__file__).parent / "templates"
 _BASE = Template((_TEMPLATES / "base.html").read_text())
 _LOGIN_BODY = (_TEMPLATES / "login.html").read_text()
 _DASHBOARD_BODY = Template((_TEMPLATES / "dashboard.html").read_text())
-_PROVISIONING_BODY = Template((_TEMPLATES / "provisioning.html").read_text())
 
 
 def login_html() -> str:
@@ -24,16 +28,10 @@ def login_html() -> str:
     return _BASE.substitute(title="Sign In", body=_LOGIN_BODY)
 
 
-def dashboard_html(github_username: str, notebook_url: str) -> str:
-    """Post-login dashboard linking to the user's per-project notebook."""
-    body = _DASHBOARD_BODY.substitute(
+def dashboard_html(github_username: str, body: str) -> str:
+    """Wrap the dashboard's tile grid in the shared chrome."""
+    rendered = _DASHBOARD_BODY.substitute(
         github_username=github_username,
-        notebook_url=notebook_url,
+        body=body,
     )
-    return _BASE.substitute(title="Dashboard", body=body)
-
-
-def provisioning_html(github_username: str) -> str:
-    """Interim page shown while the user's notebook app is being deployed."""
-    body = _PROVISIONING_BODY.substitute(github_username=github_username)
-    return _BASE.substitute(title="Setting Up", body=body)
+    return _BASE.substitute(title="Dashboard", body=rendered)

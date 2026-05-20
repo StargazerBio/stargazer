@@ -3246,26 +3246,32 @@ dependencies = [
 all = [
     { name = "anndata" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "igraph" },
     { name = "itsdangerous" },
     { name = "marimo" },
     { name = "mcp", extra = ["cli"] },
     { name = "mkdocstrings", extra = ["python"] },
     { name = "pooch" },
+    { name = "python-multipart" },
     { name = "scanpy" },
     { name = "scikit-image" },
     { name = "uvicorn" },
+    { name = "websockets" },
 ]
 app = [
     { name = "anndata" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "igraph" },
     { name = "itsdangerous" },
     { name = "marimo" },
     { name = "pooch" },
+    { name = "python-multipart" },
     { name = "scanpy" },
     { name = "scikit-image" },
     { name = "uvicorn" },
+    { name = "websockets" },
 ]
 bio = [
     { name = "anndata" },
@@ -3279,8 +3285,11 @@ docs = [
 ]
 landing = [
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "itsdangerous" },
+    { name = "python-multipart" },
     { name = "uvicorn" },
+    { name = "websockets" },
 ]
 mcp = [
     { name = "mcp", extra = ["cli"] },
@@ -3312,6 +3321,7 @@ requires-dist = [
     { name = "anndata", marker = "extra == 'bio'", specifier = ">=0.12.10" },
     { name = "fastapi", marker = "extra == 'landing'", specifier = ">=0.115" },
     { name = "flyte", extras = ["tui"], specifier = ">=2.0.3" },
+    { name = "httpx", marker = "extra == 'landing'", specifier = ">=0.27" },
     { name = "igraph", marker = "extra == 'bio'", specifier = ">=1.0.0" },
     { name = "itsdangerous", marker = "extra == 'landing'", specifier = ">=2.1" },
     { name = "loguru", specifier = ">=0.7.3" },
@@ -3319,6 +3329,7 @@ requires-dist = [
     { name = "mcp", extras = ["cli"], marker = "extra == 'mcp'", specifier = ">=1.0.0" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=1.0.3" },
     { name = "pooch", marker = "extra == 'bio'", specifier = ">=1.9.0" },
+    { name = "python-multipart", marker = "extra == 'landing'", specifier = ">=0.0.9" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "scanpy", marker = "extra == 'bio'", specifier = ">=1.12" },
     { name = "scikit-image", marker = "extra == 'bio'", specifier = ">=0.26.0" },
@@ -3327,6 +3338,7 @@ requires-dist = [
     { name = "stargazer", extras = ["notebook", "mcp", "landing", "docs"], marker = "extra == 'all'" },
     { name = "tinydb", specifier = ">=4.8.2" },
     { name = "uvicorn", marker = "extra == 'landing'", specifier = ">=0.34" },
+    { name = "websockets", marker = "extra == 'landing'", specifier = ">=12" },
 ]
 provides-extras = ["bio", "notebook", "mcp", "landing", "docs", "app", "all"]
 

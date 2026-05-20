@@ -22,7 +22,6 @@ import flyte
 from mcp.server.fastmcp import FastMCP
 
 import stargazer.config  # ensure env var defaults are set  # noqa: F401
-from stargazer.init import init
 from stargazer.marshal import marshal_output
 from stargazer.registry import TaskInfo, TaskRegistry
 from stargazer.assets import ASSET_REGISTRY
@@ -78,7 +77,7 @@ def _is_list_asset_hint(hint: Any) -> bool:
 
 mcp = FastMCP("stargazer")
 
-init()
+flyte.init_from_config()
 _registry = TaskRegistry()
 
 # ---------------------------------------------------------------------------

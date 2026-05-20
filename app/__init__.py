@@ -1,13 +1,27 @@
 """
 ### Stargazer deployment infrastructure.
 
-Two Flyte AppEnvironments:
-- `app.admin_app.app_env` — shared FastAPI landing/OAuth/provisioning service
-- `app.notebook_app.notebook_env` — per-user marimo notebook env, deployed once per user project by the admin app
+Two-app architecture:
 
-Plus supporting modules: `oauth`, `session`, `templates`, `provision`,
-`init`. Lives outside `src/stargazer` because it is deployment glue, not
-part of the bioinformatics SDK.
+- `app.admin_app.app_env` — shared FastAPI service. Hosts the
+  unauthenticated landing + GitHub OAuth, runs per-user provisioning
+  (Flyte project + workspace PVC + GitHub fork), renders the post-login
+  dashboard tile grid, and brokers Edit/Run clicks into per-notebook
+  apps via `app.per_notebook.per_notebook_env(...)`.
+- `app.per_notebook.per_notebook_env(...)` — factory for per-notebook
+  AppEnvironments, spawned by the admin app's `/launch` handler. The
+  image is `stargazer-note` (uv + marimo + system tools + cookie-
+  validating reverse proxy); the proxy serves `/__sg__/workspace/list`
+  off the pod's local `/workspace` directory (cloned from the user's
+  fork on startup) and `/__sg__/workspace/sync` pushes edits back to
+  the fork. Persistence is the GitHub fork itself; per-notebook pods
+  are working copies. No PVC — Flyte v2 doesn't yet support pod
+  templates on AppEnvironments.
+
+Plus supporting modules: `oauth`, `github`, `notebooks`, `proxy`,
+`session`, `templates`, `provision`, `init`. Lives outside
+`src/stargazer` because it is deployment glue, not part of the
+bioinformatics SDK.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """

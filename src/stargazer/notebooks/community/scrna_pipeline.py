@@ -1,9 +1,23 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "marimo",
+#   "matplotlib",
+#   "numpy",
+#   "scanpy>=1.12",
+#   "anndata",
+#   "stargazer",
+# ]
+#
+# [tool.uv.sources]
+# stargazer = { path = "/stargazer", editable = true }
+# ///
 """
-### Getting Started with Stargazer.
+### Stargazer scRNA-seq production pipeline.
 
-Interactive notebook for exploring the scRNA-seq clustering pipeline.
-Load demo data, tune parameters, run tasks step-by-step, and visualize
-results at each stage.
+Multi-sample fan-out preprocessing plus interactive clustering, side-by-side
+UMAPs, and marker-gene tables. The community-tier counterpart of the
+preprocessing tutorial — same primitives, full-fat workflow.
 
 spec: [docs/architecture/notebook.md](../../docs/architecture/notebook.md)
 """

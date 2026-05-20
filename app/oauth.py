@@ -20,12 +20,14 @@ GITHUB_USER_URL = "https://api.github.com/user"
 def github_auth_url(client_id: str, redirect_uri: str, state: str) -> str:
     """Build the GitHub OAuth authorization URL.
 
-    Requests read:user scope to access the authenticated user's profile.
+    Requests `read:user` for profile access and `public_repo` so the token
+    can fork the upstream stargazer repo into the user's account and push
+    workspace edits back to it.
     """
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
-        "scope": "read:user",
+        "scope": "read:user public_repo",
         "state": state,
     }
     return f"{GITHUB_AUTHORIZE_URL}?{urllib.parse.urlencode(params)}"
