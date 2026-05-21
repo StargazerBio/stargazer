@@ -10,7 +10,7 @@ When the user clicks **Edit** or **Run** on any tile in the admin app's dashboar
 2. Spawns a **per-notebook app** in the user's Flyte project (a `flyte.app.AppEnvironment` deployed via `serve.aio`), idempotent per `(user_project, slug, mode)`.
 3. Redirects the user to that app's public URL.
 
-Each per-notebook app uses a **shared static base image** with `uv`, `marimo`, and system bioinformatics tools — but **no Python project deps**. Python deps are declared in the notebook's PEP 723 inline metadata and provisioned at boot by `marimo {edit|run} --sandbox <path>`. Per [`reference/marimo/inlining_dependencies.md`](../reference/marimo/inlining_dependencies.md).
+Each per-notebook app uses a **shared static image** with `uv`, `marimo`, and system bioinformatics tools — but **no Python project deps**. The image is built programmatically by `app.per_notebook.notebook_app_img` (a `flyte.Image` named `notebook-app`); `flyte.build(notebook_app_img)` is called once at admin-app deploy time so it's pushed to `STARGAZER_REGISTRY` before any user clicks Edit/Run. Python deps are declared in the notebook's PEP 723 inline metadata and provisioned at boot by `marimo {edit|run} --sandbox <path>`. Per [`reference/marimo/inlining_dependencies.md`](../reference/marimo/inlining_dependencies.md).
 
 ## Architecture
 
@@ -38,17 +38,20 @@ Each per-notebook app uses a **shared static base image** with `uv`, `marimo`, a
        └─────────────────────────────────────────────────┘
 ```
 
-### Shared base image
+### Shared image (programmatic `flyte.Image`)
 
-Dockerfile `note` target. Contents:
-- Ubuntu + curl/git/ca-certificates.
-- `uv` and `uvx`.
-- `mamba`/conda for bioinformatics: BWA, BWA-MEM2, samtools, GATK4.
+Defined in `app/per_notebook.py` as `notebook_app_img` (image name `notebook-app`). Built and pushed to `STARGAZER_REGISTRY` by `flyte.build(notebook_app_img)` from the admin-app deploy entrypoint. Contents (layered onto `flyte.Image.from_debian_base`):
+- `ca-certificates`, `curl`, `git`, `bzip2`.
+- `micromamba` + bioconda tools: BWA, BWA-MEM2, samtools, GATK4 — system-level so subprocess calls from inside each notebook's sandbox venv can reach them.
+- `uv` and `uvx` (marimo `--sandbox` needs uv to provision per-notebook venvs).
 - `marimo` installed at the system level (so the entrypoint can launch it; the `--sandbox` venv it spawns is separate).
 - Web deps for the proxy + uvicorn (`fastapi`, `uvicorn`, `itsdangerous`, `httpx`, `websockets`).
+- `app/proxy.py` baked at `/usr/local/lib/app/proxy.py`; `app/launch-notebook.sh` baked at `/usr/local/bin/launch-notebook.sh`.
 - **No `with_uv_project()`** — the stargazer package is NOT installed into the system Python. Each notebook's PEP 723 metadata declares stargazer as a dep.
 
-The image is a one-time build per upstream change (system tools rarely move); Python dep churn happens inside per-notebook sandbox venvs, no image rebuild needed.
+The local Dockerfile `note` target is now a thin marimo-only image for `docker run` exploration; it does NOT back the hosted apps.
+
+The hosted image is a one-time build per upstream change (system tools rarely move); Python dep churn happens inside per-notebook sandbox venvs, no image rebuild needed.
 
 ### App spec factory
 
@@ -170,7 +173,7 @@ For workspace notebooks, the container-local `/workspace` directory IS the user'
 
 All of the below has been built; this section is a record:
 
-- `Dockerfile` `note` target installs `uv`, `marimo`, the proxy's web deps (`fastapi`, `uvicorn`, `itsdangerous`, `httpx`, `websockets`), copies `proxy.py` + `launch-notebook.sh` in. No `with_uv_project` — stargazer comes via each notebook's PEP 723 sandbox.
+- `app/per_notebook.py` defines `notebook_app_img` (image name `notebook-app`) — a `flyte.Image` that layers `micromamba` + bioinformatics tools, `uv`/`uvx`, `marimo`, the proxy's web deps (`fastapi`, `uvicorn`, `itsdangerous`, `httpx`, `websockets`), and copies `proxy.py` + `launch-notebook.sh` in via `with_source_file`. Admin-app deploy calls `flyte.build(notebook_app_img)` to land it in `STARGAZER_REGISTRY`. No `with_uv_project` — stargazer comes via each notebook's PEP 723 sandbox. The local Dockerfile `note` target is now a simple marimo image for `docker run` only.
 - `app/proxy.py` validates the session cookie, serves the two `/__sg__/workspace/*` routes locally, and forwards HTTP + websockets to marimo on `127.0.0.1:8081`.
 - `app/launch-notebook.sh` clones the user's fork into `/workspace` if absent, starts marimo on 8081 (background), then `exec`s uvicorn on 8080. SIGTERM trap fires the local `/__sg__/workspace/sync` flush.
 - `app/per_notebook.py` factory builds the AppEnvironment per `(slug, mode)` and bakes `FORK_OWNER` / `GITHUB_TOKEN` / `SESSION_SECRET` into env_vars. No `pod_template=` — Flyte v2 rejects K8sPod payloads on AppEnvironments.

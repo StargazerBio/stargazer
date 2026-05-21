@@ -31,33 +31,18 @@ COPY --chown=ubuntu:ubuntu pyproject.toml uv.lock ./
 COPY --chown=ubuntu:ubuntu src/ src/
 RUN uv sync && chown -R ubuntu:ubuntu /stargazer
 
-# --- Note target (per-notebook AppEnvironment image) ---
-# Hosts a single notebook in marimo behind a cookie-validating reverse
-# proxy. Stargazer itself is NOT installed at the system level — every
-# notebook declares its deps via PEP 723 inline metadata and marimo
-# `--sandbox` provisions an isolated uv venv at boot. System
-# bioinformatics tools (BWA, samtools, GATK, mamba) DO stay baked in so
-# subprocesses inside the sandbox can call them.
+# --- Note target (local Marimo notebook UI) ---
+# Plain marimo on top of the stargazer base image — for `docker run`
+# exploration only. The hosted per-notebook AppEnvironment uses the
+# programmatic `flyte.Image` defined in `app/per_notebook.py`, which
+# layers in the cookie-validating proxy, launch script, and per-notebook
+# sandbox tooling separately.
 FROM base AS note
-# Web deps for the proxy + uvicorn launcher. Installed at system level
-# (not into /stargazer/.venv) so they're independent of the per-notebook
-# sandbox venv.
-RUN uv pip install --system --no-cache-dir \
-    "marimo>=0.10.0" \
-    "fastapi>=0.115" \
-    "uvicorn>=0.34" \
-    "itsdangerous>=2.1" \
-    "httpx>=0.27" \
-    "websockets>=12"
-COPY --chown=ubuntu:ubuntu app/proxy.py /usr/local/lib/app/proxy.py
-COPY --chown=ubuntu:ubuntu app/launch-notebook.sh /usr/local/bin/launch-notebook.sh
-RUN chmod +x /usr/local/bin/launch-notebook.sh \
-    && touch /usr/local/lib/app/__init__.py
-ENV PYTHONPATH="/usr/local/lib:${PYTHONPATH:-}"
-RUN flyte create config --local-persistence
+RUN uv sync --extra notebook && chown -R ubuntu:ubuntu /stargazer
 USER ubuntu
-ENTRYPOINT ["/usr/local/bin/launch-notebook.sh", "edit", \
-    "/stargazer/src/stargazer/notebooks/tutorials/preprocessing_tutorial.py"]
+RUN flyte create config --local-persistence
+ENTRYPOINT ["marimo", "edit", "src/stargazer/notebooks/tutorials/preprocessing_tutorial.py", \
+    "--port", "8080", "--host", "0.0.0.0", "--headless", "--no-token"]
 
 # --- Chat target (agentic interface to the MCP server) ---
 # End-user image: Claude Code + OpenCode pre-wired against the Stargazer

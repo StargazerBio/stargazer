@@ -56,7 +56,7 @@ from app.github import fork_upstream, list_workspace as gh_list_workspace
 from app.init import init
 from app.notebooks import WORKSPACE_NOTEBOOK_DIR, Notebook, by_section, by_slug
 from app.oauth import exchange_code, get_github_user, github_auth_url
-from app.per_notebook import per_notebook_env
+from app.per_notebook import notebook_app_img, per_notebook_env
 from app.provision import provision_user, sanitize_project_id
 from app.session import (
     SESSION_COOKIE,
@@ -413,22 +413,20 @@ async def health():
 
 
 def _build_and_push_notebook_image() -> None:
-    """Build and push the `stargazer-note` image used by per-notebook apps.
+    """Build and push the `notebook-app` image used by per-notebook apps.
 
     The admin pod cannot build images itself, so the deployer's machine
-    must publish `stargazer-note:latest` to `STARGAZER_REGISTRY`
-    before any user's `/launch` click can spawn a per-notebook app —
-    the AppEnvironment image reference resolves at pod-pull time, not at
+    must publish `notebook-app` to `STARGAZER_REGISTRY` before any
+    user's `/launch` click can spawn a per-notebook app — the
+    AppEnvironment image reference resolves at pod-pull time, not at
     deploy time.
+
+    Image spec is the programmatic `flyte.Image` in
+    `app/per_notebook.py`; `flyte.build` content-addresses it and pushes
+    to the registry baked into the image config.
     """
-    tag = f"{os.environ['STARGAZER_REGISTRY']}/stargazer-note:latest"
-    logger.info(f"Building notebook image {tag}")
-    subprocess.run(
-        ["docker", "build", "--target", "note", "-t", tag, str(PROJECT_ROOT)],
-        check=True,
-    )
-    logger.info(f"Pushing notebook image {tag}")
-    subprocess.run(["docker", "push", tag], check=True)
+    logger.info("Building per-notebook flyte.Image")
+    flyte.build(notebook_app_img)
 
 
 def _start_storage_port_forward() -> None:

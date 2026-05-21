@@ -2,7 +2,7 @@
 ### Notebook registry consumed by the dashboard app.
 
 Curated, hand-maintained tuple of every notebook that ships in the
-`stargazer-note` image. Workspace notebooks are NOT listed here —
+`notebook-app` image. Workspace notebooks are NOT listed here —
 they're discovered at render time from the per-notebook pod's local
 clone of the user's fork (or the GitHub Contents API as a fallback).
 

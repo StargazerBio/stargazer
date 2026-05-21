@@ -1,7 +1,7 @@
 """
 ### Cookie-validating reverse proxy in front of marimo, with workspace endpoints.
 
-Standalone ASGI app baked into the `stargazer-note` image. Listens on
+Standalone ASGI app baked into the `notebook-app` image. Listens on
 the per-notebook pod's public port (8080), validates the same signed
 session cookie the admin app issues (HMAC-keyed by `SESSION_SECRET`),
 then forwards HTTP + websocket traffic to marimo on `127.0.0.1:8081`.

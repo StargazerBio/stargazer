@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch script baked into the stargazer-note image at
+# Launch script baked into the notebook-app image at
 # /usr/local/bin/launch-notebook.sh. Invoked as the per-notebook
 # AppEnvironment's args:
 #

@@ -10,7 +10,7 @@ Two-app architecture:
   `app.per_notebook.per_notebook_env(...)`.
 - `app.per_notebook.per_notebook_env(...)` — factory for per-notebook
   AppEnvironments, spawned by the admin app's `/launch` handler. The
-  image is `stargazer-note` (uv + marimo + system tools + cookie-
+  image is `notebook-app` (uv + marimo + system tools + cookie-
   validating reverse proxy); the proxy serves `/__sg__/workspace/list`
   off the pod's local `/workspace` directory (cloned from the user's
   fork on startup) and `/__sg__/workspace/sync` pushes edits back to
