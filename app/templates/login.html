@@ -5,7 +5,7 @@
     position: relative;
     max-width: 1100px;
     width: 100%;
-    padding: 4rem 2.5rem 2rem;
+    padding: 4rem 2.5rem 3rem;
     text-align: center;
 }
 .landing .signin {
@@ -37,11 +37,36 @@
     color: #8b949e;
     line-height: 1.6;
 }
+.landing-section {
+    margin-top: 3rem;
+}
+.landing-about {
+    max-width: 680px;
+    margin: 0 auto;
+    color: #8b949e;
+    line-height: 1.6;
+}
+.landing-features .tile { text-align: left; }
+.landing-footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #30363d;
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+}
+.landing-footer a {
+    color: #8b949e;
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+.landing-footer a:hover { color: #58a6ff; }
 {% endblock %}
 
 {% block body %}
 <div class="landing">
     <a href="/auth/login" class="btn btn-github signin">Sign in with GitHub</a>
+
     <img class="landing-logo" src="/static/8-bit_stargazer_no-bg.jpg" alt="Stargazer">
     <h1 class="landing-title">Stargazer</h1>
     <p class="landing-tagline">The perpetual progress machine for computational biology</p>
@@ -50,5 +75,45 @@
         bioinformatics tools, foster collaboration, and align incentives in
         service of biomedical progress.
     </p>
+
+    <section class="landing-section">
+        <h2>About</h2>
+        <p class="landing-about">
+            Stargazer lowers the barrier to entry by placing an agent between
+            the researcher and a set of proven workflows made of deeply
+            composable tasks. Executions run on declarative infrastructure
+            against content-addressable data — reproducible by construction
+            and ready to build on at any point in the future.
+        </p>
+    </section>
+
+    <section class="landing-section">
+        <div class="grid landing-features">
+            <div class="tile">
+                <h3>Interface</h3>
+                <p>A familiar chat frontend where researchers express intent.
+                An LLM with access to a registry of typed Flyte tasks and
+                workflows composes — or builds — the right module for the job.</p>
+            </div>
+            <div class="tile">
+                <h3>Orchestrator</h3>
+                <p>Flyte V2's pure-Python, async-native engine. Every task
+                declares its resources and dependencies inline, runs in a
+                container, and enforces types at its boundary.</p>
+            </div>
+            <div class="tile">
+                <h3>Storage</h3>
+                <p>Every file is content-addressable on IPFS and self-describing
+                via Pinata. Workflows reference data by attributes, not
+                location, so reproducibility is intrinsic.</p>
+            </div>
+        </div>
+    </section>
+
+    <footer class="landing-footer">
+        <a href="https://docs.stargazer.bio/" target="_blank" rel="noopener">Docs</a>
+        <a href="https://github.com/StargazerBio/stargazer" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/StargazerBio/stargazer/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+    </footer>
 </div>
 {% endblock %}
