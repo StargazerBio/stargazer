@@ -74,17 +74,60 @@
         return false;
     }
 
+    // Append an "Open" link + "Stop" button beside a launched notebook's
+    // Edit/Run button. The original button stays so the notebook can be
+    // re-launched; the extras are tagged `.launched-extra` so a re-launch or
+    // a Stop can clear them without disturbing the form.
+    function showLaunched(row, form, url) {
+        row.querySelectorAll('.launched-extra').forEach((el) => el.remove());
+
+        const open = document.createElement('a');
+        open.href = url;
+        open.className = 'btn btn-ready launched-extra';
+        open.textContent = 'Open';
+        open.target = '_blank';
+        open.rel = 'noopener';
+
+        const stop = document.createElement('button');
+        stop.type = 'button';
+        stop.className = 'btn btn-stop launched-extra';
+        stop.textContent = 'Stop';
+        stop.addEventListener('click', () => stopNotebook(stop, row, form));
+
+        row.appendChild(open);
+        row.appendChild(stop);
+    }
+
+    // Deactivate a running per-notebook pod. Reuses the launch form's hidden
+    // slug/section/mode inputs so /stop targets the same (slug, mode) env.
+    async function stopNotebook(stopBtn, row, form) {
+        stopBtn.disabled = true;
+        stopBtn.innerHTML = '<span class="spinner-inline"></span>';
+        try {
+            const resp = await fetch('/stop', {
+                method: 'POST',
+                body: new FormData(form),
+                headers: { Accept: 'application/json' },
+            });
+            if (!resp.ok) {
+                const txt = await resp.text();
+                throw new Error('stop HTTP ' + resp.status + ': ' + txt.slice(0, 200));
+            }
+            row.querySelectorAll('.launched-extra').forEach((el) => el.remove());
+        } catch (err) {
+            stopBtn.disabled = false;
+            stopBtn.textContent = 'Stop';
+            alert('Stop failed: ' + err.message);
+        }
+    }
+
     document.querySelectorAll('form.launch-form').forEach((form) => {
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const button = form.querySelector('button[type="submit"]');
-            const tile = form.closest('.tile');
-            const otherButtons = tile
-                ? Array.from(tile.querySelectorAll('button')).filter((b) => b !== button)
-                : [];
+            const row = form.closest('.launch-row');
             const originalLabel = button.textContent;
             button.disabled = true;
-            otherButtons.forEach((b) => (b.disabled = true));
             button.innerHTML = '<span class="spinner-inline"></span>';
             try {
                 const launchResp = await fetch(form.action, {
@@ -112,18 +155,12 @@
                 // plus uv's sandbox-venv install (~90 packages).
                 const ready = await pollReady(url, Date.now() + 180000);
                 if (!ready) throw new Error('timed out waiting for notebook to start');
-                const link = document.createElement('a');
-                link.href = url;
-                link.className = button.className + ' btn-ready';
-                link.textContent = originalLabel;
-                link.target = '_blank';
-                link.rel = 'noopener';
-                button.replaceWith(link);
-                otherButtons.forEach((b) => (b.disabled = false));
+                button.disabled = false;
+                button.textContent = originalLabel;
+                showLaunched(row, form, url);
             } catch (err) {
                 button.textContent = originalLabel;
                 button.disabled = false;
-                otherButtons.forEach((b) => (b.disabled = false));
                 alert('Launch failed: ' + err.message);
             }
         });

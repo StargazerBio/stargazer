@@ -52,7 +52,7 @@ This is why `notebook_app` is not a factory function — nothing per-user lives 
 
 | Module | Role |
 |--------|------|
-| `app/admin_app.py` | `app_env` + FastAPI routes (`/`, `/auth/login`, `/auth/callback`, `/auth/logout`, `/health`). Lifespan runs `init()` at startup. |
+| `app/admin_app.py` | `app_env` + FastAPI routes (`/`, `/auth/login`, `/auth/callback`, `/auth/logout`, `/launch`, `/stop`, `/health`). `/launch` serves a per-notebook env; `/stop` deactivates it by name (`App.get(...).deactivate()`). Lifespan runs `init()` at startup. |
 | `app/notebook_app.py` | `notebook_env` — marimo edit on the bundled scRNA tutorial. |
 | `app/provision.py` | `provision_user()` — creates the Flyte project and serves `notebook_env` into it via `with_servecontext`. |
 | `app/oauth.py` | GitHub OAuth helpers. |

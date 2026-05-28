@@ -44,6 +44,7 @@ from pathlib import Path
 import flyte
 import flyte.app
 import httpx
+from flyte.remote import App
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -441,6 +442,32 @@ async def launch(
     if wants_json:
         return JSONResponse({"url": handoff})
     return RedirectResponse(handoff, status_code=303)
+
+
+@asgi_app.post("/stop")
+async def stop(
+    request: Request,
+    slug: str = Form(...),
+    mode: str = Form(...),
+):
+    """Deactivate the per-notebook app for the requested slug+mode."""
+    session = _get_session(request)
+    if session is None:
+        return JSONResponse({"error": "not authenticated"}, status_code=401)
+    if mode not in ("edit", "run"):
+        return JSONResponse({"error": f"invalid mode: {mode}"}, status_code=400)
+
+    project = sanitize_project_id(session.github_username)
+    name = f"nb-{slug}-{mode}"
+    try:
+        app = await App.get.aio(name=name, project=project, domain="development")
+        await app.deactivate.aio()
+    except Exception as exc:
+        logger.error(f"Stop failed for {name!r} in {project!r}: {exc}")
+        return JSONResponse({"error": f"stop failed: {exc}"}, status_code=502)
+
+    _launched.get(session.github_username, {}).pop((slug, mode), None)
+    return JSONResponse({"stopped": True})
 
 
 @asgi_app.get("/health")
