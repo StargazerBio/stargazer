@@ -4,9 +4,10 @@
 Shared, single deployment. Handles three roles in one FastAPI service:
 
 1. **Unauthenticated landing + GitHub OAuth.** Users sign in with GitHub;
-   the callback forks the upstream stargazer repo into their account,
-   ensures their Flyte project exists, then drops them onto the
-   dashboard.
+   the callback ensures their Flyte project exists, then drops them onto
+   the dashboard. Forking the upstream repo is deferred and opt-in — it
+   happens only when the user enables Workspace saving via
+   `POST /workspace/enable`.
 
 2. **Per-user dashboard.** Renders three sections of notebook tiles —
    Tutorials, Community (both shipped in the per-notebook image),
@@ -57,7 +58,15 @@ from stargazer.config import (
 
 from app.github import fork_upstream, list_workspace as gh_list_workspace
 from app.init import init
-from app.notebooks import WORKSPACE_NOTEBOOK_DIR, Notebook, by_section, by_slug
+from app.notebooks import (
+    TEMPLATE_DESCRIPTION,
+    TEMPLATE_SLUG,
+    TEMPLATE_TITLE,
+    WORKSPACE_NOTEBOOK_DIR,
+    Notebook,
+    by_section,
+    by_slug,
+)
 from app.oauth import exchange_code, get_github_user, github_auth_url
 from app.per_notebook import (
     NOTEBOOK_IMAGE_URI,
@@ -251,11 +260,37 @@ def _tile_dict(slug: str, title: str, description: str, section: str) -> dict:
     }
 
 
-def _dashboard_context(github_username: str, workspace_files: list[str]) -> dict:
-    """Assemble the tile lists Jinja's `dashboard.html` iterates over."""
+def _workspace_tiles(workspace_files: list[str]) -> list[dict]:
+    """Build the Workspace tile list, led by the always-present template.
+
+    The template ships in every fork, so it heads the list. Discovered
+    workspace files follow, with `template.py` deduped so a synced copy
+    doesn't render twice.
+    """
+    tiles = [
+        _tile_dict(TEMPLATE_SLUG, TEMPLATE_TITLE, TEMPLATE_DESCRIPTION, "workspace")
+    ]
+    for f in workspace_files:
+        slug = f.removesuffix(".py")
+        if slug == TEMPLATE_SLUG:
+            continue
+        tiles.append(_tile_dict(slug, f, "Personal workspace notebook.", "workspace"))
+    return tiles
+
+
+def _dashboard_context(
+    github_username: str, workspace_files: list[str], workspace_enabled: bool
+) -> dict:
+    """Assemble the tile lists Jinja's `dashboard.html` iterates over.
+
+    When `workspace_enabled` is False the user hasn't opted in to forking,
+    so no Workspace tiles are built — the template renders the disclaimer +
+    Enable button instead.
+    """
     return {
         "title": "Dashboard",
         "github_username": github_username,
+        "workspace_enabled": workspace_enabled,
         "tutorials": [
             _tile_dict(n.slug, n.title, n.description, "tutorials")
             for n in by_section("tutorials")
@@ -264,15 +299,7 @@ def _dashboard_context(github_username: str, workspace_files: list[str]) -> dict
             _tile_dict(n.slug, n.title, n.description, "community")
             for n in by_section("community")
         ],
-        "workspace": [
-            _tile_dict(
-                slug=f.removesuffix(".py"),
-                title=f,
-                description="Personal workspace notebook.",
-                section="workspace",
-            )
-            for f in workspace_files
-        ],
+        "workspace": _workspace_tiles(workspace_files) if workspace_enabled else [],
     }
 
 
@@ -284,12 +311,16 @@ async def landing(request: Request):
         return templates.TemplateResponse(
             request, "login.html", {"title": "Sign In"}
         )
-    cookie_value = request.cookies.get(SESSION_COOKIE, "")
-    files = await _resolve_workspace_files(session, cookie_value)
+    files: list[str] = []
+    if session.workspace_enabled:
+        cookie_value = request.cookies.get(SESSION_COOKIE, "")
+        files = await _resolve_workspace_files(session, cookie_value)
     return templates.TemplateResponse(
         request,
         "dashboard.html",
-        _dashboard_context(session.github_username, files),
+        _dashboard_context(
+            session.github_username, files, session.workspace_enabled
+        ),
     )
 
 
@@ -331,21 +362,18 @@ async def auth_callback(request: Request, code: str, state: str):
     username = github_user["login"]
 
     try:
-        fork = await fork_upstream(access_token)
-        fork_owner = fork["owner"]["login"]
-    except Exception as exc:
-        logger.error(f"Fork creation failed for {username!r}: {exc}")
-        fork_owner = username  # best-effort assumption
-
-    try:
         await provision_user(github_username=username)
     except Exception as exc:
         logger.error(f"Provisioning failed for {username!r}: {exc}")
 
+    # GitHub forking is opt-in: no fork is created here. The user enables
+    # Workspace saving explicitly via POST /workspace/enable, which forks
+    # the upstream repo and records `fork_owner`. Until then they run
+    # Tutorials/Community notebooks (ephemeral, image-baked) with no write
+    # to their GitHub account. `fork_owner` stays empty == saving off.
     session = SessionData(
         github_username=username,
         github_id=github_user["id"],
-        fork_owner=fork_owner,
         access_token=access_token,
     )
     cookie = create_session_cookie(session, _env("SESSION_SECRET"))
@@ -367,6 +395,41 @@ async def auth_logout():
     """Clear session and redirect to landing page."""
     response = RedirectResponse("/", status_code=302)
     response.delete_cookie(SESSION_COOKIE)
+    return response
+
+
+@asgi_app.post("/workspace/enable")
+async def workspace_enable(request: Request):
+    """Opt in to Workspace saving by forking the upstream repo for this user.
+
+    This is the explicit, consent-gated action that creates the user's fork
+    and records `fork_owner` in the session. Only after this does the
+    Workspace section list notebooks and do launches persist edits back to
+    the fork's `workspace` branch. Idempotent — `fork_upstream` returns the
+    existing fork if one already exists. On failure the session is left
+    untouched (saving stays off) so the user sees the disclaimer and can
+    retry rather than landing in a half-enabled state.
+    """
+    session = _get_session(request)
+    if session is None:
+        return RedirectResponse("/", status_code=302)
+    try:
+        fork = await fork_upstream(session.access_token)
+    except Exception as exc:
+        logger.error(f"Fork creation failed for {session.github_username!r}: {exc}")
+        return RedirectResponse("/", status_code=303)
+
+    session.fork_owner = fork["owner"]["login"]
+    cookie = create_session_cookie(session, _env("SESSION_SECRET"))
+    response = RedirectResponse("/", status_code=303)
+    response.set_cookie(
+        SESSION_COOKIE,
+        cookie,
+        httponly=True,
+        secure=False,
+        max_age=60 * 60 * 24 * 30,
+        samesite="lax",
+    )
     return response
 
 
@@ -394,6 +457,9 @@ async def launch(
         return _reject(f"invalid mode: {mode}", 400)
     if section not in ("tutorials", "community", "workspace"):
         return _reject(f"invalid section: {section}", 400)
+    # Workspace launches clone+push the user's fork, so they require opt-in.
+    if section == "workspace" and not session.workspace_enabled:
+        return _reject("enable workspace saving first", 403)
 
     if section == "workspace":
         notebook_path = f"{WORKSPACE_NOTEBOOK_DIR}/{slug}.py"

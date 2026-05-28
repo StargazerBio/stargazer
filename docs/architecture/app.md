@@ -48,11 +48,17 @@ Per-user state is enforced by **Flyte project boundaries**, not by varying the e
 
 This is why `notebook_app` is not a factory function — nothing per-user lives in the env definition.
 
+## Workspace Opt-In
+
+Forking a user's GitHub account is **opt-in**, not automatic. Login creates the user's Flyte project but writes nothing to GitHub; `SessionData.fork_owner` stays empty (`SessionData.workspace_enabled` is False). Tutorials and Community notebooks run from the image and need no fork.
+
+The Workspace section then renders a disclaimer + an **Enable workspace saving** button. `POST /workspace/enable` forks the upstream repo, records `fork_owner` in the re-signed session cookie, and only from then on does the section list the user's notebooks and do `/launch` permit workspace launches (clone-on-start + push-on-sync against the fork's `workspace` branch). The `public_repo` OAuth scope is still requested at login, but no fork is created until this explicit action.
+
 ## Modules
 
 | Module | Role |
 |--------|------|
-| `app/admin_app.py` | `app_env` + FastAPI routes (`/`, `/auth/login`, `/auth/callback`, `/auth/logout`, `/launch`, `/stop`, `/health`). `/launch` serves a per-notebook env; `/stop` deactivates it by name (`App.get(...).deactivate()`). Lifespan runs `init()` at startup. |
+| `app/admin_app.py` | `app_env` + FastAPI routes (`/`, `/auth/login`, `/auth/callback`, `/auth/logout`, `/workspace/enable`, `/launch`, `/stop`, `/health`). `/workspace/enable` is the opt-in that forks the upstream repo and records `fork_owner`; `/launch` serves a per-notebook env (workspace launches require opt-in); `/stop` deactivates it by name (`App.get(...).deactivate()`). Lifespan runs `init()` at startup. |
 | `app/notebook_app.py` | `notebook_env` — marimo edit on the bundled scRNA tutorial. |
 | `app/provision.py` | `provision_user()` — creates the Flyte project and serves `notebook_env` into it via `with_servecontext`. |
 | `app/oauth.py` | GitHub OAuth helpers. |

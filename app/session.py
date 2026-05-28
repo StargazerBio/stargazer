@@ -26,14 +26,21 @@ class SessionData:
 
     `fork_owner` is the GitHub login of the user's stargazer fork (usually
     identical to `github_username` unless GitHub redirected the fork to a
-    different account). `access_token` is the OAuth token used by the
-    dashboard to fork, list, clone, and push.
+    different account). It stays empty until the user explicitly opts in to
+    workspace saving via `POST /workspace/enable`; an empty value means no
+    fork exists yet and Workspace saving is off. `access_token` is the OAuth
+    token used by the dashboard to fork, list, clone, and push.
     """
 
     github_username: str
     github_id: int
     fork_owner: str = ""
     access_token: str = ""
+
+    @property
+    def workspace_enabled(self) -> bool:
+        """True once the user has opted in to forking (Workspace saving)."""
+        return bool(self.fork_owner and self.access_token)
 
 
 def create_session_cookie(data: SessionData, secret: str) -> str:

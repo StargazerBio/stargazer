@@ -9,13 +9,13 @@
 # stargazer = { path = "/stargazer", editable = true }
 # ///
 """
-### Bring Your Own Data — barebones skeleton.
+### Workspace template — barebones notebook skeleton.
 
-A choose-your-own-adventure scaffold for ingesting a file, defining an
-asset for it, processing it with a task, and fanning that task out in a
-workflow. Each section is a TODO-style template — pair with
-`assets_tutorial.py` and `tasks_tutorial.py` for the why and the deeper
-patterns.
+A choose-your-own-adventure scaffold for authoring your own notebook from
+scratch: ingest a file, define an asset for it, process it with a task,
+and fan that task out in a workflow. Each section is a TODO-style
+template — pair with `assets_tutorial.py` and `tasks_tutorial.py` for the
+why and the deeper patterns.
 
 spec: [docs/architecture/notebook.md](../../docs/architecture/notebook.md)
 """
@@ -121,7 +121,7 @@ async def _(MyAsset, Path, file_input, mo, tempfile):
         mo.stop(True, mo.md("⬆ Upload a file above to continue."))
 
     _f = file_input.value[0]
-    _tmpdir = Path(tempfile.mkdtemp(prefix="stargazer_byod_"))
+    _tmpdir = Path(tempfile.mkdtemp(prefix="stargazer_template_"))
     _path = _tmpdir / _f.name
     _path.write_bytes(_f.contents)
 
@@ -162,7 +162,7 @@ def _(mo):
 def _(flyte):
     """Task environment for your work."""
     my_env = flyte.TaskEnvironment(
-        name="byod",
+        name="template",
         # TODO: image=flyte.Image.from_debian_base().with_pip_packages(...),
         resources=flyte.Resources(cpu=1, memory="512Mi"),
     )

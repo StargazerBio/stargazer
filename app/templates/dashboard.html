@@ -28,14 +28,33 @@
 
     <section>
         <h2>Workspace</h2>
+        {% if workspace_enabled %}
+        <p class="section-desc">Author your own notebooks from scratch and
+        commit them to your branch. Start from the <strong>Template</strong>
+        below — anything you save lands in <code>notebooks/workspace/</code>
+        on your fork.</p>
         <div class="grid">
-            {% if workspace %}
-                {% for tile in workspace %}{% include "_tile.html" %}{% endfor %}
-            {% else %}
-                <p class="empty">No workspace notebooks yet. Once you Edit one,
-                it'll land in <code>notebooks/workspace/</code> in your fork.</p>
-            {% endif %}
+            {% for tile in workspace %}{% include "_tile.html" %}{% endfor %}
         </div>
+        {% else %}
+        <div class="notice">
+            <p class="notice-head">⚠ Workspace saving is off</p>
+            <p class="section-desc">Turn it on to author your own notebooks
+            from scratch and keep your work across sessions. Enabling will:</p>
+            <ul class="notice-list">
+                <li>Fork the public <code>StargazerBio/stargazer</code> repo
+                into your GitHub account.</li>
+                <li>Commit and push notebooks you create or edit to a
+                <code>workspace</code> branch on that fork.</li>
+            </ul>
+            <p class="section-desc">Nothing is written to your GitHub account
+            until you do this. Tutorials and Community notebooks work without
+            it — they just aren't saved.</p>
+            <form method="post" action="/workspace/enable" style="margin:0;">
+                <button class="btn btn-github" type="submit">Enable workspace saving</button>
+            </form>
+        </div>
+        {% endif %}
     </section>
 </div>
 {% endblock %}
