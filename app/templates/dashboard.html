@@ -1,12 +1,132 @@
+{% extends "base.html" %}
+
+{% block body %}
 <div class="dashboard">
     <details class="user-menu">
         <summary aria-label="User menu">
-            <img src="https://github.com/$github_username.png?size=80" alt="">
+            <img src="https://github.com/{{ github_username }}.png?size=80" alt="">
         </summary>
         <div class="menu">
-            <div class="menu-user">Signed in as <strong>@$github_username</strong></div>
+            <div class="menu-user">Signed in as <strong>@{{ github_username }}</strong></div>
             <a class="menu-item" href="/auth/logout">Sign out</a>
         </div>
     </details>
-    $body
+
+    <section>
+        <h2>Tutorials</h2>
+        <div class="grid">
+            {% for tile in tutorials %}{% include "_tile.html" %}{% endfor %}
+        </div>
+    </section>
+
+    <section>
+        <h2>Community</h2>
+        <div class="grid">
+            {% for tile in community %}{% include "_tile.html" %}{% endfor %}
+        </div>
+    </section>
+
+    <section>
+        <h2>Workspace</h2>
+        <div class="grid">
+            {% if workspace %}
+                {% for tile in workspace %}{% include "_tile.html" %}{% endfor %}
+            {% else %}
+                <p class="empty">No workspace notebooks yet. Once you Edit one,
+                it'll land in <code>notebooks/workspace/</code> in your fork.</p>
+            {% endif %}
+        </div>
+    </section>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Close the user menu when clicking outside the avatar/dropdown.
+    document.addEventListener('click', (e) => {
+        document.querySelectorAll('details.user-menu[open]').forEach((d) => {
+            if (!d.contains(e.target)) d.removeAttribute('open');
+        });
+    });
+
+    // Intercept tile Edit/Run submits: POST /launch (returns the URL
+    // immediately), then poll the per-notebook's /__sg__/ready directly
+    // cross-origin until 200, then swap the spinner for an "Open" link.
+    // Polling from the browser (rather than admin → pod) sidesteps the
+    // devbox networking trap where the per-notebook URL only resolves on
+    // the developer's machine, not from inside the admin pod.
+    async function pollReady(notebookUrl, deadlineMs) {
+        // Build the absolute /__sg__/ready URL by replacing the path on the
+        // notebookUrl (which has a ?sg_launch=… token). Strip the query
+        // because /__sg__/ready needs no auth and shouldn't burn the
+        // one-shot launch token.
+        const u = new URL(notebookUrl);
+        const readyUrl = u.origin + '/__sg__/ready';
+        while (Date.now() < deadlineMs) {
+            try {
+                // Keep this a "simple" CORS request (no custom headers) so
+                // the browser doesn't issue an OPTIONS preflight.
+                const resp = await fetch(readyUrl, { method: 'GET' });
+                if (resp.ok) return true;
+            } catch (_) { /* CORS or network blip — keep trying */ }
+            await new Promise((r) => setTimeout(r, 2000));
+        }
+        return false;
+    }
+
+    document.querySelectorAll('form.launch-form').forEach((form) => {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const button = form.querySelector('button[type="submit"]');
+            const tile = form.closest('.tile');
+            const otherButtons = tile
+                ? Array.from(tile.querySelectorAll('button')).filter((b) => b !== button)
+                : [];
+            const originalLabel = button.textContent;
+            button.disabled = true;
+            otherButtons.forEach((b) => (b.disabled = true));
+            button.innerHTML = '<span class="spinner-inline"></span>';
+            try {
+                const launchResp = await fetch(form.action, {
+                    method: 'POST',
+                    body: new FormData(form),
+                    headers: { Accept: 'application/json' },
+                });
+                // Read once as text so we can surface the body even when
+                // the server returned HTML (e.g. an error page, or a 302
+                // that fetch silently followed to the dashboard).
+                const rawBody = await launchResp.text();
+                const ctype = launchResp.headers.get('content-type') || '';
+                if (!ctype.includes('application/json')) {
+                    const snippet = rawBody.slice(0, 200).replace(/\s+/g, ' ');
+                    throw new Error('launch HTTP ' + launchResp.status + ' (non-JSON): ' + snippet);
+                }
+                let payload;
+                try { payload = JSON.parse(rawBody); }
+                catch (_) { throw new Error('launch JSON parse failed: ' + rawBody.slice(0, 200)); }
+                if (!launchResp.ok) {
+                    throw new Error('launch HTTP ' + launchResp.status + ': ' + (payload.error || rawBody));
+                }
+                const { url } = payload;
+                // Poll for readiness for up to 3 min — covers cold-start
+                // plus uv's sandbox-venv install (~90 packages).
+                const ready = await pollReady(url, Date.now() + 180000);
+                if (!ready) throw new Error('timed out waiting for notebook to start');
+                const link = document.createElement('a');
+                link.href = url;
+                link.className = button.className + ' btn-ready';
+                link.textContent = originalLabel;
+                link.target = '_blank';
+                link.rel = 'noopener';
+                button.replaceWith(link);
+                otherButtons.forEach((b) => (b.disabled = false));
+            } catch (err) {
+                button.textContent = originalLabel;
+                button.disabled = false;
+                otherButtons.forEach((b) => (b.disabled = false));
+                alert('Launch failed: ' + err.message);
+            }
+        });
+    });
+</script>
+{% endblock %}

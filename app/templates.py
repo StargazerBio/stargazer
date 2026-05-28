@@ -1,37 +1,38 @@
 """
-### HTML template loaders.
+### Jinja2 templates for the admin landing app.
 
-Reads templates from `app/templates/` and substitutes placeholders using
-`string.Template` (`$name` syntax — leaves CSS `{...}` untouched). Two
-helpers in play:
+Templates live in `app/templates/` and are rendered via
+`fastapi.templating.Jinja2Templates`. Routes hand off to
+`templates.TemplateResponse(...)` with a request and context dict;
+Jinja2 auto-escapes interpolated values (no manual `html.escape`
+required) and gives every page the shared chrome via `{% extends
+"base.html" %}`.
 
-- `login_html()` — admin app's unauthenticated landing page.
-- `dashboard_html(username, body)` — admin app's post-login dashboard
-  chrome; `body` is the three-section tile grid rendered by
-  `app.admin_app._render_tiles(...)`.
+Layout:
+
+- `base.html` — `<html>` shell, CSS, blocks `body` and `scripts`.
+- `login.html` — extends base for the unauthenticated landing.
+- `dashboard.html` — extends base for the post-login dashboard, with
+  the user-menu avatar, three tile sections, and the launch JS.
+- `_tile.html` — partial for one notebook tile (rendered per tile
+  in each dashboard section). Underscore prefix is convention for
+  "not directly rendered, included only".
+
+Context shape consumed by `dashboard.html`:
+
+- `title` (str) — `<title>` chrome.
+- `github_username` (str) — for the avatar URL and "Signed in as".
+- `tutorials`, `community`, `workspace` (list of tile dicts) — each
+  dict has `slug`, `title`, `description`, `section`. The dashboard
+  loops and includes `_tile.html` for each.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 from pathlib import Path
-from string import Template
+
+from fastapi.templating import Jinja2Templates
 
 
-_TEMPLATES = Path(__file__).parent / "templates"
-_BASE = Template((_TEMPLATES / "base.html").read_text())
-_LOGIN_BODY = (_TEMPLATES / "login.html").read_text()
-_DASHBOARD_BODY = Template((_TEMPLATES / "dashboard.html").read_text())
-
-
-def login_html() -> str:
-    """Landing page with GitHub sign-in button."""
-    return _BASE.substitute(title="Sign In", body=_LOGIN_BODY)
-
-
-def dashboard_html(github_username: str, body: str) -> str:
-    """Wrap the dashboard's tile grid in the shared chrome."""
-    rendered = _DASHBOARD_BODY.substitute(
-        github_username=github_username,
-        body=body,
-    )
-    return _BASE.substitute(title="Dashboard", body=rendered)
+_TEMPLATES_DIR = Path(__file__).parent / "templates"
+templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))

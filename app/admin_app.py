@@ -68,7 +68,7 @@ from app.session import (
     create_session_cookie,
     session_from_request,
 )
-from app.templates import dashboard_html, login_html
+from app.templates import templates
 
 
 # ---------------------------------------------------------------------------
@@ -232,51 +232,39 @@ async def _resolve_workspace_files(
 # ---------------------------------------------------------------------------
 
 
-def _render_tiles(workspace_files: list[str]) -> str:
-    """Compose the three-section tile grid HTML for the dashboard body."""
+def _tile_dict(slug: str, title: str, description: str, section: str) -> dict:
+    """Build the context dict consumed by `_tile.html`."""
+    return {
+        "slug": slug,
+        "title": title,
+        "description": description,
+        "section": section,
+    }
 
-    def tile(slug: str, title: str, description: str, section: str) -> str:
-        """Render one notebook tile with Edit / Run POST buttons."""
-        return f"""
-        <div class="tile">
-          <h3>{title}</h3>
-          <p>{description}</p>
-          <form method="post" action="/launch" class="launch-form" style="display:inline;">
-            <input type="hidden" name="slug" value="{slug}">
-            <input type="hidden" name="section" value="{section}">
-            <input type="hidden" name="mode" value="edit">
-            <button class="btn btn-notebook" type="submit">Edit</button>
-          </form>
-          <form method="post" action="/launch" class="launch-form" style="display:inline;">
-            <input type="hidden" name="slug" value="{slug}">
-            <input type="hidden" name="section" value="{section}">
-            <input type="hidden" name="mode" value="run">
-            <button class="btn btn-github" type="submit">Run</button>
-          </form>
-        </div>
-        """
 
-    tutorials = "".join(
-        tile(n.slug, n.title, n.description, "tutorials")
-        for n in by_section("tutorials")
-    )
-    community = "".join(
-        tile(n.slug, n.title, n.description, "community")
-        for n in by_section("community")
-    )
-    workspace = "".join(
-        tile(f.removesuffix(".py"), f, "Personal workspace notebook.", "workspace")
-        for f in workspace_files
-    ) or (
-        '<p class="empty">No workspace notebooks yet. Once you Edit one, '
-        "it'll land in <code>notebooks/workspace/</code> in your fork.</p>"
-    )
-
-    return f"""
-    <section><h2>Tutorials</h2><div class="grid">{tutorials}</div></section>
-    <section><h2>Community</h2><div class="grid">{community}</div></section>
-    <section><h2>Workspace</h2><div class="grid">{workspace}</div></section>
-    """
+def _dashboard_context(github_username: str, workspace_files: list[str]) -> dict:
+    """Assemble the tile lists Jinja's `dashboard.html` iterates over."""
+    return {
+        "title": "Dashboard",
+        "github_username": github_username,
+        "tutorials": [
+            _tile_dict(n.slug, n.title, n.description, "tutorials")
+            for n in by_section("tutorials")
+        ],
+        "community": [
+            _tile_dict(n.slug, n.title, n.description, "community")
+            for n in by_section("community")
+        ],
+        "workspace": [
+            _tile_dict(
+                slug=f.removesuffix(".py"),
+                title=f,
+                description="Personal workspace notebook.",
+                section="workspace",
+            )
+            for f in workspace_files
+        ],
+    }
 
 
 @asgi_app.get("/", response_class=HTMLResponse)
@@ -284,10 +272,16 @@ async def landing(request: Request):
     """Render the login page or the dashboard depending on session state."""
     session = _get_session(request)
     if not session:
-        return HTMLResponse(login_html())
+        return templates.TemplateResponse(
+            request, "login.html", {"title": "Sign In"}
+        )
     cookie_value = request.cookies.get(SESSION_COOKIE, "")
     files = await _resolve_workspace_files(session, cookie_value)
-    return HTMLResponse(dashboard_html(session.github_username, _render_tiles(files)))
+    return templates.TemplateResponse(
+        request,
+        "dashboard.html",
+        _dashboard_context(session.github_username, files),
+    )
 
 
 @asgi_app.get("/auth/login")
@@ -375,20 +369,29 @@ async def launch(
     section: str = Form(...),
 ):
     """Spawn (or reuse) a per-notebook app for the requested slug+mode."""
+    # AJAX callers parse the response as JSON; a 302 to /login would be
+    # silently followed by fetch() and decoded as HTML, breaking JSON.parse.
+    wants_json = "application/json" in request.headers.get("accept", "")
+
+    def _reject(message: str, status: int):
+        if wants_json:
+            return JSONResponse({"error": message}, status_code=status)
+        return RedirectResponse("/", status_code=302)
+
     session = _get_session(request)
     if session is None:
-        return RedirectResponse("/", status_code=302)
+        return _reject("not authenticated", 401)
     if mode not in ("edit", "run"):
-        return RedirectResponse("/", status_code=302)
+        return _reject(f"invalid mode: {mode}", 400)
     if section not in ("tutorials", "community", "workspace"):
-        return RedirectResponse("/", status_code=302)
+        return _reject(f"invalid section: {section}", 400)
 
     if section == "workspace":
         notebook_path = f"{WORKSPACE_NOTEBOOK_DIR}/{slug}.py"
     else:
         nb: Notebook | None = by_slug(slug)
         if nb is None or nb.section != section:
-            return RedirectResponse("/", status_code=302)
+            return _reject(f"unknown notebook: {slug}", 404)
         notebook_path = nb.path_in_image
 
     project = sanitize_project_id(session.github_username)
@@ -427,7 +430,7 @@ async def launch(
     # start polling `/launch/status` for readiness and swap the spinner for
     # an "Open" link once the pod responds. Plain form submissions (no JS)
     # still get the 303 redirect.
-    if "application/json" in request.headers.get("accept", ""):
+    if wants_json:
         return JSONResponse({"url": handoff})
     return RedirectResponse(handoff, status_code=303)
 

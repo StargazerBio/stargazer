@@ -148,28 +148,30 @@ async def _(mo):
 @app.cell
 def _(mo, plt, raw_asset):
     """Section 3 — Raw QC histograms for the picked sample."""
-    import scanpy as sc
+    import scanpy as _sc
 
-    ad = sc.read_h5ad(raw_asset.path)
-    ad.var_names_make_unique()
-    ad.var["mt"] = ad.var_names.str.startswith("MT-") | ad.var_names.str.startswith(
+    _ad = _sc.read_h5ad(raw_asset.path)
+    _ad.var_names_make_unique()
+    _ad.var["mt"] = _ad.var_names.str.startswith("MT-") | _ad.var_names.str.startswith(
         "mt-"
     )
-    ad.var["ribo"] = ad.var_names.str.startswith(("RPS", "RPL", "Rps", "Rpl"))
-    sc.pp.calculate_qc_metrics(ad, qc_vars=["mt", "ribo"], inplace=True, log1p=False)
+    _ad.var["ribo"] = _ad.var_names.str.startswith(("RPS", "RPL", "Rps", "Rpl"))
+    _sc.pp.calculate_qc_metrics(
+        _ad, qc_vars=["mt", "ribo"], inplace=True, log1p=False
+    )
 
-    fig, axes = plt.subplots(1, 4, figsize=(16, 3.5))
-    for ax, key, color, title in zip(
-        axes,
+    _fig, _axes = plt.subplots(1, 4, figsize=(16, 3.5))
+    for _ax, _key, _color, _title in zip(
+        _axes,
         ["n_genes_by_counts", "total_counts", "pct_counts_mt", "pct_counts_ribo"],
         ["#2196F3", "#4CAF50", "#FF5722", "#9C27B0"],
         ["Genes per cell", "Total counts", "% Mitochondrial", "% Ribosomal"],
     ):
-        ax.hist(ad.obs[key], bins=50, color=color)
-        ax.set_title(f"{raw_asset.sample_id} — {title}")
-        ax.set_xlabel(key)
-    fig.suptitle("Raw QC Metrics", fontsize=14, fontweight="bold")
-    fig.tight_layout()
+        _ax.hist(_ad.obs[_key], bins=50, color=_color)
+        _ax.set_title(f"{raw_asset.sample_id} — {_title}")
+        _ax.set_xlabel(_key)
+    _fig.suptitle("Raw QC Metrics", fontsize=14, fontweight="bold")
+    _fig.tight_layout()
 
     mo.vstack(
         [
@@ -184,7 +186,7 @@ def _(mo, plt, raw_asset):
                 `max_pct_mt` threshold.
                 """
             ),
-            fig,
+            _fig,
         ]
     )
     return
@@ -367,18 +369,18 @@ def _(flyte, mo, preprocess, raw_asset, time):
 @app.cell
 async def _(mo, plt, reduced_remote):
     """Section 8 — visualize the UMAP from the remote run."""
-    import scanpy as sc
+    import scanpy as _sc
 
     await reduced_remote.fetch()
-    ad = sc.read_h5ad(reduced_remote.path)
+    _ad = _sc.read_h5ad(reduced_remote.path)
 
-    umap = ad.obsm["X_umap"]
-    fig, ax = plt.subplots(figsize=(6, 6))
-    ax.scatter(umap[:, 0], umap[:, 1], s=2, alpha=0.6, c="#3F51B5")
-    ax.set_xlabel("UMAP1")
-    ax.set_ylabel("UMAP2")
-    ax.set_title(f"{reduced_remote.sample_id} — UMAP after preprocessing")
-    fig.tight_layout()
+    _umap = _ad.obsm["X_umap"]
+    _fig, _ax = plt.subplots(figsize=(6, 6))
+    _ax.scatter(_umap[:, 0], _umap[:, 1], s=2, alpha=0.6, c="#3F51B5")
+    _ax.set_xlabel("UMAP1")
+    _ax.set_ylabel("UMAP2")
+    _ax.set_title(f"{reduced_remote.sample_id} — UMAP after preprocessing")
+    _fig.tight_layout()
 
     mo.vstack(
         [
@@ -392,7 +394,7 @@ async def _(mo, plt, reduced_remote):
                 with Leiden and annotate with marker genes.
                 """
             ),
-            fig,
+            _fig,
         ]
     )
     return

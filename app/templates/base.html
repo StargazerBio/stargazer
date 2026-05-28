@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>$title — Stargazer</title>
+    <title>{{ title }} — Stargazer</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -146,83 +146,11 @@
         .btn-ready::before { content: "✓ "; }
         .btn[disabled] { opacity: 0.7; cursor: wait; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        {% block extra_css %}{% endblock %}
     </style>
 </head>
 <body>
-    $body
-    <script>
-        // Close the user menu when clicking outside the avatar/dropdown.
-        document.addEventListener('click', (e) => {
-            document.querySelectorAll('details.user-menu[open]').forEach(d => {
-                if (!d.contains(e.target)) d.removeAttribute('open');
-            });
-        });
-
-        // Intercept tile Edit/Run submits: POST /launch (returns the URL
-        // immediately), then poll the per-notebook's /__sg__/ready directly
-        // cross-origin until 200, then swap the spinner for an "Open" link.
-        // Polling from the browser (rather than admin → pod) sidesteps the
-        // devbox networking trap where the per-notebook URL only resolves
-        // on the developer's machine, not from inside the admin pod.
-        async function pollReady(notebookUrl, deadlineMs) {
-            // Build the absolute /__sg__/ready URL by replacing the path on
-            // the notebookUrl (which has a ?sg_launch=… token). Strip the
-            // query because /__sg__/ready needs no auth and shouldn't burn
-            // the one-shot launch token.
-            const u = new URL(notebookUrl);
-            const readyUrl = u.origin + '/__sg__/ready';
-            while (Date.now() < deadlineMs) {
-                try {
-                    // Keep this a "simple" CORS request (no custom headers)
-                    // so the browser doesn't issue an OPTIONS preflight.
-                    const resp = await fetch(readyUrl, { method: 'GET' });
-                    if (resp.ok) return true;
-                } catch (_) { /* CORS or network blip — keep trying */ }
-                await new Promise((r) => setTimeout(r, 2000));
-            }
-            return false;
-        }
-
-        document.querySelectorAll('form.launch-form').forEach((form) => {
-            form.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const button = form.querySelector('button[type="submit"]');
-                const tile = form.closest('.tile');
-                const otherButtons = tile
-                    ? Array.from(tile.querySelectorAll('button')).filter((b) => b !== button)
-                    : [];
-                const originalLabel = button.textContent;
-                button.disabled = true;
-                otherButtons.forEach((b) => (b.disabled = true));
-                button.innerHTML = '<span class="spinner-inline"></span>';
-                try {
-                    const launchResp = await fetch(form.action, {
-                        method: 'POST',
-                        body: new FormData(form),
-                        headers: { Accept: 'application/json' },
-                    });
-                    if (!launchResp.ok) throw new Error('launch HTTP ' + launchResp.status);
-                    const { url } = await launchResp.json();
-                    // Poll for readiness for up to 3 min — covers cold-start
-                    // plus uv's sandbox-venv install (~90 packages).
-                    const ready = await pollReady(url, Date.now() + 180000);
-                    if (!ready) throw new Error('timed out waiting for notebook to start');
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.className = button.className + ' btn-ready';
-                    link.textContent = originalLabel;
-                    link.target = '_blank';
-                    link.rel = 'noopener';
-                    button.replaceWith(link);
-                    otherButtons.forEach((b) => (b.disabled = false));
-                } catch (err) {
-                    button.textContent = originalLabel;
-                    button.disabled = false;
-                    otherButtons.forEach((b) => (b.disabled = false));
-                    alert('Launch failed: ' + err.message);
-                }
-            });
-        });
-    </script>
+    {% block body %}{% endblock %}
+    {% block scripts %}{% endblock %}
 </body>
 </html>

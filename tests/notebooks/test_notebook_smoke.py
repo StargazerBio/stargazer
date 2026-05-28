@@ -8,31 +8,35 @@ violations before deployment.
 """
 
 import importlib
-import pkgutil
+from pathlib import Path
 
 import pytest
 
 import stargazer.notebooks as notebooks_pkg
 
-# Discover all notebook modules dynamically
+# Notebooks live in section directories (tutorials/, community/, workspace/)
+# that aren't Python packages — no __init__.py. pkgutil won't descend into
+# them, so walk the filesystem and rebuild dotted module names manually.
+_NOTEBOOKS_ROOT = Path(notebooks_pkg.__path__[0])
 _notebook_modules = [
-    name
-    for _, name, _ in pkgutil.iter_modules(notebooks_pkg.__path__)
-    if name != "__init__"
+    f"{notebooks_pkg.__name__}."
+    + ".".join(p.relative_to(_NOTEBOOKS_ROOT).with_suffix("").parts)
+    for p in _NOTEBOOKS_ROOT.rglob("*.py")
+    if p.name != "__init__.py"
 ]
 
 
 @pytest.mark.parametrize("notebook", _notebook_modules)
 def test_notebook_imports(notebook):
     """Verify notebook module imports without errors."""
-    mod = importlib.import_module(f"stargazer.notebooks.{notebook}")
+    mod = importlib.import_module(notebook)
     assert hasattr(mod, "app"), f"{notebook} missing marimo App object"
 
 
 @pytest.mark.parametrize("notebook", _notebook_modules)
 def test_notebook_no_multiply_defined(notebook):
     """Verify no cell redefines variables from other cells."""
-    mod = importlib.import_module(f"stargazer.notebooks.{notebook}")
+    mod = importlib.import_module(notebook)
     app = mod.app
     app._maybe_initialize()
     graph = app._graph

@@ -1,0 +1,16 @@
+<div class="tile">
+    <h3>{{ tile.title }}</h3>
+    <p>{{ tile.description }}</p>
+    <form method="post" action="/launch" class="launch-form" style="display:inline;">
+        <input type="hidden" name="slug" value="{{ tile.slug }}">
+        <input type="hidden" name="section" value="{{ tile.section }}">
+        <input type="hidden" name="mode" value="edit">
+        <button class="btn btn-notebook" type="submit">Edit</button>
+    </form>
+    <form method="post" action="/launch" class="launch-form" style="display:inline;">
+        <input type="hidden" name="slug" value="{{ tile.slug }}">
+        <input type="hidden" name="section" value="{{ tile.section }}">
+        <input type="hidden" name="mode" value="run">
+        <button class="btn btn-github" type="submit">Run</button>
+    </form>
+</div>
