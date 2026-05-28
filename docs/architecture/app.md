@@ -57,7 +57,7 @@ This is why `notebook_app` is not a factory function — nothing per-user lives 
 | `app/provision.py` | `provision_user()` — creates the Flyte project and serves `notebook_env` into it via `with_servecontext`. |
 | `app/oauth.py` | GitHub OAuth helpers. |
 | `app/session.py` | Signed-cookie session (`itsdangerous`). The cookie is the session — no server-side store. |
-| `app/templates.py` + `templates/*.html` | `string.Template` HTML loader. |
+| `app/templates.py` + `templates/*.html` | Jinja2 template loader (`base.html`, `login.html`, `dashboard.html`, `_tile.html`); auto-escaped, shared chrome via `{% extends "base.html" %}`. Static assets (landing logo) served from `app/static/` at `/static`. |
 | `app/init.py` | Runtime-context-aware Flyte init. |
 
 ## Runtime Init

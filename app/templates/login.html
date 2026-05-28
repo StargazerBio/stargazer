@@ -1,9 +1,54 @@
 {% extends "base.html" %}
 
+{% block extra_css %}
+.landing {
+    position: relative;
+    max-width: 1100px;
+    width: 100%;
+    padding: 4rem 2.5rem 2rem;
+    text-align: center;
+}
+.landing .signin {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    margin: 0;
+}
+.landing-logo {
+    width: 320px;
+    max-width: 80%;
+    height: auto;
+    margin-bottom: 1.5rem;
+}
+.landing-title {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+}
+.landing-tagline {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #58a6ff;
+    margin-bottom: 1.5rem;
+}
+.landing-lede {
+    max-width: 640px;
+    margin: 0 auto;
+    font-size: 1rem;
+    color: #8b949e;
+    line-height: 1.6;
+}
+{% endblock %}
+
 {% block body %}
-<div class="card">
-    <h1>Stargazer</h1>
-    <p>Interactive bioinformatics workflows powered by Flyte.</p>
-    <a href="/auth/login" class="btn btn-github">Sign in with GitHub</a>
+<div class="landing">
+    <a href="/auth/login" class="btn btn-github signin">Sign in with GitHub</a>
+    <img class="landing-logo" src="/static/8-bit_stargazer_no-bg.jpg" alt="Stargazer">
+    <h1 class="landing-title">Stargazer</h1>
+    <p class="landing-tagline">The perpetual progress machine for computational biology</p>
+    <p class="landing-lede">
+        Stargazer is an open-science initiative to broaden access to
+        bioinformatics tools, foster collaboration, and align incentives in
+        service of biomedical progress.
+    </p>
 </div>
 {% endblock %}

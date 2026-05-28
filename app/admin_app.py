@@ -39,12 +39,14 @@ import subprocess
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import flyte
 import flyte.app
 import httpx
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from stargazer.config import (
     PROJECT_ROOT,
@@ -123,8 +125,9 @@ app_env = flyte.app.AppEnvironment(
     requires_auth=False,
     resources=flyte.Resources(memory=("512Mi", "1Gi")),
     env_vars={**STARGAZER_ENV_VARS, **_RUNTIME_SECRETS, **_FLYTE_CONTEXT},
-    # Flyte's loaded_modules bundler ships only .py files; HTML must be enumerated.
-    include=("templates/",),
+    # Flyte's loaded_modules bundler ships only .py files; HTML and the
+    # landing-page logo must be enumerated.
+    include=("templates/", "static/"),
 )
 
 
@@ -166,6 +169,11 @@ async def lifespan(_: FastAPI):
 
 
 asgi_app = FastAPI(title="Stargazer", docs_url=None, redoc_url=None, lifespan=lifespan)
+asgi_app.mount(
+    "/static",
+    StaticFiles(directory=str(Path(__file__).parent / "static")),
+    name="static",
+)
 
 
 def _redirect_uri(request: Request) -> str:
