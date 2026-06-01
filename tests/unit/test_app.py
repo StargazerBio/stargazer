@@ -37,10 +37,12 @@ def client():
     return TestClient(asgi_app)
 
 
-def _auth(client: TestClient, *, fork_owner: str = "", access_token: str = "") -> None:
+def _auth(
+    client: TestClient, *, fork_full_name: str = "", access_token: str = ""
+) -> None:
     """Attach a signed session cookie for `octocat` to the client's jar."""
     data = SessionData(
-        "octocat", 123, fork_owner=fork_owner, access_token=access_token
+        "octocat", 123, fork_full_name=fork_full_name, access_token=access_token
     )
     client.cookies.set(SESSION_COOKIE, create_session_cookie(data, SECRET))
 
@@ -79,10 +81,18 @@ def test_workspace_enabled_false_by_default():
 
 
 def test_workspace_enabled_requires_both_fork_and_token():
-    """Opt-in requires both a fork_owner and an access_token."""
-    assert SessionData("u", 1, fork_owner="u").workspace_enabled is False
+    """Opt-in requires both a fork_full_name and an access_token."""
+    assert SessionData("u", 1, fork_full_name="u/stargazer").workspace_enabled is False
     assert SessionData("u", 1, access_token="t").workspace_enabled is False
-    assert SessionData("u", 1, fork_owner="u", access_token="t").workspace_enabled
+    assert SessionData(
+        "u", 1, fork_full_name="u/stargazer", access_token="t"
+    ).workspace_enabled
+
+
+def test_fork_owner_derived_from_full_name():
+    """fork_owner is derived from fork_full_name's owner segment."""
+    assert SessionData("u", 1, fork_full_name="alice/stargazer-1").fork_owner == "alice"
+    assert SessionData("u", 1).fork_owner == ""
 
 
 # ---------------------------------------------------------------------------
@@ -167,10 +177,14 @@ def test_workspace_enable_requires_session(secret_env, client):
 
 
 def test_workspace_enable_forks_and_sets_cookie(secret_env, client, monkeypatch):
-    """A successful opt-in forks, then re-signs a cookie with fork_owner set."""
+    """A genuine fork is verified and recorded as fork_full_name."""
 
     async def fake_fork(_token):
-        return {"owner": {"login": "octocat"}}
+        return {
+            "fork": True,
+            "full_name": "octocat/stargazer",
+            "owner": {"login": "octocat"},
+        }
 
     monkeypatch.setattr("app.admin_app.fork_upstream", fake_fork)
     _auth(client, access_token="gho_token")  # logged in, not yet enabled
@@ -181,12 +195,50 @@ def test_workspace_enable_forks_and_sets_cookie(secret_env, client, monkeypatch)
     new_cookie = resp.cookies.get(SESSION_COOKIE)
     assert new_cookie is not None
     session = read_session_cookie(new_cookie, SECRET)
-    assert session.fork_owner == "octocat"
+    assert session.fork_full_name == "octocat/stargazer"
     assert session.workspace_enabled is True
 
 
+def test_workspace_enable_collision_fork_name_recorded(secret_env, client, monkeypatch):
+    """A collision fork (`stargazer-1`) records its real full_name."""
+
+    async def fake_fork(_token):
+        return {
+            "fork": True,
+            "full_name": "octocat/stargazer-1",
+            "owner": {"login": "octocat"},
+        }
+
+    monkeypatch.setattr("app.admin_app.fork_upstream", fake_fork)
+    _auth(client, access_token="gho_token")
+
+    resp = client.post("/workspace/enable", follow_redirects=False)
+    session = read_session_cookie(resp.cookies.get(SESSION_COOKIE), SECRET)
+    assert session.fork_full_name == "octocat/stargazer-1"
+
+
+def test_workspace_enable_refuses_non_fork(secret_env, client, monkeypatch):
+    """If forking returns the upstream source (transfer redirect), refuse."""
+
+    async def fake_fork(_token):
+        # Mimics POST /forks resolving to the source repo, not a fork.
+        return {
+            "fork": False,
+            "full_name": "StargazerBio/stargazer",
+            "owner": {"login": "StargazerBio"},
+        }
+
+    monkeypatch.setattr("app.admin_app.fork_upstream", fake_fork)
+    _auth(client, access_token="gho_token")
+
+    resp = client.post("/workspace/enable", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/?ws_error=fork"
+    assert resp.cookies.get(SESSION_COOKIE) is None  # saving stays off
+
+
 def test_workspace_enable_failure_leaves_saving_off(secret_env, client, monkeypatch):
-    """If the fork fails, the session is untouched (saving stays off)."""
+    """If the fork call errors, the session is untouched (saving stays off)."""
 
     async def boom(_token):
         raise RuntimeError("github down")
@@ -250,7 +302,7 @@ def test_launch_workspace_applies_notebook_resources(secret_env, client, monkeyp
     sink: dict = {}
     _stub_serve(monkeypatch, sink)
 
-    _auth(client, fork_owner="octocat", access_token="tok")
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
     resp = client.post(
         "/launch",
         data={"slug": "analysis", "mode": "edit", "section": "workspace"},
@@ -274,7 +326,7 @@ def test_launch_workspace_missing_source_uses_defaults(secret_env, client, monke
     sink: dict = {}
     _stub_serve(monkeypatch, sink)
 
-    _auth(client, fork_owner="octocat", access_token="tok")
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
     resp = client.post(
         "/launch",
         data={"slug": "analysis", "mode": "edit", "section": "workspace"},
@@ -316,7 +368,7 @@ def test_create_requires_optin(secret_env, client):
 
 def test_create_rejects_reserved_name(secret_env, client):
     """The reserved 'template' name is rejected with 400."""
-    _auth(client, fork_owner="octocat", access_token="tok")
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
     resp = client.post("/workspace/create", data=_create_form(name="Template"))
     assert resp.status_code == 400
 
@@ -328,7 +380,7 @@ def test_create_conflict_when_notebook_exists(secret_env, client, monkeypatch):
         return "# existing notebook\n"
 
     monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
-    _auth(client, fork_owner="octocat", access_token="tok")
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
     resp = client.post("/workspace/create", data=_create_form(name="taken"))
     assert resp.status_code == 409
 
@@ -354,7 +406,7 @@ def test_create_blank_writes_file_and_returns_slug(secret_env, client, monkeypat
     monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
     monkeypatch.setattr("app.admin_app.create_workspace_notebook", fake_create)
 
-    _auth(client, fork_owner="octocat", access_token="tok")
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
     resp = client.post(
         "/workspace/create",
         data=_create_form(name="My Analysis", cpu="2", memory="3Gi"),
@@ -393,7 +445,7 @@ def test_create_from_template_injects_resources(secret_env, client, monkeypatch)
     monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
     monkeypatch.setattr("app.admin_app.create_workspace_notebook", fake_create)
 
-    _auth(client, fork_owner="octocat", access_token="tok")
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
     resp = client.post(
         "/workspace/create",
         data=_create_form(name="from tmpl", source="template", cpu="1", memory="2Gi"),

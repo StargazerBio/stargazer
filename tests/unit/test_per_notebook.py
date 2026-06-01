@@ -10,7 +10,7 @@ def _env(**overrides):
         slug="demo",
         mode="edit",
         notebook_path="/workspace/x.py",
-        fork_owner="octocat",
+        fork_full_name="octocat/stargazer",
         github_token="tok",
         session_secret="sek",
         admin_url="http://admin",

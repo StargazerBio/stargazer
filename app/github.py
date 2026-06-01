@@ -39,6 +39,29 @@ def upstream_repo() -> tuple[str, str]:
     return owner, name
 
 
+def upstream_full_name() -> str:
+    """Return the upstream repo as an `owner/name` string."""
+    owner, name = upstream_repo()
+    return f"{owner}/{name}"
+
+
+def is_genuine_fork(repo: dict) -> bool:
+    """True if `repo` is a real fork we may safely write to.
+
+    Guards the transfer-redirect and self-fork cases: a repo whose path
+    redirects to (or *is*) the upstream source comes back as the source —
+    not a fork the user owns. We require GitHub's `fork` flag and a
+    `full_name` distinct from the upstream. Writing to anything else risks
+    clobbering the shared upstream (see docs/architecture/app.md).
+    """
+    full = (repo.get("full_name") or "").lower()
+    return (
+        repo.get("fork") is True
+        and "/" in full
+        and full != upstream_full_name().lower()
+    )
+
+
 async def fork_upstream(access_token: str) -> dict:
     """Idempotently fork the upstream stargazer repo into the token holder's account.
 
@@ -64,28 +87,17 @@ async def fork_upstream(access_token: str) -> dict:
         return await resp.json()
 
 
-def fork_clone_url(fork_owner: str, access_token: str) -> str:
-    """Build an authenticated HTTPS clone URL for the user's fork.
-
-    Uses GitHub's `x-access-token` username convention so HTTP basic-auth
-    works without per-clone token files. Suitable for `git clone` /
-    `git push` inside pods.
-    """
-    _, name = upstream_repo()
-    return f"https://x-access-token:{access_token}@github.com/{fork_owner}/{name}.git"
-
-
-async def list_workspace(fork_owner: str, access_token: str) -> list[str]:
+async def list_workspace(fork_full_name: str, access_token: str) -> list[str]:
     """List `.py` files under `notebooks/workspace/` in the user's fork.
 
     Cold-case fallback used by the admin dashboard when no per-notebook
-    pod is up for the user. Reads from the fork's `WORKSPACE_BRANCH`
-    (where the proxy's `/__sg__/workspace/sync` pushes). Returns an empty
-    list if the directory doesn't exist yet.
+    pod is up for the user. `fork_full_name` is the verified `owner/repo`
+    of the fork. Reads from the fork's `WORKSPACE_BRANCH` (where the proxy's
+    `/__sg__/workspace/sync` pushes). Returns an empty list if the directory
+    doesn't exist yet.
     """
-    _, repo_name = upstream_repo()
     url = (
-        f"{GITHUB_API_BASE}/repos/{fork_owner}/{repo_name}/contents/"
+        f"{GITHUB_API_BASE}/repos/{fork_full_name}/contents/"
         f"{WORKSPACE_CONTENTS_PATH}"
     )
     async with aiohttp.ClientSession() as session:
@@ -112,19 +124,18 @@ async def list_workspace(fork_owner: str, access_token: str) -> list[str]:
 
 
 async def get_workspace_notebook(
-    fork_owner: str, access_token: str, filename: str
+    fork_full_name: str, access_token: str, filename: str
 ) -> str | None:
     """Fetch a workspace notebook's source from the fork's `WORKSPACE_BRANCH`.
 
-    Returns the decoded UTF-8 source, or None if the file is absent. Used by
-    `/launch` to read a notebook's `[tool.stargazer]` resource block before
-    serving the pod, and by `/workspace/create` for collision + template
-    lookups. Non-404 transport errors propagate so callers can fall back to
-    defaults.
+    `fork_full_name` is the verified `owner/repo` of the fork. Returns the
+    decoded UTF-8 source, or None if the file is absent. Used by `/launch` to
+    read a notebook's `[tool.stargazer]` resource block before serving the
+    pod, and by `/workspace/create` for collision + seed lookups. Non-404
+    transport errors propagate so callers can fall back to defaults.
     """
-    _, repo_name = upstream_repo()
     url = (
-        f"{GITHUB_API_BASE}/repos/{fork_owner}/{repo_name}/contents/"
+        f"{GITHUB_API_BASE}/repos/{fork_full_name}/contents/"
         f"{WORKSPACE_CONTENTS_PATH}/{filename}"
     )
     async with aiohttp.ClientSession() as session:
@@ -167,28 +178,8 @@ async def _ensure_ok(resp: aiohttp.ClientResponse, action: str) -> None:
     )
 
 
-async def _resolve_repo_url(
-    session: aiohttp.ClientSession, fork_owner: str, headers: dict
-) -> str:
-    """Return the fork's canonical API URL.
-
-    GitHub 301-redirects the `/repos/{owner}/{name}` path to a canonical
-    (`/repositories/{id}`) form when the fork has been renamed or the login
-    casing differs. Following that redirect on a write can land on a URL
-    that rejects the request; resolving the repo object first gives the
-    canonical `url` (which never redirects), so subsequent writes hit it
-    directly.
-    """
-    _, repo = upstream_repo()
-    info = await session.get(
-        f"{GITHUB_API_BASE}/repos/{fork_owner}/{repo}", headers=headers
-    )
-    await _ensure_ok(info, "read fork repo info")
-    return (await info.json())["url"]
-
-
 async def create_workspace_notebook(
-    fork_owner: str,
+    fork_full_name: str,
     access_token: str,
     filename: str,
     content: str,
@@ -196,21 +187,33 @@ async def create_workspace_notebook(
 ) -> dict:
     """Create a new notebook file on the fork's `WORKSPACE_BRANCH`.
 
-    Assumes the caller has already checked the file does not exist (no `sha`
-    is sent, so GitHub rejects an overwrite). Returns the Contents API
-    response payload.
+    `fork_full_name` is the verified `owner/repo` of the fork. As a final
+    safety net, refuses to write if it resolves to the upstream source — a
+    mis-set fork must never clobber the shared repo. Writes to the literal
+    `/repos/{full_name}` path WITHOUT following redirects, so a transfer
+    redirect surfaces as an error rather than silently retargeting upstream.
+    Assumes the caller has checked the file does not exist (no `sha` is sent,
+    so GitHub rejects an overwrite). Returns the Contents API payload.
     """
+    if fork_full_name.lower() == upstream_full_name().lower():
+        raise RuntimeError(
+            f"refusing to write to the upstream source repo {fork_full_name!r}"
+        )
     path = f"{WORKSPACE_CONTENTS_PATH}/{filename}"
     payload = {
         "message": message or f"workspace: create {filename}",
         "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
         "branch": WORKSPACE_BRANCH,
     }
-    headers = _auth_headers(access_token)
+    url = f"{GITHUB_API_BASE}/repos/{fork_full_name}/contents/{path}"
     async with aiohttp.ClientSession() as session:
-        canonical = await _resolve_repo_url(session, fork_owner, headers)
         resp = await session.put(
-            f"{canonical}/contents/{path}", headers=headers, json=payload
+            url, headers=_auth_headers(access_token), json=payload, allow_redirects=False
         )
+        if 300 <= resp.status < 400:
+            raise RuntimeError(
+                f"write notebook: {fork_full_name!r} redirected "
+                f"(HTTP {resp.status}) — not a writable fork path"
+            )
         await _ensure_ok(resp, "write notebook")
         return await resp.json()

@@ -28,13 +28,14 @@ NOTEBOOK_PATH="$2"
 WORKSPACE_DIR="/workspace"
 
 if [ ! -d "${WORKSPACE_DIR}/.git" ]; then
-  if [ -z "${FORK_OWNER:-}" ] || [ -z "${GITHUB_TOKEN:-}" ]; then
-    echo "warning: FORK_OWNER or GITHUB_TOKEN missing; skipping workspace clone" >&2
+  if [ -z "${FORK_FULL_NAME:-}" ] || [ -z "${GITHUB_TOKEN:-}" ]; then
+    echo "warning: FORK_FULL_NAME or GITHUB_TOKEN missing; skipping workspace clone" >&2
   else
-    UPSTREAM="${STARGAZER_UPSTREAM_REPO:-StargazerBio/stargazer}"
-    REPO_NAME="${UPSTREAM##*/}"
-    CLONE_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${FORK_OWNER}/${REPO_NAME}.git"
-    echo "Cloning ${FORK_OWNER}/${REPO_NAME} into ${WORKSPACE_DIR}..."
+    # FORK_FULL_NAME is the verified `owner/repo` of the fork (may be `…-1`
+    # on a name collision), so clone it directly rather than assuming the
+    # upstream repo name.
+    CLONE_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${FORK_FULL_NAME}.git"
+    echo "Cloning ${FORK_FULL_NAME} into ${WORKSPACE_DIR}..."
     git clone --depth 1 "${CLONE_URL}" "${WORKSPACE_DIR}"
     git -C "${WORKSPACE_DIR}" config user.email "${FORK_OWNER}@users.noreply.github.com"
     git -C "${WORKSPACE_DIR}" config user.name "${FORK_OWNER}"

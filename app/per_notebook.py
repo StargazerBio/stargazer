@@ -153,7 +153,7 @@ def per_notebook_env(
     slug: str,
     mode: Literal["edit", "run"],
     notebook_path: str,
-    fork_owner: str,
+    fork_full_name: str,
     github_token: str,
     session_secret: str,
     admin_url: str,
@@ -166,8 +166,10 @@ def per_notebook_env(
     it's `/workspace/...` (populated by the launch script's
     clone-on-startup against the user's fork).
 
-    `fork_owner` + `github_token` let the launch script clone and the
-    proxy's `/__sg__/workspace/sync` route commit + push. `session_secret`
+    `fork_full_name` (`owner/repo` of the verified fork) + `github_token` let
+    the launch script clone the correct fork — using the full name handles
+    the collision case where GitHub named the fork `…-1`. `FORK_OWNER` is
+    derived for the git commit identity. `session_secret`
     keys the proxy's cookie validation so authenticated browser sessions
     are accepted while drive-by requests get 401s. `admin_url` is the
     admin app's public base URL; the proxy's `/__sg__/dashboard` route
@@ -198,7 +200,8 @@ def per_notebook_env(
         env_vars={
             **STARGAZER_ENV_VARS,
             "FLYTE_DOMAIN": "development",
-            "FORK_OWNER": fork_owner,
+            "FORK_FULL_NAME": fork_full_name,
+            "FORK_OWNER": fork_full_name.split("/", 1)[0],
             "GITHUB_TOKEN": github_token,
             "SESSION_SECRET": session_secret,
             "STARGAZER_ADMIN_URL": admin_url,

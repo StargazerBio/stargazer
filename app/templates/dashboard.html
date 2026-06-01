@@ -58,7 +58,16 @@
         </div>
         {% else %}
         <div class="notice">
+            {% if fork_error %}
+            <p class="notice-head">⚠ Couldn't enable workspace saving</p>
+            <p class="section-desc">We couldn't create a fork for your account.
+            This happens if your account already owns the upstream repo or a
+            repo whose name redirects to it — GitHub returns the source instead
+            of a fork, and Stargazer won't write to the shared upstream. Use a
+            different account, or contact the maintainers.</p>
+            {% else %}
             <p class="notice-head">⚠ Workspace saving is off</p>
+            {% endif %}
             <p class="section-desc">Turn it on to author your own notebooks
             from scratch and keep your work across sessions. Enabling will:</p>
             <ul class="notice-list">

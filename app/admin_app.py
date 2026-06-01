@@ -61,6 +61,7 @@ from app.github import (
     create_workspace_notebook,
     fork_upstream,
     get_workspace_notebook,
+    is_genuine_fork,
     list_workspace as gh_list_workspace,
 )
 from app.notebook_meta import (
@@ -247,10 +248,10 @@ async def _resolve_workspace_files(
     from_pod = await _list_workspace_from_pods(cookie_value, known)
     if from_pod is not None:
         return from_pod
-    if not session.access_token or not session.fork_owner:
+    if not session.workspace_enabled:
         return []
     try:
-        return await gh_list_workspace(session.fork_owner, session.access_token)
+        return await gh_list_workspace(session.fork_full_name, session.access_token)
     except Exception as exc:
         logger.warning(f"GitHub workspace listing failed: {exc}")
         return []
@@ -285,18 +286,24 @@ def _workspace_tiles(workspace_files: list[str]) -> list[dict]:
 
 
 def _dashboard_context(
-    github_username: str, workspace_files: list[str], workspace_enabled: bool
+    github_username: str,
+    workspace_files: list[str],
+    workspace_enabled: bool,
+    fork_error: bool = False,
 ) -> dict:
     """Assemble the tile lists Jinja's `dashboard.html` iterates over.
 
     When `workspace_enabled` is False the user hasn't opted in to forking,
     so no Workspace tiles are built — the template renders the disclaimer +
-    Enable button instead.
+    Enable button instead. `fork_error` (set after a failed
+    `/workspace/enable`) tells the disclaimer to explain the fork couldn't
+    be created.
     """
     return {
         "title": "Dashboard",
         "github_username": github_username,
         "workspace_enabled": workspace_enabled,
+        "fork_error": fork_error,
         "tutorials": [
             _tile_dict(n.slug, n.title, n.description, "tutorials")
             for n in by_section("tutorials")
@@ -325,7 +332,10 @@ async def landing(request: Request):
         request,
         "dashboard.html",
         _dashboard_context(
-            session.github_username, files, session.workspace_enabled
+            session.github_username,
+            files,
+            session.workspace_enabled,
+            fork_error=request.query_params.get("ws_error") == "fork",
         ),
     )
 
@@ -409,12 +419,18 @@ async def workspace_enable(request: Request):
     """Opt in to Workspace saving by forking the upstream repo for this user.
 
     This is the explicit, consent-gated action that creates the user's fork
-    and records `fork_owner` in the session. Only after this does the
-    Workspace section list notebooks and do launches persist edits back to
-    the fork's `main`. Idempotent — `fork_upstream` returns the existing
-    fork if one already exists. On failure the session is left untouched
-    (saving stays off) so the user sees the disclaimer and can retry rather
-    than landing in a half-enabled state.
+    and records its verified `fork_full_name` in the session. Only after this
+    does the Workspace section list notebooks and do launches persist edits
+    back to the fork's `main`. Idempotent — `fork_upstream` returns the
+    existing fork if one already exists.
+
+    Before recording anything, `is_genuine_fork` confirms GitHub actually
+    handed back a fork the user owns — NOT the upstream source. That's the
+    guard against accounts whose namespace redirects to (or is) the upstream
+    (e.g. the repo was transferred out of a personal account): there, forking
+    yields the source, and writing to it would clobber the shared repo. On
+    any failure the session is left untouched (saving stays off) and we
+    redirect with `?ws_error=fork` so the user sees why.
     """
     session = _get_session(request)
     if session is None:
@@ -423,9 +439,17 @@ async def workspace_enable(request: Request):
         fork = await fork_upstream(session.access_token)
     except Exception as exc:
         logger.error(f"Fork creation failed for {session.github_username!r}: {exc}")
-        return RedirectResponse("/", status_code=303)
+        return RedirectResponse("/?ws_error=fork", status_code=303)
 
-    session.fork_owner = fork["owner"]["login"]
+    if not is_genuine_fork(fork):
+        logger.error(
+            f"Refusing workspace enable for {session.github_username!r}: not a "
+            f"genuine fork (full_name={fork.get('full_name')!r}, "
+            f"fork={fork.get('fork')!r})"
+        )
+        return RedirectResponse("/?ws_error=fork", status_code=303)
+
+    session.fork_full_name = fork["full_name"]
     cookie = create_session_cookie(session, _env("SESSION_SECRET"))
     response = RedirectResponse("/", status_code=303)
     response.set_cookie(
@@ -488,24 +512,24 @@ async def workspace_create(
 
     filename = f"{slug}.py"
     resources = resources_from_inputs(cpu, memory)
-    owner, token = session.fork_owner, session.access_token
+    repo, token = session.fork_full_name, session.access_token
 
     try:
-        if await get_workspace_notebook(owner, token, filename) is not None:
+        if await get_workspace_notebook(repo, token, filename) is not None:
             return JSONResponse(
                 {"error": f"notebook already exists: {filename}"}, status_code=409
             )
 
         # Both sources are shipped seed notebooks (`{source}.py`); copy the
         # chosen one and inject the requested resources into its header.
-        seed_src = await get_workspace_notebook(owner, token, f"{source}.py")
+        seed_src = await get_workspace_notebook(repo, token, f"{source}.py")
         if seed_src is None:
             return JSONResponse(
                 {"error": f"{source} seed not found in fork"}, status_code=502
             )
         content = with_stargazer_resources(seed_src, resources)
 
-        await create_workspace_notebook(owner, token, filename, content)
+        await create_workspace_notebook(repo, token, filename, content)
     except Exception as exc:
         logger.error(f"Notebook create failed for {filename!r}: {exc}")
         return JSONResponse({"error": f"create failed: {exc}"}, status_code=502)
@@ -551,7 +575,7 @@ async def launch(
         notebook_path = f"{WORKSPACE_NOTEBOOK_DIR}/{slug}.py"
         try:
             source = await get_workspace_notebook(
-                session.fork_owner, session.access_token, f"{slug}.py"
+                session.fork_full_name, session.access_token, f"{slug}.py"
             )
         except Exception as exc:
             logger.warning(f"Resource fetch failed for workspace {slug!r}: {exc}")
@@ -574,7 +598,7 @@ async def launch(
         slug=slug,
         mode=mode,  # type: ignore[arg-type]
         notebook_path=notebook_path,
-        fork_owner=session.fork_owner,
+        fork_full_name=session.fork_full_name,
         github_token=session.access_token,
         session_secret=_env("SESSION_SECRET"),
         admin_url=admin_url,

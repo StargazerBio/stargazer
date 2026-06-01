@@ -24,23 +24,29 @@ SESSION_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
 class SessionData:
     """Session payload stored in the signed cookie.
 
-    `fork_owner` is the GitHub login of the user's stargazer fork (usually
-    identical to `github_username` unless GitHub redirected the fork to a
-    different account). It stays empty until the user explicitly opts in to
-    workspace saving via `POST /workspace/enable`; an empty value means no
-    fork exists yet and Workspace saving is off. `access_token` is the OAuth
+    `fork_full_name` is the `owner/repo` of the user's *verified* stargazer
+    fork — the exact name GitHub created, which may differ from the upstream
+    name on a collision (e.g. `alice/stargazer-1`). It stays empty until the
+    user opts in via `POST /workspace/enable`, which only records it after
+    confirming the repo is a genuine fork and not the upstream source; an
+    empty value means Workspace saving is off. `access_token` is the OAuth
     token used by the dashboard to fork, list, clone, and push.
     """
 
     github_username: str
     github_id: int
-    fork_owner: str = ""
+    fork_full_name: str = ""
     access_token: str = ""
+
+    @property
+    def fork_owner(self) -> str:
+        """The fork's owner login, derived from `fork_full_name`."""
+        return self.fork_full_name.split("/", 1)[0] if self.fork_full_name else ""
 
     @property
     def workspace_enabled(self) -> bool:
         """True once the user has opted in to forking (Workspace saving)."""
-        return bool(self.fork_owner and self.access_token)
+        return bool(self.fork_full_name and self.access_token)
 
 
 def create_session_cookie(data: SessionData, secret: str) -> str:
