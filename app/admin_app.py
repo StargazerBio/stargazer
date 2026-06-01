@@ -32,6 +32,7 @@ Deploy hosted to Flyte:
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
+import asyncio
 import atexit
 import os
 import re
@@ -73,6 +74,7 @@ from app.notebook_meta import (
 )
 from app.init import init
 from app.notebooks import (
+    NOTEBOOKS,
     SEED_SLUGS,
     WORKSPACE_NOTEBOOK_DIR,
     Notebook,
@@ -534,7 +536,13 @@ async def workspace_create(
         logger.error(f"Notebook create failed for {filename!r}: {exc}")
         return JSONResponse({"error": f"create failed: {exc}"}, status_code=502)
 
-    return JSONResponse({"slug": slug})
+    # Return the rendered tile so the dashboard can drop it straight into the
+    # Workspace grid — from there it behaves like any other tile (Edit/Run,
+    # then the standard launch + status flow). Create stays a pure "add a
+    # notebook" action: no launching, no navigation.
+    tile = _tile_dict(slug, filename, "Personal workspace notebook.", "workspace")
+    tile_html = templates.env.get_template("_tile.html").render(tile=tile)
+    return JSONResponse({"slug": slug, "tile_html": tile_html})
 
 
 @asgi_app.post("/launch")
@@ -653,6 +661,50 @@ async def stop(
 
     _launched.get(session.github_username, {}).pop((slug, mode), None)
     return JSONResponse({"stopped": True})
+
+
+@asgi_app.get("/launch/status")
+async def launch_status(request: Request):
+    """Report which of the user's notebooks have an active per-notebook app.
+
+    For each candidate `nb-{slug}-{mode}` (Tutorials/Community from the
+    registry, plus the user's Workspace notebooks), query Flyte in the user's
+    project and keep the ones that are active with a public endpoint. Queried
+    live from the control plane, so it's authoritative and survives admin
+    restarts (unlike the in-memory `_launched`). The dashboard calls this on
+    load to render running notebooks straight to Open+Stop instead of a fresh
+    Edit/Run that would re-spin.
+    """
+    session = _get_session(request)
+    if session is None:
+        return JSONResponse({"error": "not authenticated"}, status_code=401)
+    project = sanitize_project_id(session.github_username)
+
+    slugs = [n.slug for n in NOTEBOOKS]
+    if session.workspace_enabled:
+        cookie_value = request.cookies.get(SESSION_COOKIE, "")
+        files = await _resolve_workspace_files(session, cookie_value)
+        slugs += [
+            slug
+            for f in files
+            if (slug := f.removesuffix(".py")) not in SEED_SLUGS
+        ]
+
+    async def _probe(slug: str, mode: str) -> dict | None:
+        """Return run info for `nb-{slug}-{mode}` if it's active, else None."""
+        try:
+            app = await App.get.aio(
+                name=f"nb-{slug}-{mode}", project=project, domain="development"
+            )
+        except Exception:
+            return None  # not found / not deployed
+        if app.is_active() and app.endpoint:
+            return {"slug": slug, "mode": mode, "url": app.endpoint}
+        return None
+
+    probes = [_probe(slug, mode) for slug in slugs for mode in ("edit", "run")]
+    running = [r for r in await asyncio.gather(*probes) if r is not None]
+    return JSONResponse({"running": running})
 
 
 @asgi_app.get("/health")

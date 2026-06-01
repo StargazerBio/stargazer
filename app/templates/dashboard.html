@@ -51,9 +51,9 @@
                 <option value="4Gi" selected>4 GiB</option>
                 <option value="6Gi">6 GiB</option>
             </select>
-            <button type="submit" class="btn btn-notebook">Create &amp; open</button>
+            <button type="submit" class="btn btn-notebook">Create</button>
         </form>
-        <div class="grid">
+        <div class="grid" id="workspace-grid">
             {% for tile in workspace %}{% include "_tile.html" %}{% endfor %}
         </div>
         {% else %}
@@ -195,34 +195,69 @@
         return payload.url;
     }
 
-    document.querySelectorAll('form.launch-form').forEach((form) => {
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const button = form.querySelector('button[type="submit"]');
-            const row = form.closest('.launch-row');
-            const originalLabel = button.textContent;
-            button.disabled = true;
-            button.innerHTML = '<span class="spinner-inline"></span>';
-            try {
-                const url = await requestLaunch(new FormData(form));
-                // Poll for readiness for up to 3 min — covers cold-start
-                // plus uv's sandbox-venv install (~90 packages).
-                const ready = await pollReady(url, Date.now() + 180000);
-                if (!ready) throw new Error('timed out waiting for notebook to start');
-                button.disabled = false;
-                button.textContent = originalLabel;
-                showLaunched(row, form, url);
-            } catch (err) {
-                button.textContent = originalLabel;
-                button.disabled = false;
-                alert('Launch failed: ' + err.message);
-            }
-        });
+    // Run the launch flow for one tile: spinner → /launch → poll ready →
+    // show Open+Stop beside the button.
+    async function handleLaunch(form) {
+        const button = form.querySelector('button[type="submit"]');
+        const row = form.closest('.launch-row');
+        const originalLabel = button.textContent;
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-inline"></span>';
+        try {
+            const url = await requestLaunch(new FormData(form));
+            // Poll for readiness for up to 3 min — covers cold-start plus
+            // uv's sandbox-venv install (~90 packages).
+            const ready = await pollReady(url, Date.now() + 180000);
+            if (!ready) throw new Error('timed out waiting for notebook to start');
+            button.disabled = false;
+            button.textContent = originalLabel;
+            showLaunched(row, form, url);
+        } catch (err) {
+            button.textContent = originalLabel;
+            button.disabled = false;
+            alert('Launch failed: ' + err.message);
+        }
+    }
+
+    // Delegated, so tiles added after load (e.g. a freshly created notebook)
+    // get the same Edit/Run behavior with no re-binding.
+    document.addEventListener('submit', (e) => {
+        const form = e.target.closest('form.launch-form');
+        if (!form) return;
+        e.preventDefault();
+        handleLaunch(form);
     });
 
-    // Create-and-open: POST /workspace/create to write the file, then chain
-    // into the standard /launch (edit) path for the returned slug and
-    // navigate to the new notebook once it's ready.
+    // Find a tile's launch form by slug + mode (both are hidden inputs).
+    function findLaunchForm(slug, mode) {
+        return Array.from(document.querySelectorAll('form.launch-form')).find(
+            (f) =>
+                f.querySelector('input[name="slug"]').value === slug &&
+                f.querySelector('input[name="mode"]').value === mode
+        );
+    }
+
+    // On load, ask which notebooks are already running and flip their tiles
+    // straight to Open+Stop — no re-launch, no spin. Authoritative + survives
+    // admin restarts (the server queries Flyte, not in-memory state).
+    async function hydrateRunning() {
+        let data;
+        try {
+            const resp = await fetch('/launch/status', {
+                headers: { Accept: 'application/json' },
+            });
+            if (!resp.ok) return;
+            data = await resp.json();
+        } catch (_) { return; }
+        for (const { slug, mode, url } of (data.running || [])) {
+            const form = findLaunchForm(slug, mode);
+            if (form) showLaunched(form.closest('.launch-row'), form, url);
+        }
+    }
+
+    // Create just adds a notebook: write the file, then drop the returned
+    // tile into the Workspace grid. From there it's a normal tile (Edit/Run →
+    // launch → Open/Stop), so run-state is handled exactly like every other.
     const createForm = document.getElementById('create-form');
     if (createForm) {
         createForm.addEventListener('submit', async (e) => {
@@ -241,20 +276,19 @@
                 if (!resp.ok) {
                     throw new Error(payload.error || ('HTTP ' + resp.status));
                 }
-                const fd = new FormData();
-                fd.set('slug', payload.slug);
-                fd.set('section', 'workspace');
-                fd.set('mode', 'edit');
-                const url = await requestLaunch(fd);
-                const ready = await pollReady(url, Date.now() + 180000);
-                if (!ready) throw new Error('timed out waiting for notebook to start');
-                window.location.href = url;
+                document
+                    .getElementById('workspace-grid')
+                    .insertAdjacentHTML('beforeend', payload.tile_html);
+                createForm.querySelector('input[name="name"]').value = '';
             } catch (err) {
+                alert('Create failed: ' + err.message);
+            } finally {
                 button.disabled = false;
                 button.textContent = originalLabel;
-                alert('Create failed: ' + err.message);
             }
         });
     }
+
+    hydrateRunning();
 </script>
 {% endblock %}

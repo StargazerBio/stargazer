@@ -263,6 +263,68 @@ def test_stop_requires_session(secret_env, client):
 
 
 # ---------------------------------------------------------------------------
+# /launch/status
+# ---------------------------------------------------------------------------
+
+
+class _FakeApp:
+    """Stand-in for a flyte.remote.App in status tests."""
+
+    def __init__(self, active: bool, endpoint: str):
+        self._active, self._endpoint = active, endpoint
+
+    def is_active(self) -> bool:
+        """Whether the app is deployed and active."""
+        return self._active
+
+    @property
+    def endpoint(self) -> str:
+        """The app's public endpoint URL."""
+        return self._endpoint
+
+
+def _stub_app_get(monkeypatch, table: dict):
+    """Patch admin_app.App so App.get.aio resolves names from `table`."""
+
+    class _Get:
+        async def aio(self, name, project, domain):
+            if name in table:
+                return table[name]
+            raise RuntimeError("not found")
+
+    monkeypatch.setattr("app.admin_app.App", SimpleNamespace(get=_Get()))
+
+
+def test_launch_status_requires_session(secret_env, client):
+    """Unauthenticated /launch/status is rejected with 401."""
+    resp = client.get("/launch/status")
+    assert resp.status_code == 401
+
+
+def test_launch_status_reports_only_active_apps(secret_env, client, monkeypatch):
+    """Status returns active per-notebook apps with their endpoints."""
+    _stub_app_get(monkeypatch, {"nb-assets-edit": _FakeApp(True, "http://nb.example")})
+
+    _auth(client)  # no fork → workspace off → registry notebooks only
+    resp = client.get("/launch/status", headers={"Accept": "application/json"})
+    assert resp.status_code == 200
+    running = resp.json()["running"]
+    assert running == [
+        {"slug": "assets", "mode": "edit", "url": "http://nb.example"}
+    ]
+
+
+def test_launch_status_skips_inactive_apps(secret_env, client, monkeypatch):
+    """A deployed-but-inactive app is not reported as running."""
+    _stub_app_get(monkeypatch, {"nb-assets-edit": _FakeApp(False, "http://nb.example")})
+
+    _auth(client)
+    resp = client.get("/launch/status", headers={"Accept": "application/json"})
+    assert resp.status_code == 200
+    assert resp.json()["running"] == []
+
+
+# ---------------------------------------------------------------------------
 # /launch — workspace resource propagation
 # ---------------------------------------------------------------------------
 
@@ -412,7 +474,11 @@ def test_create_blank_writes_file_and_returns_slug(secret_env, client, monkeypat
         data=_create_form(name="My Analysis", cpu="2", memory="3Gi"),
     )
     assert resp.status_code == 200
-    assert resp.json()["slug"] == "my-analysis"
+    body = resp.json()
+    assert body["slug"] == "my-analysis"
+    # Create returns a ready-to-insert tile that behaves like any other.
+    assert 'name="slug" value="my-analysis"' in body["tile_html"]
+    assert "launch-form" in body["tile_html"]
 
     assert written["filename"] == "my-analysis.py"
     # The written file is a runnable marimo notebook carrying the resources.
