@@ -50,13 +50,6 @@ class Notebook:
 # so the per-notebook navigation bar's prev/next buttons resolve correctly.
 NOTEBOOKS: tuple[Notebook, ...] = (
     Notebook(
-        slug="preprocessing",
-        title="scRNA-seq Preprocessing",
-        description="Asset → Task → Workflow, local vs remote on one sample.",
-        section="tutorials",
-        path_in_image=f"{IMAGE_WORKDIR}/src/stargazer/notebooks/tutorials/preprocessing_tutorial.py",
-    ),
-    Notebook(
         slug="assets",
         title="Assets",
         description="Content-addressed I/O primitives.",
@@ -71,8 +64,15 @@ NOTEBOOKS: tuple[Notebook, ...] = (
         path_in_image=f"{IMAGE_WORKDIR}/src/stargazer/notebooks/tutorials/tasks_tutorial.py",
     ),
     Notebook(
+        slug="preprocessing",
+        title="Execution",
+        description="Asset → Task → Workflow, local vs remote on one sample.",
+        section="tutorials",
+        path_in_image=f"{IMAGE_WORKDIR}/src/stargazer/notebooks/tutorials/preprocessing_tutorial.py",
+    ),
+    Notebook(
         slug="scrna-pipeline",
-        title="scRNA-seq Production Pipeline",
+        title="scRNA-seq",
         description="Multi-sample fan-out, clustering, side-by-side UMAPs.",
         section="community",
         path_in_image=f"{IMAGE_WORKDIR}/src/stargazer/notebooks/community/scrna_pipeline.py",

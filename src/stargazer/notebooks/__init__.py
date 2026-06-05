@@ -36,10 +36,10 @@ class _NavEntry:
 # new tutorial means appending here AND adding a `Notebook(...)` entry
 # to `app/notebooks.py::NOTEBOOKS`.
 NAV_ORDER: tuple[_NavEntry, ...] = (
-    _NavEntry("preprocessing", "scRNA-seq Preprocessing", "tutorials"),
     _NavEntry("assets", "Assets", "tutorials"),
     _NavEntry("tasks", "Tasks", "tutorials"),
-    _NavEntry("scrna-pipeline", "scRNA-seq Production Pipeline", "community"),
+    _NavEntry("preprocessing", "Execution", "tutorials"),
+    _NavEntry("scrna-pipeline", "scRNA-seq", "community"),
 )
 
 

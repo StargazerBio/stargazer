@@ -13,7 +13,7 @@
 # stargazer = { path = "/stargazer", editable = true }
 # ///
 """
-### Stargazer scRNA-seq production pipeline.
+### Stargazer scRNA-seq.
 
 Multi-sample fan-out preprocessing plus interactive clustering, side-by-side
 UMAPs, and marker-gene tables. The community-tier counterpart of the
@@ -47,7 +47,7 @@ def _():
 
     mo.md(
         """
-        # Stargazer — scRNA-seq Explorer
+        # Stargazer — scRNA-seq
 
         A guided tour of how Stargazer wraps scanpy in a Flyte v2
         orchestrator. Pick samples from the `scrna_demo` bundle, then

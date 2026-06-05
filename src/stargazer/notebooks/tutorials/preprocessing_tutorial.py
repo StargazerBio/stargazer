@@ -49,7 +49,7 @@ def _():
 
     mo.md(
         """
-        # Stargazer — scRNA-seq Preprocessing Tutorial
+        # Stargazer — Execution
 
         A guided tour of how Stargazer wraps scanpy in a Flyte v2
         orchestrator. We'll build a four-stage preprocessing pipeline
