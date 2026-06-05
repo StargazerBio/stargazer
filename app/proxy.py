@@ -83,7 +83,13 @@ def _sync_workspace() -> tuple[dict, int]:
     status = git("status", "--porcelain", WORKSPACE_REL)
     if not status.stdout.strip():
         return {"status": "clean"}, 200
-    commit = git("commit", "-m", "workspace: sync from notebook session")
+    # Name the touched notebook(s) in the message — the porcelain paths are the
+    # only authoritative signal here (the pod isn't told its own slug). For
+    # renames ("R old -> new") the last token is the new path.
+    saved = sorted(
+        {Path(line.split()[-1]).stem for line in status.stdout.splitlines() if line.strip()}
+    )
+    commit = git("commit", "-m", f"workspace: save {', '.join(saved)}")
     if commit.returncode != 0:
         return {"error": "git commit failed", "stderr": commit.stderr}, 500
     push = git("push", "origin", "HEAD:main")

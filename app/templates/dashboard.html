@@ -136,10 +136,24 @@
     function showLaunched(row, form, url) {
         row.querySelectorAll('.launched-extra').forEach((el) => el.remove());
 
+        // A notebook runs in exactly one modality at a time. Hide this row's own
+        // Edit/Run button (Open/Stop take over) and the *other* mode's button
+        // too, so a running notebook offers no path to a second pod. Stop
+        // restores both. See docs/architecture/app.md. Don't hide a sibling
+        // that's itself already launched (a legacy both-running pod hydrated
+        // from /launch/status keeps its own Open/Stop visible).
+        const mode = form.querySelector('input[name="mode"]').value;
+        const tile = row.closest('.tile');
+        row.hidden = false;
+        form.hidden = true;
+        tile.querySelectorAll('.launch-row').forEach((r) => {
+            if (r !== row && !r.querySelector('.launched-extra')) r.hidden = true;
+        });
+
         const open = document.createElement('a');
         open.href = url;
         open.className = 'btn btn-ready launched-extra';
-        open.textContent = 'Open';
+        open.textContent = mode === 'run' ? 'Open in Run Mode' : 'Open in Edit Mode';
         open.target = '_blank';
         open.rel = 'noopener';
 
@@ -205,6 +219,12 @@
                 throw new Error('stop HTTP ' + resp.status + ': ' + txt.slice(0, 200));
             }
             row.querySelectorAll('.launched-extra').forEach((el) => el.remove());
+            // Nothing's running now — restore every mode's Edit/Run button
+            // (both the hidden sibling row and this row's own hidden form).
+            row.closest('.tile').querySelectorAll('.launch-row').forEach((r) => {
+                r.hidden = false;
+                r.querySelectorAll('form.launch-form').forEach((f) => { f.hidden = false; });
+            });
         } catch (err) {
             stopBtn.disabled = false;
             stopBtn.textContent = 'Stop';
@@ -276,6 +296,7 @@
     async function deleteNotebook(btn) {
         const slug = btn.dataset.deleteSlug;
         if (!confirm(`Delete notebook "${slug}"? This removes it from your fork.`)) return;
+        const restore = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-inline"></span>';
         try {
@@ -289,7 +310,7 @@
             btn.closest('.tile').remove();
         } catch (err) {
             btn.disabled = false;
-            btn.textContent = 'Delete';
+            btn.innerHTML = restore;
             alert('Delete failed: ' + err.message);
         }
     }

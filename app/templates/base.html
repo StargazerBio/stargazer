@@ -245,17 +245,46 @@
             border-color: var(--border-strong);
             color: var(--text);
         }
-        .btn-stop, .btn-delete {
+        .btn-stop {
             background: transparent;
             color: var(--text-dim);
             border-color: var(--border);
         }
-        .btn-stop:hover, .btn-delete:hover {
+        .btn-stop:hover {
             background: rgba(229, 83, 75, 0.09);
             border-color: rgba(229, 83, 75, 0.5);
             color: var(--danger);
         }
-        .btn-delete { align-self: flex-start; }
+        /* Trashcan control, pinned to the tile's top-right corner. Muted at
+           rest so the grid stays calm; reddens on tile/own hover. */
+        .tile-delete {
+            position: absolute;
+            top: 0.6rem;
+            right: 0.6rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.85rem;
+            height: 1.85rem;
+            padding: 0;
+            border-radius: 6px;
+            border: 1px solid transparent;
+            background: transparent;
+            color: var(--text-dim);
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.15s ease, background 0.15s ease,
+                        border-color 0.15s ease, color 0.15s ease;
+        }
+        .tile:hover .tile-delete { opacity: 0.65; }
+        .tile-delete:hover {
+            opacity: 1;
+            background: rgba(229, 83, 75, 0.09);
+            border-color: rgba(229, 83, 75, 0.5);
+            color: var(--danger);
+        }
+        .tile-delete[disabled] { opacity: 0.7; cursor: wait; }
+        .tile-delete svg { display: block; }
         /* Round emoji control with a hover tooltip — the shared UI language
            for both the dashboard's cleanup button and the landing's login,
            so the two pages read as one product. Positioning is per-instance;
@@ -319,7 +348,11 @@
             margin-top: 0.15rem;
         }
         .launch-row { display: inline-flex; align-items: center; gap: 0.4rem; }
+        /* A launched notebook hides its other-mode row (one modality per
+           notebook); the class rule above would otherwise beat UA [hidden]. */
+        .launch-row[hidden] { display: none; }
         .launch-row form { margin: 0; display: inline-flex; }
+        .launch-row form[hidden] { display: none; }
         /* Brand mark, top-left — anchors the dashboard header opposite the
            avatar menu and links home. Sits in normal flow so it never
            overlaps the first section heading. */
