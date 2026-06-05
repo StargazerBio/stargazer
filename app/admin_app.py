@@ -59,6 +59,7 @@ from stargazer.config import (
 )
 
 from app.github import (
+    canonical_fork_name,
     create_workspace_notebook,
     delete_workspace_notebook,
     find_existing_fork,
@@ -86,6 +87,7 @@ from app.notebooks import (
 from app.oauth import exchange_code, get_github_user, github_auth_url
 from app.per_notebook import (
     NOTEBOOK_IMAGE_URI,
+    list_project_apps,
     notebook_app_img_recipe,
     per_notebook_env,
 )
@@ -469,13 +471,15 @@ async def workspace_enable(request: Request):
     back to the fork's `main`. Idempotent — `fork_upstream` returns the
     existing fork if one already exists.
 
-    Before recording anything, `is_genuine_fork` confirms GitHub actually
-    handed back a fork the user owns — NOT the upstream source. That's the
-    guard against accounts whose namespace redirects to (or is) the upstream
-    (e.g. the repo was transferred out of a personal account): there, forking
-    yields the source, and writing to it would clobber the shared repo. On
-    any failure the session is left untouched (saving stays off) and we
-    redirect with `?ws_error=fork` so the user sees why.
+    Two checks before recording: `is_genuine_fork` confirms GitHub handed back
+    a fork the user owns — NOT the upstream source (the transfer-redirect /
+    self-fork case, where writing would clobber the shared repo) — and the
+    result must sit at the canonical `{username}/{upstream_name}` location. If
+    that name is already taken, GitHub renames the fork (`stargazer-1`); we
+    refuse rather than track the alias, so detection at login (which only looks
+    at the canonical name) can never disagree with what enable recorded. On any
+    failure the session is left untouched (saving stays off) and we redirect
+    with `?ws_error=fork` so the user sees why.
     """
     session = _get_session(request)
     if session is None:
@@ -486,11 +490,12 @@ async def workspace_enable(request: Request):
         logger.error(f"Fork creation failed for {session.github_username!r}: {exc}")
         return RedirectResponse("/?ws_error=fork", status_code=303)
 
-    if not is_genuine_fork(fork):
+    canonical = canonical_fork_name(session.github_username)
+    if not is_genuine_fork(fork) or fork.get("full_name") != canonical:
         logger.error(
             f"Refusing workspace enable for {session.github_username!r}: not a "
-            f"genuine fork (full_name={fork.get('full_name')!r}, "
-            f"fork={fork.get('fork')!r})"
+            f"genuine fork at the canonical name {canonical!r} "
+            f"(full_name={fork.get('full_name')!r}, fork={fork.get('fork')!r})"
         )
         return RedirectResponse("/?ws_error=fork", status_code=303)
 
@@ -595,9 +600,11 @@ async def workspace_delete(request: Request, slug: str = Form(...)):
     """Delete a workspace notebook from the user's fork.
 
     Removes `<slug>.py` from the fork's `main` (idempotent — a file that's
-    already gone still returns 200) and best-effort deactivates any running
-    edit/run pod for that slug, so a deleted notebook can't orphan a pod with
-    no tile left to Stop it.
+    already gone still returns 200) and tears down each edit/run pod for that
+    slug completely: deactivate (clean stop), then delete the deployment record,
+    so a deleted notebook leaves nothing behind — no tile to Stop it, no orphan
+    for `/workspace/cleanup` to reap. Both steps are best-effort and never fail
+    the delete.
     """
     session = _get_session(request)
     if session is None:
@@ -612,13 +619,17 @@ async def workspace_delete(request: Request, slug: str = Form(...)):
         )
 
     project = sanitize_project_id(session.github_username)
-    # Tear down any running pod first; best-effort, never fails the delete.
+    # Tear down each pod completely; best-effort, never fails the delete.
+    # Deactivate first (a clean stop), then delete the deployment record.
     for mode in ("edit", "run"):
+        name = f"nb-{slug}-{mode}"
         try:
-            app = await App.get.aio(
-                name=f"nb-{slug}-{mode}", project=project, domain="development"
-            )
+            app = await App.get.aio(name=name, project=project, domain="development")
             await app.deactivate.aio()
+        except Exception:
+            pass
+        try:
+            await App.delete.aio(name=name, project=project, domain="development")
         except Exception:
             pass
         _launched.get(session.github_username, {}).pop((slug, mode), None)
@@ -865,25 +876,31 @@ async def workspace_save(
 async def workspace_cleanup(request: Request):
     """Delete the user's stopped (deactivated) per-notebook app deployments.
 
-    Stopping a notebook deactivates its app but leaves the deployment record.
-    This removes those records (`App.delete`) for every deactivated
-    `nb-{slug}-{mode}` candidate in the user's project. Active/idle apps are
-    left alone. Returns the deleted app names.
+    Stopping a notebook (or deleting one) deactivates its app but leaves the
+    deployment record. This lists EVERY `nb-*` app in the user's project — not
+    just those still on the dashboard — and removes the deactivated ones, so a
+    deleted notebook's leftover stopped app is cleaned up too. The list only
+    discovers names; each is re-fetched with `App.get` for authoritative status
+    before deletion. Active/idle apps are left alone. Returns the deleted names.
     """
     session = _get_session(request)
     if session is None:
         return JSONResponse({"error": "not authenticated"}, status_code=401)
     project = sanitize_project_id(session.github_username)
-    cookie_value = request.cookies.get(SESSION_COOKIE, "")
-    slugs = await _candidate_slugs(session, cookie_value)
+    try:
+        apps = await list_project_apps(project, domain="development")
+    except Exception as exc:
+        logger.error(f"cleanup listing failed for {project!r}: {exc}")
+        return JSONResponse({"error": f"cleanup failed: {exc}"}, status_code=502)
 
-    async def _cleanup(slug: str, mode: str) -> str | None:
-        """Delete `nb-{slug}-{mode}` if it exists and is deactivated."""
-        name = f"nb-{slug}-{mode}"
+    names = [app.name for app in apps if app.name.startswith("nb-")]
+
+    async def _cleanup(name: str) -> str | None:
+        """Delete `name` if it's still a deactivated deployment."""
         try:
             app = await App.get.aio(name=name, project=project, domain="development")
         except Exception:
-            return None  # not deployed
+            return None  # vanished between list and get
         if not app.is_deactivated():
             return None
         try:
@@ -893,9 +910,7 @@ async def workspace_cleanup(request: Request):
             logger.warning(f"cleanup delete failed for {name!r}: {exc}")
             return None
 
-    results = await asyncio.gather(
-        *(_cleanup(slug, mode) for slug in slugs for mode in ("edit", "run"))
-    )
+    results = await asyncio.gather(*(_cleanup(name) for name in names))
     deleted = [r for r in results if r is not None]
     return JSONResponse({"deleted": deleted, "count": len(deleted)})
 

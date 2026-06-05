@@ -226,36 +226,43 @@
             color: var(--danger);
         }
         .btn-delete { align-self: flex-start; }
-        .cleanup-fab {
-            position: absolute;
-            bottom: 1rem;
-            right: 1rem;
-            width: 3rem;
-            height: 3rem;
+        /* Round emoji control with a hover tooltip — the shared UI language
+           for both the dashboard's cleanup button and the landing's login,
+           so the two pages read as one product. Positioning is per-instance;
+           appearance + tooltip live here. */
+        .icon-fab {
+            position: relative;
+            width: 2.7rem;
+            height: 2.7rem;
             border-radius: 50%;
-            border: 1px solid #30363d;
-            background: #21262d;
-            font-size: 1.4rem;
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            color: var(--text);
+            font-size: 1.25rem;
             line-height: 1;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: opacity 0.15s, transform 0.15s;
-            z-index: 50;
+            text-decoration: none;
+            transition: border-color 0.15s, transform 0.15s, opacity 0.15s;
         }
-        .cleanup-fab:hover { opacity: 0.9; transform: translateY(-2px); }
-        .cleanup-fab[disabled] { opacity: 0.7; cursor: wait; transform: none; }
-        .cleanup-fab[data-tooltip]::after {
+        .icon-fab:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+            opacity: 1;
+        }
+        .icon-fab[disabled] { opacity: 0.7; cursor: wait; transform: none; }
+        .icon-fab[data-tooltip]::after {
             content: attr(data-tooltip);
             position: absolute;
-            bottom: 50%;
+            top: 50%;
             right: calc(100% + 0.6rem);
-            transform: translateY(50%);
+            transform: translateY(-50%);
             white-space: nowrap;
-            background: #161b22;
-            color: #c9d1d9;
-            border: 1px solid #30363d;
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
             padding: 0.3rem 0.55rem;
             border-radius: 6px;
             font-size: 0.75rem;
@@ -263,7 +270,16 @@
             pointer-events: none;
             transition: opacity 0.15s;
         }
-        .cleanup-fab:hover[data-tooltip]::after { opacity: 1; }
+        .icon-fab:hover[data-tooltip]::after { opacity: 1; }
+        .cleanup-fab {
+            position: absolute;
+            bottom: 1rem;
+            right: 1rem;
+            width: 3rem;
+            height: 3rem;
+            font-size: 1.4rem;
+            z-index: 50;
+        }
         .actions { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
         .tile-actions {
             display: flex;
@@ -274,6 +290,25 @@
         }
         .launch-row { display: inline-flex; align-items: center; gap: 0.4rem; }
         .launch-row form { margin: 0; display: inline-flex; }
+        /* Brand mark, top-left — anchors the dashboard header opposite the
+           avatar menu and links home. Sits in normal flow so it never
+           overlaps the first section heading. */
+        /* Pull up-and-left so the icon lines up with the top-corner controls
+           (avatar / login key at 1rem inset) rather than sitting inside the
+           2rem/2.5rem content padding. Stays in flow, so no overlap. */
+        .dash-brand {
+            display: inline-flex;
+            align-items: center;
+            margin: -1rem 0 0.5rem -1.5rem;
+        }
+        .dash-brand img {
+            width: 40px;
+            height: 40px;
+            object-fit: contain;
+            display: block;
+            transition: transform 0.15s ease;
+        }
+        .dash-brand:hover img { transform: translateY(-1px) scale(1.04); }
         .user-menu {
             position: absolute;
             top: 1rem;

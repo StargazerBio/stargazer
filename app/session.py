@@ -25,12 +25,12 @@ class SessionData:
     """Session payload stored in the signed cookie.
 
     `fork_full_name` is the `owner/repo` of the user's *verified* stargazer
-    fork — the exact name GitHub created, which may differ from the upstream
-    name on a collision (e.g. `alice/stargazer-1`). It stays empty until the
-    user opts in via `POST /workspace/enable`, which only records it after
-    confirming the repo is a genuine fork and not the upstream source; an
-    empty value means Workspace saving is off. `access_token` is the OAuth
-    token used by the dashboard to fork, list, clone, and push.
+    fork, always the canonical `{username}/{upstream_name}` (see
+    `github.canonical_fork_name`). It stays empty until the user opts in via
+    `POST /workspace/enable`, which only records it after confirming the repo is
+    a genuine fork of upstream at that canonical name; an empty value means
+    Workspace saving is off. `access_token` is the OAuth token used by the
+    dashboard to fork, list, clone, and push.
     """
 
     github_username: str

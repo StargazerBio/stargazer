@@ -48,6 +48,19 @@ def upstream_full_name() -> str:
     return f"{owner}/{name}"
 
 
+def canonical_fork_name(username: str) -> str:
+    """The deterministic fork location: `{username}/{upstream_name}`.
+
+    Stargazer treats this as the *only* valid fork. GitHub names a fork after
+    its upstream, so this is where both `find_existing_fork` (detection) and
+    `/workspace/enable` (creation) look — keeping them in lockstep. If the name
+    is already taken on the user's account, Workspace saving is simply
+    unavailable; we don't fall back to a renamed fork (`stargazer-1`).
+    """
+    _, name = upstream_repo()
+    return f"{username}/{name}"
+
+
 def is_genuine_fork(repo: dict) -> bool:
     """True if `repo` is a real fork we may safely write to.
 
@@ -91,15 +104,18 @@ async def fork_upstream(access_token: str) -> dict:
 
 
 async def find_existing_fork(access_token: str, username: str) -> dict | None:
-    """Return the user's existing fork of the upstream repo, or None.
+    """Return the user's fork of the upstream repo if it exists, else None.
 
     Detection-only — no fork is created (that stays the opt-in
-    `/workspace/enable` action). Lets a returning user who enabled Workspace
-    saving in a past session have it restored at login: the fork persists on
-    GitHub, but the session cookie is minted fresh each login. Looks up
-    `{username}/{upstream_name}` and confirms it is a genuine fork whose
-    `parent` is our upstream, so an unrelated repo that merely shares the name
-    is ignored. Any non-200 / network error yields None (saving stays off).
+    `/workspace/enable` action). Restores Workspace saving for a returning user:
+    the fork persists on GitHub, but the session cookie is minted fresh each
+    login.
+
+    A fork's location is deterministic (`canonical_fork_name`), so this is a
+    single lookup — fetch that repo and keep it only if it's a genuine fork of
+    our upstream. We don't chase collision-renamed forks; `enable` refuses to
+    create one off the canonical name, so detection and creation stay in
+    lockstep. Any non-200 / network error yields None (saving stays off).
     """
     _, name = upstream_repo()
     url = f"{GITHUB_API_BASE}/repos/{username}/{name}"
@@ -108,10 +124,16 @@ async def find_existing_fork(access_token: str, username: str) -> dict | None:
         if resp.status != 200:
             return None
         repo = await resp.json()
-    parent = ((repo.get("parent") or {}).get("full_name") or "").lower()
-    if is_genuine_fork(repo) and parent == upstream_full_name().lower():
-        return repo
-    return None
+    if not is_genuine_fork(repo):
+        return None
+    # Confirm it's a fork of *our* upstream, not some other repo of the same
+    # name the user happens to have forked.
+    upstream = upstream_full_name().lower()
+    forked_from = {
+        ((repo.get(key) or {}).get("full_name") or "").lower()
+        for key in ("parent", "source")
+    }
+    return repo if upstream in forked_from else None
 
 
 async def list_workspace(fork_full_name: str, access_token: str) -> list[str]:

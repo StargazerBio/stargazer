@@ -1,18 +1,16 @@
 {% extends "base.html" %}
 
 {% block extra_css %}
+/* Reuse the dashboard's .dashboard box so signed-out and signed-in views
+   share one frame; .landing only adds the centered, roomier landing padding. */
 .landing {
-    position: relative;
-    max-width: 1100px;
-    width: 100%;
-    padding: 4rem 2.5rem 3rem;
+    padding: 3.5rem 2.5rem 2.5rem;
     text-align: center;
 }
 .landing .signin {
     position: absolute;
     top: 1rem;
     right: 1rem;
-    margin: 0;
 }
 .landing-logo {
     width: 320px;
@@ -64,8 +62,9 @@
 {% endblock %}
 
 {% block body %}
-<div class="landing">
-    <a href="/auth/login" class="btn btn-github signin">Sign in with GitHub</a>
+<div class="dashboard landing">
+    <a href="/auth/login" class="icon-fab signin"
+       aria-label="Login via GitHub" data-tooltip="Login via GitHub">🔑</a>
 
     <img class="landing-logo" src="/static/8-bit_stargazer_no-bg.jpg" alt="Stargazer">
     <h1 class="landing-title">Stargazer</h1>

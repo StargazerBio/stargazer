@@ -2,6 +2,10 @@
 
 {% block body %}
 <div class="dashboard">
+    <a href="/" class="dash-brand" aria-label="Stargazer home">
+        <img src="/static/8-bit_stargazer_no-bg.jpg" alt="Stargazer">
+    </a>
+
     <details class="user-menu">
         <summary aria-label="User menu">
             <img src="https://github.com/{{ github_username }}.png?size=80" alt="">
@@ -12,7 +16,7 @@
         </div>
     </details>
 
-    <button id="cleanup-btn" class="cleanup-fab" type="button"
+    <button id="cleanup-btn" class="icon-fab cleanup-fab" type="button"
             aria-label="Clean up stopped notebooks"
             data-tooltip="Clean up stopped notebooks">🧹</button>
 

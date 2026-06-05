@@ -199,8 +199,13 @@ def test_workspace_enable_forks_and_sets_cookie(secret_env, client, monkeypatch)
     assert session.workspace_enabled is True
 
 
-def test_workspace_enable_collision_fork_name_recorded(secret_env, client, monkeypatch):
-    """A collision fork (`stargazer-1`) records its real full_name."""
+def test_workspace_enable_refuses_collision_fork(secret_env, client, monkeypatch):
+    """A collision fork (`stargazer-1`) is refused — only the canonical name.
+
+    Detection at login only looks at the canonical `{user}/stargazer`, so
+    recording an alias would silently break saving on the next login. We refuse
+    instead and keep the two paths in lockstep.
+    """
 
     async def fake_fork(_token):
         return {
@@ -213,8 +218,9 @@ def test_workspace_enable_collision_fork_name_recorded(secret_env, client, monke
     _auth(client, access_token="gho_token")
 
     resp = client.post("/workspace/enable", follow_redirects=False)
-    session = read_session_cookie(resp.cookies.get(SESSION_COOKIE), SECRET)
-    assert session.fork_full_name == "octocat/stargazer-1"
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/?ws_error=fork"
+    assert resp.cookies.get(SESSION_COOKIE) is None  # saving stays off
 
 
 def test_workspace_enable_refuses_non_fork(secret_env, client, monkeypatch):
@@ -358,8 +364,12 @@ class _FakeApp:
         return self._endpoint
 
 
-def _stub_app_get(monkeypatch, table: dict):
-    """Patch admin_app.App so App.get.aio resolves names from `table`."""
+def _stub_app_get(monkeypatch, table: dict, deleted: list | None = None):
+    """Patch admin_app.App so App.get.aio resolves names from `table`.
+
+    App.delete.aio records deleted names into `deleted` when provided, so
+    teardown paths (e.g. /workspace/delete) can be asserted.
+    """
 
     class _Get:
         async def aio(self, name, project, domain):
@@ -367,7 +377,14 @@ def _stub_app_get(monkeypatch, table: dict):
                 return table[name]
             raise RuntimeError("not found")
 
-    monkeypatch.setattr("app.admin_app.App", SimpleNamespace(get=_Get()))
+    class _Delete:
+        async def aio(self, name, project, domain):
+            if deleted is not None:
+                deleted.append(name)
+
+    monkeypatch.setattr(
+        "app.admin_app.App", SimpleNamespace(get=_Get(), delete=_Delete())
+    )
 
 
 def test_launch_status_requires_session(secret_env, client):
@@ -470,28 +487,43 @@ def test_cleanup_requires_session(secret_env, client):
     assert resp.status_code == 401
 
 
-def test_cleanup_deletes_only_deactivated_apps(secret_env, client, monkeypatch):
-    """Cleanup deletes stopped (deactivated) apps and reports their names."""
+def test_cleanup_deletes_deactivated_apps_regardless_of_dashboard(
+    secret_env, client, monkeypatch
+):
+    """Cleanup lists every nb-* app in the project and deletes the deactivated
+    ones — including a deleted notebook's leftover that's on no dashboard list,
+    while skipping active apps and non-notebook deployments."""
 
-    class _DeactivatedApp:
-        def is_active(self):
-            return False
-
-        def is_deactivated(self):
-            return True
+    class _App:
+        def __init__(self, name, deactivated):
+            self._name = name
+            self._deactivated = deactivated
 
         @property
-        def endpoint(self):
-            return "http://x"
+        def name(self):
+            return self._name
+
+        def is_deactivated(self):
+            return self._deactivated
+
+    # A deleted notebook's stopped app (in no registry/workspace listing), an
+    # active app, and a non-notebook deployment.
+    table = {
+        "nb-deleted-edit": _App("nb-deleted-edit", True),
+        "nb-running-run": _App("nb-running-run", False),
+        "other-service": _App("other-service", True),
+    }
+
+    async def fake_list(project, domain="development", limit=500):
+        return list(table.values())
+
+    monkeypatch.setattr("app.admin_app.list_project_apps", fake_list)
 
     deleted: list = []
-    table = {"nb-assets-edit": _DeactivatedApp()}
 
     class _Get:
         async def aio(self, name, project, domain):
-            if name in table:
-                return table[name]
-            raise RuntimeError("not found")
+            return table[name]
 
     class _Delete:
         async def aio(self, name, project, domain):
@@ -501,11 +533,25 @@ def test_cleanup_deletes_only_deactivated_apps(secret_env, client, monkeypatch):
         "app.admin_app.App", SimpleNamespace(get=_Get(), delete=_Delete())
     )
 
-    _auth(client)  # workspace off -> registry candidates only
+    _auth(client)
     resp = client.post("/workspace/cleanup", headers={"Accept": "application/json"})
     assert resp.status_code == 200
-    assert resp.json() == {"deleted": ["nb-assets-edit"], "count": 1}
-    assert deleted == ["nb-assets-edit"]
+    assert resp.json() == {"deleted": ["nb-deleted-edit"], "count": 1}
+    assert deleted == ["nb-deleted-edit"]
+
+
+def test_cleanup_listing_failure_returns_502(secret_env, client, monkeypatch):
+    """If listing the project's apps fails, cleanup reports an error, not a 500."""
+
+    async def boom(project, domain="development", limit=500):
+        raise RuntimeError("control plane down")
+
+    monkeypatch.setattr("app.admin_app.list_project_apps", boom)
+
+    _auth(client)
+    resp = client.post("/workspace/cleanup", headers={"Accept": "application/json"})
+    assert resp.status_code == 502
+    assert "error" in resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -756,6 +802,42 @@ def test_delete_removes_notebook(secret_env, client, monkeypatch):
     assert resp.status_code == 200
     assert resp.json()["slug"] == "my-analysis"
     assert deleted == {"repo": "octocat/stargazer", "filename": "my-analysis.py"}
+
+
+def test_delete_tears_down_pod_deployment(secret_env, client, monkeypatch):
+    """Delete deactivates AND deletes the deployment for each running mode."""
+    deactivated: list = []
+    deleted_apps: list = []
+
+    class _RunningApp:
+        def __init__(self, name):
+            self.name = name
+            self.deactivate = SimpleNamespace(aio=self._deactivate)
+
+        async def _deactivate(self):
+            deactivated.append(self.name)
+
+    table = {
+        "nb-my-analysis-edit": _RunningApp("nb-my-analysis-edit"),
+        "nb-my-analysis-run": _RunningApp("nb-my-analysis-run"),
+    }
+
+    async def fake_delete(repo, token, filename, message=None):
+        return True
+
+    monkeypatch.setattr(
+        "app.admin_app.delete_workspace_notebook", fake_delete, raising=False
+    )
+    _stub_app_get(monkeypatch, table, deleted=deleted_apps)
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
+    resp = client.post(
+        "/workspace/delete",
+        data={"slug": "my-analysis"},
+        headers={"Accept": "application/json"},
+    )
+    assert resp.status_code == 200
+    assert sorted(deactivated) == ["nb-my-analysis-edit", "nb-my-analysis-run"]
+    assert sorted(deleted_apps) == ["nb-my-analysis-edit", "nb-my-analysis-run"]
 
 
 def test_delete_idempotent_when_missing(secret_env, client, monkeypatch):

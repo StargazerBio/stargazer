@@ -41,6 +41,10 @@ from typing import Literal
 
 import flyte
 import flyte.app
+from flyte._initialize import get_client, get_init_config
+from flyte.remote import App
+from flyteidl2.app import app_payload_pb2
+from flyteidl2.common import identifier_pb2, list_pb2
 
 from stargazer.config import PROJECT_ROOT, STARGAZER_ENV_VARS
 
@@ -207,3 +211,38 @@ def per_notebook_env(
             "STARGAZER_ADMIN_URL": admin_url,
         },
     )
+
+
+async def list_project_apps(
+    project: str, domain: str = "development", limit: int = 500
+) -> list[App]:
+    """List every App deployment in `project`, regardless of name or state.
+
+    `flyte.remote.App.listall` only honors the ambient init-config project (the
+    admin's), but per-notebook apps live in each user's own project, so we issue
+    the project-scoped list against the same client the SDK uses — there's no
+    public list API that takes a project. Callers re-`App.get` by name for
+    authoritative status, since a list payload may not carry full conditions.
+
+    Used by `/workspace/cleanup` to find stopped apps for notebooks no longer on
+    the dashboard (e.g. deleted ones), which a name-bounded probe would miss.
+    """
+    cfg = get_init_config()
+    project_id = identifier_pb2.ProjectIdentifier(
+        organization=cfg.org, name=project, domain=domain
+    )
+    apps: list[App] = []
+    token = None
+    while len(apps) < limit:
+        resp = await get_client().app_service.list(
+            request=app_payload_pb2.ListRequest(
+                request=list_pb2.ListRequest(limit=100, token=token),
+                org=cfg.org,
+                project=project_id,
+            )
+        )
+        apps.extend(App(a) for a in resp.apps)
+        token = resp.token
+        if not token:
+            break
+    return apps
