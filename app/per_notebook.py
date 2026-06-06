@@ -112,7 +112,9 @@ notebook_app_img_recipe = (
         ]
     )
     .with_pip_packages(
-        "marimo>=0.10.0",
+        # Launcher marimo — pinned to the same version each notebook's sandbox
+        # kernel resolves (see config.MARIMO_VERSION) so the two never skew.
+        f"marimo=={config.MARIMO_VERSION}",
         "fastapi>=0.115",
         "uvicorn>=0.34",
         "itsdangerous>=2.1",
@@ -130,7 +132,7 @@ notebook_app_img_recipe = (
     # Bake the stargazer source tree at `/stargazer/` so each notebook's
     # `[tool.uv.sources] stargazer = { path = "/stargazer", editable = true }`
     # resolves inside the marimo --sandbox venv. Image-shipped notebooks live
-    # under `/stargazer/src/stargazer/notebooks/{tutorials,community}/`.
+    # under `/stargazer/src/stargazer/notebooks/{tutorials,workflows}/`.
     .with_source_file(PROJECT_ROOT / "pyproject.toml", "/stargazer/")
     .with_source_file(PROJECT_ROOT / "README.md", "/stargazer/")
     .with_source_folder(PROJECT_ROOT / "src", "/stargazer/src")
@@ -188,7 +190,7 @@ def per_notebook_env(
     `/__sg__/dashboard` route 302s here, and the pod calls it back for tokens.
 
     `resources` is the notebook's declared `[tool.stargazer]` spec, honored
-    as-authored (no ceiling). When None — image-baked tutorials and community
+    as-authored (no ceiling). When None — image-baked tutorials and workflows
     notebooks — the env falls back to the legacy `("2Gi", "6Gi")`
     request/limit, which the memory-heavy scRNA notebook depends on.
     """

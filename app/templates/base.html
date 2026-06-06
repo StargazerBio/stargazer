@@ -155,6 +155,53 @@
         .section-desc { font-size: 0.85rem; color: #8b949e; margin-bottom: 1rem; max-width: 640px; }
         .section-desc a { color: var(--accent); text-decoration: none; }
         .section-desc a:hover { text-decoration: underline; }
+        /* Inline tagline beside each section's <h2> — the one-line "what is
+           this shelf" descriptor. Lighter weight + dim so the heading still
+           leads. Wraps under the title on narrow viewports. */
+        .section-tag {
+            font-size: 0.82rem;
+            font-weight: 400;
+            color: var(--text-dim);
+            margin-left: 0.5rem;
+            letter-spacing: 0;
+        }
+        /* The New-notebook tile: a create form that lives at the end of the
+           workspace grid. Dashed border marks it as an action, not a notebook;
+           the form stacks vertically to fit one grid cell. */
+        .tile-create { border-style: dashed; }
+        /* Fill the tile so the create tile matches its neighbors' height and
+           its Create row lines up with their action buttons. */
+        .create-form-tile {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0.5rem;
+            margin: 0;
+            height: 100%;
+        }
+        .create-form-tile .create-name,
+        .create-form-tile select { min-width: 0; width: 100%; }
+        /* Name input stands in for the tile's <h3> title — a touch more
+           presence than the secondary fields below it. */
+        .create-form-tile .create-title {
+            font-family: var(--mono);
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--heading);
+        }
+        /* Resources + Create share the bottom row, pinned to the tile floor. */
+        .create-form-tile .create-fields-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: auto;
+        }
+        .create-form-tile .create-fields-row .btn {
+            flex: 1 1 auto;
+            min-width: 4.5rem;
+            justify-content: center;
+        }
         .notice {
             background: #0d1117;
             border: 1px solid #30363d;
@@ -330,14 +377,17 @@
             transition: opacity 0.15s;
         }
         .icon-fab:hover[data-tooltip]::after { opacity: 1; }
+        /* Invisible footer: a flow row at the card's bottom that right-aligns
+           the cleanup control so it can't overlap the last section's tiles
+           (it used to be absolutely positioned and clipped them). */
+        .dash-footer {
+            display: flex;
+            justify-content: flex-end;
+        }
         .cleanup-fab {
-            position: absolute;
-            bottom: 1rem;
-            right: 1rem;
             width: 3rem;
             height: 3rem;
             font-size: 1.4rem;
-            z-index: 50;
         }
         .actions { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
         .tile-actions {
@@ -353,16 +403,20 @@
         .launch-row[hidden] { display: none; }
         .launch-row form { margin: 0; display: inline-flex; }
         .launch-row form[hidden] { display: none; }
-        /* Brand mark, top-left — anchors the dashboard header opposite the
-           avatar menu and links home. Sits in normal flow so it never
+        /* Dashboard header: brand (left) and avatar menu (right) in a single
+           flow row. Pulled up-and-out so brand/avatar sit near the card's top
+           corners (matching the old 1rem-inset look) rather than inside the
+           2rem/2.5rem content padding — but in normal flow, so it never
            overlaps the first section heading. */
-        /* Pull up-and-left so the icon lines up with the top-corner controls
-           (avatar / login key at 1rem inset) rather than sitting inside the
-           2rem/2.5rem content padding. Stays in flow, so no overlap. */
+        .dash-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: -1rem -1.5rem 0.5rem;
+        }
         .dash-brand {
             display: inline-flex;
             align-items: center;
-            margin: -1rem 0 0.5rem -1.5rem;
         }
         .dash-brand img {
             width: 40px;
@@ -373,9 +427,7 @@
         }
         .dash-brand:hover img { transform: translateY(-1px) scale(1.04); }
         .user-menu {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
+            position: relative;
         }
         .user-menu summary {
             list-style: none;

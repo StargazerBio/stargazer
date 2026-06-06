@@ -1,113 +1,202 @@
-{% extends "base.html" %}
-
-{% block body %}
+{% extends "base.html" %} {% block body %}
 <div class="dashboard">
-    <a href="/" class="dash-brand" aria-label="Stargazer home">
-        <img src="/static/8-bit_stargazer_no-bg.jpg" alt="Stargazer">
-    </a>
+    <header class="dash-header">
+        <a href="/" class="dash-brand" aria-label="Stargazer home">
+            <img src="/static/8-bit_stargazer_no-bg.jpg" alt="Stargazer" />
+        </a>
 
-    <details class="user-menu">
-        <summary aria-label="User menu">
-            <img src="https://github.com/{{ github_username }}.png?size=80" alt="">
-        </summary>
-        <div class="menu">
-            <div class="menu-user">Signed in as <strong>@{{ github_username }}</strong></div>
-            <a class="menu-item" href="/auth/logout">Sign out</a>
-        </div>
-    </details>
-
-    <button id="cleanup-btn" class="icon-fab cleanup-fab" type="button"
-            aria-label="Clean up stopped notebooks"
-            data-tooltip="Clean up stopped notebooks">🧹</button>
+        <details class="user-menu">
+            <summary aria-label="User menu">
+                <img
+                    src="https://github.com/{{ github_username }}.png?size=80"
+                    alt=""
+                />
+            </summary>
+            <div class="menu">
+                <div class="menu-user">
+                    Signed in as <strong>@{{ github_username }}</strong>
+                </div>
+                <a class="menu-item" href="/auth/logout">Sign out</a>
+            </div>
+        </details>
+    </header>
 
     <section>
-        <h2>Tutorials</h2>
+        <h2>
+            Workflows
+            <span class="section-tag"
+                >Production pipelines — bring your own data.</span
+            >
+        </h2>
         <div class="grid">
-            {% for tile in tutorials %}{% include "_tile.html" %}{% endfor %}
+            {% for tile in workflows %}{% include "_tile.html" %}{% endfor %}
         </div>
     </section>
 
     <section>
-        <h2>Community</h2>
+        <h2>
+            Snapshots
+            <span class="section-tag"
+                >Frozen notebooks — inputs, outputs, and image pinned.</span
+            >
+        </h2>
+        {% if snapshots %}
         <div class="grid">
-            {% for tile in community %}{% include "_tile.html" %}{% endfor %}
+            {% for tile in snapshots %}{% include "_tile.html" %}{% endfor %}
         </div>
+        {% else %}
+        <p class="section-desc">
+            No snapshots yet — freeze a notebook to pin its inputs, outputs, and
+            image here for exact reproduction.
+        </p>
+        {% endif %}
     </section>
 
     <section>
-        <h2>Workspace</h2>
+        <h2>
+            Workspace
+            <span class="section-tag">Author and save your own notebooks.</span>
+        </h2>
         {% if workspace_enabled %}
-        <p class="section-desc">Author your own notebooks from scratch and
-        commit them to your branch. Create one below or start from the
-        <a href="https://github.com/StargazerBio/stargazer/blob/main/src/stargazer/notebooks/workspace/template.py"
-           target="_blank" rel="noopener">template</a> — anything you save
-        lands in <code>notebooks/workspace/</code> on your fork.</p>
-        <form id="create-form" class="create-form">
-            <input name="name" class="create-name" placeholder="New notebook name"
-                   required maxlength="60">
-            <select name="source" title="Start from">
-                <option value="blank">Blank</option>
-                <option value="template">From template</option>
-            </select>
-            <label class="create-field" title="CPUs">
-                <input type="number" name="cpu" value="2" min="1" step="1"
-                       required class="create-num" aria-label="CPUs">
-                <span class="create-unit">CPU</span>
-            </label>
-            <label class="create-field" title="Memory in GiB">
-                <input type="number" name="memory" value="4" min="1" step="1"
-                       required class="create-num" aria-label="Memory in GiB">
-                <span class="create-unit">GiB</span>
-            </label>
-            <button type="submit" class="btn btn-notebook">Create</button>
-        </form>
+        <p class="section-desc">
+            Author your own notebooks from scratch and commit them to your
+            branch. Use the <strong>New notebook</strong> tile or start from the
+            <a
+                href="https://github.com/StargazerBio/stargazer/blob/main/src/stargazer/notebooks/workspace/template.py"
+                target="_blank"
+                rel="noopener"
+                >template</a
+            >
+            — anything you save lands in <code>notebooks/workspace/</code> on
+            your fork.
+        </p>
         <div class="grid" id="workspace-grid">
             {% for tile in workspace %}{% include "_tile.html" %}{% endfor %}
+            <div class="tile tile-create" id="create-tile">
+                <form id="create-form" class="create-form create-form-tile">
+                    <input
+                        name="name"
+                        class="create-name create-title"
+                        placeholder="New notebook name"
+                        required
+                        maxlength="60"
+                    />
+                    <select name="source" title="Start from">
+                        <option value="blank">Blank</option>
+                        <option value="template">Template</option>
+                    </select>
+                    <div class="create-fields-row">
+                        <label class="create-field" title="CPUs">
+                            <input
+                                type="number"
+                                name="cpu"
+                                value="2"
+                                min="1"
+                                step="1"
+                                required
+                                class="create-num"
+                                aria-label="CPUs"
+                            />
+                            <span class="create-unit">CPU</span>
+                        </label>
+                        <label class="create-field" title="Memory in GiB">
+                            <input
+                                type="number"
+                                name="memory"
+                                value="4"
+                                min="1"
+                                step="1"
+                                required
+                                class="create-num"
+                                aria-label="Memory in GiB"
+                            />
+                            <span class="create-unit">GiB</span>
+                        </label>
+                        <button type="submit" class="btn btn-notebook">
+                            Create
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
         {% else %}
         <div class="notice">
             {% if fork_error %}
             <p class="notice-head">⚠ Couldn't enable workspace saving</p>
-            <p class="section-desc">We couldn't create a fork for your account.
-            This happens if your account already owns the upstream repo or a
-            repo whose name redirects to it — GitHub returns the source instead
-            of a fork, and Stargazer won't write to the shared upstream. Use a
-            different account, or contact the maintainers.</p>
+            <p class="section-desc">
+                We couldn't create a fork for your account. This happens if your
+                account already owns the upstream repo or a repo whose name
+                redirects to it — GitHub returns the source instead of a fork,
+                and Stargazer won't write to the shared upstream. Use a
+                different account, or contact the maintainers.
+            </p>
             {% else %}
             <p class="notice-head">⚠ Workspace saving is off</p>
             {% endif %}
-            <p class="section-desc">Turn it on to author your own notebooks
-            from scratch and keep your work across sessions. Enabling will:</p>
+            <p class="section-desc">
+                Turn it on to author your own notebooks from scratch and keep
+                your work across sessions. Enabling will:
+            </p>
             <ul class="notice-list">
-                <li>Fork the public <code>StargazerBio/stargazer</code> repo
-                into your GitHub account.</li>
-                <li>Send you to GitHub to install the Stargazer app — choose
-                <strong>Only select repositories</strong> and pick your new
-                <code>stargazer</code> fork, so it can read and write just that
-                one repo.</li>
-                <li>Save notebooks you create or edit to your fork's
-                <code>main</code>, under <code>notebooks/workspace/</code>.</li>
+                <li>
+                    Fork the public <code>StargazerBio/stargazer</code> repo
+                    into your GitHub account.
+                </li>
+                <li>
+                    Send you to GitHub to install the Stargazer app — choose
+                    <strong>Only select repositories</strong> and pick your new
+                    <code>stargazer</code> fork, so it can read and write just
+                    that one repo.
+                </li>
+                <li>
+                    Save notebooks you create or edit to your fork's
+                    <code>main</code>, under <code>notebooks/workspace/</code>.
+                </li>
             </ul>
-            <p class="section-desc">Stargazer never holds a broad token — the
-            app is scoped to your fork, and you can revoke it anytime from your
-            GitHub settings. Saving starts working once the app is installed;
-            nothing is written until then. Tutorials and Community notebooks
-            work without it — they just aren't saved.</p>
-            <form method="post" action="/workspace/enable" style="margin:0;">
-                <button class="btn btn-github" type="submit">Enable workspace saving</button>
+            <p class="section-desc">
+                Stargazer never holds a broad token — the app is scoped to your
+                fork, and you can revoke it anytime from your GitHub settings.
+                Saving starts working once the app is installed; nothing is
+                written until then. Tutorials and Workflow notebooks work
+                without it — they just aren't saved.
+            </p>
+            <form method="post" action="/workspace/enable" style="margin: 0">
+                <button class="btn btn-github" type="submit">
+                    Enable workspace saving
+                </button>
             </form>
         </div>
         {% endif %}
     </section>
-</div>
-{% endblock %}
 
-{% block scripts %}
+    <section>
+        <h2>
+            Tutorials
+            <span class="section-tag">Learn the building blocks.</span>
+        </h2>
+        <div class="grid">
+            {% for tile in tutorials %}{% include "_tile.html" %}{% endfor %}
+        </div>
+    </section>
+
+    <footer class="dash-footer">
+        <button
+            id="cleanup-btn"
+            class="icon-fab cleanup-fab"
+            type="button"
+            aria-label="Clean up stopped notebooks"
+            data-tooltip="Clean up stopped notebooks"
+        >
+            🧹
+        </button>
+    </footer>
+</div>
+{% endblock %} {% block scripts %}
 <script>
     // Close the user menu when clicking outside the avatar/dropdown.
-    document.addEventListener('click', (e) => {
-        document.querySelectorAll('details.user-menu[open]').forEach((d) => {
-            if (!d.contains(e.target)) d.removeAttribute('open');
+    document.addEventListener("click", (e) => {
+        document.querySelectorAll("details.user-menu[open]").forEach((d) => {
+            if (!d.contains(e.target)) d.removeAttribute("open");
         });
     });
 
@@ -122,14 +211,16 @@
         // because /__sg__/ready needs no auth and shouldn't burn the
         // one-shot launch token.
         const u = new URL(notebookUrl);
-        const readyUrl = u.origin + '/__sg__/ready';
+        const readyUrl = u.origin + "/__sg__/ready";
         while (Date.now() < deadlineMs) {
             try {
                 // Keep this a "simple" CORS request (no custom headers) so
                 // the browser doesn't issue an OPTIONS preflight.
-                const resp = await fetch(readyUrl, { method: 'GET' });
+                const resp = await fetch(readyUrl, { method: "GET" });
                 if (resp.ok) return true;
-            } catch (_) { /* CORS or network blip — keep trying */ }
+            } catch (_) {
+                /* CORS or network blip — keep trying */
+            }
             await new Promise((r) => setTimeout(r, 2000));
         }
         return false;
@@ -140,7 +231,7 @@
     // re-launched; the extras are tagged `.launched-extra` so a re-launch or
     // a Stop can clear them without disturbing the form.
     function showLaunched(row, form, url) {
-        row.querySelectorAll('.launched-extra').forEach((el) => el.remove());
+        row.querySelectorAll(".launched-extra").forEach((el) => el.remove());
 
         // A notebook runs in exactly one modality at a time. Hide this row's own
         // Edit/Run button (Open/Stop take over) and the *other* mode's button
@@ -149,39 +240,41 @@
         // that's itself already launched (a legacy both-running pod hydrated
         // from /launch/status keeps its own Open/Stop visible).
         const mode = form.querySelector('input[name="mode"]').value;
-        const tile = row.closest('.tile');
+        const tile = row.closest(".tile");
         row.hidden = false;
         form.hidden = true;
-        tile.querySelectorAll('.launch-row').forEach((r) => {
-            if (r !== row && !r.querySelector('.launched-extra')) r.hidden = true;
+        tile.querySelectorAll(".launch-row").forEach((r) => {
+            if (r !== row && !r.querySelector(".launched-extra"))
+                r.hidden = true;
         });
 
-        const open = document.createElement('a');
+        const open = document.createElement("a");
         open.href = url;
-        open.className = 'btn btn-ready launched-extra';
-        open.textContent = mode === 'run' ? 'Open in Run Mode' : 'Open in Edit Mode';
-        open.target = '_blank';
-        open.rel = 'noopener';
+        open.className = "btn btn-ready launched-extra";
+        open.textContent =
+            mode === "run" ? "Open in Run Mode" : "Open in Edit Mode";
+        open.target = "_blank";
+        open.rel = "noopener";
 
-        const stop = document.createElement('button');
-        stop.type = 'button';
-        stop.className = 'btn btn-stop launched-extra';
-        stop.textContent = 'Stop';
-        stop.addEventListener('click', () => stopNotebook(stop, row, form));
+        const stop = document.createElement("button");
+        stop.type = "button";
+        stop.className = "btn btn-stop launched-extra";
+        stop.textContent = "Stop";
+        stop.addEventListener("click", () => stopNotebook(stop, row, form));
 
         row.appendChild(open);
         row.appendChild(stop);
 
-        // Workspace notebooks can be committed to the fork; tutorials/community
+        // Workspace notebooks can be committed to the fork; tutorials/workflows
         // are ephemeral, so no Save for them.
         const section = form.querySelector('input[name="section"]');
-        if (section && section.value === 'workspace') {
-            const save = document.createElement('button');
-            save.type = 'button';
-            save.className = 'btn btn-save launched-extra';
-            save.textContent = 'Save';
-            save.title = 'Commit this notebook to your fork';
-            save.addEventListener('click', () => saveNotebook(save, form));
+        if (section && section.value === "workspace") {
+            const save = document.createElement("button");
+            save.type = "button";
+            save.className = "btn btn-save launched-extra";
+            save.textContent = "Save";
+            save.title = "Commit this notebook to your fork";
+            save.addEventListener("click", () => saveNotebook(save, form));
             row.appendChild(save);
         }
     }
@@ -193,19 +286,24 @@
         saveBtn.disabled = true;
         saveBtn.innerHTML = '<span class="spinner-inline"></span>';
         try {
-            const resp = await fetch('/workspace/save', {
-                method: 'POST',
+            const resp = await fetch("/workspace/save", {
+                method: "POST",
                 body: new FormData(form),
-                headers: { Accept: 'application/json' },
+                headers: { Accept: "application/json" },
             });
             const payload = await resp.json().catch(() => ({}));
-            if (!resp.ok) throw new Error(payload.error || ('HTTP ' + resp.status));
-            saveBtn.textContent = payload.status === 'clean' ? 'No changes' : 'Saved ✓';
-            setTimeout(() => { saveBtn.textContent = original; saveBtn.disabled = false; }, 2500);
+            if (!resp.ok)
+                throw new Error(payload.error || "HTTP " + resp.status);
+            saveBtn.textContent =
+                payload.status === "clean" ? "No changes" : "Saved ✓";
+            setTimeout(() => {
+                saveBtn.textContent = original;
+                saveBtn.disabled = false;
+            }, 2500);
         } catch (err) {
             saveBtn.disabled = false;
             saveBtn.textContent = original;
-            alert('Save failed: ' + err.message);
+            alert("Save failed: " + err.message);
         }
     }
 
@@ -215,26 +313,34 @@
         stopBtn.disabled = true;
         stopBtn.innerHTML = '<span class="spinner-inline"></span>';
         try {
-            const resp = await fetch('/stop', {
-                method: 'POST',
+            const resp = await fetch("/stop", {
+                method: "POST",
                 body: new FormData(form),
-                headers: { Accept: 'application/json' },
+                headers: { Accept: "application/json" },
             });
             if (!resp.ok) {
                 const txt = await resp.text();
-                throw new Error('stop HTTP ' + resp.status + ': ' + txt.slice(0, 200));
+                throw new Error(
+                    "stop HTTP " + resp.status + ": " + txt.slice(0, 200),
+                );
             }
-            row.querySelectorAll('.launched-extra').forEach((el) => el.remove());
+            row.querySelectorAll(".launched-extra").forEach((el) =>
+                el.remove(),
+            );
             // Nothing's running now — restore every mode's Edit/Run button
             // (both the hidden sibling row and this row's own hidden form).
-            row.closest('.tile').querySelectorAll('.launch-row').forEach((r) => {
-                r.hidden = false;
-                r.querySelectorAll('form.launch-form').forEach((f) => { f.hidden = false; });
-            });
+            row.closest(".tile")
+                .querySelectorAll(".launch-row")
+                .forEach((r) => {
+                    r.hidden = false;
+                    r.querySelectorAll("form.launch-form").forEach((f) => {
+                        f.hidden = false;
+                    });
+                });
         } catch (err) {
             stopBtn.disabled = false;
-            stopBtn.textContent = 'Stop';
-            alert('Stop failed: ' + err.message);
+            stopBtn.textContent = "Stop";
+            alert("Stop failed: " + err.message);
         }
     }
 
@@ -242,24 +348,36 @@
     // throwing with a useful message on any non-JSON / error response.
     // Shared by the tile Edit/Run buttons and the create-and-open flow.
     async function requestLaunch(formData) {
-        const resp = await fetch('/launch', {
-            method: 'POST',
+        const resp = await fetch("/launch", {
+            method: "POST",
             body: formData,
-            headers: { Accept: 'application/json' },
+            headers: { Accept: "application/json" },
         });
         // Read once as text so we can surface the body even when the server
         // returned HTML (e.g. an error page, or a 302 fetch silently followed).
         const rawBody = await resp.text();
-        const ctype = resp.headers.get('content-type') || '';
-        if (!ctype.includes('application/json')) {
-            const snippet = rawBody.slice(0, 200).replace(/\s+/g, ' ');
-            throw new Error('launch HTTP ' + resp.status + ' (non-JSON): ' + snippet);
+        const ctype = resp.headers.get("content-type") || "";
+        if (!ctype.includes("application/json")) {
+            const snippet = rawBody.slice(0, 200).replace(/\s+/g, " ");
+            throw new Error(
+                "launch HTTP " + resp.status + " (non-JSON): " + snippet,
+            );
         }
         let payload;
-        try { payload = JSON.parse(rawBody); }
-        catch (_) { throw new Error('launch JSON parse failed: ' + rawBody.slice(0, 200)); }
+        try {
+            payload = JSON.parse(rawBody);
+        } catch (_) {
+            throw new Error(
+                "launch JSON parse failed: " + rawBody.slice(0, 200),
+            );
+        }
         if (!resp.ok) {
-            throw new Error('launch HTTP ' + resp.status + ': ' + (payload.error || rawBody));
+            throw new Error(
+                "launch HTTP " +
+                    resp.status +
+                    ": " +
+                    (payload.error || rawBody),
+            );
         }
         return payload.url;
     }
@@ -268,7 +386,7 @@
     // show Open+Stop beside the button.
     async function handleLaunch(form) {
         const button = form.querySelector('button[type="submit"]');
-        const row = form.closest('.launch-row');
+        const row = form.closest(".launch-row");
         const originalLabel = button.textContent;
         button.disabled = true;
         button.innerHTML = '<span class="spinner-inline"></span>';
@@ -277,21 +395,22 @@
             // Poll for readiness for up to 3 min — covers cold-start plus
             // uv's sandbox-venv install (~90 packages).
             const ready = await pollReady(url, Date.now() + 180000);
-            if (!ready) throw new Error('timed out waiting for notebook to start');
+            if (!ready)
+                throw new Error("timed out waiting for notebook to start");
             button.disabled = false;
             button.textContent = originalLabel;
             showLaunched(row, form, url);
         } catch (err) {
             button.textContent = originalLabel;
             button.disabled = false;
-            alert('Launch failed: ' + err.message);
+            alert("Launch failed: " + err.message);
         }
     }
 
     // Delegated, so tiles added after load (e.g. a freshly created notebook)
     // get the same Edit/Run behavior with no re-binding.
-    document.addEventListener('submit', (e) => {
-        const form = e.target.closest('form.launch-form');
+    document.addEventListener("submit", (e) => {
+        const form = e.target.closest("form.launch-form");
         if (!form) return;
         e.preventDefault();
         handleLaunch(form);
@@ -301,28 +420,34 @@
     // tiles get it too. Confirm (destructive), POST, then drop the tile.
     async function deleteNotebook(btn) {
         const slug = btn.dataset.deleteSlug;
-        if (!confirm(`Delete notebook "${slug}"? This removes it from your fork.`)) return;
+        if (
+            !confirm(
+                `Delete notebook "${slug}"? This removes it from your fork.`,
+            )
+        )
+            return;
         const restore = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-inline"></span>';
         try {
-            const resp = await fetch('/workspace/delete', {
-                method: 'POST',
+            const resp = await fetch("/workspace/delete", {
+                method: "POST",
                 body: new URLSearchParams({ slug }),
-                headers: { Accept: 'application/json' },
+                headers: { Accept: "application/json" },
             });
             const payload = await resp.json().catch(() => ({}));
-            if (!resp.ok) throw new Error(payload.error || ('HTTP ' + resp.status));
-            btn.closest('.tile').remove();
+            if (!resp.ok)
+                throw new Error(payload.error || "HTTP " + resp.status);
+            btn.closest(".tile").remove();
         } catch (err) {
             btn.disabled = false;
             btn.innerHTML = restore;
-            alert('Delete failed: ' + err.message);
+            alert("Delete failed: " + err.message);
         }
     }
 
-    document.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-delete-slug]');
+    document.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-delete-slug]");
         if (!btn) return;
         e.preventDefault();
         deleteNotebook(btn);
@@ -330,10 +455,10 @@
 
     // Find a tile's launch form by slug + mode (both are hidden inputs).
     function findLaunchForm(slug, mode) {
-        return Array.from(document.querySelectorAll('form.launch-form')).find(
+        return Array.from(document.querySelectorAll("form.launch-form")).find(
             (f) =>
                 f.querySelector('input[name="slug"]').value === slug &&
-                f.querySelector('input[name="mode"]').value === mode
+                f.querySelector('input[name="mode"]').value === mode,
         );
     }
 
@@ -343,45 +468,48 @@
     async function hydrateRunning() {
         let data;
         try {
-            const resp = await fetch('/launch/status', {
-                headers: { Accept: 'application/json' },
+            const resp = await fetch("/launch/status", {
+                headers: { Accept: "application/json" },
             });
             if (!resp.ok) return;
             data = await resp.json();
-        } catch (_) { return; }
-        for (const { slug, mode, url } of (data.running || [])) {
+        } catch (_) {
+            return;
+        }
+        for (const { slug, mode, url } of data.running || []) {
             const form = findLaunchForm(slug, mode);
-            if (form) showLaunched(form.closest('.launch-row'), form, url);
+            if (form) showLaunched(form.closest(".launch-row"), form, url);
         }
     }
 
     // Create just adds a notebook: write the file, then drop the returned
-    // tile into the Workspace grid. From there it's a normal tile (Edit/Run →
-    // launch → Open/Stop), so run-state is handled exactly like every other.
-    const createForm = document.getElementById('create-form');
+    // tile into the Workspace grid *before* the New-notebook tile, so that
+    // tile stays last (to the right), ready to make another. From there it's a
+    // normal tile (Edit/Run → launch → Open/Stop), handled like every other.
+    const createForm = document.getElementById("create-form");
     if (createForm) {
-        createForm.addEventListener('submit', async (e) => {
+        createForm.addEventListener("submit", async (e) => {
             e.preventDefault();
             const button = createForm.querySelector('button[type="submit"]');
             const originalLabel = button.textContent;
             button.disabled = true;
             button.innerHTML = '<span class="spinner-inline"></span>';
             try {
-                const resp = await fetch('/workspace/create', {
-                    method: 'POST',
+                const resp = await fetch("/workspace/create", {
+                    method: "POST",
                     body: new FormData(createForm),
-                    headers: { Accept: 'application/json' },
+                    headers: { Accept: "application/json" },
                 });
                 const payload = await resp.json().catch(() => ({}));
                 if (!resp.ok) {
-                    throw new Error(payload.error || ('HTTP ' + resp.status));
+                    throw new Error(payload.error || "HTTP " + resp.status);
                 }
                 document
-                    .getElementById('workspace-grid')
-                    .insertAdjacentHTML('beforeend', payload.tile_html);
-                createForm.querySelector('input[name="name"]').value = '';
+                    .getElementById("create-tile")
+                    .insertAdjacentHTML("beforebegin", payload.tile_html);
+                createForm.querySelector('input[name="name"]').value = "";
             } catch (err) {
-                alert('Create failed: ' + err.message);
+                alert("Create failed: " + err.message);
             } finally {
                 button.disabled = false;
                 button.textContent = originalLabel;
@@ -390,22 +518,23 @@
     }
 
     // Global control: delete deployments for notebooks the user has stopped.
-    const cleanupBtn = document.getElementById('cleanup-btn');
+    const cleanupBtn = document.getElementById("cleanup-btn");
     if (cleanupBtn) {
-        const BROOM = '🧹';
+        const BROOM = "🧹";
         const defaultTip = cleanupBtn.dataset.tooltip;
-        cleanupBtn.addEventListener('click', async () => {
+        cleanupBtn.addEventListener("click", async () => {
             cleanupBtn.disabled = true;
             cleanupBtn.innerHTML = '<span class="spinner-inline"></span>';
             try {
-                const resp = await fetch('/workspace/cleanup', {
-                    method: 'POST',
-                    headers: { Accept: 'application/json' },
+                const resp = await fetch("/workspace/cleanup", {
+                    method: "POST",
+                    headers: { Accept: "application/json" },
                 });
                 const payload = await resp.json().catch(() => ({}));
-                if (!resp.ok) throw new Error(payload.error || ('HTTP ' + resp.status));
-                cleanupBtn.textContent = '✓';
-                cleanupBtn.dataset.tooltip = 'Removed ' + payload.count;
+                if (!resp.ok)
+                    throw new Error(payload.error || "HTTP " + resp.status);
+                cleanupBtn.textContent = "✓";
+                cleanupBtn.dataset.tooltip = "Removed " + payload.count;
                 setTimeout(() => {
                     cleanupBtn.textContent = BROOM;
                     cleanupBtn.dataset.tooltip = defaultTip;
@@ -414,7 +543,7 @@
             } catch (err) {
                 cleanupBtn.textContent = BROOM;
                 cleanupBtn.disabled = false;
-                alert('Cleanup failed: ' + err.message);
+                alert("Cleanup failed: " + err.message);
             }
         });
     }

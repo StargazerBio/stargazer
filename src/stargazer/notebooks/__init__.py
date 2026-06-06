@@ -29,7 +29,7 @@ class _NavEntry:
 
     slug: str
     title: str
-    section: Literal["tutorials", "community"]
+    section: Literal["tutorials", "workflows"]
 
 
 # Canonical reading order for the nav bar's prev/next buttons. Adding a
@@ -39,7 +39,7 @@ NAV_ORDER: tuple[_NavEntry, ...] = (
     _NavEntry("assets", "Assets", "tutorials"),
     _NavEntry("tasks", "Tasks", "tutorials"),
     _NavEntry("preprocessing", "Execution", "tutorials"),
-    _NavEntry("scrna-pipeline", "scRNA-seq", "community"),
+    _NavEntry("scrna-pipeline", "scRNA-seq", "workflows"),
 )
 
 
@@ -85,7 +85,7 @@ def nav_bar(mo, *, current: str | None = None):
 
     `current` is the current notebook's slug — pass `None` for workspace
     notebooks (only the Dashboard button is rendered then). For registered
-    tutorials/community notebooks, also renders form-POST buttons that
+    tutorials/workflows notebooks, also renders form-POST buttons that
     launch the previous and next NAV_ORDER entries via the admin app's
     `/launch` endpoint. Cross-origin POST works because the admin's
     session cookie is `SameSite=Lax`.

@@ -36,6 +36,14 @@ _PEP723_BLOCK = re.compile(
 )
 
 
+# A single `marimo` dependency entry inside the commented header — bare
+# (`"marimo"`) or already version-specified (`"marimo==0.23.6"`). Used to rewrite
+# the pin; the optional spec match makes re-stamping idempotent.
+_MARIMO_DEP = re.compile(
+    r'(?m)^(?P<pre>#[ \t]*")marimo(?:[<>=!~][^"]*)?(?P<post>"[ \t]*,?[ \t]*)$'
+)
+
+
 @dataclass(frozen=True)
 class NotebookResources:
     """Normalized resource request parsed from a notebook header.
@@ -163,6 +171,27 @@ def _strip_stargazer_table(body_lines: list[str]) -> list[str]:
             continue
         out.append(line)
     return out
+
+
+def with_pinned_marimo(source: str, version: str) -> str:
+    """Return `source` with its PEP 723 `marimo` dependency pinned to `version`.
+
+    Rewrites the `marimo` entry in the script header to `marimo=={version}`,
+    whether it was bare or already pinned (idempotent). Scoped to the PEP 723
+    block so a `marimo` mention elsewhere in the source is untouched. Returns
+    `source` unchanged if there's no script block or no `marimo` entry — the
+    create flow stamps every new notebook so the sandbox kernel matches the
+    image launcher (see `app.config.MARIMO_VERSION`).
+    """
+    match = _PEP723_BLOCK.search(source)
+    if match is None or match.group("type") != "script":
+        return source
+    new_block, n = _MARIMO_DEP.subn(
+        rf"\g<pre>marimo=={version}\g<post>", match.group(0)
+    )
+    if n == 0:
+        return source
+    return source[: match.start()] + new_block + source[match.end() :]
 
 
 def with_stargazer_resources(source: str, resources: NotebookResources) -> str:

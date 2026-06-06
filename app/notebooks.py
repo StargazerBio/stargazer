@@ -42,7 +42,7 @@ class Notebook:
     slug: str
     title: str
     description: str
-    section: Literal["tutorials", "community"]
+    section: Literal["tutorials", "workflows"]
     path_in_image: str
 
 
@@ -74,8 +74,8 @@ NOTEBOOKS: tuple[Notebook, ...] = (
         slug="scrna-pipeline",
         title="scRNA-seq",
         description="Multi-sample fan-out, clustering, side-by-side UMAPs.",
-        section="community",
-        path_in_image=f"{IMAGE_WORKDIR}/src/stargazer/notebooks/community/scrna_pipeline.py",
+        section="workflows",
+        path_in_image=f"{IMAGE_WORKDIR}/src/stargazer/notebooks/workflows/scrna_pipeline.py",
     ),
 )
 

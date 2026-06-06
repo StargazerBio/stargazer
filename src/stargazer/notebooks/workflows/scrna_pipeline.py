@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#   "marimo",
+#   "marimo==0.23.6",
 #   "matplotlib",
 #   "numpy",
 #   "scanpy>=1.12",
@@ -16,7 +16,7 @@
 ### Stargazer scRNA-seq.
 
 Multi-sample fan-out preprocessing plus interactive clustering, side-by-side
-UMAPs, and marker-gene tables. The community-tier counterpart of the
+UMAPs, and marker-gene tables. The workflow-tier counterpart of the
 preprocessing tutorial — same primitives, full-fat workflow.
 
 spec: [docs/architecture/notebook.md](../../docs/architecture/notebook.md)

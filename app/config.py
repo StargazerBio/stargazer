@@ -55,3 +55,13 @@ LANDING_BASE_URL: str | None = os.environ.get("LANDING_BASE_URL") or None
 # during per-user `serve.aio(...)` calls.
 FLYTE_PROJECT: str = os.environ.get("FLYTE_PROJECT", "flytesnacks")
 FLYTE_DOMAIN: str = os.environ.get("FLYTE_DOMAIN", "development")
+
+# The single marimo version pinned across the whole notebook surface. It must
+# match in two places that otherwise drift independently and skew: the
+# *launcher* baked into the notebook image (`per_notebook.notebook_app_img_recipe`)
+# and the *kernel* each notebook's PEP 723 sandbox header resolves under. A
+# mismatch between launcher and kernel is a client/server protocol skew, so both
+# read this constant: the image pins `marimo=={MARIMO_VERSION}`, and
+# `/workspace/create` stamps it into every new notebook's header via
+# `notebook_meta.with_pinned_marimo`. Keep in step with `uv.lock`.
+MARIMO_VERSION: str = "0.23.6"

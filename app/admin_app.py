@@ -79,6 +79,7 @@ from app.notebook_meta import (
     NotebookResources,
     parse_notebook_resources,
     resources_from_inputs,
+    with_pinned_marimo,
     with_stargazer_resources,
 )
 from app.init import init
@@ -391,10 +392,13 @@ def _dashboard_context(
             _tile_dict(n.slug, n.title, n.description, "tutorials")
             for n in by_section("tutorials")
         ],
-        "community": [
-            _tile_dict(n.slug, n.title, n.description, "community")
-            for n in by_section("community")
+        "workflows": [
+            _tile_dict(n.slug, n.title, n.description, "workflows")
+            for n in by_section("workflows")
         ],
+        # Frozen notebooks (inputs/outputs/image pinned). No registry yet —
+        # the section renders an empty-state hint until freezing ships.
+        "snapshots": [],
         "workspace": _workspace_tiles(workspace_files) if workspace_enabled else [],
     }
 
@@ -656,13 +660,16 @@ async def workspace_create(
             )
 
         # Both sources are shipped seed notebooks (`{source}.py`); copy the
-        # chosen one and inject the requested resources into its header.
+        # chosen one, inject the requested resources, and pin marimo to the
+        # image launcher's version so the sandbox kernel can't drift from it
+        # (a stale fork seed gets re-stamped here regardless).
         seed_src = await get_workspace_notebook(repo, token, f"{source}.py")
         if seed_src is None:
             return JSONResponse(
                 {"error": f"{source} seed not found in fork"}, status_code=502
             )
         content = with_stargazer_resources(seed_src, resources)
+        content = with_pinned_marimo(content, config.MARIMO_VERSION)
 
         await create_workspace_notebook(repo, token, filename, content)
     except Exception as exc:
@@ -749,7 +756,7 @@ async def launch(
         return _reject("not authenticated", 401)
     if mode not in ("edit", "run"):
         return _reject(f"invalid mode: {mode}", 400)
-    if section not in ("tutorials", "community", "workspace"):
+    if section not in ("tutorials", "workflows", "workspace"):
         return _reject(f"invalid section: {section}", 400)
     # Workspace launches clone+push the user's fork, so they require opt-in.
     if section == "workspace" and not session.workspace_enabled:
@@ -757,7 +764,7 @@ async def launch(
 
     # Workspace notebooks declare resources in their `[tool.stargazer]`
     # header; fetch the source from the fork and parse it before serving.
-    # Image-baked tutorials/community keep the env's legacy defaults
+    # Image-baked tutorials/workflows keep the env's legacy defaults
     # (`resources=None`). A missing/unfetchable source falls back to the
     # parser's defaults rather than failing the launch.
     resources: NotebookResources | None = None

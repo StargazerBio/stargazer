@@ -12,6 +12,7 @@ from app.notebook_meta import (
     NotebookResources,
     parse_notebook_resources,
     resources_from_inputs,
+    with_pinned_marimo,
     with_stargazer_resources,
 )
 
@@ -143,3 +144,39 @@ def test_inject_resources_replaces_existing_block():
     out = with_stargazer_resources(src, NotebookResources(cpu=4, memory="5Gi"))
     assert parse_notebook_resources(out) == NotebookResources(cpu=4, memory="5Gi")
     assert out.count("[tool.stargazer]") == 1
+
+
+# ---------------------------------------------------------------------------
+# with_pinned_marimo — pin the sandbox kernel to the launcher version
+# ---------------------------------------------------------------------------
+
+
+def test_pin_marimo_pins_bare_entry():
+    """A bare `marimo` dep gains an exact pin; siblings are left alone."""
+    src = _nb('dependencies = [\n  "marimo",\n  "stargazer",\n]')
+    out = with_pinned_marimo(src, "0.23.6")
+    assert '"marimo==0.23.6"' in out
+    assert '"stargazer"' in out
+
+
+def test_pin_marimo_is_idempotent_and_rebumps():
+    """Re-stamping the same version is a no-op; a new version replaces it."""
+    src = _nb('dependencies = [\n  "marimo",\n  "stargazer",\n]')
+    once = with_pinned_marimo(src, "0.23.6")
+    assert with_pinned_marimo(once, "0.23.6") == once
+    assert '"marimo==0.24.0"' in with_pinned_marimo(once, "0.24.0")
+
+
+def test_pin_marimo_leaves_import_lines_untouched():
+    """Only the header dep entry is rewritten, never a code-level import."""
+    src = _nb('dependencies = [\n  "marimo",\n]', body="import marimo as mo\n")
+    out = with_pinned_marimo(src, "0.23.6")
+    assert "import marimo as mo" in out
+    assert out.count("marimo==0.23.6") == 1
+
+
+def test_pin_marimo_no_op_without_block_or_entry():
+    """No script block, or a header without marimo, returns source unchanged."""
+    assert with_pinned_marimo("import marimo\n", "0.23.6") == "import marimo\n"
+    no_marimo = _nb('dependencies = [\n  "stargazer",\n]')
+    assert with_pinned_marimo(no_marimo, "0.23.6") == no_marimo

@@ -22,9 +22,10 @@ Context shape consumed by `dashboard.html`:
 
 - `title` (str) — `<title>` chrome.
 - `github_username` (str) — for the avatar URL and "Signed in as".
-- `tutorials`, `community`, `workspace` (list of tile dicts) — each
-  dict has `slug`, `title`, `description`, `section`. The dashboard
-  loops and includes `_tile.html` for each.
+- `workflows`, `snapshots`, `workspace`, `tutorials` (list of tile
+  dicts) — each dict has `slug`, `title`, `description`, `section`. The
+  dashboard loops and includes `_tile.html` for each. `snapshots` is
+  always empty for now (freezing not yet implemented).
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
