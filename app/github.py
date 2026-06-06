@@ -145,10 +145,7 @@ async def list_workspace(fork_full_name: str, access_token: str) -> list[str]:
     `/__sg__/workspace/sync` pushes). Returns an empty list if the directory
     doesn't exist yet.
     """
-    url = (
-        f"{GITHUB_API_BASE}/repos/{fork_full_name}/contents/"
-        f"{WORKSPACE_CONTENTS_PATH}"
-    )
+    url = f"{GITHUB_API_BASE}/repos/{fork_full_name}/contents/{WORKSPACE_CONTENTS_PATH}"
     async with aiohttp.ClientSession() as session:
         resp = await session.get(
             url,
@@ -257,7 +254,10 @@ async def create_workspace_notebook(
     url = f"{GITHUB_API_BASE}/repos/{fork_full_name}/contents/{path}"
     async with aiohttp.ClientSession() as session:
         resp = await session.put(
-            url, headers=_auth_headers(access_token), json=payload, allow_redirects=False
+            url,
+            headers=_auth_headers(access_token),
+            json=payload,
+            allow_redirects=False,
         )
         if 300 <= resp.status < 400:
             raise RuntimeError(
@@ -302,7 +302,10 @@ async def delete_workspace_notebook(
             "branch": WORKSPACE_BRANCH,
         }
         resp = await session.delete(
-            url, headers=_auth_headers(access_token), json=payload, allow_redirects=False
+            url,
+            headers=_auth_headers(access_token),
+            json=payload,
+            allow_redirects=False,
         )
         if 300 <= resp.status < 400:
             raise RuntimeError(

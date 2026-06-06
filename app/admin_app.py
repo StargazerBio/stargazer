@@ -49,7 +49,12 @@ import flyte.app
 import httpx
 from flyte.remote import App
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+)
 from fastapi.staticfiles import StaticFiles
 
 from stargazer.config import (
@@ -58,6 +63,7 @@ from stargazer.config import (
     logger,
 )
 
+from app import config, installation_tokens
 from app.github import (
     canonical_fork_name,
     create_workspace_notebook,
@@ -94,9 +100,12 @@ from app.per_notebook import (
 from app.provision import provision_user, sanitize_project_id
 from app.session import (
     SESSION_COOKIE,
+    SESSION_MAX_AGE,
     SessionData,
     create_session_cookie,
+    read_pod_capability,
     session_from_request,
+    sign_pod_capability,
 )
 from app.templates import templates
 
@@ -114,16 +123,31 @@ from app.templates import templates
 # values then live in the App spec. Export them before `python -m app.admin_app`.
 # See .opencode/reference/devbox_workarounds.md
 _SECRET_NAMES = ("GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "SESSION_SECRET")
+# GitHub App credentials + config (trust anchor for fork-scoped installation
+# tokens — see app.installation_tokens / plan 18). `GITHUB_APP_SLUG` (non-secret)
+# drives the install-redirect URL. All optional: baked into the App env only
+# when set, so deploys before the GitHub App is registered keep working.
+_GITHUB_APP_NAMES = ("GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY", "GITHUB_APP_SLUG")
 _RUNTIME_SECRETS = {
-    name: os.environ[name] for name in _SECRET_NAMES if os.environ.get(name)
+    name: os.environ[name]
+    for name in (*_SECRET_NAMES, *_GITHUB_APP_NAMES)
+    if os.environ.get(name)
 }
 
 # Admin pod needs a default Flyte project for code-bundle uploads during
 # per-user `serve.aio(per_notebook_env)` calls. `with_servecontext(project=...)`
 # alone is not enough — the upload uses the client's init-time project.
 _FLYTE_CONTEXT = {
-    "FLYTE_PROJECT": os.environ.get("FLYTE_PROJECT", "flytesnacks"),
-    "FLYTE_DOMAIN": os.environ.get("FLYTE_DOMAIN", "development"),
+    "FLYTE_PROJECT": config.FLYTE_PROJECT,
+    "FLYTE_DOMAIN": config.FLYTE_DOMAIN,
+}
+
+# Non-secret config that request handlers read at runtime, baked into the pod
+# env so the deployed admin (and, propagated onward, the notebook proxy) sees
+# it. `STARGAZER_SECURE_COOKIES` is re-serialized from the parsed flag so a
+# single source of truth (`config.SECURE_COOKIES`) drives every cookie writer.
+_PUBLIC_CONFIG = {
+    "STARGAZER_SECURE_COOKIES": "1" if config.SECURE_COOKIES else "",
 }
 
 
@@ -155,7 +179,12 @@ app_env = flyte.app.AppEnvironment(
     port=8080,
     requires_auth=False,
     resources=flyte.Resources(memory=("512Mi", "1Gi")),
-    env_vars={**STARGAZER_ENV_VARS, **_RUNTIME_SECRETS, **_FLYTE_CONTEXT},
+    env_vars={
+        **STARGAZER_ENV_VARS,
+        **_RUNTIME_SECRETS,
+        **_FLYTE_CONTEXT,
+        **_PUBLIC_CONFIG,
+    },
     # Flyte's loaded_modules bundler ships only .py files; HTML and the
     # landing-page logo must be enumerated.
     include=("templates/", "static/"),
@@ -207,15 +236,37 @@ asgi_app.mount(
 
 def _redirect_uri(request: Request) -> str:
     """Build the OAuth callback URI."""
-    base = os.environ.get("LANDING_BASE_URL")
-    if base:
-        return f"{base.rstrip('/')}/auth/callback"
+    if config.LANDING_BASE_URL:
+        return f"{config.LANDING_BASE_URL.rstrip('/')}/auth/callback"
     return str(request.url_for("auth_callback"))
 
 
 def _get_session(request: Request) -> SessionData | None:
     """Extract a valid session from the request cookie, if present."""
     return session_from_request(request, _env("SESSION_SECRET"))
+
+
+def _session_redirect(
+    location: str, session: SessionData, status_code: int = 302
+) -> RedirectResponse:
+    """Redirect to `location` with the (re-)signed session cookie attached.
+
+    The single place the host-only, 30-day session cookie is written — used by
+    every route that mints or updates a session (login callback, enable, install
+    callback). `Secure` comes from `config.SECURE_COOKIES` (off on devbox/http,
+    on under production TLS). Use 303 from POST handlers to force a GET on the
+    redirect, 302 from GET handlers.
+    """
+    response = RedirectResponse(location, status_code=status_code)
+    response.set_cookie(
+        SESSION_COOKIE,
+        create_session_cookie(session, _env("SESSION_SECRET")),
+        httponly=True,
+        secure=config.SECURE_COOKIES,
+        max_age=SESSION_MAX_AGE,
+        samesite="lax",
+    )
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -236,9 +287,7 @@ async def _list_workspace_from_pods(
     for endpoint in endpoints.values():
         url = f"{endpoint.rstrip('/')}/__sg__/workspace/list"
         try:
-            async with httpx.AsyncClient(
-                timeout=2.0, follow_redirects=True
-            ) as client:
+            async with httpx.AsyncClient(timeout=2.0, follow_redirects=True) as client:
                 resp = await client.get(url, cookies={SESSION_COOKIE: session_cookie})
             if resp.status_code == 200:
                 return resp.json().get("files", [])
@@ -258,7 +307,8 @@ async def _resolve_workspace_files(
     if not session.workspace_enabled:
         return []
     try:
-        return await gh_list_workspace(session.fork_full_name, session.access_token)
+        token = await installation_tokens.fork_token(session.fork_full_name)
+        return await gh_list_workspace(session.fork_full_name, token)
     except Exception as exc:
         logger.warning(f"GitHub workspace listing failed: {exc}")
         return []
@@ -275,9 +325,7 @@ async def _candidate_slugs(session: SessionData, cookie_value: str) -> list[str]
     if session.workspace_enabled:
         files = await _resolve_workspace_files(session, cookie_value)
         slugs += [
-            slug
-            for f in files
-            if (slug := f.removesuffix(".py")) not in SEED_SLUGS
+            slug for f in files if (slug := f.removesuffix(".py")) not in SEED_SLUGS
         ]
     return slugs
 
@@ -356,9 +404,7 @@ async def landing(request: Request):
     """Render the login page or the dashboard depending on session state."""
     session = _get_session(request)
     if not session:
-        return templates.TemplateResponse(
-            request, "login.html", {"title": "Sign In"}
-        )
+        return templates.TemplateResponse(request, "login.html", {"title": "Sign In"})
     files: list[str] = []
     if session.workspace_enabled:
         cookie_value = request.cookies.get(SESSION_COOKIE, "")
@@ -389,7 +435,7 @@ async def auth_login(request: Request):
         "oauth_state",
         state,
         httponly=True,
-        secure=False,
+        secure=config.SECURE_COOKIES,
         max_age=600,
         samesite="lax",
     )
@@ -423,7 +469,7 @@ async def auth_callback(request: Request, code: str, state: str):
     # login. So detect an already-existing genuine fork and restore
     # `fork_full_name` — otherwise a returning user who enabled saving in a
     # past session would find it silently off. Users who never enabled have no
-    # fork, so this stays None == saving off, and they run Tutorials/Community
+    # fork, so this stays empty == saving off, and they run Tutorials/Community
     # notebooks (ephemeral, image-baked) with no write to their GitHub account.
     fork_full_name = ""
     try:
@@ -433,22 +479,31 @@ async def auth_callback(request: Request, code: str, state: str):
     except Exception as exc:
         logger.warning(f"Fork lookup failed for {username!r}: {exc}")
 
+    # A returning user's fork persists, but the cookie is minted fresh each
+    # login — so re-confirm the GitHub App is still installed on it (the second
+    # half of opt-in). A live `get_installation_id` is authoritative: if they
+    # uninstalled, `app_installed` goes False and they're prompted to re-enable.
+    app_installed = False
+    if fork_full_name:
+        try:
+            await installation_tokens.get_installation_id(username)
+            app_installed = True
+        except Exception as exc:
+            logger.warning(f"App-install check failed for {username!r}: {exc}")
+
+    # The OAuth token is kept only to fork at a future `/workspace/enable`. An
+    # already-enabled returning user (fork + install confirmed) has nothing left
+    # to fork, so we don't store it — their session stays token-free. Everyone
+    # else keeps it until the install callback clears it.
+    fully_enabled = bool(fork_full_name and app_installed)
     session = SessionData(
         github_username=username,
         github_id=github_user["id"],
-        access_token=access_token,
+        access_token="" if fully_enabled else access_token,
         fork_full_name=fork_full_name,
+        app_installed=app_installed,
     )
-    cookie = create_session_cookie(session, _env("SESSION_SECRET"))
-    response = RedirectResponse("/", status_code=302)
-    response.set_cookie(
-        SESSION_COOKIE,
-        cookie,
-        httponly=True,
-        secure=False,
-        max_age=60 * 60 * 24 * 30,
-        samesite="lax",
-    )
+    response = _session_redirect("/", session)
     response.delete_cookie("oauth_state")
     return response
 
@@ -465,11 +520,11 @@ async def auth_logout():
 async def workspace_enable(request: Request):
     """Opt in to Workspace saving by forking the upstream repo for this user.
 
-    This is the explicit, consent-gated action that creates the user's fork
-    and records its verified `fork_full_name` in the session. Only after this
-    does the Workspace section list notebooks and do launches persist edits
-    back to the fork's `main`. Idempotent — `fork_upstream` returns the
-    existing fork if one already exists.
+    The first of opt-in's two consent-gated steps: it creates the user's fork
+    and records its verified `fork_full_name`, then sends them to install the
+    GitHub App (the second step). Saving turns on only once **both** are done —
+    `workspace_enabled` gates on the install too. Idempotent — `fork_upstream`
+    returns the existing fork if one already exists.
 
     Two checks before recording: `is_genuine_fork` confirms GitHub handed back
     a fork the user owns — NOT the upstream source (the transfer-redirect /
@@ -480,6 +535,12 @@ async def workspace_enable(request: Request):
     at the canonical name) can never disagree with what enable recorded. On any
     failure the session is left untouched (saving stays off) and we redirect
     with `?ws_error=fork` so the user sees why.
+
+    After the fork is recorded we send the user to install the GitHub App on it
+    (`_app_install_url`), so post-fork ops can mint fork-scoped tokens. The
+    install's setup callback (`/auth/app-install-callback`) finishes the opt-in
+    and drops the now-spent OAuth token. If no App is configured
+    (`GITHUB_APP_SLUG` unset) we skip straight to the dashboard.
     """
     session = _get_session(request)
     if session is None:
@@ -500,17 +561,42 @@ async def workspace_enable(request: Request):
         return RedirectResponse("/?ws_error=fork", status_code=303)
 
     session.fork_full_name = fork["full_name"]
-    cookie = create_session_cookie(session, _env("SESSION_SECRET"))
-    response = RedirectResponse("/", status_code=303)
-    response.set_cookie(
-        SESSION_COOKIE,
-        cookie,
-        httponly=True,
-        secure=False,
-        max_age=60 * 60 * 24 * 30,
-        samesite="lax",
-    )
-    return response
+    return _session_redirect(_app_install_url() or "/", session, status_code=303)
+
+
+def _app_install_url() -> str | None:
+    """The GitHub App's installation URL, or None when no App is configured.
+
+    Built from `config.GITHUB_APP_SLUG` (the App's public URL handle, e.g.
+    `stargazer-workspaces`). On the App's "Only select repositories" install
+    page the user picks their fork. Unset means installs aren't wired up yet, so
+    `/workspace/enable` just lands on the dashboard (clone/push will no-op until
+    the App is installed).
+    """
+    slug = config.GITHUB_APP_SLUG
+    return f"https://github.com/apps/{slug}/installations/new" if slug else None
+
+
+@asgi_app.get("/auth/app-install-callback")
+async def app_install_callback(request: Request):
+    """Finish opt-in after the user installs the GitHub App on their fork.
+
+    Configured as the App's Setup URL; GitHub redirects here post-install with
+    `installation_id` / `setup_action` (we don't need either — `fork_token`
+    resolves the install by owner on demand). Reaching this route *is* the
+    install confirmation (GitHub only sends users here after a successful
+    install, so we trust it over a racy API re-check): we set `app_installed`,
+    which flips `workspace_enabled` on, and **drop the OAuth token** — the fork
+    exists, the App is installed, and every post-fork op uses fork-scoped
+    installation tokens from here on. Re-sign the cookie and land on the
+    dashboard.
+    """
+    session = _get_session(request)
+    if session is None:
+        return RedirectResponse("/", status_code=302)
+    session.app_installed = True
+    session.access_token = ""
+    return _session_redirect("/", session)
 
 
 _NOTEBOOK_NAME_RE = re.compile(r"[^a-z0-9]+")
@@ -548,9 +634,7 @@ async def workspace_create(
     if session is None:
         return JSONResponse({"error": "not authenticated"}, status_code=401)
     if not session.workspace_enabled:
-        return JSONResponse(
-            {"error": "enable workspace saving first"}, status_code=403
-        )
+        return JSONResponse({"error": "enable workspace saving first"}, status_code=403)
     if source not in ("blank", "template"):
         return JSONResponse({"error": f"invalid source: {source}"}, status_code=400)
 
@@ -562,9 +646,10 @@ async def workspace_create(
 
     filename = f"{slug}.py"
     resources = resources_from_inputs(cpu, memory)
-    repo, token = session.fork_full_name, session.access_token
+    repo = session.fork_full_name
 
     try:
+        token = await installation_tokens.fork_token(session.fork_full_name)
         if await get_workspace_notebook(repo, token, filename) is not None:
             return JSONResponse(
                 {"error": f"notebook already exists: {filename}"}, status_code=409
@@ -610,9 +695,7 @@ async def workspace_delete(request: Request, slug: str = Form(...)):
     if session is None:
         return JSONResponse({"error": "not authenticated"}, status_code=401)
     if not session.workspace_enabled:
-        return JSONResponse(
-            {"error": "enable workspace saving first"}, status_code=403
-        )
+        return JSONResponse({"error": "enable workspace saving first"}, status_code=403)
     if _notebook_slug(slug) != slug:
         return JSONResponse(
             {"error": f"invalid or reserved notebook: {slug!r}"}, status_code=400
@@ -635,9 +718,8 @@ async def workspace_delete(request: Request, slug: str = Form(...)):
         _launched.get(session.github_username, {}).pop((slug, mode), None)
 
     try:
-        await delete_workspace_notebook(
-            session.fork_full_name, session.access_token, f"{slug}.py"
-        )
+        token = await installation_tokens.fork_token(session.fork_full_name)
+        await delete_workspace_notebook(session.fork_full_name, token, f"{slug}.py")
     except Exception as exc:
         logger.error(f"Notebook delete failed for {slug!r}: {exc}")
         return JSONResponse({"error": f"delete failed: {exc}"}, status_code=502)
@@ -682,8 +764,9 @@ async def launch(
     if section == "workspace":
         notebook_path = f"{WORKSPACE_NOTEBOOK_DIR}/{slug}.py"
         try:
+            token = await installation_tokens.fork_token(session.fork_full_name)
             source = await get_workspace_notebook(
-                session.fork_full_name, session.access_token, f"{slug}.py"
+                session.fork_full_name, token, f"{slug}.py"
             )
         except Exception as exc:
             logger.warning(f"Resource fetch failed for workspace {slug!r}: {exc}")
@@ -699,15 +782,18 @@ async def launch(
     # Prefer the explicit LANDING_BASE_URL (set in hosted deploys); fall back
     # to the request's own base_url so local dev (`uvicorn ... --reload`) works
     # without extra config.
-    admin_url = (
-        os.environ.get("LANDING_BASE_URL") or str(request.base_url)
-    ).rstrip("/")
+    admin_url = (config.LANDING_BASE_URL or str(request.base_url)).rstrip("/")
+    # The pod gets a signed *capability* (fork name only), never a GitHub
+    # credential. It exchanges that at `/workspace/pod-token` for a fresh,
+    # fork-scoped, short-lived token at clone/push time.
     env = per_notebook_env(
         slug=slug,
         mode=mode,  # type: ignore[arg-type]
         notebook_path=notebook_path,
         fork_full_name=session.fork_full_name,
-        github_token=session.access_token,
+        pod_capability=sign_pod_capability(
+            session.fork_full_name, _env("SESSION_SECRET")
+        ),
         session_secret=_env("SESSION_SECRET"),
         admin_url=admin_url,
         resources=resources,
@@ -836,9 +922,7 @@ async def workspace_save(
     if session is None:
         return JSONResponse({"error": "not authenticated"}, status_code=401)
     if not session.workspace_enabled:
-        return JSONResponse(
-            {"error": "enable workspace saving first"}, status_code=403
-        )
+        return JSONResponse({"error": "enable workspace saving first"}, status_code=403)
     if mode not in ("edit", "run"):
         return JSONResponse({"error": f"invalid mode: {mode}"}, status_code=400)
 
@@ -913,6 +997,31 @@ async def workspace_cleanup(request: Request):
     results = await asyncio.gather(*(_cleanup(name) for name in names))
     deleted = [r for r in results if r is not None]
     return JSONResponse({"deleted": deleted, "count": len(deleted)})
+
+
+@asgi_app.post("/workspace/pod-token")
+async def pod_token(request: Request):
+    """Mint a fresh, fork-scoped git token for a notebook pod (callback-fetch).
+
+    The pod authenticates with the `SESSION_SECRET`-signed capability injected
+    as `SG_POD_TOKEN` (Authorization: Bearer), *not* a GitHub credential. We
+    verify it, then mint a short-lived installation token scoped to that one
+    fork and return it as plain text for the pod's `GIT_ASKPASS` clone/push.
+    The token is minted at use and never persisted in the pod spec or
+    `.git/config`. A bad/expired capability is a 401; an un-installed fork (no
+    GitHub App) is a 502.
+    """
+    auth = request.headers.get("Authorization", "")
+    capability = auth[7:] if auth.lower().startswith("bearer ") else ""
+    fork_full_name = read_pod_capability(capability, _env("SESSION_SECRET"))
+    if not fork_full_name:
+        return PlainTextResponse("unauthorized", status_code=401)
+    try:
+        token = await installation_tokens.fork_token(fork_full_name)
+    except Exception as exc:
+        logger.warning(f"pod-token mint failed for {fork_full_name!r}: {exc}")
+        return PlainTextResponse("could not mint token", status_code=502)
+    return PlainTextResponse(token)
 
 
 @asgi_app.get("/health")

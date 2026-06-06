@@ -48,6 +48,7 @@ from flyteidl2.common import identifier_pb2, list_pb2
 
 from stargazer.config import PROJECT_ROOT, STARGAZER_ENV_VARS
 
+from app import config
 from app.notebook_meta import NotebookResources
 
 
@@ -117,6 +118,8 @@ notebook_app_img_recipe = (
         "itsdangerous>=2.1",
         "httpx>=0.27",
         "websockets>=12",
+        # The proxy decrypts the Fernet session cookie (app.session._fernet).
+        "cryptography>=43",
     )
     # `/usr/local/lib/` already exists in the base image, so the COPY drops
     # `proxy.py` into it without needing a directory-creating trailing-slash.
@@ -158,7 +161,7 @@ def per_notebook_env(
     mode: Literal["edit", "run"],
     notebook_path: str,
     fork_full_name: str,
-    github_token: str,
+    pod_capability: str,
     session_secret: str,
     admin_url: str,
     resources: NotebookResources | None = None,
@@ -170,14 +173,19 @@ def per_notebook_env(
     it's `/workspace/...` (populated by the launch script's
     clone-on-startup against the user's fork).
 
-    `fork_full_name` (`owner/repo` of the verified fork) + `github_token` let
-    the launch script clone the correct fork — using the full name handles
-    the collision case where GitHub named the fork `…-1`. `FORK_OWNER` is
-    derived for the git commit identity. `session_secret`
-    keys the proxy's cookie validation so authenticated browser sessions
-    are accepted while drive-by requests get 401s. `admin_url` is the
-    admin app's public base URL; the proxy's `/__sg__/dashboard` route
-    302s here so notebooks can link back without knowing the URL.
+    `fork_full_name` (`owner/repo` of the verified fork) tells the launch
+    script which fork to clone — the full name handles the collision case
+    where GitHub named the fork `…-1` — and `FORK_OWNER` is derived for the
+    git commit identity. No GitHub credential is injected: instead
+    `pod_capability` (a `SESSION_SECRET`-signed token carrying only the fork
+    name, **not** a GitHub credential) goes in as `SG_POD_TOKEN`. At clone /
+    push time the pod presents it to the admin's `/workspace/pod-token`
+    endpoint, which mints a fresh, fork-scoped, ~1h installation token — so the
+    broad token never reaches code the user controls and nothing durable lands
+    in `.git/config`. `session_secret` keys the proxy's cookie validation so
+    authenticated browser sessions are accepted while drive-by requests get
+    401s. `admin_url` is the admin app's public base URL; the proxy's
+    `/__sg__/dashboard` route 302s here, and the pod calls it back for tokens.
 
     `resources` is the notebook's declared `[tool.stargazer]` spec, honored
     as-authored (no ceiling). When None — image-baked tutorials and community
@@ -206,9 +214,12 @@ def per_notebook_env(
             "FLYTE_DOMAIN": "development",
             "FORK_FULL_NAME": fork_full_name,
             "FORK_OWNER": fork_full_name.split("/", 1)[0],
-            "GITHUB_TOKEN": github_token,
+            "SG_POD_TOKEN": pod_capability,
             "SESSION_SECRET": session_secret,
             "STARGAZER_ADMIN_URL": admin_url,
+            # Propagate the cookie-Secure policy so the proxy sets the session
+            # cookie identically to the admin (off on devbox/http, on under TLS).
+            "STARGAZER_SECURE_COOKIES": "1" if config.SECURE_COOKIES else "",
         },
     )
 

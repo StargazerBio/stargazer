@@ -81,12 +81,18 @@
             <ul class="notice-list">
                 <li>Fork the public <code>StargazerBio/stargazer</code> repo
                 into your GitHub account.</li>
-                <li>Commit and push notebooks you create or edit to a
-                <code>workspace</code> branch on that fork.</li>
+                <li>Send you to GitHub to install the Stargazer app — choose
+                <strong>Only select repositories</strong> and pick your new
+                <code>stargazer</code> fork, so it can read and write just that
+                one repo.</li>
+                <li>Save notebooks you create or edit to your fork's
+                <code>main</code>, under <code>notebooks/workspace/</code>.</li>
             </ul>
-            <p class="section-desc">Nothing is written to your GitHub account
-            until you do this. Tutorials and Community notebooks work without
-            it — they just aren't saved.</p>
+            <p class="section-desc">Stargazer never holds a broad token — the
+            app is scoped to your fork, and you can revoke it anytime from your
+            GitHub settings. Saving starts working once the app is installed;
+            nothing is written until then. Tutorials and Community notebooks
+            work without it — they just aren't saved.</p>
             <form method="post" action="/workspace/enable" style="margin:0;">
                 <button class="btn btn-github" type="submit">Enable workspace saving</button>
             </form>

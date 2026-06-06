@@ -17,7 +17,9 @@ from app.session import (
     SESSION_COOKIE,
     SessionData,
     create_session_cookie,
+    read_pod_capability,
     read_session_cookie,
+    sign_pod_capability,
 )
 
 
@@ -38,13 +40,47 @@ def client():
 
 
 def _auth(
-    client: TestClient, *, fork_full_name: str = "", access_token: str = ""
+    client: TestClient,
+    *,
+    fork_full_name: str = "",
+    access_token: str = "",
+    app_installed: bool | None = None,
 ) -> None:
-    """Attach a signed session cookie for `octocat` to the client's jar."""
+    """Attach a signed session cookie for `octocat` to the client's jar.
+
+    `app_installed` defaults to True whenever a fork is given, so tests that
+    just want an *enabled* session (`fork_full_name=…`) stay enabled without
+    spelling it out. Pass it explicitly to model a half-finished opt-in.
+    """
+    if app_installed is None:
+        app_installed = bool(fork_full_name)
     data = SessionData(
-        "octocat", 123, fork_full_name=fork_full_name, access_token=access_token
+        "octocat",
+        123,
+        fork_full_name=fork_full_name,
+        access_token=access_token,
+        app_installed=app_installed,
     )
     client.cookies.set(SESSION_COOKIE, create_session_cookie(data, SECRET))
+
+
+INSTALL_TOKEN = "ghs_installation_token"
+
+
+def _stub_fork_token(monkeypatch, token: str = INSTALL_TOKEN) -> str:
+    """Patch the GitHub-App path so post-fork ops use a minted installation token.
+
+    Post-fork admin-side GitHub reads/writes mint via
+    `installation_tokens.fork_token(session.fork_full_name)`, never
+    `session.access_token`. Stubbing it here keeps the network out of the test
+    and lets callers assert the *minted* token is what reaches the op.
+    """
+
+    async def fake(fork_full_name):
+        return token
+
+    monkeypatch.setattr("app.installation_tokens.fork_token", fake)
+    return token
 
 
 # ---------------------------------------------------------------------------
@@ -80,19 +116,51 @@ def test_workspace_enabled_false_by_default():
     assert SessionData("u", 1).workspace_enabled is False
 
 
-def test_workspace_enabled_requires_both_fork_and_token():
-    """Opt-in requires both a fork_full_name and an access_token."""
+def test_workspace_enabled_requires_fork_and_install():
+    """Opt-in needs both a fork and a confirmed App install — and no token."""
+    # Fork + install, token already dropped → enabled.
+    assert (
+        SessionData(
+            "u", 1, fork_full_name="u/stargazer", app_installed=True
+        ).workspace_enabled
+        is True
+    )
+    # Forked but install abandoned → still off.
     assert SessionData("u", 1, fork_full_name="u/stargazer").workspace_enabled is False
+    # A token (pre-fork window) without a fork → off.
     assert SessionData("u", 1, access_token="t").workspace_enabled is False
-    assert SessionData(
-        "u", 1, fork_full_name="u/stargazer", access_token="t"
-    ).workspace_enabled
 
 
 def test_fork_owner_derived_from_full_name():
     """fork_owner is derived from fork_full_name's owner segment."""
     assert SessionData("u", 1, fork_full_name="alice/stargazer-1").fork_owner == "alice"
     assert SessionData("u", 1).fork_owner == ""
+
+
+# ---------------------------------------------------------------------------
+# Pod capability sign / verify
+# ---------------------------------------------------------------------------
+
+
+def test_pod_capability_roundtrips_fork_name():
+    """A signed capability verifies back to its fork name."""
+    cap = sign_pod_capability("octocat/stargazer", SECRET)
+    assert read_pod_capability(cap, SECRET) == "octocat/stargazer"
+
+
+def test_pod_capability_rejects_tamper_and_wrong_secret():
+    """A bad signature / wrong secret yields None, not the fork name."""
+    cap = sign_pod_capability("octocat/stargazer", SECRET)
+    assert read_pod_capability(cap, "different-secret") is None
+    assert read_pod_capability(cap + "x", SECRET) is None
+
+
+def test_pod_capability_not_confused_with_session_cookie():
+    """A session cookie can't be replayed as a pod capability (distinct salt)."""
+    cookie = create_session_cookie(
+        SessionData("octocat", 1, fork_full_name="octocat/stargazer"), SECRET
+    )
+    assert read_pod_capability(cookie, SECRET) is None
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +191,37 @@ def test_dashboard_context_on_builds_workspace_tiles():
     ctx = _dashboard_context("octocat", ["template.py", "foo.py"], True)
     assert ctx["workspace_enabled"] is True
     assert [t["slug"] for t in ctx["workspace"]] == ["foo"]
+
+
+# ---------------------------------------------------------------------------
+# Workspace listing routes through the installation token (post-fork read)
+# ---------------------------------------------------------------------------
+
+
+async def test_resolve_workspace_files_uses_installation_token(monkeypatch):
+    """The GitHub listing fallback mints a fork-scoped token, not access_token."""
+    from app import admin_app
+
+    used: dict = {}
+
+    async def fake_list(fork_full_name, token):
+        used.update(fork=fork_full_name, token=token)
+        return ["my_analysis.py"]
+
+    monkeypatch.setattr(admin_app, "gh_list_workspace", fake_list)
+    _stub_fork_token(monkeypatch)
+
+    session = SessionData(
+        "octocat",
+        123,
+        fork_full_name="octocat/stargazer",
+        access_token="oauth_tok",
+        app_installed=True,
+    )
+    files = await admin_app._resolve_workspace_files(session, cookie_value="")
+
+    assert files == ["my_analysis.py"]
+    assert used == {"fork": "octocat/stargazer", "token": INSTALL_TOKEN}
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +276,13 @@ def test_workspace_enable_requires_session(secret_env, client):
 
 
 def test_workspace_enable_forks_and_sets_cookie(secret_env, client, monkeypatch):
-    """A genuine fork is verified and recorded as fork_full_name."""
+    """A genuine fork is verified and recorded, but saving stays off until install.
+
+    Enable only completes the *first* half of opt-in (the fork). The session
+    records `fork_full_name` but `workspace_enabled` stays False until the user
+    finishes the GitHub App install (the `/auth/app-install-callback`); so a
+    user who abandons the install isn't shown as enabled.
+    """
 
     async def fake_fork(_token):
         return {
@@ -196,7 +301,8 @@ def test_workspace_enable_forks_and_sets_cookie(secret_env, client, monkeypatch)
     assert new_cookie is not None
     session = read_session_cookie(new_cookie, SECRET)
     assert session.fork_full_name == "octocat/stargazer"
-    assert session.workspace_enabled is True
+    assert session.app_installed is False
+    assert session.workspace_enabled is False  # pending the App install
 
 
 def test_workspace_enable_refuses_collision_fork(secret_env, client, monkeypatch):
@@ -257,6 +363,60 @@ def test_workspace_enable_failure_leaves_saving_off(secret_env, client, monkeypa
     assert resp.cookies.get(SESSION_COOKIE) is None  # no re-signed cookie
 
 
+def test_workspace_enable_redirects_to_app_install(secret_env, client, monkeypatch):
+    """With an App configured, a successful fork redirects to its install page."""
+
+    async def fake_fork(_token):
+        return {
+            "fork": True,
+            "full_name": "octocat/stargazer",
+            "owner": {"login": "octocat"},
+        }
+
+    monkeypatch.setattr("app.admin_app.fork_upstream", fake_fork)
+    monkeypatch.setattr("app.config.GITHUB_APP_SLUG", "stargazer-workspaces")
+    _auth(client, access_token="gho_token")
+
+    resp = client.post("/workspace/enable", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == (
+        "https://github.com/apps/stargazer-workspaces/installations/new"
+    )
+    # The fork is already recorded before the user leaves to install.
+    session = read_session_cookie(resp.cookies.get(SESSION_COOKIE), SECRET)
+    assert session.fork_full_name == "octocat/stargazer"
+
+
+# ---------------------------------------------------------------------------
+# /auth/app-install-callback — finish opt-in, drop the OAuth token
+# ---------------------------------------------------------------------------
+
+
+def test_app_install_callback_confirms_install_and_drops_token(secret_env, client):
+    """The callback flips on the install (enabling saving) and clears the token."""
+    # Mid-flow: forked, OAuth token kept, install not yet confirmed → off.
+    _auth(
+        client,
+        fork_full_name="octocat/stargazer",
+        access_token="gho_token",
+        app_installed=False,
+    )
+
+    resp = client.get("/auth/app-install-callback", follow_redirects=False)
+    assert resp.status_code == 302
+    session = read_session_cookie(resp.cookies.get(SESSION_COOKIE), SECRET)
+    assert session.app_installed is True
+    assert session.workspace_enabled is True  # now both halves of opt-in are done
+    assert session.access_token == ""  # spent OAuth token dropped
+
+
+def test_app_install_callback_without_session_redirects_home(secret_env, client):
+    """No session → just bounce home, set no cookie."""
+    resp = client.get("/auth/app-install-callback", follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.cookies.get(SESSION_COOKIE) is None
+
+
 # ---------------------------------------------------------------------------
 # /auth/callback — restore Workspace saving for returning users
 # ---------------------------------------------------------------------------
@@ -286,18 +446,63 @@ def _callback(client):
 
 
 def test_callback_restores_saving_for_returning_fork(secret_env, client, monkeypatch):
-    """A returning user whose fork still exists gets Workspace saving back."""
+    """A returning user whose fork exists AND App is installed gets saving back."""
     _patch_oauth(monkeypatch)
 
     async def fake_find(_token, _username):
         return {"full_name": "octocat/stargazer"}
 
+    async def fake_install_id(_owner):
+        return 42  # App still installed on the fork
+
     monkeypatch.setattr("app.admin_app.find_existing_fork", fake_find)
+    monkeypatch.setattr("app.installation_tokens.get_installation_id", fake_install_id)
 
     resp = _callback(client)
     session = read_session_cookie(resp.cookies.get(SESSION_COOKIE), SECRET)
     assert session.fork_full_name == "octocat/stargazer"
+    assert session.app_installed is True
     assert session.workspace_enabled is True
+    # Returning user is already enabled+installed → no OAuth token kept.
+    assert session.access_token == ""
+
+
+def test_callback_fork_but_uninstalled_app_is_not_enabled(
+    secret_env, client, monkeypatch
+):
+    """A fork whose App install is gone → saving off, OAuth token kept to retry."""
+    _patch_oauth(monkeypatch)
+
+    async def fake_find(_token, _username):
+        return {"full_name": "octocat/stargazer"}
+
+    async def boom(_owner):
+        raise RuntimeError("404 not installed")
+
+    monkeypatch.setattr("app.admin_app.find_existing_fork", fake_find)
+    monkeypatch.setattr("app.installation_tokens.get_installation_id", boom)
+
+    resp = _callback(client)
+    session = read_session_cookie(resp.cookies.get(SESSION_COOKIE), SECRET)
+    assert session.fork_full_name == "octocat/stargazer"
+    assert session.app_installed is False
+    assert session.workspace_enabled is False
+    assert session.access_token == "gho_token"  # kept so they can re-enable
+
+
+def test_callback_first_time_keeps_token_for_enable(secret_env, client, monkeypatch):
+    """A first-time user (no fork) keeps the OAuth token to fork at Enable."""
+    _patch_oauth(monkeypatch)
+
+    async def fake_find(_token, _username):
+        return None
+
+    monkeypatch.setattr("app.admin_app.find_existing_fork", fake_find)
+
+    resp = _callback(client)
+    session = read_session_cookie(resp.cookies.get(SESSION_COOKIE), SECRET)
+    assert session.fork_full_name == ""
+    assert session.access_token == "gho_token"
 
 
 def test_callback_saving_off_when_no_fork(secret_env, client, monkeypatch):
@@ -401,9 +606,7 @@ def test_launch_status_reports_only_active_apps(secret_env, client, monkeypatch)
     resp = client.get("/launch/status", headers={"Accept": "application/json"})
     assert resp.status_code == 200
     running = resp.json()["running"]
-    assert running == [
-        {"slug": "assets", "mode": "edit", "url": "http://nb.example"}
-    ]
+    assert running == [{"slug": "assets", "mode": "edit", "url": "http://nb.example"}]
 
 
 def test_launch_status_skips_inactive_apps(secret_env, client, monkeypatch):
@@ -555,6 +758,61 @@ def test_cleanup_listing_failure_returns_502(secret_env, client, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# /workspace/pod-token — callback-fetch git token for notebook pods
+# ---------------------------------------------------------------------------
+
+
+def test_pod_token_rejects_missing_capability(secret_env, client):
+    """No/!bearer capability is a 401 — the endpoint mints nothing."""
+    resp = client.post("/workspace/pod-token")
+    assert resp.status_code == 401
+
+
+def test_pod_token_rejects_bad_capability(secret_env, client):
+    """A capability that doesn't verify is a 401."""
+    resp = client.post(
+        "/workspace/pod-token",
+        headers={"Authorization": "Bearer not-a-real-capability"},
+    )
+    assert resp.status_code == 401
+
+
+def test_pod_token_mints_fork_scoped_token(secret_env, client, monkeypatch):
+    """A valid capability mints a fork-scoped token, returned as plain text."""
+    minted: dict = {}
+
+    async def fake_fork_token(fork_full_name):
+        minted.update(fork_full_name=fork_full_name)
+        return "ghs_pod_scoped"
+
+    monkeypatch.setattr("app.installation_tokens.fork_token", fake_fork_token)
+    cap = sign_pod_capability("octocat/stargazer", SECRET)
+
+    resp = client.post(
+        "/workspace/pod-token", headers={"Authorization": f"Bearer {cap}"}
+    )
+    assert resp.status_code == 200
+    assert resp.text == "ghs_pod_scoped"
+    # Scoped to exactly the capability's fork, never a session/access token.
+    assert minted == {"fork_full_name": "octocat/stargazer"}
+
+
+def test_pod_token_502_when_app_not_installed(secret_env, client, monkeypatch):
+    """If minting fails (fork has no GitHub App install), report 502."""
+
+    async def boom(fork_full_name):
+        raise RuntimeError("not installed")
+
+    monkeypatch.setattr("app.installation_tokens.fork_token", boom)
+    cap = sign_pod_capability("octocat/stargazer", SECRET)
+
+    resp = client.post(
+        "/workspace/pod-token", headers={"Authorization": f"Bearer {cap}"}
+    )
+    assert resp.status_code == 502
+
+
+# ---------------------------------------------------------------------------
 # /launch — workspace resource propagation
 # ---------------------------------------------------------------------------
 
@@ -591,6 +849,7 @@ def test_launch_workspace_applies_notebook_resources(secret_env, client, monkeyp
         return source
 
     monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
+    _stub_fork_token(monkeypatch)
     sink: dict = {}
     _stub_serve(monkeypatch, sink)
 
@@ -615,6 +874,7 @@ def test_launch_workspace_missing_source_uses_defaults(secret_env, client, monke
         return None
 
     monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
+    _stub_fork_token(monkeypatch)
     sink: dict = {}
     _stub_serve(monkeypatch, sink)
 
@@ -672,6 +932,7 @@ def test_create_conflict_when_notebook_exists(secret_env, client, monkeypatch):
         return "# existing notebook\n"
 
     monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
+    _stub_fork_token(monkeypatch)
     _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
     resp = client.post("/workspace/create", data=_create_form(name="taken"))
     assert resp.status_code == 409
@@ -680,10 +941,7 @@ def test_create_conflict_when_notebook_exists(secret_env, client, monkeypatch):
 def test_create_blank_writes_file_and_returns_slug(secret_env, client, monkeypatch):
     """A blank create copies the blank seed, injects resources, returns slug."""
     blank_seed = (
-        "# /// script\n"
-        '# dependencies = ["marimo", "stargazer"]\n'
-        "# ///\n"
-        "import marimo\n"
+        '# /// script\n# dependencies = ["marimo", "stargazer"]\n# ///\nimport marimo\n'
     )
     written: dict = {}
 
@@ -692,11 +950,12 @@ def test_create_blank_writes_file_and_returns_slug(secret_env, client, monkeypat
         return blank_seed if filename == "blank.py" else None
 
     async def fake_create(owner, token, filename, content, message=None):
-        written.update(filename=filename, content=content)
+        written.update(filename=filename, content=content, token=token)
         return {"content": {"name": filename}}
 
     monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
     monkeypatch.setattr("app.admin_app.create_workspace_notebook", fake_create)
+    token = _stub_fork_token(monkeypatch)
 
     _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
     resp = client.post(
@@ -706,6 +965,8 @@ def test_create_blank_writes_file_and_returns_slug(secret_env, client, monkeypat
     assert resp.status_code == 200
     body = resp.json()
     assert body["slug"] == "my-analysis"
+    # The write used the fork-scoped installation token, never session.access_token.
+    assert written["token"] == token
     # Create returns a ready-to-insert tile that behaves like any other.
     assert 'name="slug" value="my-analysis"' in body["tile_html"]
     assert "launch-form" in body["tile_html"]
@@ -723,10 +984,7 @@ def test_create_blank_writes_file_and_returns_slug(secret_env, client, monkeypat
 def test_create_from_template_injects_resources(secret_env, client, monkeypatch):
     """A template create fetches template.py and injects chosen resources."""
     template_src = (
-        "# /// script\n"
-        '# dependencies = ["marimo", "stargazer"]\n'
-        "# ///\n"
-        "import marimo\n"
+        '# /// script\n# dependencies = ["marimo", "stargazer"]\n# ///\nimport marimo\n'
     )
     written: dict = {}
 
@@ -740,6 +998,7 @@ def test_create_from_template_injects_resources(secret_env, client, monkeypatch)
 
     monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
     monkeypatch.setattr("app.admin_app.create_workspace_notebook", fake_create)
+    _stub_fork_token(monkeypatch)
 
     _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
     resp = client.post(
@@ -786,12 +1045,13 @@ def test_delete_removes_notebook(secret_env, client, monkeypatch):
     deleted: dict = {}
 
     async def fake_delete(repo, token, filename, message=None):
-        deleted.update(repo=repo, filename=filename)
+        deleted.update(repo=repo, filename=filename, token=token)
         return True
 
     monkeypatch.setattr(
         "app.admin_app.delete_workspace_notebook", fake_delete, raising=False
     )
+    token = _stub_fork_token(monkeypatch)
     _stub_app_get(monkeypatch, {})  # no running pod to deactivate
     _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
     resp = client.post(
@@ -801,7 +1061,12 @@ def test_delete_removes_notebook(secret_env, client, monkeypatch):
     )
     assert resp.status_code == 200
     assert resp.json()["slug"] == "my-analysis"
-    assert deleted == {"repo": "octocat/stargazer", "filename": "my-analysis.py"}
+    # The delete used the fork-scoped installation token, never session.access_token.
+    assert deleted == {
+        "repo": "octocat/stargazer",
+        "filename": "my-analysis.py",
+        "token": token,
+    }
 
 
 def test_delete_tears_down_pod_deployment(secret_env, client, monkeypatch):
@@ -828,6 +1093,7 @@ def test_delete_tears_down_pod_deployment(secret_env, client, monkeypatch):
     monkeypatch.setattr(
         "app.admin_app.delete_workspace_notebook", fake_delete, raising=False
     )
+    _stub_fork_token(monkeypatch)
     _stub_app_get(monkeypatch, table, deleted=deleted_apps)
     _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
     resp = client.post(
@@ -849,6 +1115,7 @@ def test_delete_idempotent_when_missing(secret_env, client, monkeypatch):
     monkeypatch.setattr(
         "app.admin_app.delete_workspace_notebook", fake_delete, raising=False
     )
+    _stub_fork_token(monkeypatch)
     _stub_app_get(monkeypatch, {})
     _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
     resp = client.post(

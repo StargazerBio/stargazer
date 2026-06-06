@@ -21,15 +21,17 @@ Four reserved paths the proxy handles itself instead of forwarding:
   app queries this on dashboard render so workspace state is read
   straight off disk.
 - `POST /__sg__/workspace/sync` — `git add` + `git commit` + `git push`
-  to the fork's `main` using the `GITHUB_TOKEN`/`FORK_OWNER` baked into
-  env_vars at deploy time. Only the `notebooks/workspace/` dir is staged,
-  so the fork's `main` never collides with upstream's shipped files.
-  Called by the launch script's SIGTERM hook on idle-down, and exposed to
-  the admin app as a "save" affordance.
+  to the fork's `main`. No GitHub credential is baked into the pod: the push
+  exchanges the signed `SG_POD_TOKEN` capability for a fresh, fork-scoped, ~1h
+  token from the admin's `/workspace/pod-token` endpoint and feeds it to git
+  via `GIT_ASKPASS`, so it never lands in argv or `.git/config`. Only the
+  `notebooks/workspace/` dir is staged, so the fork's `main` never collides
+  with upstream's shipped files. Called by the launch script's SIGTERM hook on
+  idle-down, and exposed to the admin app as a "save" affordance.
 
 Self-contained on purpose: the notebook image installs only `fastapi`,
-`uvicorn`, `itsdangerous`, `httpx`, `websockets` at system level and
-COPYs this single file in as `/usr/local/lib/sg_proxy.py` — no
+`uvicorn`, `itsdangerous`, `httpx`, `websockets`, `cryptography` at system
+level and COPYs this single file in as `/usr/local/lib/sg_proxy.py` — no
 stargazer or app-package install needed, and the top-level module
 name avoids colliding with Flyte's loaded_modules code bundle which
 ships an `app/` package into the pod's `/home/flyte` cwd at deploy
@@ -39,17 +41,20 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import asyncio
+import base64
+import hashlib
 import os
 import subprocess
+import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlencode
 
 import httpx
 import websockets
+from cryptography.fernet import Fernet, InvalidToken
 from fastapi import FastAPI, Request, Response, WebSocket
 from fastapi.responses import JSONResponse, RedirectResponse
-from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 
 SESSION_COOKIE = "sg_session"
@@ -62,12 +67,40 @@ WORKSPACE_NOTEBOOK_DIR = WORKSPACE_ROOT / "src/stargazer/notebooks/workspace"
 WORKSPACE_REL = "src/stargazer/notebooks/workspace"
 
 
+def _fetch_pod_git_token() -> str | None:
+    """Exchange the pod capability for a fresh fork-scoped git token.
+
+    Calls the admin's `/workspace/pod-token` with the `SG_POD_TOKEN` capability
+    baked into the pod env. Returns the bare token string, or None if the
+    capability/admin URL is missing or the admin declines — the caller turns
+    None into a push failure. The token is fetched at use (never persisted), so
+    it's always fresh even past the ~1h installation-token expiry.
+    """
+    capability = os.environ.get("SG_POD_TOKEN")
+    admin_url = os.environ.get("STARGAZER_ADMIN_URL")
+    if not capability or not admin_url:
+        return None
+    try:
+        resp = httpx.post(
+            f"{admin_url.rstrip('/')}/workspace/pod-token",
+            headers={"Authorization": f"Bearer {capability}"},
+            timeout=10.0,
+        )
+    except Exception:
+        return None
+    if resp.status_code != 200 or not resp.text.strip():
+        return None
+    return resp.text.strip()
+
+
 def _sync_workspace() -> tuple[dict, int]:
     """git add + commit + push the workspace dir to the user's fork.
 
     Returns `(payload, http_status)`. `{"status": "clean"}` means there were
     no on-disk changes to push. Shared by the `/__sg__/workspace/sync` route
     and the shutdown hook so manual Save and scale-to-zero use one code path.
+    The push fetches a fresh fork-scoped token (`_fetch_pod_git_token`) and
+    supplies it via `GIT_ASKPASS`, so no credential is stored in `.git/config`.
     """
     if not (WORKSPACE_ROOT / ".git").exists():
         return {"error": "workspace not initialized"}, 409
@@ -87,15 +120,53 @@ def _sync_workspace() -> tuple[dict, int]:
     # only authoritative signal here (the pod isn't told its own slug). For
     # renames ("R old -> new") the last token is the new path.
     saved = sorted(
-        {Path(line.split()[-1]).stem for line in status.stdout.splitlines() if line.strip()}
+        {
+            Path(line.split()[-1]).stem
+            for line in status.stdout.splitlines()
+            if line.strip()
+        }
     )
     commit = git("commit", "-m", f"workspace: save {', '.join(saved)}")
     if commit.returncode != 0:
         return {"error": "git commit failed", "stderr": commit.stderr}, 500
-    push = git("push", "origin", "HEAD:main")
-    if push.returncode != 0:
-        return {"error": "git push failed", "stderr": push.stderr}, 500
+    push, err = _git_push()
+    if not push:
+        return {"error": "git push failed", "stderr": err}, 500
     return {"status": "pushed"}, 200
+
+
+def _git_push() -> tuple[bool, str]:
+    """Push `HEAD:main` to origin using a freshly-minted token via GIT_ASKPASS.
+
+    Returns `(ok, stderr)`. The remote URL is token-free
+    (`https://x-access-token@github.com/...`), so git asks GIT_ASKPASS for the
+    password; we point that at a throwaway script echoing the just-fetched
+    token. The token lives only in the push subprocess's env and a temp file we
+    delete immediately — never in argv or `.git/config`.
+    """
+    token = _fetch_pod_git_token()
+    if not token:
+        return False, "could not obtain a fork-scoped push token from the admin"
+    askpass = tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False)
+    try:
+        askpass.write('#!/bin/sh\necho "$SG_GIT_TOKEN"\n')
+        askpass.close()
+        os.chmod(askpass.name, 0o700)
+        env = {
+            **os.environ,
+            "SG_GIT_TOKEN": token,
+            "GIT_ASKPASS": askpass.name,
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+        push = subprocess.run(
+            ["git", "-C", str(WORKSPACE_ROOT), "push", "origin", "HEAD:main"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        return push.returncode == 0, push.stderr
+    finally:
+        os.unlink(askpass.name)
 
 
 @asynccontextmanager
@@ -120,20 +191,47 @@ asgi_app = FastAPI(
 )
 
 
+def _fernet(secret: str) -> Fernet:
+    """Derive the session-cookie cipher from `SESSION_SECRET`.
+
+    Mirrors `app.session._fernet` exactly (sha256 → urlsafe-base64 key) so this
+    standalone proxy can decrypt the admin-issued cookie without importing the
+    app package. Keep the two derivations in lockstep.
+    """
+    key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
+    return Fernet(key)
+
+
+def _cookie_secure() -> bool:
+    """Whether the session cookie gets `Secure` — mirrors `app.config.SECURE_COOKIES`.
+
+    Off on devbox/http, on under production TLS. This standalone proxy can't
+    import `app.config`, so it re-reads `STARGAZER_SECURE_COOKIES` (which the
+    admin bakes into this pod's env at launch from that single source of truth);
+    keep this read in lockstep so both sides set the cookie identically.
+    """
+    return os.environ.get("STARGAZER_SECURE_COOKIES", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
 def _cookie_is_valid(cookie_value: str | None) -> bool:
-    """Verify the signed session cookie against `SESSION_SECRET`.
+    """Verify the encrypted session cookie against `SESSION_SECRET`.
 
     Returns False (denying access) if the secret env var is missing, the
-    cookie is absent, or the signature does not verify within the max
-    age window.
+    cookie is absent, or it does not decrypt/authenticate within the max age
+    window. Fernet authenticates on decrypt, so a forged cookie fails here.
     """
     secret = os.environ.get("SESSION_SECRET")
     if not secret or not cookie_value:
         return False
     try:
-        URLSafeTimedSerializer(secret).loads(cookie_value, max_age=SESSION_MAX_AGE)
+        _fernet(secret).decrypt(cookie_value.encode("ascii"), ttl=SESSION_MAX_AGE)
         return True
-    except (BadSignature, Exception):
+    except (InvalidToken, Exception):
         return False
 
 
@@ -160,7 +258,7 @@ async def redeem_launch_token(request: Request, call_next):
         SESSION_COOKIE,
         token,
         httponly=True,
-        secure=False,
+        secure=_cookie_secure(),
         max_age=SESSION_MAX_AGE,
         samesite="lax",
     )

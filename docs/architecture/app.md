@@ -52,7 +52,21 @@ This is why `notebook_app` is not a factory function — nothing per-user lives 
 
 Forking a user's GitHub account is **opt-in**, not automatic. Login creates the user's Flyte project but writes nothing to GitHub; `SessionData.fork_owner` stays empty (`SessionData.workspace_enabled` is False). Tutorials and Community notebooks run from the image and need no fork.
 
-The Workspace section then renders a disclaimer + an **Enable workspace saving** button. `POST /workspace/enable` forks the upstream repo, records `fork_owner` in the re-signed session cookie, and only from then on does the section list the user's notebooks and do `/launch` permit workspace launches (clone-on-start + push-on-sync against the fork's `main`). The `public_repo` OAuth scope is still requested at login, but no fork is created until this explicit action.
+Opt-in is **two steps**, and `SessionData.workspace_enabled` requires both — gated on `fork_full_name` **and** `app_installed`. The Workspace section renders a disclaimer + an **Enable workspace saving** button. `POST /workspace/enable` forks the upstream repo, records `fork_full_name`, then redirects the user to install the GitHub App on the fork (see Credential Model). The App's setup-URL returns to `/auth/app-install-callback`, which sets `app_installed` (and drops the OAuth token) — only *then* is saving on. A user who forks but abandons the install is **not** shown as enabled (post-fork ops would fail), and a returning user's install is re-confirmed at login via `installation_tokens.get_installation_id`. Only when enabled does the section list the user's notebooks and `/launch` permit workspace launches (clone-on-start + push-on-sync against the fork's `main`). The `public_repo` OAuth scope is still requested at login, but no fork is created until this explicit action.
+
+## Credential Model
+
+Two GitHub identities, deliberately split so the broad credential is short-lived and never touches code the user controls:
+
+| Step | Credential | Scope | Lifetime | Where it lives |
+|---|---|---|---|---|
+| Login + the one-time fork | **OAuth user token** (`read:user public_repo`) | all public repos | login → opt-in only | admin process + encrypted cookie, then **dropped** at install callback |
+| Admin-side reads/writes (list/get/create/delete on the fork) | **GitHub App installation token** | the fork only | ~1h, minted on demand | admin process memory |
+| Pod clone / push | **GitHub App installation token** via `GIT_ASKPASS` | the fork only | ~1h, minted at use | never persisted — fetched per operation |
+
+The **GitHub App private key** is the trust anchor: held solely by the admin, it mints fork-scoped installation tokens (`app/installation_tokens.py`) for every post-fork operation. The OAuth token forks once at `/workspace/enable`; the App's install setup-URL hits `/auth/app-install-callback`, which clears the token from the session — so an *enabled* session carries no GitHub credential. A returning user whose fork already exists never stores the OAuth token at all.
+
+**Pods never receive a GitHub credential.** `per_notebook_env` injects only a signed *capability* (`SG_POD_TOKEN`, carrying the fork name, not a token). At clone (`launch-notebook.sh`) and push (`proxy.py`), the pod exchanges that capability at the admin's `POST /workspace/pod-token` for a fresh fork-scoped token, fed to git via `GIT_ASKPASS` against a token-free remote — so nothing lands in `.git/config` or `os.environ`. The worst a malicious cell can do is mint a fork-scoped, ~1h, revocable token (uninstalling the App cuts it off) — never the broad OAuth token. The session cookie is **encrypted** (Fernet, keyed off `SESSION_SECRET`; the proxy mirrors the derivation), so even its identity fields are opaque client-side.
 
 ## Creating Notebooks & Per-Notebook Resources
 
@@ -80,12 +94,13 @@ User notebooks live and persist on the fork's **`main`** — there is no side br
 
 | Module | Role |
 |--------|------|
-| `app/admin_app.py` | `app_env` + FastAPI routes (`/`, `/auth/login`, `/auth/callback`, `/auth/logout`, `/workspace/enable`, `/workspace/create`, `/launch`, `/launch/status`, `/stop`, `/health`). `/workspace/enable` is the opt-in that forks the upstream repo and records the verified `fork_full_name`; `/workspace/create` writes a new notebook to the fork's `main` and returns the rendered tile; `/workspace/delete` removes a workspace notebook from the fork (idempotent) and deactivates any running pod for it; `/launch` serves a per-notebook env (workspace launches require opt-in); `/launch/status` reports the user's active per-notebook apps (Flyte-queried) so the dashboard hydrates running tiles to Open/Stop; `/stop` deactivates by name (`App.get(...).deactivate()`); `/workspace/save` syncs one running pod's workspace to the fork; `/workspace/cleanup` deletes deactivated per-notebook app records (`App.delete`). Lifespan runs `init()` at startup. |
+| `app/admin_app.py` | `app_env` + FastAPI routes (`/`, `/auth/login`, `/auth/callback`, `/auth/logout`, `/workspace/enable`, `/auth/app-install-callback`, `/workspace/create`, `/workspace/delete`, `/launch`, `/launch/status`, `/stop`, `/workspace/save`, `/workspace/cleanup`, `/workspace/pod-token`, `/health`). `/workspace/enable` is the opt-in that forks the upstream repo, records the verified `fork_full_name`, and redirects to the GitHub App install; `/auth/app-install-callback` finishes opt-in and drops the OAuth token; `/workspace/create` writes a new notebook to the fork's `main` and returns the rendered tile; `/workspace/delete` removes a workspace notebook (idempotent) and deactivates any running pod for it; `/launch` serves a per-notebook env (workspace launches require opt-in); `/launch/status` reports active per-notebook apps so the dashboard hydrates running tiles to Open/Stop; `/stop` deactivates by name; `/workspace/save` syncs one running pod's workspace to the fork; `/workspace/cleanup` deletes deactivated per-notebook app records; `/workspace/pod-token` mints a fork-scoped git token for a pod that presents its capability. Post-fork GitHub ops go through `app/installation_tokens.py` (installation tokens), not the OAuth token. Lifespan runs `init()` at startup. |
 | `app/notebook_meta.py` | Static parsing of a notebook's PEP 723 `[tool.stargazer]` resource block (no code execution, honored as-authored — no ceiling); plus the resource-injection helper (`with_stargazer_resources`) used by `/workspace/create`. |
 | `app/notebook_app.py` | `notebook_env` — marimo edit on the bundled scRNA tutorial. |
 | `app/provision.py` | `provision_user()` — creates the Flyte project and serves `notebook_env` into it via `with_servecontext`. |
-| `app/oauth.py` | GitHub OAuth helpers. |
-| `app/session.py` | Signed-cookie session (`itsdangerous`). The cookie is the session — no server-side store. |
+| `app/oauth.py` | GitHub OAuth helpers (login + the one-time fork). |
+| `app/installation_tokens.py` | GitHub App client — mints fork-scoped, ~1h installation tokens from the App private key for every post-fork op (`fork_token`). The trust anchor of the Credential Model. |
+| `app/session.py` | Encrypted-cookie session (`Fernet`, keyed off `SESSION_SECRET`). The cookie is the session — no server-side store. Also signs/verifies pod capabilities (`sign_pod_capability`). |
 | `app/templates.py` + `templates/*.html` | Jinja2 template loader (`base.html`, `login.html`, `dashboard.html`, `_tile.html`); auto-escaped, shared chrome via `{% extends "base.html" %}`. Static assets (landing logo) served from `app/static/` at `/static`. |
 | `app/init.py` | Runtime-context-aware Flyte init. |
 

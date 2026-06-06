@@ -7,7 +7,6 @@ whenever the block is missing or malformed. No notebook code is executed —
 purely a text parse.
 """
 
-
 from app.notebook_meta import (
     DEFAULT_RESOURCES,
     NotebookResources,
@@ -54,9 +53,7 @@ def test_malformed_toml_returns_default():
 
 def test_reads_cpu_and_memory():
     """cpu + memory from [tool.stargazer] are parsed verbatim."""
-    src = _nb(
-        'dependencies = ["marimo"]\n\n[tool.stargazer]\ncpu = 2\nmemory = "4Gi"'
-    )
+    src = _nb('dependencies = ["marimo"]\n\n[tool.stargazer]\ncpu = 2\nmemory = "4Gi"')
     res = parse_notebook_resources(src)
     assert res == NotebookResources(cpu=2, memory="4Gi")
 
@@ -82,8 +79,14 @@ def test_large_values_pass_through_unclamped():
 
 def test_memory_units_pass_through():
     """Any Kubernetes-style memory quantity is taken as-is."""
-    assert parse_notebook_resources(_nb('[tool.stargazer]\nmemory = "512Mi"')).memory == "512Mi"
-    assert parse_notebook_resources(_nb('[tool.stargazer]\nmemory = "2Gi"')).memory == "2Gi"
+    assert (
+        parse_notebook_resources(_nb('[tool.stargazer]\nmemory = "512Mi"')).memory
+        == "512Mi"
+    )
+    assert (
+        parse_notebook_resources(_nb('[tool.stargazer]\nmemory = "2Gi"')).memory
+        == "2Gi"
+    )
 
 
 # ---------------------------------------------------------------------------

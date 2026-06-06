@@ -11,7 +11,7 @@ def _env(**overrides):
         mode="edit",
         notebook_path="/workspace/x.py",
         fork_full_name="octocat/stargazer",
-        github_token="tok",
+        pod_capability="signed-cap",
         session_secret="sek",
         admin_url="http://admin",
     )
@@ -31,3 +31,13 @@ def test_custom_resources_applied_to_env():
     env = _env(resources=NotebookResources(cpu=2, memory="4Gi"))
     assert env.resources.cpu == 2
     assert env.resources.memory == "4Gi"
+
+
+def test_pod_gets_capability_not_github_token():
+    """No GitHub credential reaches the pod — only the signed capability."""
+    env = _env()
+    assert "GITHUB_TOKEN" not in env.env_vars
+    assert env.env_vars["SG_POD_TOKEN"] == "signed-cap"
+    # The fork identity + admin callback URL the launch script needs are present.
+    assert env.env_vars["FORK_FULL_NAME"] == "octocat/stargazer"
+    assert env.env_vars["STARGAZER_ADMIN_URL"] == "http://admin"

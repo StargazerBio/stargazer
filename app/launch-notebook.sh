@@ -29,17 +29,33 @@ NOTEBOOK_PATH="$2"
 WORKSPACE_DIR="/workspace"
 
 if [ ! -d "${WORKSPACE_DIR}/.git" ]; then
-  if [ -z "${FORK_FULL_NAME:-}" ] || [ -z "${GITHUB_TOKEN:-}" ]; then
-    echo "warning: FORK_FULL_NAME or GITHUB_TOKEN missing; skipping workspace clone" >&2
+  if [ -z "${FORK_FULL_NAME:-}" ] || [ -z "${SG_POD_TOKEN:-}" ] || [ -z "${STARGAZER_ADMIN_URL:-}" ]; then
+    echo "warning: FORK_FULL_NAME/SG_POD_TOKEN/STARGAZER_ADMIN_URL missing; skipping workspace clone" >&2
   else
-    # FORK_FULL_NAME is the verified `owner/repo` of the fork (may be `…-1`
-    # on a name collision), so clone it directly rather than assuming the
-    # upstream repo name.
-    CLONE_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${FORK_FULL_NAME}.git"
-    echo "Cloning ${FORK_FULL_NAME} into ${WORKSPACE_DIR}..."
-    git clone --depth 1 "${CLONE_URL}" "${WORKSPACE_DIR}"
-    git -C "${WORKSPACE_DIR}" config user.email "${FORK_OWNER}@users.noreply.github.com"
-    git -C "${WORKSPACE_DIR}" config user.name "${FORK_OWNER}"
+    # No GitHub credential is baked into this pod. Exchange the signed
+    # capability (SG_POD_TOKEN) for a fresh, fork-scoped, ~1h token from the
+    # admin, and feed it to git via GIT_ASKPASS so it never lands in argv or
+    # .git/config. FORK_FULL_NAME is the verified `owner/repo` (may be `…-1` on
+    # a name collision), so clone it directly.
+    SG_GIT_TOKEN=$(curl -sf -X POST \
+      -H "Authorization: Bearer ${SG_POD_TOKEN}" \
+      "${STARGAZER_ADMIN_URL%/}/workspace/pod-token" || true)
+    if [ -z "${SG_GIT_TOKEN}" ]; then
+      echo "warning: could not fetch fork token from admin; skipping workspace clone" >&2
+    else
+      ASKPASS=$(mktemp)
+      printf '#!/bin/sh\necho "$SG_GIT_TOKEN"\n' > "${ASKPASS}"
+      chmod +x "${ASKPASS}"
+      echo "Cloning ${FORK_FULL_NAME} into ${WORKSPACE_DIR}..."
+      # Username in the URL is the literal `x-access-token` (not a secret); the
+      # token comes only from GIT_ASKPASS, so the stored remote stays token-free.
+      SG_GIT_TOKEN="${SG_GIT_TOKEN}" GIT_ASKPASS="${ASKPASS}" GIT_TERMINAL_PROMPT=0 \
+        git clone --depth 1 \
+        "https://x-access-token@github.com/${FORK_FULL_NAME}.git" "${WORKSPACE_DIR}"
+      rm -f "${ASKPASS}"
+      git -C "${WORKSPACE_DIR}" config user.email "${FORK_OWNER}@users.noreply.github.com"
+      git -C "${WORKSPACE_DIR}" config user.name "${FORK_OWNER}"
+    fi
   fi
 fi
 

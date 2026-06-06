@@ -3244,7 +3244,9 @@ dependencies = [
 
 [package.optional-dependencies]
 all = [
+    { name = "aiohttp" },
     { name = "anndata" },
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "igraph" },
@@ -3254,6 +3256,7 @@ all = [
     { name = "mcp", extra = ["cli"] },
     { name = "mkdocstrings", extra = ["python"] },
     { name = "pooch" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "python-multipart" },
     { name = "scanpy" },
     { name = "scikit-image" },
@@ -3261,7 +3264,9 @@ all = [
     { name = "websockets" },
 ]
 app = [
+    { name = "aiohttp" },
     { name = "anndata" },
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "igraph" },
@@ -3269,6 +3274,7 @@ app = [
     { name = "jinja2" },
     { name = "marimo" },
     { name = "pooch" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "python-multipart" },
     { name = "scanpy" },
     { name = "scikit-image" },
@@ -3286,10 +3292,13 @@ docs = [
     { name = "mkdocstrings", extra = ["python"] },
 ]
 landing = [
+    { name = "aiohttp" },
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "itsdangerous" },
     { name = "jinja2" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "python-multipart" },
     { name = "uvicorn" },
     { name = "websockets" },
@@ -3321,7 +3330,9 @@ dev = [
 requires-dist = [
     { name = "aiofiles", specifier = ">=24.1.0" },
     { name = "aiohttp", specifier = ">=3.9.0" },
+    { name = "aiohttp", marker = "extra == 'landing'", specifier = ">=3.10" },
     { name = "anndata", marker = "extra == 'bio'", specifier = ">=0.12.10" },
+    { name = "cryptography", marker = "extra == 'landing'", specifier = ">=43" },
     { name = "fastapi", marker = "extra == 'landing'", specifier = ">=0.115" },
     { name = "flyte", extras = ["tui"], specifier = ">=2.0.3" },
     { name = "httpx", marker = "extra == 'landing'", specifier = ">=0.27" },
@@ -3333,6 +3344,7 @@ requires-dist = [
     { name = "mcp", extras = ["cli"], marker = "extra == 'mcp'", specifier = ">=1.0.0" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=1.0.3" },
     { name = "pooch", marker = "extra == 'bio'", specifier = ">=1.9.0" },
+    { name = "pyjwt", extras = ["crypto"], marker = "extra == 'landing'", specifier = ">=2.8" },
     { name = "python-multipart", marker = "extra == 'landing'", specifier = ">=0.0.9" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "scanpy", marker = "extra == 'bio'", specifier = ">=1.12" },
