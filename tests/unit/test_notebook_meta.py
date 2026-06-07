@@ -10,9 +10,10 @@ purely a text parse.
 from app.notebook_meta import (
     DEFAULT_RESOURCES,
     NotebookResources,
+    memory_to_gib,
+    parse_notebook_description,
     parse_notebook_resources,
     resources_from_inputs,
-    with_pinned_marimo,
     with_stargazer_resources,
 )
 
@@ -147,36 +148,48 @@ def test_inject_resources_replaces_existing_block():
 
 
 # ---------------------------------------------------------------------------
-# with_pinned_marimo — pin the sandbox kernel to the launcher version
+# description — written into the same table, edited via the settings modal
 # ---------------------------------------------------------------------------
 
 
-def test_pin_marimo_pins_bare_entry():
-    """A bare `marimo` dep gains an exact pin; siblings are left alone."""
-    src = _nb('dependencies = [\n  "marimo",\n  "stargazer",\n]')
-    out = with_pinned_marimo(src, "0.23.6")
-    assert '"marimo==0.23.6"' in out
-    assert '"stargazer"' in out
+def test_description_absent_parses_empty():
+    """No description in the header yields the empty string, not None."""
+    assert parse_notebook_description(_nb('cpu = 2', body="x\n")) == ""
+    assert parse_notebook_description("import marimo\n") == ""
 
 
-def test_pin_marimo_is_idempotent_and_rebumps():
-    """Re-stamping the same version is a no-op; a new version replaces it."""
-    src = _nb('dependencies = [\n  "marimo",\n  "stargazer",\n]')
-    once = with_pinned_marimo(src, "0.23.6")
-    assert with_pinned_marimo(once, "0.23.6") == once
-    assert '"marimo==0.24.0"' in with_pinned_marimo(once, "0.24.0")
+def test_description_round_trips_with_resources():
+    """Writing resources + description round-trips both back out."""
+    src = _nb('dependencies = ["marimo", "stargazer"]')
+    out = with_stargazer_resources(
+        src, NotebookResources(cpu=2, memory="4Gi"), description="My analysis"
+    )
+    assert parse_notebook_resources(out) == NotebookResources(cpu=2, memory="4Gi")
+    assert parse_notebook_description(out) == "My analysis"
 
 
-def test_pin_marimo_leaves_import_lines_untouched():
-    """Only the header dep entry is rewritten, never a code-level import."""
-    src = _nb('dependencies = [\n  "marimo",\n]', body="import marimo as mo\n")
-    out = with_pinned_marimo(src, "0.23.6")
-    assert "import marimo as mo" in out
-    assert out.count("marimo==0.23.6") == 1
+def test_description_escapes_quotes_and_collapses_whitespace():
+    """Quotes/backslashes survive the TOML round-trip; newlines collapse."""
+    src = _nb('dependencies = ["marimo"]')
+    out = with_stargazer_resources(
+        src,
+        NotebookResources(cpu=1, memory="2Gi"),
+        description='Calls "X" \\ over\nmulti   lines',
+    )
+    assert parse_notebook_description(out) == 'Calls "X" \\ over multi lines'
 
 
-def test_pin_marimo_no_op_without_block_or_entry():
-    """No script block, or a header without marimo, returns source unchanged."""
-    assert with_pinned_marimo("import marimo\n", "0.23.6") == "import marimo\n"
-    no_marimo = _nb('dependencies = [\n  "stargazer",\n]')
-    assert with_pinned_marimo(no_marimo, "0.23.6") == no_marimo
+def test_empty_description_writes_no_line():
+    """A falsy description leaves the table description-free (create path)."""
+    src = _nb('dependencies = ["marimo"]')
+    out = with_stargazer_resources(src, NotebookResources(cpu=1, memory="2Gi"))
+    assert "description" not in out
+    assert parse_notebook_description(out) == ""
+
+
+def test_memory_to_gib_reads_quantities_back():
+    """GiB quantities and bare ints recover; other units fall back to 2."""
+    assert memory_to_gib("4Gi") == 4
+    assert memory_to_gib("16") == 16
+    assert memory_to_gib("512Mi") == 2
+    assert memory_to_gib(DEFAULT_RESOURCES.memory) == 2

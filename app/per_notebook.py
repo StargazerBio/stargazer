@@ -112,9 +112,10 @@ notebook_app_img_recipe = (
         ]
     )
     .with_pip_packages(
-        # Launcher marimo — pinned to the same version each notebook's sandbox
-        # kernel resolves (see config.MARIMO_VERSION) so the two never skew.
-        f"marimo=={config.MARIMO_VERSION}",
+        # Launcher marimo, pinned. Notebooks don't list marimo in their PEP 723
+        # headers — `marimo --sandbox` injects *this* version into each kernel
+        # venv, so launcher and kernel are the same build by construction.
+        "marimo==0.23.6",
         "fastapi>=0.115",
         "uvicorn>=0.34",
         "itsdangerous>=2.1",

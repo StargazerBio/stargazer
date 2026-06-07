@@ -168,27 +168,66 @@ def test_pod_capability_not_confused_with_session_cookie():
 # ---------------------------------------------------------------------------
 
 
-def test_workspace_tiles_excludes_template():
+_WS_SRC = (
+    "# /// script\n"
+    '# dependencies = ["marimo"]\n'
+    "#\n"
+    "# [tool.stargazer]\n"
+    "# cpu = 3\n"
+    '# memory = "5Gi"\n'
+    '# description = "Tile blurb"\n'
+    "# ///\n"
+    "import marimo\n"
+)
+
+
+def _ws_session():
+    """A session with Workspace saving enabled (fork + token + app installed)."""
+    return SessionData(
+        "octocat",
+        123,
+        fork_full_name="octocat/stargazer",
+        access_token="oauth_tok",
+        app_installed=True,
+    )
+
+
+def _stub_ws_fetch(monkeypatch, source: str = _WS_SRC):
+    """Stub the per-notebook source fetch the tile builder parses metadata from."""
+
+    async def fake_fetch(fork_full_name, token, filename):
+        return source
+
+    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
+    _stub_fork_token(monkeypatch)
+
+
+async def test_workspace_tiles_excludes_template(monkeypatch):
     """The shipped template is never rendered as a tile."""
-    assert _workspace_tiles(["template.py"]) == []
+    _stub_ws_fetch(monkeypatch)
+    assert await _workspace_tiles(_ws_session(), ["template.py"]) == []
 
 
-def test_workspace_tiles_lists_only_user_notebooks():
-    """User-created notebooks become tiles; the template is filtered out."""
-    slugs = [t["slug"] for t in _workspace_tiles(["template.py", "my_analysis.py"])]
-    assert slugs == ["my_analysis"]
+async def test_workspace_tiles_lists_user_notebooks_with_meta(monkeypatch):
+    """User notebooks tile (template filtered) and carry parsed resources/blurb."""
+    _stub_ws_fetch(monkeypatch)
+    tiles = await _workspace_tiles(_ws_session(), ["template.py", "my_analysis.py"])
+    assert [t["slug"] for t in tiles] == ["my_analysis"]
+    assert (tiles[0]["cpu"], tiles[0]["memory"]) == (3, 5)
+    assert tiles[0]["description"] == "Tile blurb"
 
 
-def test_dashboard_context_off_has_no_workspace_tiles():
+async def test_dashboard_context_off_has_no_workspace_tiles():
     """When opt-in is off, no Workspace tiles are built."""
-    ctx = _dashboard_context("octocat", ["foo.py"], False)
+    ctx = await _dashboard_context(SessionData("octocat", 123), ["foo.py"])
     assert ctx["workspace_enabled"] is False
     assert ctx["workspace"] == []
 
 
-def test_dashboard_context_on_builds_workspace_tiles():
+async def test_dashboard_context_on_builds_workspace_tiles(monkeypatch):
     """When opt-in is on, only the user's own notebooks become tiles."""
-    ctx = _dashboard_context("octocat", ["template.py", "foo.py"], True)
+    _stub_ws_fetch(monkeypatch)
+    ctx = await _dashboard_context(_ws_session(), ["template.py", "foo.py"])
     assert ctx["workspace_enabled"] is True
     assert [t["slug"] for t in ctx["workspace"]] == ["foo"]
 
@@ -1013,6 +1052,93 @@ def test_create_from_template_injects_resources(secret_env, client, monkeypatch)
     assert parse_notebook_resources(written["content"]) == NotebookResources(
         cpu=1, memory="2Gi"
     )
+
+
+# ---------------------------------------------------------------------------
+# /workspace/settings
+# ---------------------------------------------------------------------------
+
+
+def test_settings_requires_session(secret_env, client):
+    """Unauthenticated settings is rejected with 401."""
+    resp = client.post(
+        "/workspace/settings", data={"slug": "foo", "cpu": "2", "memory": "4"}
+    )
+    assert resp.status_code == 401
+
+
+def test_settings_rejects_reserved_slug(secret_env, client):
+    """The reserved 'template' slug can't be edited (400)."""
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
+    resp = client.post(
+        "/workspace/settings",
+        data={"slug": "template", "cpu": "2", "memory": "4"},
+    )
+    assert resp.status_code == 400
+
+
+def test_settings_writes_header_and_returns_normalized(
+    secret_env, client, monkeypatch
+):
+    """Settings rewrites the notebook's header and echoes normalized values."""
+    src = (
+        '# /// script\n# dependencies = ["marimo"]\n'
+        "#\n# [tool.stargazer]\n# cpu = 1\n# memory = \"2Gi\"\n# ///\nimport marimo\n"
+    )
+    written: dict = {}
+
+    async def fake_fetch(_owner, _token, filename):
+        return src if filename == "foo.py" else None
+
+    async def fake_update(_owner, _token, filename, content, message=None):
+        written.update(filename=filename, content=content)
+        return {}
+
+    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
+    monkeypatch.setattr("app.admin_app.update_workspace_notebook", fake_update)
+    _stub_fork_token(monkeypatch)
+
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
+    resp = client.post(
+        "/workspace/settings",
+        data={"slug": "foo", "cpu": "4", "memory": "8", "description": "  My  blurb "},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "slug": "foo",
+        "cpu": 4,
+        "memory": 8,
+        "description": "My blurb",
+    }
+
+    from app.notebook_meta import (
+        NotebookResources,
+        parse_notebook_description,
+        parse_notebook_resources,
+    )
+
+    assert written["filename"] == "foo.py"
+    assert parse_notebook_resources(written["content"]) == NotebookResources(
+        cpu=4, memory="8Gi"
+    )
+    assert parse_notebook_description(written["content"]) == "My blurb"
+
+
+def test_settings_missing_notebook_is_404(secret_env, client, monkeypatch):
+    """Editing a notebook that isn't on the fork returns 404."""
+
+    async def fake_fetch(_owner, _token, _filename):
+        return None
+
+    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
+    _stub_fork_token(monkeypatch)
+
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
+    resp = client.post(
+        "/workspace/settings",
+        data={"slug": "ghost", "cpu": "2", "memory": "4"},
+    )
+    assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------

@@ -8,7 +8,7 @@ notebook *source*, not from running code. Notebooks already carry a PEP
 reads an optional `[tool.stargazer]` table from that same header:
 
     # /// script
-    # dependencies = ["marimo", "stargazer"]
+    # dependencies = ["stargazer"]
     #
     # [tool.stargazer]
     # cpu = 2
@@ -33,14 +33,6 @@ from dataclasses import dataclass
 # between prefixed with `#`. Mirrors the reference regex in the PEP.
 _PEP723_BLOCK = re.compile(
     r"(?m)^# /// (?P<type>[a-zA-Z0-9-]+)$\s(?P<content>(^#(| .*)$\s?)+)^# ///$"
-)
-
-
-# A single `marimo` dependency entry inside the commented header — bare
-# (`"marimo"`) or already version-specified (`"marimo==0.23.6"`). Used to rewrite
-# the pin; the optional spec match makes re-stamping idempotent.
-_MARIMO_DEP = re.compile(
-    r'(?m)^(?P<pre>#[ \t]*")marimo(?:[<>=!~][^"]*)?(?P<post>"[ \t]*,?[ \t]*)$'
 )
 
 
@@ -108,6 +100,32 @@ def _extract_stargazer_table(source: str) -> dict:
     return table if isinstance(table, dict) else {}
 
 
+def parse_notebook_description(source: str) -> str:
+    """Return the `[tool.stargazer]` `description` string, or "" if absent.
+
+    Companion to `parse_notebook_resources`: the workspace tile's blurb is
+    authored in the same header table and edited via the settings modal. Always
+    returns a str — a missing/non-string value yields "".
+    """
+    value = _extract_stargazer_table(source).get("description", "")
+    return value if isinstance(value, str) else ""
+
+
+def memory_to_gib(memory: str) -> int:
+    """Read a `NotebookResources.memory` quantity back to a GiB integer.
+
+    The settings modal and create form both speak whole GiB, while the header
+    stores a Kubernetes quantity (`"4Gi"`). Recovers the integer for the form:
+    `"4Gi"` → 4, a bare digit string → itself, anything else → the default.
+    """
+    text = memory.strip()
+    if text.endswith("Gi") and text[:-2].isdigit():
+        return int(text[:-2])
+    if text.isdigit():
+        return int(text)
+    return 2
+
+
 def parse_notebook_resources(source: str) -> NotebookResources:
     """Parse `[tool.stargazer]` resources from notebook source.
 
@@ -141,14 +159,31 @@ def resources_from_inputs(cpu: object, memory: object) -> NotebookResources:
     )
 
 
-def _resource_table_lines(resources: NotebookResources) -> list[str]:
+def _toml_str(value: str) -> str:
+    """Encode `value` as a single-line TOML basic string (quoted, escaped).
+
+    The description is free user text written into the commented header, so it
+    must round-trip through `tomllib`. Newlines/runs of whitespace collapse to a
+    single space, the result is length-capped, and `\\`/`"` are escaped.
+    """
+    text = " ".join(value.split())[:200]
+    text = text.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{text}"'
+
+
+def _stargazer_table_lines(
+    resources: NotebookResources, description: str | None
+) -> list[str]:
     """Render the commented `[tool.stargazer]` TOML lines for a header."""
-    return [
+    lines = [
         "#",
         "# [tool.stargazer]",
         f"# cpu = {resources.cpu}",
         f'# memory = "{resources.memory}"',
     ]
+    if description:
+        lines.append(f"# description = {_toml_str(description)}")
+    return lines
 
 
 def _strip_stargazer_table(body_lines: list[str]) -> list[str]:
@@ -173,33 +208,16 @@ def _strip_stargazer_table(body_lines: list[str]) -> list[str]:
     return out
 
 
-def with_pinned_marimo(source: str, version: str) -> str:
-    """Return `source` with its PEP 723 `marimo` dependency pinned to `version`.
-
-    Rewrites the `marimo` entry in the script header to `marimo=={version}`,
-    whether it was bare or already pinned (idempotent). Scoped to the PEP 723
-    block so a `marimo` mention elsewhere in the source is untouched. Returns
-    `source` unchanged if there's no script block or no `marimo` entry — the
-    create flow stamps every new notebook so the sandbox kernel matches the
-    image launcher (see `app.config.MARIMO_VERSION`).
-    """
-    match = _PEP723_BLOCK.search(source)
-    if match is None or match.group("type") != "script":
-        return source
-    new_block, n = _MARIMO_DEP.subn(
-        rf"\g<pre>marimo=={version}\g<post>", match.group(0)
-    )
-    if n == 0:
-        return source
-    return source[: match.start()] + new_block + source[match.end() :]
-
-
-def with_stargazer_resources(source: str, resources: NotebookResources) -> str:
+def with_stargazer_resources(
+    source: str, resources: NotebookResources, description: str | None = None
+) -> str:
     """Return `source` with its `[tool.stargazer]` block set to `resources`.
 
-    Replaces an existing table or appends one before the header's closing
-    `# ///`. Returns `source` unchanged if there's no PEP 723 script block
-    to inject into.
+    Rewrites the whole table, so `description` (the workspace tile blurb) is
+    written when truthy and dropped when None/empty — callers that edit settings
+    pass the current value so it's preserved, and create omits it. Replaces an
+    existing table or appends one before the header's closing `# ///`. Returns
+    `source` unchanged if there's no PEP 723 script block to inject into.
     """
     match = _PEP723_BLOCK.search(source)
     if match is None or match.group("type") != "script":
@@ -211,6 +229,6 @@ def with_stargazer_resources(source: str, resources: NotebookResources) -> str:
     while body and body[-1].lstrip("#").strip() == "":
         body.pop()
     new_block = "\n".join(
-        [open_line, *body, *_resource_table_lines(resources), close_line]
+        [open_line, *body, *_stargazer_table_lines(resources, description), close_line]
     )
     return source[: match.start()] + new_block + source[match.end() :]

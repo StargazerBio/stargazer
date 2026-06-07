@@ -85,37 +85,9 @@
                         <option value="blank">Blank</option>
                         <option value="template">Template</option>
                     </select>
-                    <div class="create-fields-row">
-                        <label class="create-field" title="CPUs">
-                            <input
-                                type="number"
-                                name="cpu"
-                                value="2"
-                                min="1"
-                                step="1"
-                                required
-                                class="create-num"
-                                aria-label="CPUs"
-                            />
-                            <span class="create-unit">CPU</span>
-                        </label>
-                        <label class="create-field" title="Memory in GiB">
-                            <input
-                                type="number"
-                                name="memory"
-                                value="4"
-                                min="1"
-                                step="1"
-                                required
-                                class="create-num"
-                                aria-label="Memory in GiB"
-                            />
-                            <span class="create-unit">GiB</span>
-                        </label>
-                        <button type="submit" class="btn btn-notebook">
-                            Create
-                        </button>
-                    </div>
+                    <button type="submit" class="btn btn-notebook">
+                        Create
+                    </button>
                 </form>
             </div>
         </div>
@@ -191,6 +163,56 @@
         </button>
     </footer>
 </div>
+
+<!-- Outside .dashboard on purpose: an ancestor with backdrop-filter becomes the
+     containing block for the modal's position:fixed, which would center it
+     inside the (tall) dashboard card instead of the viewport. As a sibling of
+     .dashboard its only ancestors are body/html, so it centers on the screen. -->
+<dialog id="settings-modal" class="settings-modal">
+    <form id="settings-form" class="settings-form">
+            <h3>Notebook settings</h3>
+            <p class="settings-target"><code></code></p>
+            <label class="settings-label">
+                Description
+                <input
+                    type="text"
+                    name="description"
+                    maxlength="120"
+                    placeholder="What this notebook does"
+                />
+            </label>
+            <div class="settings-res-row">
+                <label class="settings-label">
+                    CPU
+                    <input
+                        type="number"
+                        name="cpu"
+                        min="1"
+                        step="1"
+                        required
+                    />
+                </label>
+                <label class="settings-label">
+                    Memory (GiB)
+                    <input
+                        type="number"
+                        name="memory"
+                        min="1"
+                        step="1"
+                        required
+                    />
+                </label>
+            </div>
+            <p class="settings-note">
+                Resource changes take effect the next time you launch this
+                notebook.
+            </p>
+        <div class="settings-actions">
+            <button type="button" class="btn btn-muted" data-close>Cancel</button>
+            <button type="submit" class="btn btn-notebook">Save</button>
+        </div>
+    </form>
+</dialog>
 {% endblock %} {% block scripts %}
 <script>
     // Close the user menu when clicking outside the avatar/dropdown.
@@ -452,6 +474,82 @@
         e.preventDefault();
         deleteNotebook(btn);
     });
+
+    // Edit a workspace notebook's resources + description via the gear → modal.
+    // The gear carries the current values as data-*; Save POSTs them and
+    // refreshes the tile blurb + the gear's data-* in place — no reload.
+    const settingsModal = document.getElementById("settings-modal");
+    const settingsForm = document.getElementById("settings-form");
+    let settingsSlug = null;
+
+    function openSettings(gear) {
+        settingsSlug = gear.dataset.settingsSlug;
+        const desc = gear.dataset.description || "";
+        // The generic placeholder isn't a real description — start blank so the
+        // user types their own rather than editing boilerplate.
+        settingsForm.description.value =
+            desc === "Personal workspace notebook." ? "" : desc;
+        settingsForm.cpu.value = gear.dataset.cpu || "1";
+        settingsForm.memory.value = gear.dataset.memory || "2";
+        settingsModal.querySelector(".settings-target code").textContent =
+            settingsSlug + ".py";
+        settingsModal.showModal();
+    }
+
+    document.addEventListener("click", (e) => {
+        const gear = e.target.closest("[data-settings-slug]");
+        if (gear) {
+            e.preventDefault();
+            openSettings(gear);
+            return;
+        }
+        if (!settingsModal) return;
+        // Cancel button, or a click on the dialog backdrop, closes the modal.
+        if (e.target.closest("[data-close]") || e.target === settingsModal) {
+            settingsModal.close();
+        }
+    });
+
+    if (settingsForm) {
+        settingsForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const saveBtn = settingsForm.querySelector('button[type="submit"]');
+            const label = saveBtn.textContent;
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="spinner-inline"></span>';
+            try {
+                const resp = await fetch("/workspace/settings", {
+                    method: "POST",
+                    body: new URLSearchParams({
+                        slug: settingsSlug,
+                        cpu: settingsForm.cpu.value,
+                        memory: settingsForm.memory.value,
+                        description: settingsForm.description.value,
+                    }),
+                    headers: { Accept: "application/json" },
+                });
+                const payload = await resp.json().catch(() => ({}));
+                if (!resp.ok)
+                    throw new Error(payload.error || "HTTP " + resp.status);
+                const gear = document.querySelector(
+                    `[data-settings-slug="${settingsSlug}"]`,
+                );
+                if (gear) {
+                    gear.dataset.cpu = payload.cpu;
+                    gear.dataset.memory = payload.memory;
+                    gear.dataset.description = payload.description;
+                    const p = gear.closest(".tile").querySelector("p");
+                    if (p) p.textContent = payload.description;
+                }
+                settingsModal.close();
+            } catch (err) {
+                alert("Save failed: " + err.message);
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = label;
+            }
+        });
+    }
 
     // Find a tile's launch form by slug + mode (both are hidden inputs).
     function findLaunchForm(slug, mode) {

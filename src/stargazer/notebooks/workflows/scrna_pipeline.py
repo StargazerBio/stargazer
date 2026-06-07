@@ -1,7 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
-#   "marimo==0.23.6",
 #   "matplotlib",
 #   "numpy",
 #   "scanpy>=1.12",

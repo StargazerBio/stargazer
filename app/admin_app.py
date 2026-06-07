@@ -73,13 +73,15 @@ from app.github import (
     get_workspace_notebook,
     is_genuine_fork,
     list_workspace as gh_list_workspace,
+    update_workspace_notebook,
 )
 from app.notebook_meta import (
     DEFAULT_RESOURCES,
     NotebookResources,
+    memory_to_gib,
+    parse_notebook_description,
     parse_notebook_resources,
     resources_from_inputs,
-    with_pinned_marimo,
     with_stargazer_resources,
 )
 from app.init import init
@@ -336,13 +338,27 @@ async def _candidate_slugs(session: SessionData, cookie_value: str) -> list[str]
 # ---------------------------------------------------------------------------
 
 
-def _tile_dict(slug: str, title: str, description: str, section: str) -> dict:
-    """Build the context dict consumed by `_tile.html`."""
+def _tile_dict(
+    slug: str,
+    title: str,
+    description: str,
+    section: str,
+    *,
+    cpu: int | None = None,
+    memory: int | None = None,
+) -> dict:
+    """Build the context dict consumed by `_tile.html`.
+
+    `cpu`/`memory` (whole GiB) are carried only for workspace tiles — they
+    seed the settings modal's fields via the gear button's data attributes.
+    """
     return {
         "slug": slug,
         "title": title,
         "description": description,
         "section": section,
+        "cpu": cpu,
+        "memory": memory,
     }
 
 
@@ -356,37 +372,87 @@ def _display_name(filename: str) -> str:
     return stem[:1].upper() + stem[1:]
 
 
-def _workspace_tiles(workspace_files: list[str]) -> list[dict]:
+_GENERIC_WS_DESC = "Personal workspace notebook."
+
+
+def _workspace_tile_dict(slug: str, cpu: int, memory: int, description: str) -> dict:
+    """A workspace tile carrying its editable resources + blurb for the modal."""
+    return _tile_dict(
+        slug,
+        _display_name(f"{slug}.py"),
+        description or _GENERIC_WS_DESC,
+        "workspace",
+        cpu=cpu,
+        memory=memory,
+    )
+
+
+async def _workspace_tiles(
+    session: SessionData, workspace_files: list[str]
+) -> list[dict]:
     """Build Workspace tiles from the user's own notebooks.
 
-    The shipped seed notebooks (`SEED_SLUGS`) are filtered out — they're
-    create sources, not user notebooks. Only user-created notebooks tile.
+    The shipped seed notebooks (`SEED_SLUGS`) are filtered out — they're create
+    sources, not user notebooks. Each remaining notebook's `[tool.stargazer]`
+    header is fetched from the fork (in parallel, best-effort) so the tile shows
+    its edited description and the gear seeds the settings modal with current
+    resources. A fetch/parse failure falls back to the generic blurb + default
+    resources rather than dropping the tile.
     """
-    return [
-        _tile_dict(slug, _display_name(f), "Personal workspace notebook.", "workspace")
+    slugs = [
+        slug
         for f in workspace_files
         if (slug := f.removesuffix(".py")) not in SEED_SLUGS
     ]
+    if not slugs:
+        return []
+    try:
+        token = await installation_tokens.fork_token(session.fork_full_name)
+    except Exception as exc:
+        logger.warning(f"Workspace metadata token failed: {exc}")
+        token = None
+
+    default_gib = memory_to_gib(DEFAULT_RESOURCES.memory)
+
+    async def _tile(slug: str) -> dict:
+        cpu, memory, desc = DEFAULT_RESOURCES.cpu, default_gib, ""
+        if token is not None:
+            try:
+                src = await get_workspace_notebook(
+                    session.fork_full_name, token, f"{slug}.py"
+                )
+                if src:
+                    res = parse_notebook_resources(src)
+                    cpu, memory = res.cpu, memory_to_gib(res.memory)
+                    desc = parse_notebook_description(src)
+            except Exception as exc:
+                logger.warning(f"Workspace metadata fetch failed for {slug!r}: {exc}")
+        return _workspace_tile_dict(slug, cpu, memory, desc)
+
+    return list(await asyncio.gather(*[_tile(s) for s in slugs]))
 
 
-def _dashboard_context(
-    github_username: str,
+async def _dashboard_context(
+    session: SessionData,
     workspace_files: list[str],
-    workspace_enabled: bool,
     fork_error: bool = False,
 ) -> dict:
     """Assemble the tile lists Jinja's `dashboard.html` iterates over.
 
-    When `workspace_enabled` is False the user hasn't opted in to forking,
-    so no Workspace tiles are built — the template renders the disclaimer +
-    Enable button instead. `fork_error` (set after a failed
-    `/workspace/enable`) tells the disclaimer to explain the fork couldn't
-    be created.
+    When workspace saving is off the user hasn't opted in to forking, so no
+    Workspace tiles are built — the template renders the disclaimer + Enable
+    button instead. `fork_error` (set after a failed `/workspace/enable`) tells
+    the disclaimer to explain the fork couldn't be created.
     """
+    workspace = (
+        await _workspace_tiles(session, workspace_files)
+        if session.workspace_enabled
+        else []
+    )
     return {
         "title": "Dashboard",
-        "github_username": github_username,
-        "workspace_enabled": workspace_enabled,
+        "github_username": session.github_username,
+        "workspace_enabled": session.workspace_enabled,
         "fork_error": fork_error,
         "tutorials": [
             _tile_dict(n.slug, n.title, n.description, "tutorials")
@@ -399,7 +465,7 @@ def _dashboard_context(
         # Frozen notebooks (inputs/outputs/image pinned). No registry yet —
         # the section renders an empty-state hint until freezing ships.
         "snapshots": [],
-        "workspace": _workspace_tiles(workspace_files) if workspace_enabled else [],
+        "workspace": workspace,
     }
 
 
@@ -416,10 +482,9 @@ async def landing(request: Request):
     return templates.TemplateResponse(
         request,
         "dashboard.html",
-        _dashboard_context(
-            session.github_username,
+        await _dashboard_context(
+            session,
             files,
-            session.workspace_enabled,
             fork_error=request.query_params.get("ws_error") == "fork",
         ),
     )
@@ -624,15 +689,17 @@ async def workspace_create(
     request: Request,
     name: str = Form(...),
     source: str = Form("blank"),
-    cpu: str = Form(...),
-    memory: str = Form(...),
+    cpu: str = Form("2"),
+    memory: str = Form("4"),
 ):
     """Create a new workspace notebook (blank or from template) on the fork.
 
-    Writes `<slug>.py` to the fork's `main` (under `notebooks/workspace/`)
-    with the chosen resources baked into its `[tool.stargazer]` header, then
-    returns the slug. The dashboard JS chains into the existing `/launch`
-    flow (edit mode) to open it, so `/launch` stays the only serve path.
+    Writes `<slug>.py` to the fork's `main` (under `notebooks/workspace/`) with
+    default resources baked into its `[tool.stargazer]` header, then returns the
+    rendered tile. Resources (and the tile blurb) are edited afterward via the
+    tile's gear → settings modal (`/workspace/settings`), so creation only asks
+    for a name + seed. The dashboard JS chains into the existing `/launch` flow
+    (edit mode) to open it, so `/launch` stays the only serve path.
     """
     session = _get_session(request)
     if session is None:
@@ -660,16 +727,13 @@ async def workspace_create(
             )
 
         # Both sources are shipped seed notebooks (`{source}.py`); copy the
-        # chosen one, inject the requested resources, and pin marimo to the
-        # image launcher's version so the sandbox kernel can't drift from it
-        # (a stale fork seed gets re-stamped here regardless).
+        # chosen one and inject the requested resources into its header.
         seed_src = await get_workspace_notebook(repo, token, f"{source}.py")
         if seed_src is None:
             return JSONResponse(
                 {"error": f"{source} seed not found in fork"}, status_code=502
             )
         content = with_stargazer_resources(seed_src, resources)
-        content = with_pinned_marimo(content, config.MARIMO_VERSION)
 
         await create_workspace_notebook(repo, token, filename, content)
     except Exception as exc:
@@ -680,11 +744,66 @@ async def workspace_create(
     # Workspace grid — from there it behaves like any other tile (Edit/Run,
     # then the standard launch + status flow). Create stays a pure "add a
     # notebook" action: no launching, no navigation.
-    tile = _tile_dict(
-        slug, _display_name(filename), "Personal workspace notebook.", "workspace"
+    tile = _workspace_tile_dict(
+        slug, resources.cpu, memory_to_gib(resources.memory), ""
     )
     tile_html = templates.env.get_template("_tile.html").render(tile=tile)
     return JSONResponse({"slug": slug, "tile_html": tile_html})
+
+
+@asgi_app.post("/workspace/settings")
+async def workspace_settings(
+    request: Request,
+    slug: str = Form(...),
+    cpu: str = Form(...),
+    memory: str = Form(...),
+    description: str = Form(""),
+):
+    """Persist edited resources + description for a workspace notebook.
+
+    Rewrites the notebook's `[tool.stargazer]` header on the fork (cpu/memory +
+    the tile blurb) and commits it via the Contents API, like create and delete.
+    Resource changes take effect at the **next** `/launch` (resources bind at
+    pod-spawn); the description is reflected on the tile immediately. Returns the
+    normalized values so the browser can refresh the tile + gear data in place.
+    """
+    session = _get_session(request)
+    if session is None:
+        return JSONResponse({"error": "not authenticated"}, status_code=401)
+    if not session.workspace_enabled:
+        return JSONResponse({"error": "enable workspace saving first"}, status_code=403)
+    if _notebook_slug(slug) != slug:
+        return JSONResponse(
+            {"error": f"invalid or reserved notebook: {slug!r}"}, status_code=400
+        )
+
+    repo = session.fork_full_name
+    filename = f"{slug}.py"
+    resources = resources_from_inputs(cpu, memory)
+    desc = " ".join(description.split())[:200]
+    try:
+        token = await installation_tokens.fork_token(repo)
+        source = await get_workspace_notebook(repo, token, filename)
+        if source is None:
+            return JSONResponse(
+                {"error": f"notebook not found: {filename}"}, status_code=404
+            )
+        content = with_stargazer_resources(source, resources, description=desc or None)
+        await update_workspace_notebook(
+            repo, token, filename, content, message=f"workspace: settings {filename}"
+        )
+    except Exception as exc:
+        logger.error(f"Notebook settings update failed for {filename!r}: {exc}")
+        return JSONResponse({"error": f"update failed: {exc}"}, status_code=502)
+
+    return JSONResponse(
+        {
+            "slug": slug,
+            "cpu": resources.cpu,
+            "memory": memory_to_gib(resources.memory),
+            "description": desc or _GENERIC_WS_DESC,
+        }
+    )
 
 
 @asgi_app.post("/workspace/delete")

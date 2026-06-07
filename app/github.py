@@ -268,6 +268,55 @@ async def create_workspace_notebook(
         return await resp.json()
 
 
+async def update_workspace_notebook(
+    fork_full_name: str,
+    access_token: str,
+    filename: str,
+    content: str,
+    message: str | None = None,
+) -> dict:
+    """Overwrite an existing notebook file on the fork's `WORKSPACE_BRANCH`.
+
+    Like `create_workspace_notebook` but for a file that already exists: the
+    Contents API needs the current blob `sha` to replace it, so this fetches it
+    first (404 → raises, the caller should have verified existence). Same
+    upstream-source and redirect guards as create. Returns the Contents payload.
+    Used by `/workspace/settings` to persist edited resources/description.
+    """
+    if fork_full_name.lower() == upstream_full_name().lower():
+        raise RuntimeError(
+            f"refusing to write to the upstream source repo {fork_full_name!r}"
+        )
+    path = f"{WORKSPACE_CONTENTS_PATH}/{filename}"
+    url = f"{GITHUB_API_BASE}/repos/{fork_full_name}/contents/{path}"
+    async with aiohttp.ClientSession() as session:
+        head = await session.get(
+            url, headers=_auth_headers(access_token), params={"ref": WORKSPACE_BRANCH}
+        )
+        await _ensure_ok(head, "update notebook (lookup)")
+        sha = (await head.json())["sha"]
+
+        payload = {
+            "message": message or f"workspace: update {filename}",
+            "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+            "sha": sha,
+            "branch": WORKSPACE_BRANCH,
+        }
+        resp = await session.put(
+            url,
+            headers=_auth_headers(access_token),
+            json=payload,
+            allow_redirects=False,
+        )
+        if 300 <= resp.status < 400:
+            raise RuntimeError(
+                f"update notebook: {fork_full_name!r} redirected "
+                f"(HTTP {resp.status}) — not a writable fork path"
+            )
+        await _ensure_ok(resp, "update notebook")
+        return await resp.json()
+
+
 async def delete_workspace_notebook(
     fork_full_name: str,
     access_token: str,

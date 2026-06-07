@@ -1,5 +1,10 @@
 <div class="tile">
     {% if tile.section == 'workspace' %}
+    <button type="button" class="tile-settings" data-settings-slug="{{ tile.slug }}"
+            data-cpu="{{ tile.cpu }}" data-memory="{{ tile.memory }}"
+            data-description="{{ tile.description }}"
+            aria-label="Edit this notebook's settings"
+            title="Edit resources and description">⚙️</button>
     <button type="button" class="tile-delete" data-delete-slug="{{ tile.slug }}"
             aria-label="Delete this notebook from your fork"
             title="Delete this notebook from your fork">
