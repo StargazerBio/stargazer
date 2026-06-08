@@ -8,9 +8,16 @@
 # Three things happen on startup:
 #
 #   1. If the container-local /workspace is empty (no /workspace/.git),
-#      clone the user's stargazer fork (default branch, `main`) into it.
-#      User notebooks live and persist on `main`; storage is the pod's
-#      ephemeral filesystem; the fork is the source of truth.
+#      clone the user's stargazer fork (default branch, `main`) into it as a
+#      cone-mode SPARSE checkout of `src/stargazer` only — the work surface is
+#      `src/stargazer/notebooks/workspace`, and tests/docs/app/etc. are never
+#      materialized in the pod. Sparse checkout is a working-tree filter, so
+#      out-of-cone files stay in the index (SKIP_WORKTREE) and commits/pushes
+#      preserve them on the fork; the pod just doesn't carry them on disk. The
+#      session then cd's into the workspace notebooks dir so marimo and the
+#      proxy's dropdown terminal both work directly there. User notebooks live
+#      and persist on `main`; storage is ephemeral; the fork is the source of
+#      truth.
 #   2. Start marimo on 127.0.0.1:8081 in sandbox mode (notebook's PEP 723
 #      header drives the venv).
 #   3. Start the cookie-validating reverse proxy on 0.0.0.0:8080 (the
@@ -27,6 +34,9 @@ MODE="$1"
 NOTEBOOK_PATH="$2"
 
 WORKSPACE_DIR="/workspace"
+# The only fork subtree the pod materializes / works in.
+WORKSPACE_REL="src/stargazer/notebooks/workspace"
+SPARSE_CONE="src/stargazer"
 
 if [ ! -d "${WORKSPACE_DIR}/.git" ]; then
   if [ -z "${FORK_FULL_NAME:-}" ] || [ -z "${SG_POD_TOKEN:-}" ] || [ -z "${STARGAZER_ADMIN_URL:-}" ]; then
@@ -46,18 +56,29 @@ if [ ! -d "${WORKSPACE_DIR}/.git" ]; then
       ASKPASS=$(mktemp)
       printf '#!/bin/sh\necho "$SG_GIT_TOKEN"\n' > "${ASKPASS}"
       chmod +x "${ASKPASS}"
-      echo "Cloning ${FORK_FULL_NAME} into ${WORKSPACE_DIR}..."
+      echo "Sparse-cloning ${FORK_FULL_NAME} (${SPARSE_CONE}) into ${WORKSPACE_DIR}..."
       # Username in the URL is the literal `x-access-token` (not a secret); the
       # token comes only from GIT_ASKPASS, so the stored remote stays token-free.
+      # `--sparse` checks out only the repo root initially; the depth-1 clone
+      # still fetches all blobs for that one commit, so the follow-up
+      # `sparse-checkout set` needs no network (hence no ASKPASS on it).
       SG_GIT_TOKEN="${SG_GIT_TOKEN}" GIT_ASKPASS="${ASKPASS}" GIT_TERMINAL_PROMPT=0 \
-        git clone --depth 1 \
+        git clone --depth 1 --sparse \
         "https://x-access-token@github.com/${FORK_FULL_NAME}.git" "${WORKSPACE_DIR}"
       rm -f "${ASKPASS}"
+      git -C "${WORKSPACE_DIR}" sparse-checkout set "${SPARSE_CONE}"
       git -C "${WORKSPACE_DIR}" config user.email "${FORK_OWNER}@users.noreply.github.com"
       git -C "${WORKSPACE_DIR}" config user.name "${FORK_OWNER}"
     fi
   fi
 fi
+
+# Work directly in the workspace notebooks dir. marimo (backgrounded) and the
+# proxy (exec'd) both inherit this cwd, so the dropdown terminal — and any
+# `claude` launched in it — open here, inside the sparse fork checkout. Guarded
+# with `|| true` so non-workspace launches (clone skipped, dir absent) stay in
+# the default cwd rather than aborting under `set -e`.
+cd "${WORKSPACE_DIR}/${WORKSPACE_REL}" 2>/dev/null || true
 
 marimo "${MODE}" --sandbox "${NOTEBOOK_PATH}" \
   --port 8081 --host 127.0.0.1 --headless --no-token &

@@ -1,0 +1,97 @@
+<!--
+  Quake-style dropdown terminal overlay, spliced into every marimo HTML page
+  before the closing body tag by app/proxy.py (read into `_TERM_INJECTION` at
+  import). It is NOT a standalone document — an injected fragment of link/style/
+  <script>. xterm.js + the fit addon load from CDN (browser-side, no pod dep);
+  the panel is fixed + semi-transparent, toggled with Ctrl+`, and talks to the
+  proxy's /__sg__/term PTY websocket. Kept as a static asset (not a Python
+  string) so it gets real HTML/CSS/JS tooling; baked next to the proxy in the
+  notebook image via per_notebook.py's with_source_file.
+-->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+<style>
+  #sg-term-overlay { position: fixed; top: 0; left: 0; right: 0; height: 100vh;
+    transform: translateY(-100%); transition: transform .18s ease;
+    z-index: 2147483600; background: rgba(15,18,24,0.55);
+    backdrop-filter: blur(8px) saturate(120%);
+    -webkit-backdrop-filter: blur(8px) saturate(120%);
+    box-shadow: 0 10px 34px rgba(0,0,0,.5);
+    border-bottom: 1px solid rgba(255,255,255,.12);
+    display: flex; flex-direction: column; }
+  #sg-term-overlay.sg-open { transform: translateY(0); }
+  #sg-term-bar { display: flex; align-items: center; gap: 8px; padding: 5px 12px;
+    font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: rgba(255,255,255,.72); border-bottom: 1px solid rgba(255,255,255,.08);
+    user-select: none; }
+  #sg-term-bar .sg-dot { width: 9px; height: 9px; border-radius: 50%;
+    background: #37d67a; box-shadow: 0 0 6px #37d67a; }
+  #sg-term-bar .sg-hint { margin-left: auto; opacity: .55; }
+  #sg-term-body { flex: 1; min-height: 0; padding: 6px 8px; }
+  #sg-term-body .xterm, #sg-term-body .xterm-viewport { background: transparent !important; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<script>
+(function () {
+  if (window.__sgTermInit) return; window.__sgTermInit = true;
+  var overlay, term, fit, ws, open = false, started = false;
+
+  function build() {
+    overlay = document.createElement('div'); overlay.id = 'sg-term-overlay';
+    var bar = document.createElement('div'); bar.id = 'sg-term-bar';
+    bar.innerHTML = '<span class="sg-dot"></span><span>terminal</span>' +
+      '<span class="sg-hint">Ctrl+` to toggle · Esc to hide</span>';
+    var body = document.createElement('div'); body.id = 'sg-term-body';
+    overlay.appendChild(bar); overlay.appendChild(body);
+    document.body.appendChild(overlay);
+    return body;
+  }
+
+  function connect() {
+    if (started) return; started = true;
+    var body = build();
+    term = new window.Terminal({ cursorBlink: true, fontSize: 13,
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+      allowTransparency: true,
+      theme: { background: 'rgba(0,0,0,0)', foreground: '#e6e6e6' } });
+    fit = new window.FitAddon.FitAddon(); term.loadAddon(fit);
+    term.open(body);
+    var proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(proto + '://' + location.host + '/__sg__/term');
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = function () { doFit(); };
+    ws.onmessage = function (e) {
+      term.write(typeof e.data === 'string' ? e.data : new Uint8Array(e.data));
+    };
+    ws.onclose = function () {
+      term.write('\r\n[terminal session closed]\r\n'); started = false;
+    };
+    term.onData(function (d) {
+      if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'input', data: d }));
+    });
+    window.addEventListener('resize', doFit);
+  }
+
+  function doFit() {
+    if (!fit || !open) return;
+    try { fit.fit(); } catch (e) {}
+    if (ws && ws.readyState === 1)
+      ws.send(JSON.stringify({ type: 'resize', rows: term.rows, cols: term.cols }));
+  }
+
+  function toggle(show) {
+    open = (show === undefined) ? !open : !!show;
+    if (open) connect();
+    if (overlay) overlay.classList.toggle('sg-open', open);
+    if (open) setTimeout(function () { doFit(); if (term) term.focus(); }, 200);
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey && (e.key === '`' || e.code === 'Backquote')) {
+      e.preventDefault(); toggle();
+    } else if (e.key === 'Escape' && open) {
+      toggle(false);
+    }
+  });
+})();
+</script>

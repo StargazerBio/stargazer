@@ -6,7 +6,13 @@ the per-notebook pod's public port (8080), validates the same signed
 session cookie the admin app issues (HMAC-keyed by `SESSION_SECRET`),
 then forwards HTTP + websocket traffic to marimo on `127.0.0.1:8081`.
 
-Four reserved paths the proxy handles itself instead of forwarding:
+It also injects a Quake-style dropdown terminal into marimo's HTML: every
+`text/html` response gets an xterm.js overlay (loaded from CDN) spliced in
+before `</body>`, toggled with Ctrl+` and wired to the `/__sg__/term`
+websocket below. This makes the terminal app chrome present on every notebook
+page rather than a per-notebook cell.
+
+Five reserved paths the proxy handles itself instead of forwarding:
 
 - `GET  /__sg__/dashboard` — 302 to the admin app's URL (read from
   `STARGAZER_ADMIN_URL`). Lets notebooks link back to the dashboard
@@ -28,11 +34,19 @@ Four reserved paths the proxy handles itself instead of forwarding:
   `notebooks/workspace/` dir is staged, so the fork's `main` never collides
   with upstream's shipped files. Called by the launch script's SIGTERM hook on
   idle-down, and exposed to the admin app as a "save" affordance.
+- `WS   /__sg__/term` — cookie-gated PTY websocket. Spawns a login `bash`
+  via `pty.fork()` and bridges it to the injected xterm.js overlay. The
+  child's environment is scrubbed of auth-critical secrets (`SESSION_SECRET`,
+  `SG_POD_TOKEN`, anything ending `_SECRET`/`_TOKEN`/`_JWT`/`_KEY`/`_PASSWORD`)
+  so an interactive shell in the pod can't read the shared cookie key and
+  forge sessions for other users. The shell still has full run of the pod's
+  own ephemeral `/workspace`.
 
 Self-contained on purpose: the notebook image installs only `fastapi`,
 `uvicorn`, `itsdangerous`, `httpx`, `websockets`, `cryptography` at system
-level and COPYs this single file in as `/usr/local/lib/sg_proxy.py` — no
-stargazer or app-package install needed, and the top-level module
+level and COPYs this file in as `/usr/local/lib/sg_proxy.py` (alongside
+`terminal_overlay.html`, the injected dropdown-terminal markup it reads at
+import) — no stargazer or app-package install needed, and the top-level module
 name avoids colliding with Flyte's loaded_modules code bundle which
 ships an `app/` package into the pod's `/home/flyte` cwd at deploy
 time.
@@ -42,10 +56,16 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 
 import asyncio
 import base64
+import fcntl
 import hashlib
+import json
 import os
+import pty
+import signal
+import struct
 import subprocess
 import tempfile
+import termios
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlencode
@@ -65,6 +85,22 @@ MARIMO_HTTP_PORT = 8081
 WORKSPACE_ROOT = Path("/workspace")
 WORKSPACE_NOTEBOOK_DIR = WORKSPACE_ROOT / "src/stargazer/notebooks/workspace"
 WORKSPACE_REL = "src/stargazer/notebooks/workspace"
+
+# Env keys never handed to the interactive shell. SESSION_SECRET is the big one:
+# it's shared across pods and keys cookie validation, so a shell that could
+# `echo` it could forge sessions for any user. The suffix list catches future
+# secret-shaped vars without an explicit entry per name.
+_TERM_SECRET_KEYS = {"SESSION_SECRET", "SG_POD_TOKEN", "PINATA_JWT"}
+_TERM_SECRET_SUFFIXES = ("_SECRET", "_TOKEN", "_JWT", "_KEY", "_PASSWORD")
+
+# Quake-style dropdown terminal markup, spliced into every marimo HTML page
+# before </body>. Kept as a static asset (terminal_overlay.html) so it gets real
+# HTML/CSS/JS tooling instead of living as a Python string. Read once at import.
+# In the notebook image it's baked next to this module (see per_notebook.py), so
+# resolving it relative to __file__ works both in-repo and in-pod. xterm.js + the
+# fit addon load from CDN (browser-side, no pod dep); the overlay talks to the
+# /__sg__/term PTY websocket. Self-contained — no marimo plugin needed.
+_TERM_INJECTION = (Path(__file__).parent / "terminal_overlay.html").read_bytes()
 
 
 def _fetch_pod_git_token() -> str | None:
@@ -336,6 +372,118 @@ async def workspace_sync(request: Request) -> Response:
     return JSONResponse(payload, status_code=code)
 
 
+def _shell_env() -> dict[str, str]:
+    """Pod env with auth-critical secrets stripped, for the interactive shell.
+
+    Drops every key in `_TERM_SECRET_KEYS` plus anything ending in a
+    secret-shaped suffix, so a shell opened in the pod can't read the shared
+    `SESSION_SECRET` (and thus can't forge other users' session cookies) or the
+    fork capability. Sets a sane `TERM` so curses apps render.
+    """
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in _TERM_SECRET_KEYS and not k.endswith(_TERM_SECRET_SUFFIXES)
+    }
+    env.setdefault("TERM", "xterm-256color")
+    return env
+
+
+def _set_winsize(fd: int, rows: int, cols: int) -> None:
+    """Apply an xterm.js fit-addon size to the PTY via TIOCSWINSZ.
+
+    Keeps the shell's notion of the terminal geometry in sync with the browser
+    pane so line wrapping and full-screen TUIs (less, vim) lay out correctly.
+    """
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+
+
+@asgi_app.websocket("/__sg__/term")
+async def term_proxy(websocket: WebSocket) -> None:
+    """Bridge the injected xterm.js overlay to a login bash via a PTY.
+
+    Cookie-gated like the marimo proxy. Forks a `bash -l` on a pseudo-terminal
+    with a secret-scrubbed environment (`_shell_env`) and pumps bytes both ways:
+    PTY output is read off the master fd (registered with the event loop) and
+    sent as binary frames; the client sends JSON text frames — `{"type":
+    "input", ...}` for keystrokes and `{"type": "resize", ...}` for geometry.
+    The child is killed and reaped when either side closes.
+    """
+    if not _cookie_is_valid(websocket.cookies.get(SESSION_COOKIE)):
+        await websocket.close(code=1008)
+        return
+    await websocket.accept()
+
+    pid, master_fd = pty.fork()
+    if pid == 0:  # child — becomes the shell
+        try:
+            os.execvpe("/bin/bash", ["/bin/bash", "-l"], _shell_env())
+        except Exception:
+            pass
+        os._exit(1)  # exec failed
+
+    loop = asyncio.get_running_loop()
+    os.set_blocking(master_fd, False)
+    queue: asyncio.Queue[bytes] = asyncio.Queue()
+
+    def _on_readable() -> None:
+        """Drain the PTY master fd into the outbound queue (b'' on EOF/error)."""
+        try:
+            data = os.read(master_fd, 65536)
+        except OSError:
+            data = b""
+        queue.put_nowait(data)
+
+    loop.add_reader(master_fd, _on_readable)
+
+    async def pump_out() -> None:
+        """Forward queued PTY output to the browser until EOF."""
+        while True:
+            data = await queue.get()
+            if not data:
+                return
+            await websocket.send_bytes(data)
+
+    async def pump_in() -> None:
+        """Apply client input/resize JSON frames to the PTY until disconnect."""
+        while True:
+            msg = await websocket.receive()
+            if msg["type"] == "websocket.disconnect":
+                return
+            raw = msg.get("text")
+            if raw is None:
+                continue
+            try:
+                payload = json.loads(raw)
+            except (ValueError, TypeError):
+                continue
+            if payload.get("type") == "input":
+                os.write(master_fd, payload.get("data", "").encode())
+            elif payload.get("type") == "resize":
+                _set_winsize(
+                    master_fd,
+                    int(payload.get("rows", 24)),
+                    int(payload.get("cols", 80)),
+                )
+
+    out_task = asyncio.create_task(pump_out())
+    in_task = asyncio.create_task(pump_in())
+    try:
+        _done, pending = await asyncio.wait(
+            {out_task, in_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
+    finally:
+        loop.remove_reader(master_fd)
+        os.close(master_fd)
+        try:
+            os.kill(pid, signal.SIGKILL)
+            os.waitpid(pid, 0)
+        except OSError:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Catch-all HTTP + websocket proxy → marimo on 127.0.0.1:8081
 # ---------------------------------------------------------------------------
@@ -362,12 +510,22 @@ async def http_proxy(request: Request, path: str) -> Response:
             headers=headers,
             content=body,
         )
-    # Strip hop-by-hop headers that httpx may carry across.
-    forbidden = {"content-encoding", "transfer-encoding", "connection"}
+    # Splice the dropdown-terminal overlay into marimo's HTML shell. Done here
+    # (not as a marimo plugin) so the terminal is app chrome on every page.
+    content = resp.content
+    if "text/html" in resp.headers.get("content-type", "").lower():
+        content = content.replace(b"</body>", _TERM_INJECTION + b"</body>", 1)
+
+    # Strip hop-by-hop headers httpx may carry across, plus content-length —
+    # the injection changes the body size, so let Starlette recompute it.
+    forbidden = {
+        "content-encoding",
+        "transfer-encoding",
+        "connection",
+        "content-length",
+    }
     out_headers = {k: v for k, v in resp.headers.items() if k.lower() not in forbidden}
-    return Response(
-        content=resp.content, status_code=resp.status_code, headers=out_headers
-    )
+    return Response(content=content, status_code=resp.status_code, headers=out_headers)
 
 
 @asgi_app.websocket("/{path:path}")

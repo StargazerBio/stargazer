@@ -89,3 +89,57 @@ def test_fetch_token_non_200_returns_none(monkeypatch):
     monkeypatch.setenv("STARGAZER_ADMIN_URL", "http://admin")
     _stub_httpx_post(monkeypatch, status=502, text="")
     assert proxy._fetch_pod_git_token() is None
+
+
+# ---------------------------------------------------------------------------
+# Dropdown terminal — secret scrub + HTML overlay injection
+# ---------------------------------------------------------------------------
+
+
+def test_shell_env_scrubs_named_secrets(monkeypatch):
+    """The big risk: a shell that could read SESSION_SECRET could forge cookies."""
+    monkeypatch.setenv("SESSION_SECRET", "shared-cookie-key")
+    monkeypatch.setenv("SG_POD_TOKEN", "fork-capability")
+    monkeypatch.setenv("PINATA_JWT", "pinata-secret")
+    monkeypatch.setenv("PINATA_GATEWAY", "https://dweb.link")  # not a secret
+
+    env = proxy._shell_env()
+
+    assert "SESSION_SECRET" not in env
+    assert "SG_POD_TOKEN" not in env
+    assert "PINATA_JWT" not in env
+    assert env["PINATA_GATEWAY"] == "https://dweb.link"
+
+
+def test_shell_env_scrubs_secret_shaped_suffixes(monkeypatch):
+    """Future secret-shaped vars are dropped by suffix without an explicit entry."""
+    monkeypatch.setenv("SOME_API_TOKEN", "x")
+    monkeypatch.setenv("DB_PASSWORD", "x")
+    monkeypatch.setenv("SIGNING_KEY", "x")
+    monkeypatch.setenv("WEBHOOK_SECRET", "x")
+    monkeypatch.setenv("THIRDPARTY_JWT", "x")
+    monkeypatch.setenv("HARMLESS_VALUE", "keep")
+
+    env = proxy._shell_env()
+
+    for leaked in (
+        "SOME_API_TOKEN",
+        "DB_PASSWORD",
+        "SIGNING_KEY",
+        "WEBHOOK_SECRET",
+        "THIRDPARTY_JWT",
+    ):
+        assert leaked not in env
+    assert env["HARMLESS_VALUE"] == "keep"
+    assert env["TERM"] == "xterm-256color"
+
+
+def test_term_injection_targets_body_close():
+    """The overlay splices before </body> and wires the /__sg__/term websocket."""
+    html = b"<html><body><div id='app'></div></body></html>"
+    injected = html.replace(b"</body>", proxy._TERM_INJECTION + b"</body>", 1)
+
+    assert b"/__sg__/term" in injected
+    assert b"sg-term-overlay" in injected
+    # Injection lands inside the body, before its close tag.
+    assert injected.index(b"sg-term-overlay") < injected.index(b"</body>")

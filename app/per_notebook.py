@@ -12,12 +12,18 @@ The image layers, on top of the Flyte debian base:
   per-notebook sandbox venv can reach them.
 - `uv` — needed by `marimo --sandbox` to provision each notebook's
   PEP 723 venv at boot.
+- `claude` (Claude Code CLI) — the AI agent, on PATH for the dropdown
+  terminal the proxy injects. Pinned standalone binary (auto-update off);
+  auth is interactive (`claude` browser login) and ephemeral.
 - `marimo` plus the cookie-validating reverse proxy's web deps
   (`fastapi`, `uvicorn`, `itsdangerous`, `httpx`, `websockets`).
 - `app/proxy.py` baked at `/usr/local/lib/sg_proxy.py` (top-level module,
   importable via `PYTHONPATH=/usr/local/lib` as `sg_proxy:asgi_app`; not
   under `app/` so it doesn't get shadowed by Flyte's loaded_modules
   code bundle which lands `app/` into the pod's `/home/flyte` cwd).
+- `app/terminal_overlay.html` baked at `/usr/local/lib/terminal_overlay.html`,
+  the dropdown-terminal markup the proxy reads relative to its own `__file__`
+  and injects into marimo's HTML responses.
 - `app/launch-notebook.sh` baked at `/usr/local/bin/launch-notebook.sh`,
   invoked by the AppEnvironment `args=[...]`.
 
@@ -26,12 +32,16 @@ declares its deps inline via PEP 723 and the sandbox venv resolves them
 at boot, including `stargazer` via `[tool.uv.sources]`.
 
 Persistence model: the per-notebook pod owns its workspace as container-
-local ephemeral storage. The launch script clones the user's fork into
-`/workspace` on startup; the proxy's `/__sg__/workspace/sync` pushes
-edits back to the fork; the SIGTERM hook fires the same sync before
-Knative idles the pod. The fork is the source of truth; the pod is the
-working copy. No PVC — Flyte v2 doesn't yet support `K8sPod` payloads
-on app environments anyway.
+local ephemeral storage. The launch script sparse-clones only the fork's
+`src/stargazer` subtree into `/workspace` on startup (cone mode; tests/docs/
+app are never materialized) and cd's into `src/stargazer/notebooks/workspace`,
+the sole work surface. The proxy's `/__sg__/workspace/sync` stages just that
+dir and pushes edits back to the fork; the SIGTERM hook fires the same sync
+before Knative idles the pod. Because sparse checkout only filters the working
+tree (out-of-cone files stay in the index as SKIP_WORKTREE), those commits
+still preserve the rest of the fork on `main`. The fork is the source of
+truth; the pod is the working copy. No PVC — Flyte v2 doesn't yet support
+`K8sPod` payloads on app environments anyway.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -109,6 +119,19 @@ notebook_app_img_recipe = (
             "curl -LsSf https://astral.sh/uv/install.sh | sh "
             "&& install -m 755 /root/.local/bin/uv /usr/local/bin/uv "
             "&& install -m 755 /root/.local/bin/uvx /usr/local/bin/uvx",
+            # Claude Code CLI — the AI agent, on PATH inside the dropdown
+            # terminal. The native installer is a standalone arch-detecting
+            # binary (no node). Install under a fixed build HOME so its launcher
+            # (~/.local/bin/claude) and versioned binaries (~/.local/share/claude)
+            # land at stable absolute paths independent of the `flyte` runtime
+            # user's HOME, make the tree world-readable, then symlink onto PATH.
+            # Pinned to a stable version for repro (auto-update disabled via the
+            # image env below); auth is interactive (`claude` browser login) and
+            # ephemeral per the pod's storage.
+            "mkdir -p /opt/claude-cli "
+            "&& curl -fsSL https://claude.ai/install.sh | HOME=/opt/claude-cli bash -s 2.1.153 "
+            "&& chmod -R a+rX /opt/claude-cli "
+            "&& ln -s /opt/claude-cli/.local/bin/claude /usr/local/bin/claude",
         ]
     )
     .with_pip_packages(
@@ -129,6 +152,10 @@ notebook_app_img_recipe = (
     # Renamed to `sg_proxy.py` in the next command to avoid clashing with
     # Flyte's `app/` code bundle and to keep the module name unambiguous.
     .with_source_file(PROJECT_ROOT / "app" / "proxy.py", _PROXY_LIB_DIR)
+    # Static dropdown-terminal markup the proxy reads at import (relative to its
+    # own __file__) and injects into marimo's HTML. Baked into the same dir as
+    # the proxy so that relative read resolves in-pod.
+    .with_source_file(PROJECT_ROOT / "app" / "terminal_overlay.html", _PROXY_LIB_DIR)
     .with_source_file(PROJECT_ROOT / "app" / "launch-notebook.sh", _LAUNCH_BIN)
     # Bake the stargazer source tree at `/stargazer/` so each notebook's
     # `[tool.uv.sources] stargazer = { path = "/stargazer", editable = true }`
@@ -148,7 +175,11 @@ notebook_app_img_recipe = (
             "mkdir -p /workspace && chown -R flyte:flyte /workspace",
         ]
     )
-    .with_env_vars({"PYTHONPATH": _PROXY_LIB_DIR})
+    # PYTHONPATH lets the proxy import as `sg_proxy`. DISABLE_AUTOUPDATER pins
+    # Claude Code to the baked version: the install tree is read-only for the
+    # flyte user, so a background self-update would otherwise re-download into
+    # ephemeral home on every cold-start, defeating the pin and bloating storage.
+    .with_env_vars({"PYTHONPATH": _PROXY_LIB_DIR, "DISABLE_AUTOUPDATER": "1"})
 )
 
 
