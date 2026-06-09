@@ -15,8 +15,8 @@
 ### Stargazer scRNA-seq.
 
 Multi-sample fan-out preprocessing plus interactive clustering, side-by-side
-UMAPs, and marker-gene tables. The workflow-tier counterpart of the
-preprocessing tutorial — same primitives, full-fat workflow.
+UMAPs, and marker-gene tables. The workflow-tier showcase: the same
+primitives the tutorials teach, applied as a full-fat scRNA-seq pipeline.
 
 spec: [docs/architecture/notebook.md](../../docs/architecture/notebook.md)
 """
@@ -449,13 +449,17 @@ def _(annotated_ads, annotated_assets, mo):
 
 @app.cell
 def _(mo):
-    """Links to the assets and tasks tutorials."""
+    """Links to the tutorial sequence."""
     mo.md(
         """
         ## Next Steps
 
-        - [Assets & Types](/tutorials/assets_tutorial)
-        - [Tasks & Workflows](/tutorials/tasks_tutorial)
+        The tutorials build up the primitives behind this pipeline:
+
+        - [Assets](/tutorials/assets) — typed, content-addressed I/O
+        - [Tasks](/tutorials/tasks) — single units of work
+        - [Workflows](/tutorials/workflows) — composing tasks
+        - [Execution](/tutorials/execution) — local vs remote
         """
     )
     return

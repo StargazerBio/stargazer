@@ -415,19 +415,9 @@ def _workspace_tile_dict(slug: str, cpu: int, memory: int, description: str) -> 
     )
 
 
-_GENERIC_SNAPSHOT_DESC = "Frozen snapshot."
-
-
 def _snapshot_tile_dict(slug: str) -> dict:
-    """A read-only Snapshots tile — a frozen, non-launchable record.
-
-    Snapshots carry no resources or controls: a frozen notebook isn't edited,
-    run, or re-configured from the dashboard, so the tile just marks that the
-    record exists (see `_tile.html`'s `snapshots` branch).
-    """
-    return _tile_dict(
-        slug, _display_name(f"{slug}.py"), _GENERIC_SNAPSHOT_DESC, "snapshots"
-    )
+    """A read-only Snapshots tile — a frozen record, runnable only in run mode."""
+    return _tile_dict(slug, _display_name(f"{slug}.py"), "", "snapshots")
 
 
 def _snapshot_tiles(snapshot_files: list[str]) -> list[dict]:

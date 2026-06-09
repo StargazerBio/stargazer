@@ -1,5 +1,14 @@
 # API Reference
 
+## Assets
+
+::: stargazer.assets.alignment
+::: stargazer.assets.asset
+::: stargazer.assets.reads
+::: stargazer.assets.reference
+::: stargazer.assets.scrna
+::: stargazer.assets.variants
+
 ## Config
 
 ::: stargazer.config
@@ -7,6 +16,16 @@
 ## Marshal
 
 ::: stargazer.marshal
+
+## Notebooks
+
+::: stargazer.notebooks.tutorials.assets
+::: stargazer.notebooks.tutorials.execution
+::: stargazer.notebooks.tutorials.tasks
+::: stargazer.notebooks.tutorials.workflows
+::: stargazer.notebooks.workflows.scrna_pipeline
+::: stargazer.notebooks.workspace.blank
+::: stargazer.notebooks.workspace.template
 
 ## Registry
 
@@ -25,6 +44,7 @@
 ::: stargazer.tasks.gatk.create_sequence_dictionary
 ::: stargazer.tasks.gatk.genomics_db_import
 ::: stargazer.tasks.gatk.haplotype_caller
+::: stargazer.tasks.gatk.index_feature_file
 ::: stargazer.tasks.gatk.joint_call_gvcfs
 ::: stargazer.tasks.gatk.mark_duplicates
 ::: stargazer.tasks.gatk.merge_bam_alignment
@@ -39,15 +59,6 @@
 ::: stargazer.tasks.scrna.qc_filter
 ::: stargazer.tasks.scrna.reduce_dimensions
 ::: stargazer.tasks.scrna.select_features
-
-## Types
-
-::: stargazer.assets.alignment
-::: stargazer.assets.asset
-::: stargazer.assets.reads
-::: stargazer.assets.reference
-::: stargazer.assets.scrna
-::: stargazer.assets.variants
 
 ## Utils
 

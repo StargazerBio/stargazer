@@ -13,7 +13,7 @@
 A choose-your-own-adventure scaffold for authoring your own notebook from
 scratch: ingest a file, define an asset for it, process it with a task,
 and fan that task out in a workflow. Each section is a TODO-style
-template — pair with `assets_tutorial.py` and `tasks_tutorial.py` for the
+template — pair with `assets.py` and `tasks.py` for the
 why and the deeper patterns.
 
 spec: [docs/architecture/notebook.md](../../docs/architecture/notebook.md)
@@ -47,9 +47,9 @@ def _():
         Defaults work as-is (your file round-trips through a no-op
         pipeline). Replace the TODOs to make it do real work.
 
-        Reference: [`assets_tutorial.py`](./assets_tutorial.py) for
-        asset internals, [`tasks_tutorial.py`](./tasks_tutorial.py)
-        for tasks/workflows and the local→remote toggle.
+        Reference: [`assets.py`](../tutorials/assets.py) for asset
+        internals, [`tasks.py`](../tutorials/tasks.py) for tasks, and
+        [`workflows.py`](../tutorials/workflows.py) for composition.
         """
     )
     return ClassVar, Path, asyncio, dataclass, flyte, mo, tempfile

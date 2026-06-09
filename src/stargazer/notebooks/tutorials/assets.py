@@ -14,30 +14,31 @@ A guided walkthrough of why typed `Asset` subclasses exist, the three
 layers each Asset has (cid, path, fields), defining a new asset class,
 and the round-trip from Python object to storage and back.
 
+`SampleSheet` is defined here as a marimo *reusable* top-level symbol
+(`with app.setup:` + `@app.class_definition`) so the Tasks tutorial
+imports this exact class rather than redefining it — one definition, no
+drift across the tutorial sequence.
+
 spec: [docs/architecture/types.md](../../docs/architecture/types.md)
 """
 
 import marimo
 
-__generated_with = "0.21.1"
+__generated_with = "0.23.6"
 app = marimo.App(width="medium")
+
+with app.setup:
+    from dataclasses import dataclass, fields
+    from typing import ClassVar
+
+    import marimo as mo
+
+    from stargazer.assets.asset import Asset
 
 
 @app.cell
 def _():
-    """Imports and Flyte init."""
-    import asyncio
-    import csv
-    import tempfile
-    from dataclasses import dataclass, fields
-    from pathlib import Path
-    from typing import ClassVar
-
-    import marimo as mo
-    import flyte
-
-    flyte.init_from_config()
-
+    """Intro."""
     mo.md(
         """
         # Stargazer Asset System
@@ -47,19 +48,22 @@ def _():
         the system. By the end of this notebook you'll have defined a
         `SampleSheet` asset, uploaded a real CSV through it, and
         rediscovered it via a metadata query.
+
+        The `SampleSheet` you define here is importable — the next three
+        tutorials reuse this very class.
         """
     )
-    return ClassVar, Path, asyncio, csv, dataclass, fields, mo, tempfile
+    return
 
 
 @app.cell
-def _(mo):
+def _():
     """Why typed assets exist."""
     mo.md(
         """
         ## Why typed assets?
 
-        A naive bioinformatics pipeline passes file *paths* between
+        Classic bioinformatics pipelines pass file *paths* between
         functions:
 
         ```python
@@ -88,7 +92,7 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
+def _():
     """The three layers of an Asset."""
     mo.md(
         """
@@ -116,28 +120,19 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
+def _():
     """Aside — content addressing and IPFS."""
     mo.md(
         """
         ### Aside: content addressing and IPFS
 
-        The CID is what makes the rest of the system work, so it's
-        worth a paragraph on *why* content addressing is the right
-        primitive here.
-
-        A traditional path answers *where is this file* but not *what
-        is this file*. Two paths can hold identical bytes; one path
-        can refer to different bytes after a careless edit. Identity
-        by location is fragile — links rot, files move, paths collide.
-
         A CID is a hash of the bytes. Same bytes anywhere → same CID;
         different bytes → different CID. Always. Stargazer issues
-        `local_<md5>` CIDs when running locally (indexed in TinyDB on your machine)
-        and real **IPFS** hashes (`bafy…`) when `PINATA_JWT` is set —
-        so an asset uploaded by you and by a colleague resolves to the
-        same identity and can be fetched from any IPFS node that holds
-        the bytes, including the public gateway.
+        `local_<md5>` CIDs when running locally (indexed in TinyDB on
+        your machine) and real **IPFS** hashes (`bafy…`) when
+        `PINATA_JWT` is set — so an asset uploaded by you and by a
+        colleague resolves to the same identity, fetchable from any IPFS
+        node that holds the bytes.
 
         That tiny shift unlocks four things at once:
 
@@ -164,7 +159,7 @@ def _(mo):
 
 
 @app.cell
-def _(fields, mo):
+def _():
     """Inspect an existing Asset class to ground the abstraction."""
     from stargazer.assets.scrna import AnnData
 
@@ -209,31 +204,7 @@ def _(fields, mo):
 
 
 @app.cell
-def _(mo):
-    """Why _asset_key is special."""
-    mo.md(
-        """
-        The `_asset_key` `ClassVar` is the load-bearing piece:
-
-        - **Auto-registration.** `Asset.__init_subclass__` adds the
-          class to `Asset._registry` (a `dict[str, type[Asset]]`)
-          keyed by `_asset_key`. No manual registration needed.
-          This is mainly important for the MCP server.
-        - **Storage tag.** `to_keyvalues()` writes `"asset":
-          "<_asset_key>"` so storage records know their type.
-        - **Specialization.** When `assemble()` queries storage, it
-          gets back generic records; `specialize(record)` looks up
-          `_asset_key` in the registry to rebuild the correct subclass.
-        - **Companion linking.** Related files (e.g. an index for a
-          BAM) reference their parent via `<_asset_key>_cid`
-          keyvalues. `fetch()` follows those links automatically.
-        """
-    )
-    return
-
-
-@app.cell
-def _(mo):
+def _():
     """Section 2 — define a new asset."""
     mo.md(
         """
@@ -242,7 +213,9 @@ def _(mo):
         Time to add one. We'll create `SampleSheet` — a CSV mapping
         samples to per-sample metadata for a cohort. In real code this
         would live in `src/stargazer/assets/sample_sheet.py`; here we
-        define it inline so we can poke at it.
+        define it as a top-level class right in the notebook (the
+        `@app.class_definition` decorator below) so the later tutorials
+        can `import` it.
 
         The template is always the same:
 
@@ -257,25 +230,19 @@ def _(mo):
     return
 
 
-@app.cell
-def _(ClassVar, dataclass):
-    """Define SampleSheet by subclassing Asset."""
-    from stargazer.assets.asset import Asset
+@app.class_definition
+@dataclass
+class SampleSheet(Asset):
+    """CSV of per-sample metadata for a cohort."""
 
-    @dataclass
-    class SampleSheet(Asset):
-        """CSV of per-sample metadata for a cohort."""
-
-        _asset_key: ClassVar[str] = "sample_sheet"
-        cohort_id: str = ""
-        n_samples: int = 0
-        organism: str = ""
-
-    return (SampleSheet,)
+    _asset_key: ClassVar[str] = "sample_sheet"
+    cohort_id: str = ""
+    n_samples: int = 0
+    organism: str = ""
 
 
 @app.cell
-def _(SampleSheet, mo):
+def _():
     """Confirm the new asset registered itself."""
     from stargazer.assets import ASSET_REGISTRY
 
@@ -298,7 +265,7 @@ def _(SampleSheet, mo):
 
 
 @app.cell
-def _(mo):
+def _():
     """Section 3 — round-trip metadata."""
     mo.md(
         """
@@ -314,7 +281,7 @@ def _(mo):
 
 
 @app.cell
-def _(SampleSheet, mo):
+def _():
     """Show to_keyvalues() output."""
     sheet = SampleSheet(cohort_id="demo_cohort", n_samples=12, organism="human")
     _kv = sheet.to_keyvalues()
@@ -346,7 +313,7 @@ def _(SampleSheet, mo):
 
 
 @app.cell
-def _(SampleSheet, sheet):
+def _(sheet):
     """Round-trip via from_keyvalues()."""
     _kv = sheet.to_keyvalues()
     rehydrated = SampleSheet.from_keyvalues(_kv)
@@ -354,7 +321,7 @@ def _(SampleSheet, sheet):
 
 
 @app.cell
-def _(mo, rehydrated, sheet):
+def _(rehydrated, sheet):
     """Confirm the round-trip preserves typed values."""
     mo.md(
         f"""
@@ -377,7 +344,7 @@ def _(mo, rehydrated, sheet):
 
 
 @app.cell
-def _(mo):
+def _():
     """Section 4 — persist to storage."""
     mo.md(
         """
@@ -400,9 +367,13 @@ def _(mo):
 
 
 @app.cell
-async def _(Path, SampleSheet, asyncio, csv, mo, tempfile):
+async def _():
     """Write a CSV and upload it as a SampleSheet."""
-    _tmpdir = Path(tempfile.mkdtemp(prefix="stargazer_assets_tutorial_"))
+    import csv
+    import tempfile
+    from pathlib import Path
+
+    _tmpdir = Path(tempfile.mkdtemp(prefix="stargazer_assets_"))
     csv_path = _tmpdir / "demo_cohort.csv"
     with csv_path.open("w", newline="") as _fh:
         _w = csv.writer(_fh)
@@ -413,12 +384,10 @@ async def _(Path, SampleSheet, asyncio, csv, mo, tempfile):
     uploaded_sheet = SampleSheet()
     await uploaded_sheet.update(
         path=csv_path,
-        cohort_id="assets_tutorial_demo",
+        cohort_id="assets_demo",
         n_samples=2,
         organism="human",
     )
-    # Tiny pause so the spinner has something to show on cached re-runs
-    await asyncio.sleep(0)
 
     mo.md(
         f"""
@@ -439,7 +408,7 @@ async def _(Path, SampleSheet, asyncio, csv, mo, tempfile):
 
 
 @app.cell
-def _(mo):
+def _():
     """Section 5 — discover via assemble()."""
     mo.md(
         """
@@ -455,18 +424,18 @@ def _(mo):
 
 
 @app.cell
-async def _(SampleSheet, mo, uploaded_sheet):
+async def _(uploaded_sheet):
     """Query for our newly uploaded sheet."""
     from stargazer.assets.asset import assemble
 
-    found = await assemble(asset="sample_sheet", cohort_id="assets_tutorial_demo")
+    found = await assemble(asset="sample_sheet", cohort_id="assets_demo")
     _hit = next((_a for _a in found if _a.cid == uploaded_sheet.cid), None)
 
     mo.md(
         f"""
         ```python
         found = await assemble(
-            asset="sample_sheet", cohort_id="assets_tutorial_demo"
+            asset="sample_sheet", cohort_id="assets_demo"
         )
         ```
 
@@ -486,7 +455,7 @@ async def _(SampleSheet, mo, uploaded_sheet):
 
 
 @app.cell
-def _(mo):
+def _():
     """Section 6 — companion pattern."""
     mo.md(
         """
@@ -526,63 +495,47 @@ def _(mo):
         without each task having to know about the pairing.
 
         For our `SampleSheet` we don't need a companion (it's a single
-        file), but if we ever wanted, say, a per-cohort QC report, it
-        would carry `sample_sheet_cid` and ride along automatically.
+        file), but the `CohortSummary` in the next tutorial carries
+        `sample_sheet_cid` and rides along automatically.
         """
     )
     return
 
 
 @app.cell
-def _(mo):
+def _():
     """Section 7 — why the indirection is worth it."""
     mo.md(
         """
         ## 7. "Isn't this overkill for a local filesystem?"
 
         Honest question. On a single laptop with a fixed directory, you
-        could skip all of this — glob the right folder, read the file,
-        done. `assemble()` is a metadata query against a flat-file
-        TinyDB; companion fetching is two steps where one would do.
+        could glob the right folder and read the file. The machinery
+        earns its keep the moment compute stops being local and
+        persistent — which is exactly what Flyte does to every task.
 
-        The machinery earns its keep the moment compute stops being
-        local and persistent. Stargazer tasks run inside Flyte v2,
-        which means each one gets its own Docker container, and those
-        containers are scattered:
+        Each task runs in its own Docker container, and those containers
+        are scattered **geographically** (no shared filesystem with the
+        task that produced their inputs) and **temporally** (a retry, a
+        re-run a year later, or a parameter sweep all land on fresh
+        containers with empty disks). There *is* no shared path. The
+        only way a container finds its inputs is to ask the storage
+        layer "give me the asset with these properties" — `assemble()` —
+        and the only way the BAI lands next to the BAM everywhere is the
+        companion convention.
 
-        - **Geographically.** Different machines, often different
-          regions. There is no shared filesystem between a task and the
-          one that produced its inputs.
-        - **Temporally.** A retry lands on a fresh container with an
-          empty disk. A workflow re-run a year later resolves inputs
-          from cold storage. A parameter sweep spins up dozens of
-          containers in parallel that each need the same reference.
-
-        In that world, path-based pipelines stop working: there *is* no
-        shared path. The only way for a container to find its inputs is
-        to ask the storage layer "give me the asset with these
-        properties" — that's `assemble()`. The only way to make sure
-        the BAI lands next to the BAM in every container, without each
-        task carrying layout knowledge, is the companion convention.
-
-        Content-addressing is the other half of the trick. A container
-        in `us-east` can pull the same `bafy…` reference that a
-        container in `eu-west` already pinned, with no coordination —
-        identical bytes resolve to identical CIDs, and any IPFS node
-        that has them can serve them. Caching across runs and
-        deduplication across users both fall out for free.
-
-        The local TinyDB mode you're using right now is the same API
-        with a one-machine backend. The investment in Asset / CID /
-        keyvalues looks like ceremony when you're alone on your laptop
-        but it really shines once compute is ephemeral.
+        The local TinyDB mode you're using now is the same API with a
+        one-machine backend. It looks like ceremony when you're alone on
+        your laptop, but the **Execution** tutorial shows it pay off:
+        the identical code running on a remote cluster, inputs resolved
+        by CID with no path coordination at all.
         """
     )
     return
 
 
 @app.cell
-def _(mo):
+def _():
     """Section 8 — recap."""
     mo.md(
         """
@@ -599,14 +552,18 @@ def _(mo):
 
         That's the whole system.
 
-        ### → Next: `tasks_tutorial.py`
+        ### → Next: `tasks.py`
 
-        The follow-on notebook (`src/stargazer/notebooks/tasks_tutorial.py`)
-        picks up exactly where this one ends. It re-uses the
-        `SampleSheet` you defined here, wraps a Flyte task around it,
-        composes that task into a fan-out workflow, and ends with the
-        local→remote execution toggle that needs no code changes —
-        only a swap in `.flyte/config.yaml`. Open it next.
+        The follow-on notebook **imports the `SampleSheet` you defined
+        here** and wraps a Flyte task around it. From there the arc is:
+
+        1. **Tasks** — one task, run locally two ways.
+        2. **Workflows** — compose tasks into a fan-out workflow.
+        3. **Execution** — the same code on a remote cluster, no changes.
+
+        Each tutorial imports the previous one's objects, so the whole
+        sequence runs on a single shared `SampleSheet`. Open `tasks.py`
+        next.
         """
     )
     return

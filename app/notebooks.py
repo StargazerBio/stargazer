@@ -49,29 +49,36 @@ class Notebook:
     path_in_image: str
 
 
-# Keep slug/section in sync with `src/stargazer/notebooks/__init__.py::NAV_ORDER`
-# so the per-notebook navigation bar's prev/next buttons resolve correctly.
+# Tutorials are ordered as a reading sequence: assets → tasks → workflows →
+# execution. Workflows (full pipelines) render in their own dashboard section.
 NOTEBOOKS: tuple[Notebook, ...] = (
     Notebook(
         slug="assets",
-        title="Assets",
+        title="1. Assets",
         description="Content-addressed I/O primitives.",
         section="tutorials",
-        path_in_image=f"{IMAGE_WORKDIR}/src/stargazer/notebooks/tutorials/assets_tutorial.py",
+        path_in_image=f"{IMAGE_WORKDIR}/src/stargazer/notebooks/tutorials/assets.py",
     ),
     Notebook(
         slug="tasks",
-        title="Tasks",
-        description="How Stargazer tasks compose into workflows.",
+        title="2. Tasks",
+        description="Define a single task with typed asset I/O.",
         section="tutorials",
-        path_in_image=f"{IMAGE_WORKDIR}/src/stargazer/notebooks/tutorials/tasks_tutorial.py",
+        path_in_image=f"{IMAGE_WORKDIR}/src/stargazer/notebooks/tutorials/tasks.py",
     ),
     Notebook(
-        slug="preprocessing",
-        title="Execution",
-        description="Asset → Task → Workflow, local vs remote on one sample.",
+        slug="workflows",
+        title="3. Workflows",
+        description="Compose tasks into a workflow with asyncio.gather fan-out.",
         section="tutorials",
-        path_in_image=f"{IMAGE_WORKDIR}/src/stargazer/notebooks/tutorials/preprocessing_tutorial.py",
+        path_in_image=f"{IMAGE_WORKDIR}/src/stargazer/notebooks/tutorials/workflows.py",
+    ),
+    Notebook(
+        slug="execution",
+        title="4. Execution",
+        description="Run a real workflow locally, then remote — no code changes.",
+        section="tutorials",
+        path_in_image=f"{IMAGE_WORKDIR}/src/stargazer/notebooks/tutorials/execution.py",
     ),
     Notebook(
         slug="scrna-pipeline",

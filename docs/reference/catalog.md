@@ -13,6 +13,7 @@
 | `sort_sam` | Sort a SAM/BAM file. | `alignment` (Alignment), `sort_order` (str) |
 | `mark_duplicates` | Mark duplicate reads in a BAM file. | `alignment` (Alignment) |
 | `merge_bam_alignment` | Merge alignment data from aligned BAM with data in unmapped BAM. | `aligned_bam` (Alignment), `unmapped_bam` (Alignment), `ref` (Reference) |
+| `index_feature_file` | Index a VCF file using GATK IndexFeatureFile. | `known_sites` (KnownSites) |
 | `base_recalibrator` | Generate a Base Quality Score Recalibration report. | `alignment` (Alignment), `ref` (Reference), `known_sites` (list[KnownSites]) |
 | `apply_bqsr` | Apply Base Quality Score Recalibration to a BAM file. | `alignment` (Alignment), `ref` (Reference), `bqsr_report` (BQSRReport) |
 | `haplotype_caller` | Call germline variants in GVCF mode using GATK HaplotypeCaller. | `alignment` (Alignment), `ref` (Reference) |
@@ -27,8 +28,8 @@
 | Name | Description | Parameters |
 |------|-------------|------------|
 | `prepare_reference` | Prepare reference genome for alignment and variant calling. | `build` (str) |
-| `preprocess_sample` | Pre-process a single sample's reads for variant calling. | `build` (str), `sample_id` (str), `run_bqsr` (bool) |
-| `germline_short_variant_discovery` | Germline short variant discovery from preprocessed BAMs. | `build` (str), `cohort_id` (str) |
+| `preprocess_sample` | Pre-process a single sample's reads for variant calling. | `build` (str), `sample_id` (str) |
+| `germline_short_variant_discovery` | End-to-end germline short variant discovery from raw reads. | `build` (str), `sample_ids` (list[str]), `cohort_id` (str) |
 | `scrna_clustering_pipeline` | End-to-end scRNA-seq clustering pipeline. | `sample_id` (str), `organism` (str), `n_top_genes` (int), `resolution` (float), `max_pct_mt` (float) |
 
 ## Asset Types
@@ -57,3 +58,4 @@
 | Name | Description | Files |
 |------|-------------|-------|
 | `scrna_demo` | Sample scRNA-seq mouse brain data (10x Genomics) for demo workflows | 2 |
+| `variant_calling_demo` | TP53 region test fixtures (reference and paired reads) for GRCh38 | 3 |
