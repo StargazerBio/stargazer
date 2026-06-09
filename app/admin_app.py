@@ -66,12 +66,15 @@ from stargazer.config import (
 from app import config, installation_tokens
 from app.github import (
     canonical_fork_name,
+    create_snapshot_notebook,
     create_workspace_notebook,
     delete_workspace_notebook,
     find_existing_fork,
     fork_upstream,
+    get_snapshot_notebook,
     get_workspace_notebook,
     is_genuine_fork,
+    list_snapshots as gh_list_snapshots,
     list_workspace as gh_list_workspace,
     update_workspace_notebook,
 )
@@ -88,6 +91,7 @@ from app.init import init
 from app.notebooks import (
     NOTEBOOKS,
     SEED_SLUGS,
+    SNAPSHOT_NOTEBOOK_DIR,
     WORKSPACE_NOTEBOOK_DIR,
     Notebook,
     by_section,
@@ -317,12 +321,34 @@ async def _resolve_workspace_files(
         return []
 
 
+async def _resolve_snapshot_files(session: SessionData) -> list[str]:
+    """List the fork's frozen snapshots from `notebooks/snapshots/` (GitHub).
+
+    Snapshots flow through the fork like the rest of the repo: a fresh fork
+    inherits every **public, merged** snapshot from upstream, and the user's own
+    📸 freezes land in the same dir (refreshed by syncing the fork with `main`).
+    So this single fork listing covers both — there's no separate upstream
+    source. The listing always reads GitHub (no live-pod path, unlike the
+    workspace listing) even though run-mode launches *do* serve a snapshot from
+    the fork clone. Returns [] when saving is off or the listing fails (the
+    section just shows its empty-state hint).
+    """
+    if not session.workspace_enabled:
+        return []
+    try:
+        token = await installation_tokens.fork_token(session.fork_full_name)
+        return await gh_list_snapshots(session.fork_full_name, token)
+    except Exception as exc:
+        logger.warning(f"GitHub snapshot listing failed: {exc}")
+        return []
+
+
 async def _candidate_slugs(session: SessionData, cookie_value: str) -> list[str]:
     """All notebook slugs whose per-notebook apps a user might have.
 
     Registry Tutorials/Community plus the user's Workspace notebooks (seeds
-    excluded). Shared by `/launch/status` and `/workspace/cleanup` to bound
-    the set of `nb-{slug}-{mode}` apps they query.
+    excluded) and frozen Snapshots. Shared by `/launch/status` and
+    `/workspace/cleanup` to bound the set of `nb-{slug}-{mode}` apps they query.
     """
     slugs = [n.slug for n in NOTEBOOKS]
     if session.workspace_enabled:
@@ -330,6 +356,8 @@ async def _candidate_slugs(session: SessionData, cookie_value: str) -> list[str]
         slugs += [
             slug for f in files if (slug := f.removesuffix(".py")) not in SEED_SLUGS
         ]
+        snapshots = await _resolve_snapshot_files(session)
+        slugs += [f.removesuffix(".py") for f in snapshots]
     return slugs
 
 
@@ -387,6 +415,30 @@ def _workspace_tile_dict(slug: str, cpu: int, memory: int, description: str) -> 
     )
 
 
+_GENERIC_SNAPSHOT_DESC = "Frozen snapshot."
+
+
+def _snapshot_tile_dict(slug: str) -> dict:
+    """A read-only Snapshots tile — a frozen, non-launchable record.
+
+    Snapshots carry no resources or controls: a frozen notebook isn't edited,
+    run, or re-configured from the dashboard, so the tile just marks that the
+    record exists (see `_tile.html`'s `snapshots` branch).
+    """
+    return _tile_dict(
+        slug, _display_name(f"{slug}.py"), _GENERIC_SNAPSHOT_DESC, "snapshots"
+    )
+
+
+def _snapshot_tiles(snapshot_files: list[str]) -> list[dict]:
+    """Build read-only Snapshots tiles from the fork's `snapshots/` listing."""
+    return [
+        _snapshot_tile_dict(slug)
+        for f in snapshot_files
+        if (slug := f.removesuffix(".py"))
+    ]
+
+
 async def _workspace_tiles(
     session: SessionData, workspace_files: list[str]
 ) -> list[dict]:
@@ -415,6 +467,7 @@ async def _workspace_tiles(
     default_gib = memory_to_gib(DEFAULT_RESOURCES.memory)
 
     async def _tile(slug: str) -> dict:
+        """Build one workspace tile, parsing its header (best-effort)."""
         cpu, memory, desc = DEFAULT_RESOURCES.cpu, default_gib, ""
         if token is not None:
             try:
@@ -435,14 +488,17 @@ async def _workspace_tiles(
 async def _dashboard_context(
     session: SessionData,
     workspace_files: list[str],
+    snapshot_files: list[str] | None = None,
     fork_error: bool = False,
 ) -> dict:
     """Assemble the tile lists Jinja's `dashboard.html` iterates over.
 
     When workspace saving is off the user hasn't opted in to forking, so no
     Workspace tiles are built — the template renders the disclaimer + Enable
-    button instead. `fork_error` (set after a failed `/workspace/enable`) tells
-    the disclaimer to explain the fork couldn't be created.
+    button instead. Snapshots are read-only frozen records from the fork's
+    `notebooks/snapshots/` (see `_resolve_snapshot_files`). `fork_error` (set
+    after a failed `/workspace/enable`) tells the disclaimer to explain the
+    fork couldn't be created.
     """
     workspace = (
         await _workspace_tiles(session, workspace_files)
@@ -462,9 +518,7 @@ async def _dashboard_context(
             _tile_dict(n.slug, n.title, n.description, "workflows")
             for n in by_section("workflows")
         ],
-        # Frozen notebooks (inputs/outputs/image pinned). No registry yet —
-        # the section renders an empty-state hint until freezing ships.
-        "snapshots": [],
+        "snapshots": _snapshot_tiles(snapshot_files or []),
         "workspace": workspace,
     }
 
@@ -476,15 +530,18 @@ async def landing(request: Request):
     if not session:
         return templates.TemplateResponse(request, "login.html", {"title": "Sign In"})
     files: list[str] = []
+    snapshots: list[str] = []
     if session.workspace_enabled:
         cookie_value = request.cookies.get(SESSION_COOKIE, "")
         files = await _resolve_workspace_files(session, cookie_value)
+        snapshots = await _resolve_snapshot_files(session)
     return templates.TemplateResponse(
         request,
         "dashboard.html",
         await _dashboard_context(
             session,
             files,
+            snapshots,
             fork_error=request.query_params.get("ws_error") == "fork",
         ),
     )
@@ -806,30 +863,16 @@ async def workspace_settings(
     )
 
 
-@asgi_app.post("/workspace/delete")
-async def workspace_delete(request: Request, slug: str = Form(...)):
-    """Delete a workspace notebook from the user's fork.
+async def _teardown_notebook_pods(session: SessionData, slug: str) -> None:
+    """Completely tear down each edit/run pod for a notebook slug.
 
-    Removes `<slug>.py` from the fork's `main` (idempotent — a file that's
-    already gone still returns 200) and tears down each edit/run pod for that
-    slug completely: deactivate (clean stop), then delete the deployment record,
-    so a deleted notebook leaves nothing behind — no tile to Stop it, no orphan
-    for `/workspace/cleanup` to reap. Both steps are best-effort and never fail
-    the delete.
+    Deactivate first (a clean stop), then delete the deployment record, so the
+    notebook leaves nothing behind — no tile to Stop it, no orphan for
+    `/workspace/cleanup` to reap. Shared by `/workspace/delete` and
+    `/workspace/snapshot` (both remove a notebook from the Workspace surface).
+    Every step is best-effort and never raises.
     """
-    session = _get_session(request)
-    if session is None:
-        return JSONResponse({"error": "not authenticated"}, status_code=401)
-    if not session.workspace_enabled:
-        return JSONResponse({"error": "enable workspace saving first"}, status_code=403)
-    if _notebook_slug(slug) != slug:
-        return JSONResponse(
-            {"error": f"invalid or reserved notebook: {slug!r}"}, status_code=400
-        )
-
     project = sanitize_project_id(session.github_username)
-    # Tear down each pod completely; best-effort, never fails the delete.
-    # Deactivate first (a clean stop), then delete the deployment record.
     for mode in ("edit", "run"):
         name = f"nb-{slug}-{mode}"
         try:
@@ -843,6 +886,29 @@ async def workspace_delete(request: Request, slug: str = Form(...)):
             pass
         _launched.get(session.github_username, {}).pop((slug, mode), None)
 
+
+@asgi_app.post("/workspace/delete")
+async def workspace_delete(request: Request, slug: str = Form(...)):
+    """Delete a workspace notebook from the user's fork.
+
+    Removes `<slug>.py` from the fork's `main` (idempotent — a file that's
+    already gone still returns 200) and tears down each edit/run pod for that
+    slug completely, so a deleted notebook leaves nothing behind — no tile to
+    Stop it, no orphan for `/workspace/cleanup` to reap. Teardown is best-effort
+    and never fails the delete.
+    """
+    session = _get_session(request)
+    if session is None:
+        return JSONResponse({"error": "not authenticated"}, status_code=401)
+    if not session.workspace_enabled:
+        return JSONResponse({"error": "enable workspace saving first"}, status_code=403)
+    if _notebook_slug(slug) != slug:
+        return JSONResponse(
+            {"error": f"invalid or reserved notebook: {slug!r}"}, status_code=400
+        )
+
+    await _teardown_notebook_pods(session, slug)
+
     try:
         token = await installation_tokens.fork_token(session.fork_full_name)
         await delete_workspace_notebook(session.fork_full_name, token, f"{slug}.py")
@@ -851,6 +917,55 @@ async def workspace_delete(request: Request, slug: str = Form(...)):
         return JSONResponse({"error": f"delete failed: {exc}"}, status_code=502)
 
     return JSONResponse({"status": "deleted", "slug": slug})
+
+
+@asgi_app.post("/workspace/snapshot")
+async def workspace_snapshot(request: Request, slug: str = Form(...)):
+    """Freeze a workspace notebook by *moving* it into the snapshots dir.
+
+    A snapshot takes an analysis out of the editable Workspace surface and
+    pins it as a frozen record: the notebook's current source on the fork's
+    `main` (its last *saved* state — Save first to capture live edits) is
+    re-created verbatim under `notebooks/snapshots/<slug>.py`, then the
+    workspace original is deleted. The snapshots write happens first, so a
+    failed move leaves the notebook editable rather than lost. Like delete, it
+    tears down any running pod for the slug — once moved, no Workspace tile
+    remains to Stop it.
+    """
+    session = _get_session(request)
+    if session is None:
+        return JSONResponse({"error": "not authenticated"}, status_code=401)
+    if not session.workspace_enabled:
+        return JSONResponse({"error": "enable workspace saving first"}, status_code=403)
+    if _notebook_slug(slug) != slug:
+        return JSONResponse(
+            {"error": f"invalid or reserved notebook: {slug!r}"}, status_code=400
+        )
+
+    repo = session.fork_full_name
+    filename = f"{slug}.py"
+    try:
+        token = await installation_tokens.fork_token(repo)
+        source = await get_workspace_notebook(repo, token, filename)
+        if source is None:
+            return JSONResponse(
+                {"error": f"notebook not found: {filename}"}, status_code=404
+            )
+        # Write the frozen copy first; only then remove the workspace original,
+        # so a failed write can't leave the notebook lost from both dirs.
+        await create_snapshot_notebook(repo, token, filename, source)
+        await delete_workspace_notebook(repo, token, filename)
+    except Exception as exc:
+        logger.error(f"Notebook snapshot failed for {slug!r}: {exc}")
+        return JSONResponse({"error": f"snapshot failed: {exc}"}, status_code=502)
+
+    await _teardown_notebook_pods(session, slug)
+
+    # Return the rendered frozen tile so the browser can drop it straight into
+    # the Snapshots grid (and remove the workspace tile it moved out of).
+    tile = _snapshot_tile_dict(slug)
+    tile_html = templates.env.get_template("_tile.html").render(tile=tile)
+    return JSONResponse({"status": "snapshotted", "slug": slug, "tile_html": tile_html})
 
 
 @asgi_app.post("/launch")
@@ -866,6 +981,7 @@ async def launch(
     wants_json = "application/json" in request.headers.get("accept", "")
 
     def _reject(message: str, status: int):
+        """Reject the launch: JSON error for AJAX callers, else redirect home."""
         if wants_json:
             return JSONResponse({"error": message}, status_code=status)
         return RedirectResponse("/", status_code=302)
@@ -875,27 +991,33 @@ async def launch(
         return _reject("not authenticated", 401)
     if mode not in ("edit", "run"):
         return _reject(f"invalid mode: {mode}", 400)
-    if section not in ("tutorials", "workflows", "workspace"):
+    if section not in ("tutorials", "workflows", "workspace", "snapshots"):
         return _reject(f"invalid section: {section}", 400)
-    # Workspace launches clone+push the user's fork, so they require opt-in.
-    if section == "workspace" and not session.workspace_enabled:
+    # Fork-backed sections (workspace + snapshots) clone the user's fork, so
+    # they require opt-in.
+    if section in ("workspace", "snapshots") and not session.workspace_enabled:
         return _reject("enable workspace saving first", 403)
+    # Snapshots are frozen records: read-only run view only, never editable.
+    if section == "snapshots" and mode != "run":
+        return _reject("snapshots open in run mode only", 400)
 
-    # Workspace notebooks declare resources in their `[tool.stargazer]`
-    # header; fetch the source from the fork and parse it before serving.
-    # Image-baked tutorials/workflows keep the env's legacy defaults
-    # (`resources=None`). A missing/unfetchable source falls back to the
-    # parser's defaults rather than failing the launch.
+    # Fork-backed notebooks declare resources in their `[tool.stargazer]`
+    # header; fetch the source from the fork (workspace or snapshots dir) and
+    # parse it before serving. Image-baked tutorials/workflows keep the env's
+    # legacy defaults (`resources=None`). A missing/unfetchable source falls
+    # back to the parser's defaults rather than failing the launch.
     resources: NotebookResources | None = None
-    if section == "workspace":
-        notebook_path = f"{WORKSPACE_NOTEBOOK_DIR}/{slug}.py"
+    if section in ("workspace", "snapshots"):
+        if section == "workspace":
+            notebook_dir, fetch = WORKSPACE_NOTEBOOK_DIR, get_workspace_notebook
+        else:
+            notebook_dir, fetch = SNAPSHOT_NOTEBOOK_DIR, get_snapshot_notebook
+        notebook_path = f"{notebook_dir}/{slug}.py"
         try:
             token = await installation_tokens.fork_token(session.fork_full_name)
-            source = await get_workspace_notebook(
-                session.fork_full_name, token, f"{slug}.py"
-            )
+            source = await fetch(session.fork_full_name, token, f"{slug}.py")
         except Exception as exc:
-            logger.warning(f"Resource fetch failed for workspace {slug!r}: {exc}")
+            logger.warning(f"Resource fetch failed for {section} {slug!r}: {exc}")
             source = None
         resources = parse_notebook_resources(source) if source else DEFAULT_RESOURCES
     else:

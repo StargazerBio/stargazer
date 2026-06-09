@@ -15,8 +15,11 @@ from typing import Literal
 
 # Workspace-section paths live under /workspace/<src/...>/workspace at runtime;
 # image-shipped notebooks live at /stargazer/<src/...> after the Docker COPY.
+# Snapshots live in a sibling dir on the fork (same sparse-clone cone), served
+# read-only in run mode.
 IMAGE_WORKDIR = "/stargazer"
 WORKSPACE_NOTEBOOK_DIR = "/workspace/src/stargazer/notebooks/workspace"
+SNAPSHOT_NOTEBOOK_DIR = "/workspace/src/stargazer/notebooks/snapshots"
 
 
 # Seed notebooks shipped in every fork at `notebooks/workspace/{slug}.py`.

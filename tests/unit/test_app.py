@@ -232,6 +232,22 @@ async def test_dashboard_context_on_builds_workspace_tiles(monkeypatch):
     assert [t["slug"] for t in ctx["workspace"]] == ["foo"]
 
 
+async def test_dashboard_context_no_snapshots_is_empty():
+    """With no snapshot files, the Snapshots section is empty."""
+    ctx = await _dashboard_context(_ws_session(), [])
+    assert ctx["snapshots"] == []
+
+
+async def test_dashboard_context_lists_snapshot_tiles():
+    """Snapshot files become read-only snapshots-section tiles."""
+    ctx = await _dashboard_context(
+        _ws_session(), [], snapshot_files=["my-analysis.py", "old-run.py"]
+    )
+    snaps = ctx["snapshots"]
+    assert [t["slug"] for t in snaps] == ["my-analysis", "old-run"]
+    assert all(t["section"] == "snapshots" for t in snaps)
+
+
 # ---------------------------------------------------------------------------
 # Workspace listing routes through the installation token (post-fork read)
 # ---------------------------------------------------------------------------
@@ -932,6 +948,82 @@ def test_launch_workspace_missing_source_uses_defaults(secret_env, client, monke
     assert served.resources.memory == DEFAULT_RESOURCES.memory
 
 
+def test_launch_snapshot_requires_optin(secret_env, client):
+    """Snapshot launches clone the fork, so they require opt-in: 403 when off."""
+    _auth(client)  # logged in, no fork → saving off
+    resp = client.post(
+        "/launch",
+        data={"slug": "frozen", "mode": "run", "section": "snapshots"},
+        headers={"Accept": "application/json"},
+    )
+    assert resp.status_code == 403
+    assert "enable workspace saving" in resp.json()["error"].lower()
+
+
+def test_launch_snapshot_rejects_edit_mode(secret_env, client):
+    """A frozen snapshot opens read-only: edit mode is rejected with 400."""
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
+    resp = client.post(
+        "/launch",
+        data={"slug": "frozen", "mode": "edit", "section": "snapshots"},
+        headers={"Accept": "application/json"},
+    )
+    assert resp.status_code == 400
+
+
+def test_launch_snapshot_run_serves_from_snapshots_dir(secret_env, client, monkeypatch):
+    """A snapshot run launch serves the frozen file from the snapshots dir.
+
+    The notebook is read from `notebooks/snapshots/`, its `[tool.stargazer]`
+    resources are honored, and the pod is told to `marimo run` that path.
+    """
+    source = (
+        '# /// script\n# dependencies = ["marimo"]\n#\n'
+        '# [tool.stargazer]\n# cpu = 2\n# memory = "3Gi"\n# ///\nimport marimo\n'
+    )
+
+    async def fake_fetch(_owner, _token, _filename):
+        return source
+
+    monkeypatch.setattr("app.admin_app.get_snapshot_notebook", fake_fetch)
+    _stub_fork_token(monkeypatch)
+    sink: dict = {}
+    _stub_serve(monkeypatch, sink)
+
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
+    resp = client.post(
+        "/launch",
+        data={"slug": "frozen", "mode": "run", "section": "snapshots"},
+        headers={"Accept": "application/json"},
+    )
+    assert resp.status_code == 200
+
+    served = sink["env"]
+    # run mode, frozen file resolved under the snapshots dir.
+    assert served.args[1] == "run"
+    assert served.args[2].endswith("notebooks/snapshots/frozen.py")
+    assert served.resources.cpu == 2
+    assert served.resources.memory == "3Gi"
+
+
+async def test_candidate_slugs_includes_snapshots(monkeypatch):
+    """Snapshot slugs join workspace + registry slugs so /launch/status (and
+    cleanup) probe their run pods too — a running snapshot hydrates to Open/Stop.
+    """
+    from app import admin_app
+
+    async def fake_ws(_session, _cookie):
+        return []
+
+    async def fake_snaps(_session):
+        return ["frozen.py"]
+
+    monkeypatch.setattr(admin_app, "_resolve_workspace_files", fake_ws)
+    monkeypatch.setattr(admin_app, "_resolve_snapshot_files", fake_snaps)
+    slugs = await admin_app._candidate_slugs(_ws_session(), cookie_value="")
+    assert "frozen" in slugs
+
+
 # ---------------------------------------------------------------------------
 # /workspace/create
 # ---------------------------------------------------------------------------
@@ -1077,13 +1169,11 @@ def test_settings_rejects_reserved_slug(secret_env, client):
     assert resp.status_code == 400
 
 
-def test_settings_writes_header_and_returns_normalized(
-    secret_env, client, monkeypatch
-):
+def test_settings_writes_header_and_returns_normalized(secret_env, client, monkeypatch):
     """Settings rewrites the notebook's header and echoes normalized values."""
     src = (
         '# /// script\n# dependencies = ["marimo"]\n'
-        "#\n# [tool.stargazer]\n# cpu = 1\n# memory = \"2Gi\"\n# ///\nimport marimo\n"
+        '#\n# [tool.stargazer]\n# cpu = 1\n# memory = "2Gi"\n# ///\nimport marimo\n'
     )
     written: dict = {}
 
@@ -1251,3 +1341,196 @@ def test_delete_idempotent_when_missing(secret_env, client, monkeypatch):
     )
     assert resp.status_code == 200
     assert resp.json()["slug"] == "ghost"
+
+
+# ---------------------------------------------------------------------------
+# /workspace/snapshot — move a workspace notebook into the snapshots dir
+# ---------------------------------------------------------------------------
+
+
+def test_snapshot_requires_session(secret_env, client):
+    """Unauthenticated snapshot is rejected with 401."""
+    resp = client.post("/workspace/snapshot", data={"slug": "foo"})
+    assert resp.status_code == 401
+
+
+def test_snapshot_requires_optin(secret_env, client):
+    """Snapshot without workspace saving enabled is rejected with 403."""
+    _auth(client)  # logged in, not opted in
+    resp = client.post("/workspace/snapshot", data={"slug": "foo"})
+    assert resp.status_code == 403
+
+
+def test_snapshot_rejects_seed_slug(secret_env, client):
+    """Snapshotting a shipped seed (blank/template) is rejected with 400."""
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
+    resp = client.post("/workspace/snapshot", data={"slug": "template"})
+    assert resp.status_code == 400
+
+
+def test_snapshot_missing_notebook_is_404(secret_env, client, monkeypatch):
+    """Snapshotting a notebook absent from the fork's main returns 404."""
+
+    async def fake_fetch(_owner, _token, _filename):
+        return None
+
+    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
+    _stub_fork_token(monkeypatch)
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
+    resp = client.post(
+        "/workspace/snapshot",
+        data={"slug": "ghost"},
+        headers={"Accept": "application/json"},
+    )
+    assert resp.status_code == 404
+
+
+def test_snapshot_moves_notebook_into_snapshots_dir(secret_env, client, monkeypatch):
+    """Snapshot MOVES the notebook from workspace/ into snapshots/, frozen.
+
+    It writes the source verbatim under the same `<slug>.py` name in the
+    snapshots dir, then deletes the workspace original so the notebook leaves
+    the editable surface entirely — a snapshot is no longer a workspace tile.
+    Both writes use the fork-scoped installation token, never the OAuth token.
+    """
+    src = (
+        '# /// script\n# dependencies = ["marimo"]\n'
+        '#\n# [tool.stargazer]\n# cpu = 2\n# memory = "4Gi"\n# ///\nimport marimo\n'
+    )
+    written: dict = {}
+    deleted: dict = {}
+
+    async def fake_fetch(_owner, _token, filename):
+        return src if filename == "my-analysis.py" else None
+
+    async def fake_snapshot(repo, token, filename, content, message=None):
+        written.update(repo=repo, token=token, filename=filename, content=content)
+        return {}
+
+    async def fake_delete(repo, token, filename, message=None):
+        deleted.update(repo=repo, token=token, filename=filename)
+        return True
+
+    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
+    monkeypatch.setattr(
+        "app.admin_app.create_snapshot_notebook", fake_snapshot, raising=False
+    )
+    monkeypatch.setattr(
+        "app.admin_app.delete_workspace_notebook", fake_delete, raising=False
+    )
+    token = _stub_fork_token(monkeypatch)
+    _stub_app_get(monkeypatch, {})  # no running pod to tear down
+
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
+    resp = client.post(
+        "/workspace/snapshot",
+        data={"slug": "my-analysis"},
+        headers={"Accept": "application/json"},
+    )
+    assert resp.status_code == 200
+
+    # Frozen verbatim under the same name, in the snapshots dir.
+    assert written["filename"] == "my-analysis.py"
+    assert written["content"] == src
+    assert written["token"] == token
+    # The workspace original is removed — it's a move, not a copy.
+    assert deleted["filename"] == "my-analysis.py"
+    assert deleted["token"] == token
+    # The response reports the snapshotted slug.
+    assert resp.json()["slug"] == "my-analysis"
+
+
+def test_snapshot_returns_rendered_snapshot_tile(secret_env, client, monkeypatch):
+    """Snapshot returns a ready-to-insert, read-only snapshots tile.
+
+    The browser drops `tile_html` straight into the Snapshots grid. A frozen
+    tile is display-only: it shows the file but carries no launch form (a
+    snapshot can't be edited or run from the dashboard).
+    """
+    src = '# /// script\n# dependencies = ["marimo"]\n# ///\nimport marimo\n'
+
+    async def fake_fetch(_owner, _token, filename):
+        return src if filename == "my-analysis.py" else None
+
+    async def fake_snapshot(*_a, **_k):
+        return {}
+
+    async def fake_delete(*_a, **_k):
+        return True
+
+    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
+    monkeypatch.setattr(
+        "app.admin_app.create_snapshot_notebook", fake_snapshot, raising=False
+    )
+    monkeypatch.setattr(
+        "app.admin_app.delete_workspace_notebook", fake_delete, raising=False
+    )
+    _stub_fork_token(monkeypatch)
+    _stub_app_get(monkeypatch, {})
+
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
+    resp = client.post(
+        "/workspace/snapshot",
+        data={"slug": "my-analysis"},
+        headers={"Accept": "application/json"},
+    )
+    assert resp.status_code == 200
+    html = resp.json()["tile_html"]
+    assert "my-analysis.py" in html
+    # Frozen: a read-only Run launch only — no Edit.
+    assert 'name="mode" value="run"' in html
+    assert 'name="mode" value="edit"' not in html
+    assert 'name="section" value="snapshots"' in html
+
+
+def test_snapshot_tears_down_pod_deployment(secret_env, client, monkeypatch):
+    """Snapshot deactivates AND deletes any running pod for the moved notebook.
+
+    Once moved, there's no workspace tile left to Stop the pod, so — exactly
+    like delete — snapshot tears down both modes to avoid orphaning a pod.
+    """
+    src = '# /// script\n# dependencies = ["marimo"]\n# ///\nimport marimo\n'
+    deactivated: list = []
+    deleted_apps: list = []
+
+    async def fake_fetch(_owner, _token, filename):
+        return src if filename == "my-analysis.py" else None
+
+    async def fake_snapshot(repo, token, filename, content, message=None):
+        return {}
+
+    async def fake_delete(repo, token, filename, message=None):
+        return True
+
+    class _RunningApp:
+        def __init__(self, name):
+            self.name = name
+            self.deactivate = SimpleNamespace(aio=self._deactivate)
+
+        async def _deactivate(self):
+            deactivated.append(self.name)
+
+    table = {
+        "nb-my-analysis-edit": _RunningApp("nb-my-analysis-edit"),
+        "nb-my-analysis-run": _RunningApp("nb-my-analysis-run"),
+    }
+
+    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
+    monkeypatch.setattr(
+        "app.admin_app.create_snapshot_notebook", fake_snapshot, raising=False
+    )
+    monkeypatch.setattr(
+        "app.admin_app.delete_workspace_notebook", fake_delete, raising=False
+    )
+    _stub_fork_token(monkeypatch)
+    _stub_app_get(monkeypatch, table, deleted=deleted_apps)
+
+    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
+    resp = client.post(
+        "/workspace/snapshot",
+        data={"slug": "my-analysis"},
+        headers={"Accept": "application/json"},
+    )
+    assert resp.status_code == 200
+    assert sorted(deactivated) == ["nb-my-analysis-edit", "nb-my-analysis-run"]
+    assert sorted(deleted_apps) == ["nb-my-analysis-edit", "nb-my-analysis-run"]

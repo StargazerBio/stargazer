@@ -24,8 +24,9 @@ Context shape consumed by `dashboard.html`:
 - `github_username` (str) — for the avatar URL and "Signed in as".
 - `workflows`, `snapshots`, `workspace`, `tutorials` (list of tile
   dicts) — each dict has `slug`, `title`, `description`, `section`. The
-  dashboard loops and includes `_tile.html` for each. `snapshots` is
-  always empty for now (freezing not yet implemented).
+  dashboard loops and includes `_tile.html` for each. `snapshots` tiles
+  are frozen: a Run-only launch (no Edit/gear/trash); a Workspace tile's
+  📸 button freezes it into this section.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """

@@ -4,9 +4,10 @@
 Helpers for the per-user fork that backs the Workspace section: forking the
 upstream `stargazer` repo into the authenticated user's account, and listing,
 reading, creating, and deleting notebook files under `notebooks/workspace/`
-on the fork's `main`. Fork and delete are idempotent. Every write is guarded
-against ever targeting the upstream source (`is_genuine_fork`, plus an
-upstream-name check before create/delete).
+on the fork's `main`. Snapshotting *moves* a notebook into `notebooks/snapshots/`
+(`create_snapshot_notebook` + `delete_workspace_notebook`). Fork and delete are
+idempotent. Every write is guarded against ever targeting the upstream source
+(`is_genuine_fork`, plus an upstream-name check before create/delete).
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -19,6 +20,7 @@ import aiohttp
 
 GITHUB_API_BASE = "https://api.github.com"
 WORKSPACE_CONTENTS_PATH = "src/stargazer/notebooks/workspace"
+SNAPSHOTS_CONTENTS_PATH = "src/stargazer/notebooks/snapshots"
 
 # User notebooks live and persist on the fork's default branch. Edits are
 # confined to WORKSPACE_CONTENTS_PATH (the proxy only `git add`s that dir),
@@ -169,21 +171,43 @@ async def list_workspace(fork_full_name: str, access_token: str) -> list[str]:
     )
 
 
-async def get_workspace_notebook(
-    fork_full_name: str, access_token: str, filename: str
-) -> str | None:
-    """Fetch a workspace notebook's source from the fork's `WORKSPACE_BRANCH`.
+async def list_snapshots(fork_full_name: str, access_token: str) -> list[str]:
+    """List `.py` files under `notebooks/snapshots/` in the user's fork.
 
-    `fork_full_name` is the verified `owner/repo` of the fork. Returns the
-    decoded UTF-8 source, or None if the file is absent. Used by `/launch` to
-    read a notebook's `[tool.stargazer]` resource block before serving the
-    pod, and by `/workspace/create` for collision + seed lookups. Non-404
-    transport errors propagate so callers can fall back to defaults.
+    Snapshots are frozen records that live only on the fork's `main` — no
+    per-notebook pod ever serves them — so unlike `list_workspace` there's no
+    live-pod path; the dashboard reads them straight from GitHub. Returns an
+    empty list if the directory doesn't exist yet. Mirrors `list_workspace`'s
+    filtering (`.py`, non-`_`-prefixed) so the `.gitkeep` placeholder is skipped.
     """
-    url = (
-        f"{GITHUB_API_BASE}/repos/{fork_full_name}/contents/"
-        f"{WORKSPACE_CONTENTS_PATH}/{filename}"
+    url = f"{GITHUB_API_BASE}/repos/{fork_full_name}/contents/{SNAPSHOTS_CONTENTS_PATH}"
+    async with aiohttp.ClientSession() as session:
+        resp = await session.get(
+            url,
+            headers=_auth_headers(access_token),
+            params={"ref": WORKSPACE_BRANCH},
+        )
+        if resp.status == 404:
+            return []
+        resp.raise_for_status()
+        data = await resp.json()
+    return sorted(
+        item["name"]
+        for item in data
+        if item.get("type") == "file"
+        and item.get("name", "").endswith(".py")
+        and not item["name"].startswith("_")
     )
+
+
+async def _get_file(fork_full_name: str, access_token: str, path: str) -> str | None:
+    """Fetch a file's decoded UTF-8 source from the fork's `WORKSPACE_BRANCH`.
+
+    Shared by `get_workspace_notebook` and `get_snapshot_notebook`. Returns
+    None if the file is absent (404); other transport errors propagate so
+    callers can fall back to defaults.
+    """
+    url = f"{GITHUB_API_BASE}/repos/{fork_full_name}/contents/{path}"
     async with aiohttp.ClientSession() as session:
         resp = await session.get(
             url, headers=_auth_headers(access_token), params={"ref": WORKSPACE_BRANCH}
@@ -193,6 +217,35 @@ async def get_workspace_notebook(
         resp.raise_for_status()
         data = await resp.json()
         return base64.b64decode(data["content"]).decode("utf-8")
+
+
+async def get_workspace_notebook(
+    fork_full_name: str, access_token: str, filename: str
+) -> str | None:
+    """Fetch a workspace notebook's source from the fork's `WORKSPACE_BRANCH`.
+
+    `fork_full_name` is the verified `owner/repo` of the fork. Returns the
+    decoded UTF-8 source, or None if the file is absent. Used by `/launch` to
+    read a notebook's `[tool.stargazer]` resource block before serving the
+    pod, and by `/workspace/create` for collision + seed lookups.
+    """
+    return await _get_file(
+        fork_full_name, access_token, f"{WORKSPACE_CONTENTS_PATH}/{filename}"
+    )
+
+
+async def get_snapshot_notebook(
+    fork_full_name: str, access_token: str, filename: str
+) -> str | None:
+    """Fetch a frozen snapshot's source from the fork's `WORKSPACE_BRANCH`.
+
+    Companion to `get_workspace_notebook` for `notebooks/snapshots/`. Used by
+    `/launch` to read a snapshot's `[tool.stargazer]` resources before serving
+    its read-only run pod. Returns the decoded source, or None if absent.
+    """
+    return await _get_file(
+        fork_full_name, access_token, f"{SNAPSHOTS_CONTENTS_PATH}/{filename}"
+    )
 
 
 def _auth_headers(access_token: str) -> dict:
@@ -224,30 +277,30 @@ async def _ensure_ok(resp: aiohttp.ClientResponse, action: str) -> None:
     )
 
 
-async def create_workspace_notebook(
+async def _create_file(
     fork_full_name: str,
     access_token: str,
-    filename: str,
+    path: str,
     content: str,
-    message: str | None = None,
+    message: str,
+    action: str,
 ) -> dict:
-    """Create a new notebook file on the fork's `WORKSPACE_BRANCH`.
+    """Create a new file at `path` on the fork's `WORKSPACE_BRANCH`.
 
-    `fork_full_name` is the verified `owner/repo` of the fork. As a final
-    safety net, refuses to write if it resolves to the upstream source — a
-    mis-set fork must never clobber the shared repo. Writes to the literal
-    `/repos/{full_name}` path WITHOUT following redirects, so a transfer
-    redirect surfaces as an error rather than silently retargeting upstream.
-    Assumes the caller has checked the file does not exist (no `sha` is sent,
-    so GitHub rejects an overwrite). Returns the Contents API payload.
+    Shared by `create_workspace_notebook` and `create_snapshot_notebook`. As a
+    final safety net, refuses to write if `fork_full_name` resolves to the
+    upstream source — a mis-set fork must never clobber the shared repo. Writes
+    to the literal `/repos/{full_name}` path WITHOUT following redirects, so a
+    transfer redirect surfaces as an error rather than silently retargeting
+    upstream. Assumes the caller has checked the file does not exist (no `sha`
+    is sent, so GitHub rejects an overwrite). Returns the Contents API payload.
     """
     if fork_full_name.lower() == upstream_full_name().lower():
         raise RuntimeError(
             f"refusing to write to the upstream source repo {fork_full_name!r}"
         )
-    path = f"{WORKSPACE_CONTENTS_PATH}/{filename}"
     payload = {
-        "message": message or f"workspace: create {filename}",
+        "message": message,
         "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
         "branch": WORKSPACE_BRANCH,
     }
@@ -261,11 +314,59 @@ async def create_workspace_notebook(
         )
         if 300 <= resp.status < 400:
             raise RuntimeError(
-                f"write notebook: {fork_full_name!r} redirected "
+                f"{action}: {fork_full_name!r} redirected "
                 f"(HTTP {resp.status}) — not a writable fork path"
             )
-        await _ensure_ok(resp, "write notebook")
+        await _ensure_ok(resp, action)
         return await resp.json()
+
+
+async def create_workspace_notebook(
+    fork_full_name: str,
+    access_token: str,
+    filename: str,
+    content: str,
+    message: str | None = None,
+) -> dict:
+    """Create a new notebook file under `notebooks/workspace/` on the fork.
+
+    Thin wrapper over `_create_file` targeting `WORKSPACE_CONTENTS_PATH`; see
+    that helper for the upstream-source and redirect guards. Returns the
+    Contents API payload.
+    """
+    return await _create_file(
+        fork_full_name,
+        access_token,
+        f"{WORKSPACE_CONTENTS_PATH}/{filename}",
+        content,
+        message or f"workspace: create {filename}",
+        "write notebook",
+    )
+
+
+async def create_snapshot_notebook(
+    fork_full_name: str,
+    access_token: str,
+    filename: str,
+    content: str,
+    message: str | None = None,
+) -> dict:
+    """Create a frozen notebook under `notebooks/snapshots/` on the fork.
+
+    The write half of a snapshot *move*: the admin reads a workspace notebook's
+    source and re-creates it verbatim here, then deletes the workspace original
+    (`delete_workspace_notebook`). Thin wrapper over `_create_file` targeting
+    `SNAPSHOTS_CONTENTS_PATH` — same upstream-source and redirect guards.
+    Returns the Contents API payload.
+    """
+    return await _create_file(
+        fork_full_name,
+        access_token,
+        f"{SNAPSHOTS_CONTENTS_PATH}/{filename}",
+        content,
+        message or f"snapshot: freeze {filename}",
+        "write snapshot",
+    )
 
 
 async def update_workspace_notebook(

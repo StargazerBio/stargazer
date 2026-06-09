@@ -37,19 +37,26 @@
         <h2>
             Snapshots
             <span class="section-tag"
-                >Frozen notebooks — inputs, outputs, and image pinned.</span
+                >Frozen notebooks — a saved analysis, pinned for
+                reproduction.</span
             >
         </h2>
-        {% if snapshots %}
-        <div class="grid">
+        <p
+            class="section-desc"
+            id="snapshots-empty"
+            {%
+            if
+            snapshots
+            %}hidden{%
+            endif
+            %}
+        >
+            No snapshots yet — freeze a workspace notebook (📸) to pin it here
+            as a read-only, reproducible record.
+        </p>
+        <div class="grid" id="snapshots-grid">
             {% for tile in snapshots %}{% include "_tile.html" %}{% endfor %}
         </div>
-        {% else %}
-        <p class="section-desc">
-            No snapshots yet — freeze a notebook to pin its inputs, outputs, and
-            image here for exact reproduction.
-        </p>
-        {% endif %}
     </section>
 
     <section>
@@ -170,45 +177,34 @@
      .dashboard its only ancestors are body/html, so it centers on the screen. -->
 <dialog id="settings-modal" class="settings-modal">
     <form id="settings-form" class="settings-form">
-            <h3>Notebook settings</h3>
-            <p class="settings-target"><code></code></p>
+        <h3>Notebook settings</h3>
+        <p class="settings-target"><code></code></p>
+        <label class="settings-label">
+            Description
+            <input
+                type="text"
+                name="description"
+                maxlength="120"
+                placeholder="What this notebook does"
+            />
+        </label>
+        <div class="settings-res-row">
             <label class="settings-label">
-                Description
-                <input
-                    type="text"
-                    name="description"
-                    maxlength="120"
-                    placeholder="What this notebook does"
-                />
+                CPU
+                <input type="number" name="cpu" min="1" step="1" required />
             </label>
-            <div class="settings-res-row">
-                <label class="settings-label">
-                    CPU
-                    <input
-                        type="number"
-                        name="cpu"
-                        min="1"
-                        step="1"
-                        required
-                    />
-                </label>
-                <label class="settings-label">
-                    Memory (GiB)
-                    <input
-                        type="number"
-                        name="memory"
-                        min="1"
-                        step="1"
-                        required
-                    />
-                </label>
-            </div>
-            <p class="settings-note">
-                Resource changes take effect the next time you launch this
-                notebook.
-            </p>
+            <label class="settings-label">
+                Memory (GiB)
+                <input type="number" name="memory" min="1" step="1" required />
+            </label>
+        </div>
+        <p class="settings-note">
+            Resource changes take effect the next time you launch this notebook.
+        </p>
         <div class="settings-actions">
-            <button type="button" class="btn btn-muted" data-close>Cancel</button>
+            <button type="button" class="btn btn-muted" data-close>
+                Cancel
+            </button>
             <button type="submit" class="btn btn-notebook">Save</button>
         </div>
     </form>
@@ -274,7 +270,7 @@
         open.href = url;
         open.className = "btn btn-ready launched-extra";
         open.textContent =
-            mode === "run" ? "Open in Run Mode" : "Open in Edit Mode";
+            mode === "run" ? "Open: Run Mode" : "Open: Edit Mode";
         open.target = "_blank";
         open.rel = "noopener";
 
@@ -473,6 +469,52 @@
         if (!btn) return;
         e.preventDefault();
         deleteNotebook(btn);
+    });
+
+    // Snapshot (freeze) a workspace notebook: a MOVE out of the workspace into
+    // the Snapshots section. Confirm, POST, then drop the workspace tile and
+    // drop the returned frozen tile into the Snapshots grid. Delegated so
+    // freshly created tiles get it too.
+    async function snapshotNotebook(btn) {
+        const slug = btn.dataset.snapshotSlug;
+        if (
+            !confirm(
+                `Snapshot "${slug}"? This removes edit functionality and moves it out of ` +
+                    `your workspace into Snapshots.`,
+            )
+        )
+            return;
+        const restore = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-inline"></span>';
+        try {
+            const resp = await fetch("/workspace/snapshot", {
+                method: "POST",
+                body: new URLSearchParams({ slug }),
+                headers: { Accept: "application/json" },
+            });
+            const payload = await resp.json().catch(() => ({}));
+            if (!resp.ok)
+                throw new Error(payload.error || "HTTP " + resp.status);
+            btn.closest(".tile").remove();
+            const grid = document.getElementById("snapshots-grid");
+            if (grid && payload.tile_html) {
+                grid.insertAdjacentHTML("beforeend", payload.tile_html);
+                const empty = document.getElementById("snapshots-empty");
+                if (empty) empty.hidden = true;
+            }
+        } catch (err) {
+            btn.disabled = false;
+            btn.innerHTML = restore;
+            alert("Snapshot failed: " + err.message);
+        }
+    }
+
+    document.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-snapshot-slug]");
+        if (!btn) return;
+        e.preventDefault();
+        snapshotNotebook(btn);
     });
 
     // Edit a workspace notebook's resources + description via the gear → modal.
