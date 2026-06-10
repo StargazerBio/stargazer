@@ -99,6 +99,7 @@ The `spec:` line is **module-level only** — class and function docstrings do n
   - **Critical**: Docs must be updated as the project evolves to stay in sync with the current state
   - No code in architecture docs - these are high-level references supported by docstrings in the actual functions
   - Guides are the only docs that contain code examples
+  - **Every doc must be reachable from the `nav` in `zensical.toml`.** The nav is hand-maintained, so a new `docs/**/*.md` is invisible (built but unlinked) until you add it. Whenever you add, rename, move, or delete a doc, update `nav` to match, then verify nothing is orphaned: every file under `find docs -name '*.md'` must appear in `zensical.toml`'s `nav` (mkdocstrings-target files like `reference/api.md` included). A new architecture/notebook subpackage also needs an `__init__.py` with the `###` heading + `spec:` line, or the docs build fails to collect it.
 - **`.opencode/plans/`** - Step by step instructions for building new features and fixing bugs
   - Only place outside src where code snippets are allowed
   - Keep track of progress and check off completed work as you go

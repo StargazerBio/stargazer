@@ -10,5 +10,5 @@ per-notebook AppEnvironment whose image is built programmatically by
 Navigation between notebooks lives on the dashboard; notebooks themselves
 carry no nav chrome. The dashboard tile registry is `app/notebooks.py`.
 
-spec: [docs/architecture/notebook.md](../../architecture/notebook.md)
+spec: [docs/architecture/notebook.md](../architecture/notebook.md)
 """

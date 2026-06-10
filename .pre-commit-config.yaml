@@ -12,6 +12,12 @@ repos:
         args: [--verbose, "0", --fail-under=100, src/]
   - repo: local
     hooks:
+      - id: gen-catalog
+        name: regenerate docs catalog + API reference
+        entry: uv run python docs/gen_catalog.py
+        language: system
+        pass_filenames: false
+        files: ^(src/stargazer/(tasks|workflows|assets|bundles)/.*\.py|docs/gen_catalog\.py)$
       - id: zensical-build
         name: zensical build (docs compile check)
         entry: uv run zensical build --clean
