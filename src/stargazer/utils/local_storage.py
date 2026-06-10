@@ -102,6 +102,16 @@ class LocalStorageClient:
         """
         if self.remote:
             await self.remote.upload(component)
+            # Bytes went to Pinata but never touched local_dir. Stage them into
+            # the download cache (local_dir/<name>, the key download() resolves)
+            # so a later fetch on the same filesystem — warm-pod reuse, or local
+            # in-process execution — hits disk instead of round-tripping Pinata.
+            if component.path is not None:
+                self._materialize(
+                    component.path,
+                    self.local_dir / component.path.name,
+                    overwrite=False,
+                )
             return
 
         path = component.path
@@ -123,9 +133,7 @@ class LocalStorageClient:
             rel_path = Path(path.name)
 
         local_path = self.local_dir / rel_path
-        local_path.parent.mkdir(parents=True, exist_ok=True)
-        if path.resolve() != local_path.resolve():
-            shutil.copy2(path, local_path)
+        self._materialize(path, local_path, overwrite=True)
 
         # Upsert metadata in TinyDB (avoid duplicates on re-upload)
         now = datetime.now(timezone.utc)
@@ -261,6 +269,34 @@ class LocalStorageClient:
             if local_path.exists():
                 local_path.unlink()
             self.db.remove(File.cid == component.cid)
+
+    def _materialize(self, src: Path, dest: Path, *, overwrite: bool) -> None:
+        """Place ``src`` at ``dest`` under local_dir, hardlinking when possible.
+
+        The single "get bytes into local_dir" primitive, shared by both upload
+        paths: the authoritative local store (no remote) and the download-cache
+        staging of remote uploads. A hardlink is free on the same filesystem (a
+        new directory entry sharing the inode) and keeps the bytes alive even
+        if ``src``'s directory is later cleaned; ``copy2`` is only the
+        cross-device fallback (``os.link`` raises ``OSError``/EXDEV).
+
+        ``overwrite=False`` (the download cache) leaves an existing same-named
+        file untouched — caching is keyed by name and idempotent.
+        ``overwrite=True`` (the local store) refreshes it, since a re-upload of
+        different bytes can reuse a name/rel_path. A no-op when src and dest are
+        the same file (already in place).
+        """
+        if src.resolve() == dest.resolve():
+            return
+        if dest.exists():
+            if not overwrite:
+                return
+            dest.unlink()
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(src, dest)
+        except OSError:
+            shutil.copy2(src, dest)
 
     def _resolve_dest(
         self, component: Asset, source: Path, dest: Optional[Path]

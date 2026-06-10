@@ -19,7 +19,6 @@
 | `haplotype_caller` | Call germline variants in GVCF mode using GATK HaplotypeCaller. | `alignment` (Alignment), `ref` (Reference) |
 | `joint_call_gvcfs` | Consolidate GVCFs into GenomicsDB and joint-genotype in a single task. | `gvcfs` (list[Variants]), `ref` (Reference), `intervals` (list[str]), `cohort_id` (str) |
 | `combine_gvcfs` | Combine multiple per-sample GVCFs into a single multi-sample GVCF. | `gvcfs` (list[Variants]), `ref` (Reference), `cohort_id` (str) |
-| `genomics_db_import` | Import GVCFs to GenomicsDB workspace for scalable joint genotyping. | `gvcfs` (list[Variants]), `workspace_path` (Path), `intervals` (list[str] | NoneType) |
 | `variant_recalibrator` | Build a VQSR recalibration model using GATK VariantRecalibrator. | `vcf` (Variants), `ref` (Reference), `resources` (list[KnownSites]), `mode` (str) |
 | `apply_vqsr` | Apply VQSR recalibration to a VCF using GATK ApplyVQSR. | `vcf` (Variants), `ref` (Reference), `vqsr_model` (VQSRModel), `truth_sensitivity_filter_level` (float | NoneType) |
 

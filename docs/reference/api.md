@@ -42,7 +42,6 @@
 ::: stargazer.tasks.gatk.base_recalibrator
 ::: stargazer.tasks.gatk.combine_gvcfs
 ::: stargazer.tasks.gatk.create_sequence_dictionary
-::: stargazer.tasks.gatk.genomics_db_import
 ::: stargazer.tasks.gatk.haplotype_caller
 ::: stargazer.tasks.gatk.index_feature_file
 ::: stargazer.tasks.gatk.joint_call_gvcfs

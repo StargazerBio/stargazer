@@ -22,7 +22,6 @@ def test_discovery_finds_all_tasks():
         "apply_bqsr",
         "haplotype_caller",
         "combine_gvcfs",
-        "genomics_db_import",
         "joint_call_gvcfs",
         "variant_recalibrator",
         "apply_vqsr",
