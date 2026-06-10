@@ -43,9 +43,11 @@ See [MCP Server](mcp-server.md) for the full server specification.
 
 ## Interface
 
-Stargazer is accessed through two end-user Docker images:
+The marimo notebook is the primary user surface. The hosted app serves a per-user dashboard of four notebook types — Tutorials, Workflows, Workspace, Snapshots — and notebooks are also where new tasks are prototyped before being promoted into the SDK. See [Notebooks](notebook.md) for the taxonomy, user archetypes, and promotion paths, and [App](app.md) for the hosting machinery.
 
-- **`stargazer-note`** — Marimo notebook in edit mode, for running pipelines and exploring data. See [Notebook App](notebook.md).
+For local use, Stargazer ships two end-user Docker images:
+
+- **`stargazer-note`** — Marimo notebook in edit mode, for running pipelines and exploring data locally (the hosted app uses a separate, richer image — see [App → Images](app.md#images)).
 - **`stargazer-chat`** — pre-wired Claude Code + OpenCode harness driving the Stargazer MCP server. End-user image, not a contributor dev shell.
 
 Both include the MCP server over stdio. Any MCP client connects to `stargazer serve`. Tasks and workflows can also be managed directly via the [Flyte CLI](cli.md#flyte-cli). Source contributors install natively — see [Contributing](../guides/contributing.md).

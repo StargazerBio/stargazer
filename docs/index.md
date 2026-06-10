@@ -11,7 +11,7 @@ Stargazer is a bioinformatics pipeline framework built on [Flyte v2](https://fly
 
 ## Interface
 
-Stargazer ships two end-user Docker images:
+The marimo notebook is the primary user surface — the hosted app serves per-user notebooks for learning, running pipelines, authoring, and publishing frozen analyses (see [Notebooks](architecture/notebook.md)). For local use, Stargazer ships two end-user Docker images:
 
 - **`stargazer-note`** — a Marimo notebook for running pipelines and exploring data
 - **`stargazer-chat`** — a pre-wired agentic interface (Claude Code + OpenCode) to the Stargazer MCP server

@@ -35,16 +35,7 @@ There is no separate "storage primitive" layer. `Asset` is both the typed schema
 
 ### Subclass Declaration
 
-Subclasses declare `_asset_key` and standard typed dataclass annotations:
-
-```python
-@dataclass
-class Alignment(Asset):
-    _asset_key: ClassVar[str] = "alignment"
-    sample_id: str = ""
-    duplicates_marked: bool = False
-    bqsr_applied: bool = False
-```
+Subclasses declare `_asset_key` — a unique string identifying the asset kind — plus ordinary typed dataclass fields with defaults (e.g. `Alignment` declares `sample_id`, `duplicates_marked`, `bqsr_applied`). See [Writing a Task](../guides/writing-a-task.md) for a worked declaration.
 
 `__init_subclass__` automatically derives `_field_types` (non-`str` fields) and `_field_defaults` (all defaults) from the annotations — these are never declared manually. Subclasses also auto-register in `Asset._registry`, which maps `_asset_key` strings to their class.
 
@@ -85,12 +76,7 @@ Example: `Reference(cid="Qmref").fetch()` also finds and downloads any `Referenc
 
 The `asset` filter key accepts a string or list of strings. List-valued filters produce cartesian product queries via `utils/query.py`.
 
-Workflows filter results with `isinstance`:
-
-```python
-assets = await assemble(build="GRCh38", asset="reference")
-ref = next(a for a in assets if isinstance(a, Reference))
-```
+Workflows filter the returned list with `isinstance` to pick out the types they need — see [Writing a Workflow](../guides/writing-a-workflow.md).
 
 ## Specialization
 

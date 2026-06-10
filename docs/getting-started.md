@@ -13,7 +13,7 @@ If you want to add tasks or workflows to Stargazer itself, see [Contributing](gu
 docker run -p 8080:8080 ghcr.io/stargazerbio/stargazer-note
 ```
 
-Opens a [Marimo](https://marimo.io/) notebook at `http://localhost:8080` in edit mode. From there you can import stargazer tasks, run workflows, and visualize results interactively. This is the same image used in production.
+Opens a [Marimo](https://marimo.io/) notebook at `http://localhost:8080` in edit mode. From there you can import stargazer tasks, run workflows, and visualize results interactively. (The hosted notebook dashboard uses a separate, richer image — see [Notebooks](architecture/notebook.md) for the notebook types and [App](architecture/app.md) for hosting.)
 
 ## Chat — Agentic Interface
 

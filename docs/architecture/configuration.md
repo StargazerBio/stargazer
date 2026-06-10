@@ -87,53 +87,20 @@ Stargazer ships four container images on `ghcr.io/stargazerbio`. They split alon
 |-------|--------|------|---------------|
 | `stargazer-scrna` | `config.py` (`scrna_env`) | `flyte.TaskEnvironment` | scRNA-seq tasks (`tasks/scrna/`) |
 | `stargazer-gatk` | `config.py` (`gatk_env`) | `flyte.TaskEnvironment` | GATK + alignment tasks (`tasks/gatk/`, `tasks/general/`) |
-| `stargazer-note` | `Dockerfile` (`--target note`) | Marimo notebook | Local `docker run`; hosted via `app.notebook_app.notebook_env` |
+| `stargazer-note` | `Dockerfile` (`--target note`) | Marimo notebook | Local `docker run` exploration only |
 | `stargazer-chat` | `Dockerfile` (`--target chat`) | Claude Code + OpenCode + MCP | Local `docker run` only |
 
 Why the split: task images need nothing but Flyte's contract (an entrypoint Flyte injects, a content-hash tag Flyte pins by) — perfectly served by the SDK. Human-runnable images need a real `ENTRYPOINT`, baked-in source, and a stable `:latest` tag — none of which the Flyte Image SDK exposes. Rather than reinvent the Dockerfile via post-build wrapping, we just use a Dockerfile.
 
-`notebook_env` (defined in `app/notebook_app.py`, see [App architecture](app.md)) is the bridge for hosted deploys: it's an `AppEnvironment` whose `image` is the string URI `stargazer-note:latest`, deployed once per user project by the admin app. The marimo argv is repeated in `notebook_env.args` because Flyte's `fserve` bootstrap overrides the image's `ENTRYPOINT` for hosted deploys.
+Hosted notebook pods use a separate image, **`notebook-app`**, defined programmatically in `app/per_notebook.py` and built/published by the admin deploy entrypoint — it is not `stargazer-note`. See [App → Images](app.md#images).
 
 ### Building locally
 
-Contributor builds stay on the host. Nothing is pushed to a registry — no `docker login` needed, no write access to `ghcr.io/stargazerbio` required. CI is responsible for publishing to `ghcr.io/stargazerbio` on merge to main.
-
-**Flyte task images** (no `registry=` is set on the Flyte Images, so the docker builder falls through to `--load` instead of `--push` — see `docker_builder.py:617-620`):
-
-```bash
-stargazer-build-images       # builds scrna and gatk into the local docker cache
-```
-
-Or per-env via the underlying CLI:
-
-```bash
-flyte build src/stargazer/config.py scrna_env
-flyte build src/stargazer/config.py gatk_env
-```
-
-The builder is selected in `.flyte/config.yaml` — `local` requires a working Docker daemon, `remote` (Union only) builds on the cluster.
-
-**Human-runnable images:**
-
-```bash
-docker build --target note -t ghcr.io/stargazerbio/stargazer-note:latest .
-docker build --target chat -t ghcr.io/stargazerbio/stargazer-chat:latest .
-```
-
-Tag both with the published `ghcr.io/stargazerbio/...` URL even when local-only — `notebook_env.image` references that URL string, so docker resolves it from the local cache by that name when the cluster pulls it. For devbox the same image is pushed to `localhost:30000` (the in-cluster registry); `app.admin_app:main` handles the build-and-push step as part of `python -m app.admin_app`. Both `note` and `chat` targets share a `base` stage with bioconda CLIs (bwa, bwa-mem2, samtools, gatk4), uv, and the synced project venv — so the second `docker build` is mostly cache hits.
+Contributor builds stay on the host. Nothing is pushed to a registry — no `docker login` needed, no write access to `ghcr.io/stargazerbio` required; CI publishes on merge to main. The Flyte task images build into the local docker cache (no `registry=` is set on the Flyte Images, so the docker builder falls through to `--load` instead of `--push`), with the builder selected in `.flyte/config.yaml` — `local` requires a working Docker daemon, `remote` (Union only) builds on the cluster. The human-runnable images build from the Dockerfile and are tagged with their published URLs even when local-only, so docker resolves them from the local cache by name. Commands in [Contributing → Building Images](../guides/contributing.md#building-images).
 
 ### Adding a tool
 
-When a new Flyte task wraps a new CLI tool, layer it onto the `TaskEnvironment` it is decorated against in `config.py`:
-
-```python
-gatk_env = flyte.TaskEnvironment(
-    ...
-    image=flyte.Image.from_base("broadinstitute/gatk").with_apt_packages("my-new-tool"),
-)
-```
-
-For tools that should be available in the human-runnable note/chat images, edit the bioconda block in the Dockerfile's `base` stage instead.
+When a new Flyte task wraps a new CLI tool, layer it onto the image of the `TaskEnvironment` it is decorated against in `config.py` — via `with_apt_packages`, `with_commands`, or the bioconda install block. For tools that should be available in the human-runnable note/chat images, edit the bioconda block in the Dockerfile's `base` stage instead. See [Writing a Task](../guides/writing-a-task.md).
 
 ## Resource Bundles
 
@@ -155,18 +122,7 @@ flowchart TD
 
 ### Bundle Format
 
-```yaml
-name: scrna_demo
-description: Sample scRNA-seq mouse brain data for demo workflows
-files:
-  - cid: QmABC...
-    keyvalues:
-      asset: anndata
-      bundle: scrna_demo
-      sample_id: s1d1
-      stage: raw
-      organism: mouse
-```
+A manifest carries a `name`, a `description`, and a `files` list; each file entry is a `cid` plus its `keyvalues` (asset type, sample metadata, and the `bundle` tag). See the manifests in `src/stargazer/bundles/` for live examples.
 
 After hydration, bundled assets are queryable via `assemble()` and `query_files` like any other asset.
 

@@ -11,7 +11,7 @@
 - The README is a document written exclusively BY HUMANS FOR HUMANS. Never modify the README. Notify if it is out of spec only.
 
 **Positioning**
-- The marimo notebook is Stargazer's primary user surface for both experimentation (`marimo edit`) and reproducible production (`marimo run`). `src/stargazer/tasks/` and `src/stargazer/workflows/` are the maintainer-facing primitive layer — end users rarely import from them directly. Default new feature designs to the notebook surface (marimo, `mo.ui`) over CLI or other entry points.
+- The marimo notebook is Stargazer's primary user surface for both experimentation (`marimo edit`) and reproducible production (`marimo run`) — it's the most approachable entry point, so default new feature designs to the notebook surface (marimo, `mo.ui`) over CLI or other entry points. The SDK (`src/stargazer/tasks/`, `src/stargazer/workflows/`) is a first-class user surface too: authoring workflows in an IDE by importing SDK tasks directly is a fully supported use case, not a maintainer-only path.
 - Two top-level packages: `src/stargazer/` is the bioinformatics SDK (tasks, workflows, assets, TaskEnvironment configs). `app/` at repo root is the deployment / web tier (FastAPI apps, `flyte.app.AppEnvironment` definitions, OAuth/session helpers, HTML templates, deploy entrypoints). When asked to add a deploy entrypoint, FastAPI route, AppEnvironment for a hosted service, OAuth integration, or any other non-SDK runtime code, it goes under `app/`.
 
 **Dev Process**
@@ -40,6 +40,7 @@ The `.opencode/agent/` directory contains specialized agent definitions for [Ope
 | **Test** | `test.md` | Writes unit and integration tests following TDD approach |
 | **Workflow** | `workflow.md` | Composes Flyte v2 tasks into end-to-end pipelines |
 | **Code Review** | `code-review.md` | Strict code reviewer that audits for edge cases, UX issues, and data provenance |
+| **Technical Writer** | `technical-writer.md` | Writes and edits user-facing docs — assumes competent readers, never gatekeeps surfaces by role |
 
 ### Agent File Format
 
@@ -69,6 +70,7 @@ The markdown body contains detailed instructions including:
 - **test agent**: When writing tests for tasks or workflows
 - **workflow agent**: When composing tasks into pipelines
 - **code-review agent**: Before merging code, to catch issues early
+- **technical-writer agent**: When writing or revising prose in `docs/` — tone, framing, and doc conventions
 
 ## Docstring Spec References
 
@@ -95,11 +97,13 @@ The `spec:` line is **module-level only** — class and function docstrings do n
 - **`.opencode/reference/sdk_examples_concise.md`** - Flyte SDK v2 examples
 - **`.opencode/reference/devbox_workarounds.md`** - Known devbox-specific quirks and workarounds (signed-URL host, App pod secrets webhook, in-cluster init, rustfs DNS, node memory budget, code-bundle non-Python assets). Check first when deploying/debugging against the local devbox cluster. Append any new devbox quirk you diagnose.
 - **`.opencode/reference/tool_refs/`** - Bioinformatics tool documentation, use as the source of truth for tool parameters and behavior
+- **`.opencode/reference/architecture/`** - Deep, agent-facing internals for Stargazer's *own* subsystems (vs. `tool_refs/` and the Flyte docs, which are external). Verbose by design — the cross-cutting, multi-module implementation detail that's too granular for the human-facing `docs/architecture/` doc but valuable context when working on that subsystem. Each file is the companion to a `docs/architecture/*.md` doc, which links to it. Keep them in sync when you change the subsystem. (e.g. `app_internals.md` ↔ `docs/architecture/app.md`.)
 - **`docs/`** - Project documentation (architecture, guides, reference)
   - **Critical**: Docs must be updated as the project evolves to stay in sync with the current state
   - No code in architecture docs - these are high-level references supported by docstrings in the actual functions
   - Guides are the only docs that contain code examples
   - **Every doc must be reachable from the `nav` in `zensical.toml`.** The nav is hand-maintained, so a new `docs/**/*.md` is invisible (built but unlinked) until you add it. Whenever you add, rename, move, or delete a doc, update `nav` to match, then verify nothing is orphaned: every file under `find docs -name '*.md'` must appear in `zensical.toml`'s `nav` (mkdocstrings-target files like `reference/api.md` included). A new architecture/notebook subpackage also needs an `__init__.py` with the `###` heading + `spec:` line, or the docs build fails to collect it.
+- **`.opencode/plans/ROADMAP.md`** - The single priority-ordered list of upcoming work (next feature at the top) and a Complete section. This is where known gaps, deferred work, and "open issues" belong — **not** scattered across `docs/`. When you defer something or surface a production gap while working, add it here rather than leaving an "Open Issues" section in an architecture doc. Individual `NN_*.md` plans link up from their roadmap entry; mark items ✅ and move them to Complete as they ship.
 - **`.opencode/plans/`** - Step by step instructions for building new features and fixing bugs
   - Only place outside src where code snippets are allowed
   - Keep track of progress and check off completed work as you go

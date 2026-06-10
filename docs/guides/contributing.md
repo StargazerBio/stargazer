@@ -1,6 +1,6 @@
 # Contributing
 
-Stargazer has multiple contributor shapes — researchers writing notebooks, agent users driving the MCP server, code authors adding tasks, image maintainers publishing releases. The end-user images (`note`, `chat`) are products, not dev environments. Source contributors work natively against the repo.
+Stargazer has multiple contributor shapes — researchers writing notebooks, agent users driving the MCP server, code authors adding tasks, image maintainers publishing releases. Notebook authoring, snapshot freezing, and the first step of task promotion all happen in the hosted notebook (see [Notebooks → User Archetypes](../architecture/notebook.md#user-archetypes)); this guide covers working on the source itself — the SDK, the app tier, and the images — natively against the repo.
 
 ## Setup
 
@@ -67,4 +67,4 @@ docker build --target note -t ghcr.io/stargazerbio/stargazer-note:latest .
 docker build --target chat -t ghcr.io/stargazerbio/stargazer-chat:latest .
 ```
 
-Tag both with the published `ghcr.io/stargazerbio/...` URL even though you're not pushing — that way `notebook_env` (defined in `app/notebook_app.py`) resolves the tag from your local cache (`notebook_env.image` references that URL), and `docker run` works for the same reason. The shared `base` stage (bioconda CLIs + uv + project venv) is reused between targets, so the second `docker build` is mostly cache hits.
+Tag both with the published `ghcr.io/stargazerbio/...` URL even though you're not pushing — `docker run` resolves them from the local cache by that name. (The hosted notebook pods use a different image, `notebook-app`, built by the admin deploy entrypoint — see [App → Images](../architecture/app.md#images).) The shared `base` stage (bioconda CLIs + uv + project venv) is reused between targets, so the second `docker build` is mostly cache hits.

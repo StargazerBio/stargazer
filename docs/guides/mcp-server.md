@@ -2,6 +2,23 @@
 
 This guide covers interacting with Stargazer through the MCP server.
 
+## Connecting a Client
+
+Any MCP host that supports stdio or streamable HTTP transport works (see [CLI Interface](../architecture/cli.md) for the supported-client matrix). For stdio, point the client at `stargazer serve`:
+
+```json
+{
+  "mcpServers": {
+    "stargazer": {
+      "command": "stargazer",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+For remote access, run `stargazer serve --http --port 8080` and connect over streamable HTTP.
+
 ## Running a Task (Ad-hoc)
 
 Use `run_task` for experimentation. Provide filters to select assets and inputs for scalar parameters:

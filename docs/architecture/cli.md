@@ -15,38 +15,11 @@ Any MCP host that supports stdio or streamable HTTP transport:
 
 ## Setup
 
-### stdio (most clients)
-
-The client spawns `stargazer serve` as a subprocess and communicates over stdin/stdout.
-
-```json
-{
-  "mcpServers": {
-    "stargazer": {
-      "command": "stargazer",
-      "args": ["serve"]
-    }
-  }
-}
-```
-
-### Streamable HTTP (remote access)
-
-```bash
-stargazer serve --http --port 8080
-```
+For stdio, the client spawns `stargazer serve` as a subprocess and communicates over stdin/stdout; for remote access, `stargazer serve --http --port 8080` exposes the same server over streamable HTTP. Client configuration examples are in [Using the MCP Server](../guides/mcp-server.md).
 
 ## Flyte CLI
 
-All Stargazer tasks and workflows are standard Flyte v2 entities and can be managed directly through the Flyte CLI without the MCP server. This includes registering, running, and inspecting tasks and workflows.
-
-For a local TUI to browse and launch tasks interactively:
-
-```bash
-flyte start tui
-```
-
-See the [Flyte CLI reference](https://www.union.ai/docs/v2/flyte/api-reference/flyte-cli/) for the full command set.
+All Stargazer tasks and workflows are standard Flyte v2 entities and can be managed directly through the Flyte CLI without the MCP server — registering, running, and inspecting tasks and workflows, plus a local TUI (`flyte start tui`) for browsing and launching them interactively. See the [Flyte CLI reference](https://www.union.ai/docs/v2/flyte/api-reference/flyte-cli/) for the full command set.
 
 ## What Users Get
 

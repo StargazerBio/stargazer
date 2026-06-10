@@ -1,16 +1,6 @@
 # Workflow Model
 
-Workflows are tasks that compose other tasks into end-to-end pipelines. In Flyte v2, there is no separate `@workflow` decorator — workflows are regular tasks that call other tasks.
-
-## Pattern
-
-```python
-@pipeline_env.task
-async def my_workflow(build: str, sample_id: str) -> Variants:
-    assets = await assemble(build=build, asset="reference")
-    ref = next(a for a in assets if isinstance(a, Reference))
-    # ... call tasks with ref, other typed assets ...
-```
+Workflows are tasks that compose other tasks into end-to-end pipelines. In Flyte v2, there is no separate `@workflow` decorator — workflows are regular tasks that call other tasks. A workflow accepts scalar parameters, assembles its typed inputs via `assemble()`, and chains tasks against them. For the full pattern with code, see [Writing a Workflow](../guides/writing-a-workflow.md).
 
 ## Conventions
 

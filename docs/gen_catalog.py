@@ -28,7 +28,7 @@ def _task_table(category: str) -> str:
         "|------|-------------|------------|",
     ]
     for item in items:
-        params = ", ".join(f"`{p['name']}` ({p['type']})" for p in item["params"])
+        params = ", ".join(f"`{p['name']}` (`{p['type']}`)" for p in item["params"])
         rows.append(f"| `{item['name']}` | {item['description']} | {params} |")
     return "\n".join(rows)
 
