@@ -43,10 +43,25 @@ logger.add(_log_dir / "stargazer.log", rotation="10 MB", retention=5)
 logger.add(sys.stderr, level="INFO")
 
 
-STARGAZER_ENV_VARS = {
-    "PINATA_GATEWAY": os.environ.get("PINATA_GATEWAY", "https://dweb.link"),
-    "PINATA_VISIBILITY": os.environ.get("PINATA_VISIBILITY", "private"),
-}
+def _stargazer_env_vars() -> dict[str, str]:
+    """env_vars forwarded into task pods via the TaskEnvironments.
+
+    The spec serializes from the submitting process, so STARGAZER_OWNER is
+    included when the submitter carries it (hosted workspaces) — task pods
+    then stamp ``_owner`` onto pipeline outputs. Strictly optional: absent
+    locally, nothing requires it.
+    """
+    env = {
+        "PINATA_GATEWAY": os.environ.get("PINATA_GATEWAY", "https://dweb.link"),
+        "PINATA_VISIBILITY": os.environ.get("PINATA_VISIBILITY", "private"),
+    }
+    owner = os.environ.get("STARGAZER_OWNER")
+    if owner:
+        env["STARGAZER_OWNER"] = owner
+    return env
+
+
+STARGAZER_ENV_VARS = _stargazer_env_vars()
 
 STARGAZER_SECRETS = [flyte.Secret(key="PINATA_JWT", as_env_var="PINATA_JWT")]
 
@@ -92,8 +107,6 @@ def log_execution() -> str:
         f"| local_dir={os.environ['STARGAZER_LOCAL']} | registry={os.environ['STARGAZER_REGISTRY']}"
     )
     return execution_id
-
-
 
 
 # scRNA-seq task environment for scanpy-based single-cell analysis.
@@ -157,4 +170,3 @@ gatk_env = flyte.TaskEnvironment(
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,
 )
-

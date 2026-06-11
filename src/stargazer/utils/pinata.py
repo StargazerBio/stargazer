@@ -26,6 +26,19 @@ import stargazer.config  # ensure env var defaults are set  # noqa: F401
 from stargazer.assets.asset import Asset
 
 
+def _stamp_owner(kv: dict[str, str]) -> dict[str, str]:
+    """Inject ``_owner`` from STARGAZER_OWNER into upload keyvalues.
+
+    Env wins: a rehydrated record must not carry a stale owner onto the
+    re-upload of a derived artifact. With the env unset the dict passes
+    through untouched, so manual attribution in scripts stays possible.
+    """
+    owner = os.environ.get("STARGAZER_OWNER")
+    if owner:
+        kv["_owner"] = owner
+    return kv
+
+
 class PinataClient:
     """Async client for Pinata API v3.
 
@@ -137,7 +150,7 @@ class PinataClient:
             data.add_field("name", path.name)
             data.add_field("network", self.visibility)
 
-            kv = component.to_keyvalues()
+            kv = _stamp_owner(component.to_keyvalues())
             if kv:
                 data.add_field("keyvalues", json.dumps(kv))
 

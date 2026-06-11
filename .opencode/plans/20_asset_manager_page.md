@@ -350,7 +350,7 @@ Confirm during implementation (none block starting):
 - [ ] Download route: confirm the private-network signed download link API.
 - [x] Piece 0 details: `keyvalues` uses `field(default_factory=dict)`; the
       `asset` key lives *inside* the dict (verbatim round-trip).
-- [ ] `build_asset()` reserved-key error message should tell callers to
+- [x] `build_asset()` reserved-key error message should tell callers to
       drop system keys (queried records legitimately contain `_owner`;
       re-uploads get restamped, so the fix is always "remove it").
 
@@ -369,14 +369,18 @@ Confirm during implementation (none block starting):
       `tests/unit/test_specialize.py`. Note: the tutorials register a real
       `sample_sheet` class on import — tests needing an unregistered key
       must use one that nothing registers.
-- [ ] **Piece 1 — shared validator + owner stamping.** `build_asset()` in
-      `stargazer/assets/__init__.py` (strict for registered keys, bare Asset
-      for unregistered, rejects `_`-prefixed user keys); refactor
-      `server.py::upload_file` to use it. `PinataClient.upload()` stamps
-      `_owner` from `STARGAZER_OWNER` when set, and run submission forwards
-      `STARGAZER_OWNER` into task-pod env (required: the fail-closed private
-      tab hides unowned pipeline outputs). Tests in
-      `tests/unit/test_assets_page.py`.
+- [x] **Piece 1 — shared validator + owner stamping.** ✅ 2026-06-10.
+      `build_asset()` in `stargazer/assets/__init__.py` (strict for
+      registered keys, bare Asset for unregistered, rejects `_`-prefixed
+      user keys with a "stamped automatically — remove them" message);
+      `server.py::upload_file` refactored onto it and returns a `note` key
+      when storing a generic asset. `pinata.py::_stamp_owner()` (called in
+      `PinataClient.upload()` on the `to_keyvalues()` copy) stamps `_owner`
+      from `STARGAZER_OWNER` — env wins, unset passes through.
+      `config.py::_stargazer_env_vars()` forwards `STARGAZER_OWNER` into
+      `STARGAZER_ENV_VARS` (both TaskEnvironments) when the submitting
+      process carries it, closing the task-pod gap. Tests:
+      `tests/unit/test_assets_page.py` (15).
 - [ ] **Piece 2 — API routes.** `app/assets.py` router (page, schema, list,
       sign, download) included by `admin_app.py`; bake optional `PINATA_JWT` into
       admin env_vars. Route tests with `TestClient` (no lifespan), signed

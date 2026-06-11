@@ -24,7 +24,7 @@ from mcp.server.fastmcp import FastMCP
 import stargazer.config  # ensure env var defaults are set  # noqa: F401
 from stargazer.marshal import marshal_output
 from stargazer.registry import TaskInfo, TaskRegistry
-from stargazer.assets import ASSET_REGISTRY
+from stargazer.assets import build_asset
 from stargazer.assets.asset import Asset
 from stargazer.assets.asset import assemble
 from stargazer.utils.local_storage import default_client
@@ -95,28 +95,23 @@ async def query_files(keyvalues: dict[str, str]) -> list[dict]:
 async def upload_file(path: str, keyvalues: dict[str, str]) -> dict:
     """Upload a file with metadata key-value pairs.
 
-    keyvalues must include "asset". Valid asset keys are derived
-    from the Asset registry (e.g. asset=reference component=fasta).
+    keyvalues must include "asset". Registered asset keys (e.g.
+    asset=reference) validate strictly against their declared fields;
+    unregistered keys are stored as generic assets with the keyvalues
+    verbatim. Reserved system keys (underscore-prefixed, e.g. _owner) are
+    stamped automatically and must not be supplied.
 
     When displaying results, always show a table with the CID and all keyvalues.
     """
-    asset_key = keyvalues.get("asset")
-    if asset_key not in ASSET_REGISTRY:
-        valid = sorted(ASSET_REGISTRY.keys())
-        raise ValueError(f"Invalid asset key {asset_key!r}. Valid keys: {valid}")
-    cls = ASSET_REGISTRY[asset_key]
-    import dataclasses
-    from stargazer.assets.asset import _BASE_FIELDS
-
-    declared = {f.name for f in dataclasses.fields(cls)} - _BASE_FIELDS
-    unknown = set(keyvalues) - declared - {"asset"}
-    if unknown:
-        raise ValueError(
-            f"Unknown keys for {asset_key!r}: {unknown}. Allowed: {sorted(declared)}"
-        )
-    comp = cls.from_keyvalues(keyvalues, path=Path(path))
+    comp = build_asset(keyvalues, path=Path(path))
     await default_client.upload(comp)
-    return comp.to_dict()
+    result = comp.to_dict()
+    if type(comp) is Asset:
+        result["note"] = (
+            f"asset key {keyvalues['asset']!r} is not registered; stored as a "
+            "generic asset"
+        )
+    return result
 
 
 @mcp.tool()
