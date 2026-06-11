@@ -363,11 +363,13 @@ class _LazyClient:
     _instance: Optional[LocalStorageClient] = None
 
     def _resolve(self) -> LocalStorageClient:
+        """Construct the real client on first use and memoize it."""
         if self._instance is None:
             self._instance = get_client()
         return self._instance
 
     def __getattr__(self, name: str):
+        """Proxy every attribute access to the lazily-resolved client."""
         return getattr(self._resolve(), name)
 
 

@@ -95,6 +95,25 @@ All on `app/admin_app.py` (`app_env`). Lifespan runs `init()` at startup. Post-f
 | `/workspace/pod-token` | Mints a fork-scoped git token for a pod that presents its capability |
 | `/health` | Health probe |
 
+Asset-manager routes are a separate router (`app/assets.py`, `include_router`ed onto the same app):
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `GET /assets` | none | Render `assets.html` (anonymous → public tab only) |
+| `GET /assets/schema` | none | `{asset_key: [{name,type,default}]}` from `ASSET_REGISTRY` (minus `_BASE_FIELDS`) for the dynamic form |
+| `GET /assets/list?<kv>&network=` | public: none / private: session | Public served from a TTL cache (filters in-memory); private forces `_owner == session user` server-side (fail closed) |
+| `POST /assets/sign` | session | `build_asset()` validate → stamp `_owner` → mint Pinata signed upload URL (filename + keyvalues + `MAX_UPLOAD_BYTES` baked in) → `{url, keyvalues}` |
+| `GET /assets/download/{cid}?network=` | public: none / private: session | 302 redirect; split-gateway (anon public → `PUBLIC_FALLBACK_GATEWAY`, session → `PINATA_GATEWAY`); private → signed URL |
+
+## Asset Manager (mechanics)
+
+`PINATA_JWT` rides into the admin pod via `_RUNTIME_SECRETS` (same env-baking as the OAuth secrets — App-pod `secrets=` is dropped by this Flyte build). Without it the routes 503 and the page shows "not configured"; there is no TinyDB fallback for this surface.
+
+- **Owner stamping.** `/assets/sign` stamps `session.github_username` as `_owner` *after* `build_asset()` validation, so it rides the signature-protected signed URL — unforgeable from the browser. Workspace/SDK uploads stamp from `STARGAZER_OWNER` instead: the launcher injects it into per-notebook pods (`env.env_vars["STARGAZER_OWNER"]` next to `FLYTE_PROJECT`), and `config._stargazer_env_vars()` forwards it into task pods at submission so pipeline outputs are owned too. Stamping lives in `PinataClient.upload()` (`_stamp_owner`, env wins over any stale value) and in the sign route; `build_asset()` rejects user-supplied `_*` keys so the namespace stays clean.
+- **Public TTL cache.** `_public_cache` (module global, `PUBLIC_CACHE_TTL` = 60s) holds one unfiltered public-network listing; the public tab filters it in-memory. So anonymous public browsing costs ≤1 Pinata listing call per TTL regardless of traffic, and the admin acts as a semi-static mirror. Swap to a background refresher if the first-request-after-expiry latency ever matters.
+- **Client swap for tests.** `_pinata_client` / `_public_cache` are module attributes resolved at call time, so route tests monkeypatch a fake Pinata client and reset the cache (`tests/unit/test_assets_routes.py`, `TestClient` without lifespan).
+- **Errors** are FastAPI-standard `HTTPException` → `{"detail": ...}` (401 auth, 400 validation, 503 not-configured), via the `_require_session` / `_require_pinata` guards.
+
 ## Runtime Init
 
 The same `init()` (`app/init.py`) works locally and in-cluster:

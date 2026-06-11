@@ -13,15 +13,15 @@ Every file in Stargazer carries structured keyvalue metadata that describes its 
 
 ```mermaid
 flowchart TD
-    SC("Asset Subclasses\nschema — typed Python fields via keyvalues")
-    KV("Asset.keyvalues\ntransport — flat dict[str, str]")
+    SC("Asset Subclasses\nschema — real typed dataclass fields")
+    KV("dict[str, str]\ntransport — flat storage keyvalues")
     ST[("StorageClient\npersistence — local TinyDB or Pinata")]
 
-    SC <-->|"__getattr__ / __setattr__ coercion"| KV
+    SC <-->|"to_keyvalues() / from_keyvalues()"| KV
     KV <-->|"upload() / query()"| ST
 ```
 
-There is no separate "storage primitive" layer. `Asset` is both the typed schema and the storage identity.
+There is no separate "storage primitive" layer. `Asset` is both the typed schema and the storage identity. Typed fields are ordinary dataclass attributes; the flat `dict[str, str]` exists only at the storage boundary, produced and consumed by `to_keyvalues()` / `from_keyvalues()`.
 
 ## Asset: The Base Class
 
@@ -31,29 +31,39 @@ There is no separate "storage primitive" layer. `Asset` is both the typed schema
 |-------|------|---------|
 | `cid` | `str` | Content identifier (IPFS or local hash) |
 | `path` | `Path \| None` | Local filesystem path (set after download/upload) |
-| `keyvalues` | `dict[str, str]` | Flat metadata for querying and routing |
+| `keyvalues` | `dict[str, str]` | Free-form metadata — **bare `Asset` only** (see Catchall below) |
 
 ### Subclass Declaration
 
-Subclasses declare `_asset_key` — a unique string identifying the asset kind — plus ordinary typed dataclass fields with defaults (e.g. `Alignment` declares `sample_id`, `duplicates_marked`, `bqsr_applied`). See [Writing a Task](../guides/writing-a-task.md) for a worked declaration.
+Subclasses declare `_asset_key` — a unique string identifying the asset kind — plus ordinary typed dataclass fields with defaults (e.g. `Alignment` declares `sample_id`, `duplicates_marked`, `bqsr_applied`). See [Writing a Task](../guides/writing-a-task.md) for a worked declaration. Subclasses auto-register in `Asset._registry` (via `__init_subclass__`), which maps `_asset_key` strings to their class. Registration is import-driven and per-process: a class defined in user code registers the moment its module imports, so `assemble()` returns it in any process that imports it.
 
-`__init_subclass__` automatically derives `_field_types` (non-`str` fields) and `_field_defaults` (all defaults) from the annotations — these are never declared manually. Subclasses also auto-register in `Asset._registry`, which maps `_asset_key` strings to their class.
+`__setattr__` **enforces** the declared schema on typed subclasses — assigning a field the dataclass doesn't declare raises `AttributeError`, catching metadata typos at write time. On a bare `Asset` (no `_asset_key`) it passes through.
 
-### Keyvalue Coercion
+### Serialization
 
-`__getattr__` and `__setattr__` transparently read/write `keyvalues` with type coercion:
+`to_keyvalues()` / `from_keyvalues()` convert between typed fields and the flat `dict[str, str]` storage carries:
 
-- `bool`: stored as `"true"` / `"false"`, returned as Python `bool`
-- `int`: stored as string, returned as Python `int`
-- `list`: stored as comma-separated string, returned as Python `list[str]`
-- `str`: no coercion needed
+- `str` fields pass through unchanged.
+- All other types round-trip via `json.dumps` / `json.loads` (`bool` → `"true"`, `int` → `"12"`, `list` → JSON array).
 
-Accessing a missing key returns the default derived from the annotation, or `False` for bools, or `None`.
+`from_keyvalues()` raises on a non-`str` value that doesn't parse; callers that must tolerate malformed records catch it (see [Specialization](#specialization)).
+
+### Catchall: bare `Asset`
+
+A bare `Asset` (no `_asset_key`) carries a free-form `keyvalues` dict, serialized **verbatim** (the `asset` key lives inside it). This is the escape hatch for uploading a file whose asset key has no registered class yet — only the `asset` key is required, no field schema is enforced. When a user later defines a matching `Asset` subclass, those records type-promote on the next query. Typed subclasses ignore the inherited `keyvalues` field entirely; it's part of `_BASE_FIELDS`.
+
+### Validation: `build_asset()`
+
+`build_asset(keyvalues, path=)` (`assets/__init__.py`) is the single validation choke point shared by the MCP server's `upload_file` and the admin asset page. It requires an `asset` key, rejects reserved `_`-prefixed keys (stamped automatically — see Ownership), validates registered keys strictly against their dataclass, and builds a bare `Asset` for unregistered keys. One place decides typed-vs-generic so the page and the SDK never drift.
+
+### Ownership (`_owner`)
+
+`_owner` is a reserved keyvalue stamped server-side for attribution — never typed by users (`build_asset()` rejects `_*` keys). `PinataClient.upload()` stamps it from `STARGAZER_OWNER` when set (env wins over any stale value); the admin page stamps the session user. It drives default filtering, not access control — the Pinata JWT is shared, so anyone with SDK/MCP access can read or delete anything. Hosted-deployment plumbing is in [App → Asset Manager](app.md#asset-manager).
 
 ### Core Methods
 
 - `fetch()` — downloads self, then queries for companions via `{_asset_key}_cid = self.cid` and downloads those too
-- `update(path, **kwargs)` — sets keyvalues from kwargs, sets path, uploads to storage
+- `update(path, **kwargs)` — sets the given attributes, sets path, uploads to storage
 - `to_dict()` / `from_dict()` — JSON serialization
 
 ## Asset Subclass Catalog
@@ -80,7 +90,7 @@ Workflows filter the returned list with `isinstance` to pick out the types they 
 
 ## Specialization
 
-`specialize(asset)` in `types/__init__.py` converts a base `Asset` to its registered subclass by looking up `keyvalues["asset"]` in `Asset._registry`. Returns the original instance if no match.
+`specialize(record)` in `assets/__init__.py` converts a raw storage record to its registered subclass by looking up `keyvalues["asset"]` in `Asset._registry`. It is **graceful at query time** (the mirror of `build_asset()` being strict at write time): an unregistered key, or a record whose values don't parse against the registered class, falls back to a bare `Asset` carrying the keyvalues verbatim rather than raising — so one malformed legacy record can't crash a whole `assemble()`.
 
 ## Storage Layer
 

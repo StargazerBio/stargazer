@@ -79,6 +79,27 @@ The two modes are explicit and separate:
 - **JWT set (remote mode):** Pinata owns metadata and bytes. TinyDB is not involved. Upload, query, and delete go to Pinata. Downloads fetch bytes by CID via signed URL or public gateway, cached locally as bytes only.
 - **No JWT (local mode):** TinyDB owns metadata. Local filesystem stores bytes. Downloads check TinyDB, then fall back to the public IPFS gateway for cache misses on bytes.
 
+### Pinata upload paths
+
+`PinataClient.upload()` size-branches. Files up to 100MB use the plain
+multipart POST (one round trip, CID in the response body). Larger files use
+Pinata's resumable **TUS** endpoint — chunked `PATCH`es, CID read from the
+`Upload-Cid` header on the completing request. The split is required, not an
+optimization: Pinata's plain POST is hard-capped at 100MB. The TUS path is
+chunked-first (no resume yet) with a 10 GiB/file ceiling — itself a Pinata
+limit, not an IPFS one (IPFS chunks files into a DAG with no inherent size
+cap).
+
+`query(keyvalues, network=)` queries one network when `network` is given,
+else merges both; each record carries the network it was found on.
+
+`create_signed_upload_url(filename, keyvalues, network, ...)` mints a signed
+URL with the filename and keyvalues fixed at mint time — used by the admin
+asset page so a browser can upload bytes directly to Pinata without the
+metadata ever passing through (or being chooseable at) the upload client.
+`_owner` attribution and the size cap are baked in there too — see
+[App → Asset Manager](app.md#asset-manager).
+
 ## Container Images
 
 Stargazer ships four container images on `ghcr.io/stargazerbio`. They split along a sharp line: **task images** (run only by Flyte) are declared as `flyte.Image` / `flyte.Environment` in `src/stargazer/config.py`; **human-runnable images** (used via `docker run` and hosted via `flyte.serve`) are built from the project's multi-stage `Dockerfile`.

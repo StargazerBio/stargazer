@@ -67,6 +67,47 @@ A **snapshot** is a frozen notebook — a researcher takes an analysis to a publ
 
 This is deliberately the opposite of a **workflow**: workflows are off-the-shelf pipelines run again and again against new data; a snapshot is a single point-in-time record, valued precisely because it does not change. What's frozen is the notebook *source* — the auditable record of exactly what was run. The dashboard gives them separate sections — see [Notebooks → Promotion Paths](notebook.md#promotion-paths) for when to freeze versus graduate, and `.opencode/reference/architecture/app_internals.md` for the freeze/listing/launch mechanics.
 
+## Asset Manager
+
+The admin app also hosts `/assets` — a browse-and-upload surface over the
+asset/metadata system, backed by Pinata (never the local TinyDB; the page
+renders a "not configured" state without `PINATA_JWT`). Routes live in
+`app/assets.py`; mechanics and the route table are in `.opencode/reference/architecture/app_internals.md`.
+
+**Uploads never transit the admin pod.** The page validates metadata and
+mints a Pinata **signed upload URL** (`POST /assets/sign`); the browser then
+PUTs bytes straight to Pinata. Because Pinata bakes the filename and
+keyvalues into the URL at mint time, the uploader can supply bytes only —
+never metadata the server didn't validate. Validation is the *same*
+`build_asset()` choke point the MCP server uses, so the page and the SDK
+agree on what a valid upload is. Downloads redirect the same way: bytes go
+browser↔Pinata, not through the pod.
+
+**Ownership is server-stamped attribution, not enforcement.** Every hosted
+write path stamps an `_owner` keyvalue — the page from the session at sign
+time, workspace SDK/MCP uploads from a launcher-injected `STARGAZER_OWNER`,
+pipeline outputs from that var forwarded into task pods. Users never type
+it (`_`-prefixed keys are a reserved namespace `build_asset()` rejects). So
+an unowned record on the hosted deployment is legacy data or a bug, never
+expected. Because the Pinata JWT is shared, this is attribution only — it
+drives default filtering, not access control; anyone with SDK/MCP access
+can still read or delete anything. See [Types → Ownership](types.md#ownership-_owner).
+
+**Two networks, two visibility rules.** The browse panel has Public and
+Private tabs mapping to Pinata's two networks:
+
+- **Private** fails closed — the server returns only records whose `_owner`
+  matches the session user (the `_owner` filter is forced server-side, never
+  trusted from the query string). Unowned or other-owned private records are
+  invisible on the page, reachable only via SDK/MCP.
+- **Public** is **anonymous** — public-network bytes are world-readable on
+  IPFS, so gating the index behind a login was security theater. The listing
+  is served from a short in-process TTL cache (a semi-static mirror, not a
+  per-request proxy to the Pinata API), and anonymous downloads redirect to
+  a free public gateway so they never spend metered dedicated-gateway
+  bandwidth. `_owner` is stamped on public uploads too, as a publisher
+  byline. Rate limiting of the anonymous surface is deferred.
+
 ## Images
 
 The admin app and the per-notebook pods use **different images by design**:

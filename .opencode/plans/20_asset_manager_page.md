@@ -423,12 +423,16 @@ Confirm during implementation (none block starting):
       `app.assets._pinata_client`, fail-closed and cache behavior covered.
       The page route renders `assets.html`, which lands in Piece 3 (no
       page-route test until then).
-- [ ] **Piece 3 — template.** `assets.html` (typed/custom upload modes,
-      network radio with the **anyone-on-the-internet** note, Public/Private
-      browse tabs, anonymous state = public tab only + sign-in link,
-      optimistic browse row, download links) + dashboard nav link +
-      page-route tests (anonymous and authed render); manual verify against
-      local uvicorn (needs `PINATA_JWT` in the shell — the page has no
-      TinyDB mode), including the empirical signed-upload check above.
-- [ ] **Docs.** Update `docs/architecture/app.md` (new route table entry) and
-      module docstrings as part of the same pass.
+- [ ] **Piece 3 — template.** Split into its own plan:
+      [`21_asset_manager_template.md`](./21_asset_manager_template.md)
+      (`assets.html`, client JS, dashboard nav link, page-route tests,
+      manual verify). Iterated separately from the backend.
+- [x] **Docs (backend).** ✅ 2026-06-10. `docs/architecture/app.md` gained
+      an Asset Manager section (ownership model, public/private tabs,
+      anonymous public browsing); `app_internals.md` route table + asset
+      mechanics; `configuration.md` covers signed-URL uploads, TUS, and the
+      per-network query. `types.md` Asset/specialize sections corrected for
+      the bare-Asset catchall + `build_asset()` (and the stale
+      keyvalue-coercion section, drift predating this plan, fixed in
+      passing). Module docstrings written with the code. Frontend docs ride
+      with plan 21.
