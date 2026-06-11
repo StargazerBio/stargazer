@@ -224,7 +224,7 @@ class TestSign:
             "/assets/sign", json={"filename": "x", "keyvalues": {"a": "1"}}
         )
         assert no_asset.status_code == 400
-        assert "asset" in no_asset.json()["error"]
+        assert "asset" in no_asset.json()["detail"]
 
         unknown = client.post(
             "/assets/sign",
@@ -234,7 +234,7 @@ class TestSign:
             },
         )
         assert unknown.status_code == 400
-        assert "Unknown keys" in unknown.json()["error"]
+        assert "Unknown keys" in unknown.json()["detail"]
 
         reserved = client.post(
             "/assets/sign",

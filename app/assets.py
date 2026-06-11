@@ -21,8 +21,8 @@ import os
 import time
 from typing import Optional, get_type_hints
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import RedirectResponse
 
 from app.session import SessionData, session_from_request
 from app.templates import templates
@@ -68,16 +68,18 @@ def _session(request: Request) -> SessionData | None:
     return session_from_request(request, secret)
 
 
-def _unauthorized() -> JSONResponse:
-    """401 for routes that require a session."""
-    return JSONResponse({"error": "authentication required"}, status_code=401)
+def _require_session(request: Request) -> SessionData:
+    """Return the session or raise 401 — for routes that require auth."""
+    session = _session(request)
+    if session is None:
+        raise HTTPException(status_code=401, detail="authentication required")
+    return session
 
 
-def _not_configured() -> JSONResponse | None:
-    """503 when no PINATA_JWT is present — the page has no TinyDB mode."""
-    if os.environ.get("PINATA_JWT"):
-        return None
-    return JSONResponse({"error": "Pinata not configured"}, status_code=503)
+def _require_pinata() -> None:
+    """Raise 503 when no PINATA_JWT is present — the page has no TinyDB mode."""
+    if not os.environ.get("PINATA_JWT"):
+        raise HTTPException(status_code=503, detail="Pinata not configured")
 
 
 async def _public_records() -> list[dict]:
@@ -137,8 +139,7 @@ async def assets_list(request: Request):
     session user server-side (fail closed — unowned and other-owned
     records are never returned, whatever the query string says).
     """
-    if err := _not_configured():
-        return err
+    _require_pinata()
     params = dict(request.query_params)
     network = params.pop("network", "private")
 
@@ -150,9 +151,7 @@ async def assets_list(request: Request):
             if all(r["keyvalues"].get(k) == v for k, v in params.items())
         ]
 
-    session = _session(request)
-    if session is None:
-        return _unauthorized()
+    session = _require_session(request)
     params["_owner"] = session.github_username
     return await _pinata().query(params, network="private")
 
@@ -166,25 +165,22 @@ async def assets_sign(request: Request):
     URL carries exactly the validated + stamped keyvalues and the browser
     supplies bytes only.
     """
-    if err := _not_configured():
-        return err
-    session = _session(request)
-    if session is None:
-        return _unauthorized()
+    _require_pinata()
+    session = _require_session(request)
 
     body = await request.json()
     filename = body.get("filename", "")
     network = body.get("network", "private")
     if not filename:
-        return JSONResponse({"error": "filename is required"}, status_code=400)
+        raise HTTPException(status_code=400, detail="filename is required")
     if network not in ("private", "public"):
-        return JSONResponse(
-            {"error": "network must be 'private' or 'public'"}, status_code=400
+        raise HTTPException(
+            status_code=400, detail="network must be 'private' or 'public'"
         )
     try:
         asset = build_asset(body.get("keyvalues") or {})
     except ValueError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
+        raise HTTPException(status_code=400, detail=str(exc))
 
     keyvalues = asset.to_keyvalues()
     keyvalues["_owner"] = session.github_username
@@ -215,10 +211,7 @@ async def assets_download(request: Request, cid: str):
             gateway = PUBLIC_FALLBACK_GATEWAY
         return RedirectResponse(f"{gateway}/ipfs/{cid}", status_code=302)
 
-    session = _session(request)
-    if session is None:
-        return _unauthorized()
-    if err := _not_configured():
-        return err
+    _require_session(request)
+    _require_pinata()
     url = await _pinata()._get_signed_url(cid)
     return RedirectResponse(url, status_code=302)
