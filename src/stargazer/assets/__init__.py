@@ -6,6 +6,7 @@ spec: [docs/architecture/types.md](../architecture/types.md)
 
 from stargazer.assets.asset import Asset
 from stargazer.assets.asset import assemble
+from stargazer.config import logger
 from stargazer.assets.reference import (
     Reference,
     ReferenceIndex,
@@ -36,8 +37,11 @@ def specialize(record: dict) -> Asset:
     """Construct a typed Asset subclass from a raw storage record.
 
     Looks up the 'asset' key in the record's keyvalues against the registry
-    and returns the appropriate subclass instance. Returns a base Asset if
-    no matching type is found.
+    and returns the appropriate subclass instance. Falls back to a bare
+    Asset carrying the keyvalues verbatim when no type is registered in
+    this process, or when the record's values don't parse against the
+    registered class (strict at upload, graceful at query — one malformed
+    legacy record must not crash a whole ``assemble()``).
 
     Pinata query records carry the file's original ``name`` but no local
     ``path``; we resolve that name against the storage client's local_dir so
@@ -53,8 +57,15 @@ def specialize(record: dict) -> Asset:
         path = get_client().local_dir / record["name"]
     cls = ASSET_REGISTRY.get(kv.get("asset", ""))
     if cls is None:
-        return Asset(cid=cid, path=path)
-    return cls.from_keyvalues(kv, cid=cid, path=path)
+        return Asset(cid=cid, path=path, keyvalues=dict(kv))
+    try:
+        return cls.from_keyvalues(kv, cid=cid, path=path)
+    except ValueError:
+        logger.warning(
+            f"Record {cid} claims asset={kv.get('asset')!r} but its values "
+            f"don't parse as {cls.__name__}; returning it as a bare Asset"
+        )
+        return Asset(cid=cid, path=path, keyvalues=dict(kv))
 
 
 __all__ = [

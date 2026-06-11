@@ -6,13 +6,13 @@ spec: [docs/architecture/types.md](../architecture/types.md)
 
 import dataclasses
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, get_type_hints
 
 from typing_extensions import Self
 
-_BASE_FIELDS = frozenset(("cid", "path"))
+_BASE_FIELDS = frozenset(("cid", "path", "keyvalues"))
 
 
 @dataclass
@@ -22,7 +22,11 @@ class Asset:
     Attributes:
         cid: Content identifier (CID) for the stored file
         path: Local filesystem path (set after download or upload)
-        keyvalues: Arbitrary metadata dict for base Asset instances only
+        keyvalues: Free-form metadata for *bare* Asset instances — the
+            catchall for records whose asset key has no registered class
+            in this process. Serialized verbatim (the ``asset`` key lives
+            inside the dict). Typed subclasses ignore this field entirely;
+            they serialize their declared fields instead.
 
     Subclasses declare typed fields as normal dataclass attributes:
 
@@ -43,6 +47,7 @@ class Asset:
 
     cid: str = ""
     path: Path | None = None
+    keyvalues: dict[str, str] = field(default_factory=dict)
 
     def __init_subclass__(cls, **kwargs):
         """Register subclass in the asset registry."""
@@ -66,10 +71,12 @@ class Asset:
         """Serialize to storage format.
 
         str fields pass through as-is; all other types are serialized with
-        json.dumps. Base Asset instances return their keyvalues dict directly.
+        json.dumps. Bare Asset instances return a copy of their keyvalues
+        dict verbatim — a copy so callers (e.g. ``_owner`` stamping at the
+        storage layer) can mutate the result without touching the Asset.
         """
         if not self._asset_key:
-            return {}
+            return dict(self.keyvalues)
         hints = get_type_hints(type(self))
         result: dict[str, str] = {"asset": self._asset_key}
         for f in dataclasses.fields(self):
@@ -85,11 +92,13 @@ class Asset:
     ) -> "Asset":
         """Reconstruct from a storage keyvalues dict.
 
-        str fields are assigned directly; all other types are deserialized with
-        json.loads. Base Asset receives keyvalues as-is.
+        str fields are assigned directly; all other types are deserialized
+        with json.loads (raising ``json.JSONDecodeError`` on values that
+        don't parse — callers that must tolerate malformed records catch it,
+        see ``specialize()``). Bare Asset receives the keyvalues verbatim.
         """
         if not cls._asset_key:
-            return cls(cid=cid, path=path)
+            return cls(cid=cid, path=path, keyvalues=dict(kv))
         hints = get_type_hints(cls)
         kwargs = {}
         for f in dataclasses.fields(cls):

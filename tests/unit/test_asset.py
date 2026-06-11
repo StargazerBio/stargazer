@@ -51,6 +51,52 @@ class TestAssetRoundtrip:
         assert restored.duplicates_marked is True
 
 
+class TestBareAssetKeyvalues:
+    """Bare Asset carries free-form keyvalues verbatim (plan 20, piece 0)."""
+
+    def test_to_keyvalues_passthrough(self):
+        kv = {"asset": "sample_sheet", "sequencer": "novaseq", "lanes": "4"}
+        assert Asset(keyvalues=kv).to_keyvalues() == kv
+
+    def test_to_keyvalues_returns_copy(self):
+        """Callers (e.g. _owner stamping) may mutate the result freely."""
+        asset = Asset(keyvalues={"asset": "sample_sheet"})
+        asset.to_keyvalues()["_owner"] = "someone"
+        assert "_owner" not in asset.keyvalues
+
+    def test_from_keyvalues_preserves(self):
+        kv = {"asset": "sample_sheet", "sequencer": "novaseq"}
+        restored = Asset.from_keyvalues(kv, cid="bafy123")
+        assert restored.keyvalues == kv
+        assert restored.cid == "bafy123"
+
+    def test_to_dict_round_trip(self):
+        original = Asset(
+            cid="bafy456",
+            path=Path("/tmp/sheet.tsv"),
+            keyvalues={"asset": "sample_sheet", "sequencer": "novaseq"},
+        )
+        restored = Asset.from_dict(original.to_dict())
+        assert restored.keyvalues == original.keyvalues
+        assert restored.cid == original.cid
+        assert restored.path == original.path
+
+    def test_typed_subclass_ignores_keyvalues_field(self):
+        """Typed assets serialize declared fields only; the inherited
+        keyvalues dict never appears in their storage format."""
+        alignment = Alignment(sample_id="NA12878")
+        kv = alignment.to_keyvalues()
+        assert "keyvalues" not in kv
+        assert kv["asset"] == "alignment"
+
+    def test_typed_from_keyvalues_ignores_keyvalues_key(self):
+        restored = Alignment.from_keyvalues(
+            {"asset": "alignment", "sample_id": "S1", "keyvalues": "{}"}
+        )
+        assert restored.sample_id == "S1"
+        assert restored.keyvalues == {}
+
+
 class TestAssetDefaults:
     def test_default_cid_is_empty(self):
         assert Asset().cid == ""

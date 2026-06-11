@@ -95,9 +95,40 @@ class TestSpecialize:
         result = specialize(record("Qmunk", asset="unknown_thing"))
         assert type(result) is Asset
 
+    def test_unknown_preserves_keyvalues(self):
+        """A custom-key record keeps its metadata when no class is registered
+        in this process (plan 20: registry is import-driven, per-process).
+
+        The key must never collide with a registered class — even the
+        tutorials register real classes (e.g. sample_sheet) on import.
+        """
+        result = specialize(
+            record("Qmunk", asset="never_registered_key", sequencer="novaseq")
+        )
+        assert type(result) is Asset
+        assert result.keyvalues == {
+            "asset": "never_registered_key",
+            "sequencer": "novaseq",
+        }
+
     def test_missing_asset_key_returns_base(self):
         result = specialize(record("Qmbare"))
         assert type(result) is Asset
+
+    def test_malformed_value_falls_back_to_base(self):
+        """A registered-key record whose non-str field doesn't json-parse
+        degrades to a bare Asset with keyvalues intact — strict at upload,
+        graceful at query. It must not raise."""
+        result = specialize(
+            record("Qmbad", asset="variants", sample_id="S1", sample_count="three")
+        )
+        assert type(result) is Asset
+        assert result.cid == "Qmbad"
+        assert result.keyvalues == {
+            "asset": "variants",
+            "sample_id": "S1",
+            "sample_count": "three",
+        }
 
     def test_unknown_keyvalues_dropped_on_specialize(self):
         """Undeclared keyvalues are silently dropped during specialization."""
