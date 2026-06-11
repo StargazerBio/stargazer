@@ -12,6 +12,7 @@ Used as a remote backend by LocalStorageClient when PINATA_JWT is available.
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
 
+import base64
 import json
 import os
 import time
@@ -24,6 +25,28 @@ import aiofiles
 import stargazer.config  # ensure env var defaults are set  # noqa: F401
 
 from stargazer.assets.asset import Asset
+
+# Pinata's plain multipart POST is capped at 100MB; larger files must use the
+# resumable TUS endpoint. upload() switches paths at this threshold. Chunks
+# must stay under Pinata's 50MB TUS limit; per-file ceiling is 10 GiB.
+TUS_THRESHOLD_BYTES = 100 * 1024**2
+TUS_CHUNK_BYTES = 48 * 1024**2
+
+
+def _tus_metadata(filename: str, network: str, keyvalues: dict[str, str]) -> str:
+    """Encode TUS ``Upload-Metadata``: comma-joined ``key b64(value)`` pairs.
+
+    Pinata reads ``filename``, ``network``, and ``keyvalues`` (stringified
+    JSON) from this header on the creation POST.
+    """
+    fields = {
+        "filename": filename,
+        "network": network,
+        "keyvalues": json.dumps(keyvalues),
+    }
+    return ",".join(
+        f"{k} {base64.b64encode(v.encode()).decode()}" for k, v in fields.items()
+    )
 
 
 def _stamp_owner(kv: dict[str, str]) -> dict[str, str]:
@@ -132,8 +155,56 @@ class PinataClient:
                 data = await response.json()
                 return data["data"]
 
+    async def create_signed_upload_url(
+        self,
+        filename: str,
+        keyvalues: dict[str, str],
+        network: str,
+        expires: int = 300,
+        max_file_size: Optional[int] = None,
+    ) -> str:
+        """Mint a signed upload URL for a direct browser→Pinata upload.
+
+        All metadata is fixed at mint time — Pinata bakes ``filename``,
+        ``keyvalues``, and the size cap into the URL, so the uploader
+        supplies bytes only and can never attach unvalidated metadata.
+
+        Args:
+            filename: Name the uploaded file will carry (downloads resolve
+                their on-disk name from it)
+            keyvalues: Validated, already-stamped metadata to bake in
+            network: "private" or "public"
+            expires: URL lifetime in seconds after minting
+            max_file_size: Upload size cap in bytes, if any
+
+        Returns:
+            The signed upload URL
+        """
+        payload: dict = {
+            "date": int(time.time()),
+            "expires": expires,
+            "filename": filename,
+            "keyvalues": keyvalues,
+            "network": network,
+        }
+        if max_file_size is not None:
+            payload["max_file_size"] = max_file_size
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.UPLOAD_BASE}/files/sign",
+                headers=self._headers(),
+                json=payload,
+            ) as response:
+                response.raise_for_status()
+                data = await response.json()
+                return data["data"]
+
     async def upload(self, component: Asset) -> None:
         """Upload a file to IPFS via Pinata. Sets component.cid.
+
+        Files up to ``TUS_THRESHOLD_BYTES`` go via the plain multipart POST;
+        larger files use the resumable TUS endpoint (chunked, no resume yet).
 
         Args:
             component: Asset with path and keyvalues set
@@ -142,6 +213,15 @@ class PinataClient:
         if path is None:
             raise ValueError("component.path must be set before uploading")
 
+        kv = _stamp_owner(component.to_keyvalues())
+        if path.stat().st_size > TUS_THRESHOLD_BYTES:
+            await self._upload_tus(component, kv)
+        else:
+            await self._upload_plain(component, kv)
+
+    async def _upload_plain(self, component: Asset, kv: dict[str, str]) -> None:
+        """Plain multipart POST upload (≤ TUS_THRESHOLD_BYTES)."""
+        path = component.path
         url = f"{self.UPLOAD_BASE}/files"
 
         async with aiohttp.ClientSession() as session:
@@ -149,8 +229,6 @@ class PinataClient:
             data.add_field("file", open(path, "rb"), filename=path.name)
             data.add_field("name", path.name)
             data.add_field("network", self.visibility)
-
-            kv = _stamp_owner(component.to_keyvalues())
             if kv:
                 data.add_field("keyvalues", json.dumps(kv))
 
@@ -161,6 +239,55 @@ class PinataClient:
                 result = await response.json()
                 data_obj = result.get("data", result)
                 component.cid = data_obj["cid"]
+
+    async def _upload_tus(self, component: Asset, kv: dict[str, str]) -> None:
+        """Resumable TUS upload for large files (chunked, no resume yet).
+
+        Creates an upload, streams the file in ``TUS_CHUNK_BYTES`` chunks via
+        ``PATCH``, and reads the resulting CID from the ``Upload-Cid`` header
+        on the completing response.
+        """
+        path = component.path
+        metadata = _tus_metadata(path.name, self.visibility, kv)
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.UPLOAD_BASE}/files",
+                headers={
+                    **self._headers(),
+                    "Tus-Resumable": "1.0.0",
+                    "Content-Type": "application/offset+octet-stream",
+                    "Upload-Length": str(path.stat().st_size),
+                    "Upload-Metadata": metadata,
+                },
+            ) as response:
+                response.raise_for_status()
+                location = response.headers["Location"]
+
+            offset = 0
+            cid = None
+            async with aiofiles.open(path, "rb") as f:
+                while True:
+                    chunk = await f.read(TUS_CHUNK_BYTES)
+                    if not chunk:
+                        break
+                    async with session.patch(
+                        location,
+                        headers={
+                            **self._headers(),
+                            "Tus-Resumable": "1.0.0",
+                            "Upload-Offset": str(offset),
+                            "Content-Type": "application/offset+octet-stream",
+                        },
+                        data=chunk,
+                    ) as response:
+                        response.raise_for_status()
+                        offset = int(response.headers["Upload-Offset"])
+                        cid = response.headers.get("Upload-Cid", cid)
+
+        if not cid:
+            raise ValueError("TUS upload completed but returned no Upload-Cid")
+        component.cid = cid
 
     async def download_to(self, cid: str, dest: Path) -> None:
         """Download a file to dest. Uses signed URL for private, raises for public.
@@ -190,21 +317,27 @@ class PinataClient:
                     async for chunk in response.content.iter_chunked(8192):
                         await f.write(chunk)
 
-    async def query(self, keyvalues: dict[str, str]) -> list[dict]:
+    async def query(
+        self, keyvalues: dict[str, str], network: Optional[str] = None
+    ) -> list[dict]:
         """Query files by keyvalue metadata from Pinata API.
 
-        Checks both private and public Pinata endpoints and merges results
-        by CID so files are found regardless of which network they were
-        uploaded to.
+        By default checks both private and public Pinata endpoints and
+        merges results by CID so files are found regardless of which
+        network they were uploaded to; pass ``network`` to query a single
+        endpoint (the asset-manager page lists per-tab).
 
         Args:
             keyvalues: Metadata key-value pairs to filter by
+            network: "private" or "public" to query one endpoint only
 
         Returns:
-            List of matching file records with cid, name, and keyvalues
+            List of matching file records with cid, name, keyvalues, and
+            the network each record was found on
         """
         seen: dict[str, dict] = {}
-        for visibility in ("private", "public"):
+        networks = (network,) if network else ("private", "public")
+        for visibility in networks:
             url = f"{self.API_BASE}/files/{visibility}"
             params: dict = {"pageLimit": 1000, "order": "DESC"}
             if keyvalues:
@@ -225,6 +358,7 @@ class PinataClient:
                                     "cid": f["cid"],
                                     "name": f.get("name", ""),
                                     "keyvalues": f.get("keyvalues", {}),
+                                    "network": visibility,
                                 }
 
                         next_token = data.get("data", {}).get("next_page_token")

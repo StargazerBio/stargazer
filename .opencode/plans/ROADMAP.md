@@ -28,6 +28,27 @@ Upcoming work is ordered — the **next feature is at the top**. Move items into
 18. **Bit-for-bit snapshot reproducibility.** Snapshots currently freeze the notebook *source* only; add image-digest pinning and a CID input/output manifest so a snapshot re-run is bit-for-bit. (Was a Deferred note in `docs/architecture/app.md`.)
 19. **Cohesive `marimo.toml` integration.** A root `marimo.toml` exists with `[ai] rules` carrying stargazer authoring conventions, but it's an ad-hoc artifact — no story for how it's baked into the notebook image, kept in sync with the conventions in AGENTS.md/docs, or extended (completions, future MCP wiring, per-notebook overrides). Design one deliberate marimo-config surface and remove the duplication. Subsumes the marimo-AI angle of items 6 and 17.
 
+20. **TUS resumable uploads — browser half remaining.** Pinata's plain
+    multipart POST is hard-capped at 100MB; larger files need the TUS
+    resumable endpoint (per-file ceiling then 10 GiB, chunks <50MB).
+    - ✅ **SDK/task outputs (2026-06-10):** `PinataClient.upload()` now
+      size-branches — ≤100MB plain POST, larger streams via chunked TUS
+      (`_upload_tus`, CID read from the `Upload-Cid` header on the final
+      PATCH). Chunked-first: no resume yet. Verified by
+      `test_tus_upload_multichunk_roundtrip` (pinata-marked).
+    - ⬜ **Browser/assets page:** wire `tus-js-client` into `assets.html`
+      (Piece 3 territory) so the page lifts past `MAX_UPLOAD_BYTES` (100MB).
+      Confirmed empirically that **signed upload URLs speak full TUS** —
+      anonymous TUS creation against a signed URL returns 201 with a signed,
+      resumable Location URL whose mint-time keyvalues/filename/network/size
+      cap ride in signature-protected query params, so the
+      no-unvalidated-metadata property carries over. Note: the resumable
+      session inherits the signed URL's `expires`, so mint generously for
+      big files.
+    - ⬜ **Resume** (`HEAD`-then-continue-from-offset) for both halves — the
+      real payoff of TUS (survive a dropped multi-GB upload); deferred until
+      a flaky large upload demands it.
+
 ## Complete
 
 - ✅ scRNA preprocessing tutorial rebuild (Asset → Task → Workflow → local → remote). [`archive/15_scrna_tutorial_rebuild.md`](./archive/15_scrna_tutorial_rebuild.md)

@@ -1,0 +1,224 @@
+"""
+### Asset manager page and API routes.
+
+APIRouter included by the admin app serving `/assets`: the registry schema
+for the dynamic upload form, Pinata-backed listing, signed-URL minting for
+direct browser→Pinata uploads (bytes never transit the admin pod), and
+download redirects.
+
+Auth model: the public network is truly public — schema, public listing,
+and public downloads are anonymous, with the listing served from an
+in-process TTL cache so the admin acts as a semi-static read-only mirror
+rather than an open proxy to the Pinata API. Private listing fails closed
+(`_owner == session user` only, stamped and filtered server-side), and
+sign minting always requires a session.
+
+spec: [docs/architecture/app.md](../docs/architecture/app.md)
+"""
+
+import dataclasses
+import os
+import time
+from typing import Optional, get_type_hints
+
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse, RedirectResponse
+
+from app.session import SessionData, session_from_request
+from app.templates import templates
+from stargazer.assets import ASSET_REGISTRY, build_asset
+from stargazer.assets.asset import _BASE_FIELDS
+from stargazer.utils.pinata import PinataClient
+
+router = APIRouter()
+
+# Pinata's plain multipart POST — the only thing a signed URL accepts from
+# a fetch() upload — is capped at 100MB; larger files require the TUS
+# resumable endpoint (ROADMAP: TUS support). Mirroring the cap into the
+# signed URL turns an opaque mid-upload failure into a mint-time error the
+# form can explain.
+MAX_UPLOAD_BYTES = 100 * 1024**2
+
+# The anonymous public tab reads this cache, refreshed lazily — stale
+# entries cost at most one Pinata listing per TTL regardless of traffic.
+PUBLIC_CACHE_TTL = 60.0
+
+# Anonymous downloads redirect here instead of PINATA_GATEWAY, which may be
+# a dedicated (bandwidth-metered) gateway — only session-holders spend it.
+PUBLIC_FALLBACK_GATEWAY = "https://dweb.link"
+
+# Module attributes resolved at call time so tests can swap in fakes.
+_pinata_client: Optional[PinataClient] = None
+_public_cache: Optional[tuple[float, list[dict]]] = None
+
+
+def _pinata() -> PinataClient:
+    """The shared Pinata client, created lazily (keeps its gateway cache)."""
+    global _pinata_client
+    if _pinata_client is None:
+        _pinata_client = PinataClient()
+    return _pinata_client
+
+
+def _session(request: Request) -> SessionData | None:
+    """Session from the request cookie, or None (anonymous)."""
+    secret = os.environ.get("SESSION_SECRET")
+    if not secret:
+        return None
+    return session_from_request(request, secret)
+
+
+def _unauthorized() -> JSONResponse:
+    """401 for routes that require a session."""
+    return JSONResponse({"error": "authentication required"}, status_code=401)
+
+
+def _not_configured() -> JSONResponse | None:
+    """503 when no PINATA_JWT is present — the page has no TinyDB mode."""
+    if os.environ.get("PINATA_JWT"):
+        return None
+    return JSONResponse({"error": "Pinata not configured"}, status_code=503)
+
+
+async def _public_records() -> list[dict]:
+    """The cached full public listing, refreshed when older than the TTL."""
+    global _public_cache
+    now = time.monotonic()
+    if _public_cache is None or now - _public_cache[0] > PUBLIC_CACHE_TTL:
+        _public_cache = (now, await _pinata().query({}, network="public"))
+    return _public_cache[1]
+
+
+@router.get("/assets")
+async def assets_page(request: Request):
+    """Render the asset manager. Anonymous visitors get the public tab."""
+    session = _session(request)
+    return templates.TemplateResponse(
+        request,
+        "assets.html",
+        {
+            "title": "Assets",
+            "username": session.github_username if session else "",
+            "pinata_configured": bool(os.environ.get("PINATA_JWT")),
+        },
+    )
+
+
+@router.get("/assets/schema")
+async def assets_schema() -> dict:
+    """Registry schema for the dynamic upload form.
+
+    Anonymous-readable: dataclass field names are not sensitive and the
+    public tab's type filter wants them too.
+    """
+    schema: dict = {}
+    for key, cls in sorted(ASSET_REGISTRY.items()):
+        hints = get_type_hints(cls)
+        schema[key] = [
+            {
+                "name": f.name,
+                "type": getattr(hints.get(f.name), "__name__", "str"),
+                "default": (
+                    f.default if f.default is not dataclasses.MISSING else None
+                ),
+            }
+            for f in dataclasses.fields(cls)
+            if f.name not in _BASE_FIELDS
+        ]
+    return schema
+
+
+@router.get("/assets/list")
+async def assets_list(request: Request):
+    """List assets on one network, filtered by keyvalue query params.
+
+    Public: anonymous, served from the TTL cache with filters applied
+    in-process. Private: session required; `_owner` is forced to the
+    session user server-side (fail closed — unowned and other-owned
+    records are never returned, whatever the query string says).
+    """
+    if err := _not_configured():
+        return err
+    params = dict(request.query_params)
+    network = params.pop("network", "private")
+
+    if network == "public":
+        records = await _public_records()
+        return [
+            r
+            for r in records
+            if all(r["keyvalues"].get(k) == v for k, v in params.items())
+        ]
+
+    session = _session(request)
+    if session is None:
+        return _unauthorized()
+    params["_owner"] = session.github_username
+    return await _pinata().query(params, network="private")
+
+
+@router.post("/assets/sign")
+async def assets_sign(request: Request):
+    """Validate metadata and mint a signed upload URL (session required).
+
+    `build_asset()` is the same choke point the MCP server uses; the
+    session user is stamped as `_owner` after validation, so the minted
+    URL carries exactly the validated + stamped keyvalues and the browser
+    supplies bytes only.
+    """
+    if err := _not_configured():
+        return err
+    session = _session(request)
+    if session is None:
+        return _unauthorized()
+
+    body = await request.json()
+    filename = body.get("filename", "")
+    network = body.get("network", "private")
+    if not filename:
+        return JSONResponse({"error": "filename is required"}, status_code=400)
+    if network not in ("private", "public"):
+        return JSONResponse(
+            {"error": "network must be 'private' or 'public'"}, status_code=400
+        )
+    try:
+        asset = build_asset(body.get("keyvalues") or {})
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+    keyvalues = asset.to_keyvalues()
+    keyvalues["_owner"] = session.github_username
+    url = await _pinata().create_signed_upload_url(
+        filename=filename,
+        keyvalues=keyvalues,
+        network=network,
+        max_file_size=MAX_UPLOAD_BYTES,
+    )
+    return {"url": url, "keyvalues": keyvalues}
+
+
+@router.get("/assets/download/{cid}")
+async def assets_download(request: Request, cid: str):
+    """Redirect to the file bytes — they never transit the admin pod.
+
+    Public files live on world-readable IPFS, so the redirect is anonymous,
+    but split-gateway: only session-holders go through PINATA_GATEWAY
+    (possibly dedicated and bandwidth-metered); anonymous visitors get the
+    free public gateway. Private files need a session and get a short-lived
+    signed URL.
+    """
+    network = request.query_params.get("network", "private")
+    if network == "public":
+        if _session(request) is not None:
+            gateway = os.environ.get("PINATA_GATEWAY", PUBLIC_FALLBACK_GATEWAY)
+        else:
+            gateway = PUBLIC_FALLBACK_GATEWAY
+        return RedirectResponse(f"{gateway}/ipfs/{cid}", status_code=302)
+
+    session = _session(request)
+    if session is None:
+        return _unauthorized()
+    if err := _not_configured():
+        return err
+    url = await _pinata()._get_signed_url(cid)
+    return RedirectResponse(url, status_code=302)

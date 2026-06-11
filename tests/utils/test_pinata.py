@@ -55,6 +55,121 @@ async def test_upload_and_delete_file():
         pass  # Pinata API issue with delay after upload
 
 
+def test_tus_metadata_encoding():
+    """TUS Upload-Metadata is comma-joined `key b64(value)` pairs."""
+    import base64
+
+    from stargazer.utils.pinata import _tus_metadata
+
+    encoded = _tus_metadata(
+        filename="x.bam", network="private", keyvalues={"asset": "alignment"}
+    )
+    pairs = dict(p.split(" ", 1) for p in encoded.split(","))
+    assert base64.b64decode(pairs["filename"]).decode() == "x.bam"
+    assert base64.b64decode(pairs["network"]).decode() == "private"
+    assert base64.b64decode(pairs["keyvalues"]).decode() == '{"asset": "alignment"}'
+
+
+@pytest.mark.pinata
+@pytest.mark.asyncio
+async def test_tus_upload_multichunk_roundtrip(tmp_path, monkeypatch):
+    """Force the TUS path on a small file with a tiny chunk size so the
+    offset loop runs several PATCHes, then verify the reassembled file
+    downloads back byte-identical (a broken offset loop corrupts the cid).
+    """
+    import stargazer.utils.pinata as pinata_mod
+    from stargazer.utils.local_storage import LocalStorageClient
+
+    # Force TUS regardless of size, and chunk small enough to loop.
+    monkeypatch.setattr(pinata_mod, "TUS_THRESHOLD_BYTES", 0)
+    monkeypatch.setattr(pinata_mod, "TUS_CHUNK_BYTES", 4096)
+
+    remote = PinataClient(visibility="private")
+    content = b"".join(f"stargazer tus line {i}\n".encode() for i in range(2000))
+    src = tmp_path / "tus_roundtrip.txt"
+    src.write_bytes(content)
+
+    comp = Asset(path=src, keyvalues={"asset": "never_registered_key"})
+    await remote.upload(comp)
+    assert comp.cid, "TUS upload should set the cid (from Upload-Cid header)"
+
+    try:
+        client = LocalStorageClient(local_dir=tmp_path / "cache", remote=remote)
+        fetched = Asset(cid=comp.cid)
+        await client.download(fetched)
+        assert fetched.path.read_bytes() == content, "TUS reassembly corrupted bytes"
+    finally:
+        try:
+            await remote.delete(Asset(cid=comp.cid))
+        except Exception as exc:
+            print(f"cleanup skipped: {exc}")
+
+
+@pytest.mark.pinata
+@pytest.mark.asyncio
+async def test_create_signed_upload_url_end_to_end(tmp_path):
+    """Mint a signed upload URL, upload bytes to it like a browser would,
+    and verify the mint-time metadata reached the stored record.
+
+    Also probes (informationally, no assert — undocumented semantics) what
+    a second upload to the same URL does, answering plan 20's open
+    single-use question.
+    """
+    import aiohttp
+
+    client = PinataClient()
+
+    url = await client.create_signed_upload_url(
+        filename="signed_upload_test.txt",
+        keyvalues={
+            "asset": "never_registered_key",
+            "purpose": "signed-url-test",
+            "_owner": "integration-test",
+        },
+        network="private",
+        expires=120,
+        max_file_size=1024,
+    )
+    assert url.startswith("https://"), f"Unexpected signed URL: {url!r}"
+    print(f"\nSigned URL minted: {url[:80]}...")
+
+    test_file = tmp_path / "signed_upload_test.txt"
+    test_file.write_text("stargazer signed upload test\n")
+
+    async with aiohttp.ClientSession() as session:
+        data = aiohttp.FormData()
+        data.add_field("file", test_file.open("rb"), filename=test_file.name)
+        async with session.post(url, data=data) as resp:
+            body = await resp.json()
+            assert resp.status in (200, 201), f"Upload failed: {resp.status} {body}"
+
+    record = body.get("data", body)
+    cid = record.get("cid")
+    assert cid, f"Upload response carries no cid: {body}"
+    print(f"Upload response cid: {cid}")
+    print(f"Upload response keyvalues: {record.get('keyvalues')}")
+
+    try:
+        # Mint-time metadata must be on the stored record (the whole point
+        # of the signed-URL design: the uploader can't choose keyvalues).
+        assert record.get("keyvalues", {}).get("purpose") == "signed-url-test"
+        assert record.get("keyvalues", {}).get("_owner") == "integration-test"
+        assert record.get("name") == "signed_upload_test.txt"
+
+        # Single-use probe: second upload to the same URL.
+        async with aiohttp.ClientSession() as session:
+            data = aiohttp.FormData()
+            data.add_field("file", test_file.open("rb"), filename=test_file.name)
+            async with session.post(url, data=data) as resp:
+                print(f"Second upload to same signed URL: HTTP {resp.status}")
+    finally:
+        try:
+            await client.delete(Asset(cid=cid))
+            print(f"Cleaned up {cid}")
+        except Exception as exc:
+            print(f"Cleanup skipped (Pinata post-upload delay?): {exc}")
+
+
 @pytest.mark.pinata
 @pytest.mark.asyncio
 async def test_query():

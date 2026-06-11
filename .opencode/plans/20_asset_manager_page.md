@@ -33,10 +33,30 @@
   user's private view by missing its label. (Unowned private records remain
   reachable via SDK/MCP.)
   `_owner` is stamped on public uploads too: it's publisher attribution
-  (and lives in Pinata account keyvalues, not the public file content, so
-  usernames don't leak beyond the deployment). Private filtering happens
+  (in Pinata account keyvalues, not the public file bytes; with anonymous
+  public browsing — next bullet — these usernames are world-visible,
+  accepted as the GitHub-attribution norm). Private filtering happens
   server-side in `/assets/list`, but is page-level only — the shared JWT
   means SDK/MCP can still query anything.
+- **Public browsing is anonymous.** Schema, public listing, and public
+  downloads need no session — public bytes are world-readable IPFS anyway,
+  so gating the index was security theater. The admin serves the public
+  listing from an in-process TTL cache (`app/assets.py::PUBLIC_CACHE_TTL`,
+  60s, refreshed lazily) with filters applied in-memory: a semi-static
+  read-only mirror, not an open per-request proxy to the Pinata API. Rate
+  limiting of the anonymous surface is deferred until it's needed — and
+  note that surface includes **gateway bandwidth**: `PINATA_GATEWAY`
+  reaches the admin pod via `STARGAZER_ENV_VARS` with no per-user
+  branching, so when the hosted deploy sets a dedicated (metered)
+  `*.mypinata.cloud` gateway, anonymous download redirects spend account
+  bandwidth just like authed ones. **Split-gateway policy implemented**
+  (2026-06-10): anonymous public downloads redirect to
+  `PUBLIC_FALLBACK_GATEWAY` (`dweb.link`); only session-holders go through
+  `PINATA_GATEWAY`. Real rate limiting stays deferred.
+  **UI obligation (piece 3):** the private/public upload toggle must say
+  public = *anyone on the internet* can browse it (not "anyone on the
+  deployment"), and anonymous visitors get a public-tab-only page with a
+  sign-in link.
 
 ### 2026-06-09
 
@@ -130,11 +150,11 @@ only". Fix before anything else:
 
 | Route | Auth | Behavior |
 |-------|------|----------|
-| `GET /assets` | session → else redirect `/` | Render `assets.html` |
-| `GET /assets/schema` | session → else 401 JSON | Registry schema for the dynamic form |
-| `GET /assets/list?<kv filters>&network=` | session → else 401 JSON | Pinata query → `[{cid, name, keyvalues, network}]`. Private-network results are filtered **server-side** to `_owner == session user` (fail closed: unowned records excluded) |
-| `POST /assets/sign` | session → else 401 JSON | JSON `{filename, keyvalues, network}` (must include `asset`; `network` defaults to private). Validate via `build_asset()`, stamp `_owner` from the session, mint a Pinata signed upload URL for that network with `filename` + the final keyvalues baked in (plus `max_file_size`), return `{url, keyvalues}` |
-| `GET /assets/download/{cid}` | session → else 401 JSON | 302 redirect to a Pinata signed download URL (private files), so bytes also bypass the pod on the way out |
+| `GET /assets` | none | Render `assets.html`; anonymous visitors get the public tab only |
+| `GET /assets/schema` | none | Registry schema for the dynamic form (field names aren't sensitive; the public type filter wants them too) |
+| `GET /assets/list?<kv filters>&network=` | public: none / private: session → else 401 | Public: full listing from the TTL cache, filters applied in-memory. Private: Pinata query with `_owner == session user` forced **server-side** (fail closed: unowned and other-owned excluded, whatever the query string says) |
+| `POST /assets/sign` | session → else 401 JSON | JSON `{filename, keyvalues, network}` (must include `asset`; `network` defaults to private). Validate via `build_asset()`, stamp `_owner` from the session, mint a Pinata signed upload URL for that network with `filename` + the final keyvalues baked in (plus `MAX_UPLOAD_BYTES`), return `{url, keyvalues}` |
+| `GET /assets/download/{cid}?network=` | public: none / private: session → else 401 | 302 redirect — public to the IPFS gateway, private to a Pinata signed download URL; bytes bypass the pod both ways |
 
 Upload data plane (two-phase, browser → Pinata):
 
@@ -288,11 +308,15 @@ an "Assets" nav link.
     hints that non-text values should be JSON-encoded (`true`, `42`) so the
     record can type-promote when a class is later registered.
   - Network choice: **private / public radio, default private**, passed to
-    `/assets/sign`. Public means anyone on the deployment can browse it;
-    the form says so next to the radio.
-  - A short note sets size expectations (browser uploads suit small/medium
-    files; bulk sequencing data flows through the SDK/MCP), backed by
-    `max_file_size` on the signed URL.
+    `/assets/sign`. Public means **anyone on the internet** can browse it
+    (the public listing is anonymous) — the form must say exactly that
+    next to the radio.
+  - A short note sets size expectations: uploads are capped at **100MB —
+    a Pinata limit, not ours** (plain multipart POST; larger requires the
+    TUS resumable endpoint, ROADMAP item 20, which also covers the SDK's
+    identical ceiling). `MAX_UPLOAD_BYTES` mirrors the cap into the signed
+    URL so oversized files fail at mint time with an explanation, not
+    mid-upload.
 - Browse panel: **Public / Private tabs** (the two Pinata networks).
   Private shows only the session user's own records (`_owner` match,
   filtered server-side, fail closed — unowned records don't appear).
@@ -342,12 +366,17 @@ Resolved by inspection:
 
 Confirm during implementation (none block starting):
 
-- [ ] Signed upload URL semantics: single-use vs reusable, and the upload
-      response shape (cid for the optimistic browse row) — undocumented;
-      test empirically.
-- [ ] `PinataClient.query()` needs an explicit `network` parameter for the
-      per-tab list route (it currently merges both networks).
-- [ ] Download route: confirm the private-network signed download link API.
+- [x] Signed upload URL semantics — answered empirically by
+      `test_create_signed_upload_url_end_to_end` (pinata-marked, ran
+      against the real API 2026-06-10): the upload response carries the
+      full record (`cid`, `name`, `keyvalues`) — everything the optimistic
+      browse row needs; mint-time keyvalues (incl. `_owner`) verifiably
+      reach the stored record; and **signed URLs are single-use** (second
+      upload → HTTP 409), so the page's re-mint-on-retry isn't optional.
+- [x] `PinataClient.query()` gained a `network` parameter (single-endpoint
+      query; records now carry the network they were found on).
+- [x] Download route: reuses the existing `_get_signed_url` (already the
+      private-download path); public redirects to the IPFS gateway.
 - [x] Piece 0 details: `keyvalues` uses `field(default_factory=dict)`; the
       `asset` key lives *inside* the dict (verbatim round-trip).
 - [x] `build_asset()` reserved-key error message should tell callers to
@@ -381,20 +410,25 @@ Confirm during implementation (none block starting):
       `STARGAZER_ENV_VARS` (both TaskEnvironments) when the submitting
       process carries it, closing the task-pod gap. Tests:
       `tests/unit/test_assets_page.py` (15).
-- [ ] **Piece 2 — API routes.** `app/assets.py` router (page, schema, list,
-      sign, download) included by `admin_app.py`; bake optional `PINATA_JWT` into
-      admin env_vars. Route tests with `TestClient` (no lifespan), signed
-      session cookies, Pinata client swapped for a fake via the module
-      attribute (sign returns a canned URL; list returns canned records).
-      Sign-route tests cover `_owner` stamping from the session and the
-      network pass-through; list-route tests cover the server-side private
-      fail-closed owner filter (unowned and other-owned records excluded).
-      Workspace launcher injects `STARGAZER_OWNER=<github_username>` into
-      workspace pods.
+- [x] **Piece 2 — API routes.** ✅ 2026-06-10. `app/assets.py` router
+      (page, schema, list, sign, download) included by `admin_app.py`;
+      `PINATA_JWT` joined `_RUNTIME_SECRETS` (optional bake); workspace
+      launcher injects `STARGAZER_OWNER=<github_username>` next to
+      `FLYTE_PROJECT`. Public browsing is anonymous, served from the
+      lazy TTL cache; private list forces `_owner` server-side; sign
+      stamps the session user after `build_asset()` validation; download
+      302s (gateway / signed URL). `PinataClient` gained
+      `create_signed_upload_url()` and per-network `query()`. Tests:
+      `tests/unit/test_assets_routes.py` (19) — fake Pinata client via
+      `app.assets._pinata_client`, fail-closed and cache behavior covered.
+      The page route renders `assets.html`, which lands in Piece 3 (no
+      page-route test until then).
 - [ ] **Piece 3 — template.** `assets.html` (typed/custom upload modes,
-      network radio, Public/Private browse tabs, optimistic browse row,
-      download links) + dashboard nav link; manual
-      verify against local uvicorn (needs `PINATA_JWT` in the shell — the
-      page has no TinyDB mode).
+      network radio with the **anyone-on-the-internet** note, Public/Private
+      browse tabs, anonymous state = public tab only + sign-in link,
+      optimistic browse row, download links) + dashboard nav link +
+      page-route tests (anonymous and authed render); manual verify against
+      local uvicorn (needs `PINATA_JWT` in the shell — the page has no
+      TinyDB mode), including the empirical signed-upload check above.
 - [ ] **Docs.** Update `docs/architecture/app.md` (new route table entry) and
       module docstrings as part of the same pass.

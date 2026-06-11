@@ -97,6 +97,7 @@ from app.notebooks import (
     by_section,
     by_slug,
 )
+from app.assets import router as assets_router
 from app.oauth import exchange_code, get_github_user, github_auth_url
 from app.per_notebook import (
     NOTEBOOK_IMAGE_URI,
@@ -135,9 +136,12 @@ _SECRET_NAMES = ("GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "SESSION_SECRET")
 # drives the install-redirect URL. All optional: baked into the App env only
 # when set, so deploys before the GitHub App is registered keep working.
 _GITHUB_APP_NAMES = ("GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY", "GITHUB_APP_SLUG")
+# Pinata credential for the /assets routes (list/sign/download). Optional:
+# without it the asset manager renders a "Pinata not configured" state.
+_STORAGE_NAMES = ("PINATA_JWT",)
 _RUNTIME_SECRETS = {
     name: os.environ[name]
-    for name in (*_SECRET_NAMES, *_GITHUB_APP_NAMES)
+    for name in (*_SECRET_NAMES, *_GITHUB_APP_NAMES, *_STORAGE_NAMES)
     if os.environ.get(name)
 }
 
@@ -239,6 +243,7 @@ asgi_app.mount(
     StaticFiles(directory=str(Path(__file__).parent / "static")),
     name="static",
 )
+asgi_app.include_router(assets_router)
 
 
 def _redirect_uri(request: Request) -> str:
@@ -1037,6 +1042,9 @@ async def launch(
         resources=resources,
     )
     env.env_vars["FLYTE_PROJECT"] = project
+    # Owner attribution: workspace MCP/SDK uploads stamp `_owner` from this
+    # (and config.py forwards it onward into task pods at run submission).
+    env.env_vars["STARGAZER_OWNER"] = session.github_username
 
     # `serve.aio()` watches the deployment to readiness and raises if the pod
     # is slow to schedule/boot — common on the memory-tight devbox node, where
