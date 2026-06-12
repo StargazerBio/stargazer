@@ -1,0 +1,1106 @@
+{% extends "base.html" %} {% block extra_css %}
+/* Asset manager — lives in the same .dashboard box as the notebook dashboard
+   and reuses base.html's tokens/buttons. The reactive starfield (#sky) is
+   untouched; the asset graph is a separate foreground SVG inside the card. */
+.assets-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+}
+/* Segmented control shared by the network tabs and the graph/list toggle. */
+.seg {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.seg button {
+    background: transparent;
+    color: var(--text-dim);
+    border: none;
+    padding: 0.4rem 0.9rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-selected="true"] {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+.seg button:hover:not([aria-selected="true"]) {
+    background: var(--surface-2);
+    color: var(--text);
+}
+.asset-filters { display: inline-flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.asset-filters input {
+    background: #0d1117;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.82rem;
+    font-family: inherit;
+}
+.asset-filters input:focus { outline: none; border-color: var(--accent); }
+.mine-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+.controls-spacer { flex: 1; }
+
+/* Display region — graph and list are siblings; one is [hidden] at a time. */
+.asset-region {
+    position: relative;
+    min-height: 380px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: rgba(13, 17, 23, 0.45);
+    margin-bottom: 1.25rem;
+}
+.asset-region[hidden] { display: none; }
+.region-empty, .region-error {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-dim);
+    font-size: 0.88rem;
+}
+.region-error { color: var(--danger); }
+
+/* Graph */
+.asset-graph { width: 100%; height: 420px; display: block; }
+.asset-graph .edge { stroke: var(--accent-line); stroke-width: 0.8; }
+.asset-graph .edge.hot { stroke: var(--accent); stroke-width: 1.4; }
+.asset-graph .node circle {
+    fill: var(--accent-soft);
+    stroke: var(--accent-line);
+    stroke-width: 1.2;
+    cursor: pointer;
+    transition: fill 0.15s ease, stroke 0.15s ease;
+}
+.asset-graph .node.green circle { fill: var(--green-soft); stroke: var(--green-line); }
+.asset-graph .node:hover circle,
+.asset-graph .node.hot circle { stroke: var(--accent); }
+.asset-graph .node.selected circle {
+    fill: var(--accent-softer);
+    stroke: var(--accent);
+    stroke-width: 2;
+}
+.asset-graph .node text {
+    fill: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 9px;
+    text-anchor: middle;
+    pointer-events: none;
+    user-select: none;
+}
+.graph-cap {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.75rem;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    font-family: var(--mono);
+}
+.graph-tip {
+    position: absolute;
+    z-index: 5;
+    max-width: 280px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.76rem;
+    color: var(--text);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+    display: none;
+}
+.graph-tip .tip-type { color: var(--accent); font-family: var(--mono); font-weight: 600; }
+.graph-tip dl { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.5rem; margin-top: 0.35rem; }
+.graph-tip dt { color: var(--text-dim); font-family: var(--mono); }
+.graph-tip dd { margin: 0; word-break: break-all; }
+
+/* List */
+.asset-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.asset-table th, .asset-table td {
+    text-align: left;
+    padding: 0.5rem 0.7rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+}
+.asset-table th {
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.asset-table tbody tr { cursor: pointer; transition: background 0.12s ease; }
+.asset-table tbody tr:hover { background: var(--surface-2); }
+.asset-table tbody tr.selected { background: var(--accent-soft); }
+.asset-table .col-cid { font-family: var(--mono); color: var(--text-dim); white-space: nowrap; }
+.asset-table .kv-mini { color: var(--text-dim); font-size: 0.76rem; }
+.badge {
+    display: inline-block;
+    padding: 0.05rem 0.45rem;
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+}
+.badge.type { color: var(--accent); border-color: var(--accent-line); }
+.copy-cid {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 0 0.2rem;
+}
+.copy-cid:hover { color: var(--accent); }
+
+/* Detail card */
+.asset-detail {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+.asset-detail.empty { color: var(--text-dim); font-size: 0.85rem; }
+.detail-head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.detail-head h3 { font-family: var(--mono); margin: 0; }
+.detail-cid { font-family: var(--mono); font-size: 0.78rem; color: var(--text-dim); word-break: break-all; }
+.detail-grid { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.75rem; margin: 0.6rem 0; font-size: 0.82rem; }
+.detail-grid dt { color: var(--text-dim); font-family: var(--mono); }
+.detail-grid dt.sys { opacity: 0.7; }
+.detail-grid dd { margin: 0; word-break: break-all; }
+.detail-links { margin: 0.6rem 0; font-size: 0.82rem; }
+.link-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid var(--accent-line);
+    border-radius: 999px;
+    padding: 0.1rem 0.55rem;
+    margin: 0.15rem 0.25rem 0.15rem 0;
+    font-size: 0.76rem;
+    cursor: pointer;
+}
+.link-chip.dangling { background: transparent; color: var(--text-dim); border-color: var(--border); cursor: default; }
+.detail-actions { margin-top: 0.6rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.detail-edit { margin: 0.6rem 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.detail-edit .kv-row .kv-k[readonly] { color: var(--text-dim); background: transparent; border-style: dashed; }
+.edit-note { font-size: 0.76rem; color: var(--text-dim); }
+.edit-err { font-size: 0.8rem; color: var(--danger); }
+
+/* Upload panel */
+.asset-upload {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: rgba(13, 17, 23, 0.45);
+    padding: 0 1.25rem;
+}
+.asset-upload > summary {
+    cursor: pointer;
+    padding: 0.9rem 0;
+    font-family: var(--mono);
+    font-weight: 600;
+    color: var(--heading);
+    list-style: none;
+}
+.asset-upload > summary::-webkit-details-marker { display: none; }
+.asset-upload > summary::before { content: "▸ "; color: var(--accent); }
+.asset-upload[open] > summary::before { content: "▾ "; }
+.upload-body { padding-bottom: 1.25rem; display: flex; flex-direction: column; gap: 0.9rem; }
+.upload-row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+.upload-label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; color: var(--text-dim); }
+.upload-body input[type="text"],
+.upload-body input[type="number"],
+.upload-body input[type="file"],
+.upload-body select {
+    background: #0d1117;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.82rem;
+    font-family: inherit;
+}
+.upload-body input:focus, .upload-body select:focus { outline: none; border-color: var(--accent); }
+.typed-fields { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+/* Custom mode gets its own dashed framing so the strictness asymmetry reads
+   as a different contract, not an arbitrary quirk. */
+.custom-editor {
+    border: 1px dashed var(--accent-line);
+    border-radius: 8px;
+    padding: 0.9rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+.custom-editor .generic-notice {
+    font-size: 0.78rem;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+}
+.kv-row { display: flex; gap: 0.5rem; align-items: center; }
+.kv-row input { flex: 1; }
+.kv-row button { background: transparent; border: 1px solid var(--border); color: var(--text-dim); border-radius: 6px; cursor: pointer; padding: 0.3rem 0.55rem; }
+.upload-net { display: inline-flex; gap: 1rem; align-items: center; font-size: 0.82rem; }
+.upload-net label { display: inline-flex; gap: 0.3rem; align-items: center; cursor: pointer; color: var(--text-dim); }
+.upload-note { font-size: 0.78rem; color: var(--text-dim); }
+.upload-status { font-size: 0.82rem; }
+.upload-status.err { color: var(--danger); }
+.upload-status.ok { color: var(--green); }
+.signin-link { color: var(--accent); text-decoration: none; font-size: 0.85rem; }
+.signin-link:hover { text-decoration: underline; }
+{% endblock %} {% block body %}
+<div class="dashboard">
+    <header class="dash-header">
+        <a href="/" class="dash-brand" aria-label="Stargazer home">
+            <img src="/static/8-bit_stargazer_no-bg.jpg" alt="Stargazer" />
+        </a>
+        {% if username %}
+        <details class="user-menu">
+            <summary aria-label="User menu">
+                <img src="https://github.com/{{ username }}.png?size=80" alt="" />
+            </summary>
+            <div class="menu">
+                <div class="menu-user">Signed in as <strong>@{{ username }}</strong></div>
+                <a class="menu-item" href="/">Dashboard</a>
+                <a class="menu-item" href="/auth/logout">Sign out</a>
+            </div>
+        </details>
+        {% else %}
+        <a class="signin-link" href="/auth/login">Sign in</a>
+        {% endif %}
+    </header>
+
+    <h2>
+        Assets
+        <span class="section-tag">Browse, graph, and upload files in the asset store.</span>
+    </h2>
+
+    {% if not pinata_configured %}
+    <div class="notice">
+        <p class="notice-head">⚠ Pinata not configured</p>
+        <p class="section-desc">
+            This deployment has no <code>PINATA_JWT</code>, so the asset store is
+            unavailable. The asset manager talks only to Pinata — there is no
+            local-storage fallback here.
+        </p>
+    </div>
+    {% else %}
+    <div class="assets-controls">
+        <div class="seg" id="network-tabs" role="tablist" aria-label="Network">
+            <button data-network="public" role="tab" aria-selected="false">Public</button>
+            {% if username %}
+            <button data-network="private" role="tab" aria-selected="true">Private</button>
+            {% endif %}
+        </div>
+        <div class="seg" id="view-toggle" role="tablist" aria-label="View">
+            <button data-view="graph" role="tab" aria-selected="true">Graph</button>
+            <button data-view="list" role="tab" aria-selected="false">List</button>
+        </div>
+        <div class="asset-filters">
+            <input id="filter-type" list="type-options" placeholder="asset type" />
+            <datalist id="type-options"></datalist>
+            <input id="filter-key" placeholder="key" size="10" />
+            <input id="filter-val" placeholder="value" size="10" />
+            <button class="btn btn-muted" id="filter-apply" type="button">Filter</button>
+        </div>
+        <label class="mine-toggle" id="mine-wrap" hidden>
+            <input type="checkbox" id="mine-only" />
+            Mine only
+        </label>
+    </div>
+
+    <div class="asset-region" id="graph-region">
+        <div class="graph-cap" id="graph-cap" hidden></div>
+        <div id="graph-host"></div>
+        <div class="graph-tip" id="graph-tip"></div>
+    </div>
+
+    <div class="asset-region" id="list-region" hidden>
+        <table class="asset-table">
+            <thead>
+                <tr>
+                    <th>CID</th><th>Name</th><th>Owner</th><th>Type</th>
+                    <th>Metadata</th><th></th>
+                </tr>
+            </thead>
+            <tbody id="list-body"></tbody>
+        </table>
+    </div>
+
+    <div class="asset-detail empty" id="detail">
+        Select an asset node or row to see its metadata and download it.
+    </div>
+
+    {% if username %}
+    <details class="asset-upload" id="upload-panel" open>
+        <summary>Upload an asset</summary>
+        <div class="upload-body">
+            <div class="upload-row">
+                <label class="upload-label">
+                    File
+                    <input type="file" id="up-file" />
+                </label>
+                <label class="upload-label">
+                    Asset type
+                    <select id="up-type"></select>
+                </label>
+            </div>
+
+            <div class="typed-fields" id="typed-fields"></div>
+
+            <div class="custom-editor" id="custom-editor" hidden>
+                <div class="generic-notice">
+                    Unregistered asset key — stored as a generic asset. Encode
+                    non-text values as JSON (<code>true</code>, <code>42</code>)
+                    so the record can type-promote if a class is registered later.
+                </div>
+                <label class="upload-label">
+                    Asset key (required)
+                    <input type="text" id="custom-key" placeholder="e.g. sample_sheet" />
+                </label>
+                <div id="kv-rows"></div>
+                <div><button type="button" class="btn btn-muted" id="add-kv">+ Add field</button></div>
+            </div>
+
+            <div class="upload-net">
+                <span>Network:</span>
+                <label><input type="radio" name="net" value="private" checked /> Private (only you)</label>
+                <label><input type="radio" name="net" value="public" /> Public — <strong>anyone on the internet</strong> can browse it</label>
+            </div>
+
+            <p class="upload-note">
+                Uploads are capped at <strong>100&nbsp;MB</strong> — a Pinata
+                limit, not ours. Larger files need resumable (TUS) upload, not
+                yet wired into this page.
+            </p>
+
+            <div class="upload-row">
+                <button type="button" class="btn btn-notebook" id="up-submit">Upload</button>
+                <span class="upload-status" id="up-status"></span>
+            </div>
+        </div>
+    </details>
+    {% endif %}
+    {% endif %}
+</div>
+{% endblock %} {% block scripts %}
+{% if pinata_configured %}
+<script>
+const AUTHED = {{ 'true' if username else 'false' }};
+const USERNAME = {{ username | tojson }};
+
+const NODE_CAP = 150;
+const state = {
+    network: AUTHED ? "private" : "public",
+    view: "graph",
+    mineOnly: false,
+    filters: {},
+    records: [],
+    schema: {},
+    selected: null,
+    editing: null,
+};
+
+const $ = (id) => document.getElementById(id);
+const shortCid = (c) => (c && c.length > 14 ? c.slice(0, 8) + "…" + c.slice(-4) : c || "");
+const assetType = (r) => (r.keyvalues && r.keyvalues.asset) || "(bare)";
+const owner = (r) => (r.keyvalues && r.keyvalues._owner) || "shared";
+// Relationship keys: any keyvalue ending in _cid with a non-empty value.
+// Bare "cid" is excluded (no underscore prefix on the suffix boundary).
+function relKeys(kv) {
+    return Object.keys(kv || {}).filter((k) => k !== "cid" && k.endsWith("_cid") && kv[k]);
+}
+
+// ---- data ----------------------------------------------------------------
+
+async function fetchSchema() {
+    try {
+        const resp = await fetch("/assets/schema", { headers: { Accept: "application/json" } });
+        if (resp.ok) state.schema = await resp.json();
+    } catch (_) { /* schema is best-effort; custom upload still works */ }
+}
+
+function listParams() {
+    const p = new URLSearchParams({ network: state.network });
+    if (state.filters.type) p.set("asset", state.filters.type);
+    if (state.filters.key && state.filters.val) p.set(state.filters.key, state.filters.val);
+    if (state.network === "public" && state.mineOnly && USERNAME) p.set("_owner", USERNAME);
+    return p;
+}
+
+async function fetchRecords() {
+    setRegionMessage(null);
+    try {
+        const resp = await fetch("/assets/list?" + listParams().toString(), {
+            headers: { Accept: "application/json" },
+        });
+        if (!resp.ok) {
+            const body = await resp.json().catch(() => ({}));
+            throw new Error(body.detail || "HTTP " + resp.status);
+        }
+        state.records = await resp.json();
+    } catch (err) {
+        state.records = [];
+        setRegionMessage("Couldn't load assets: " + err.message, true);
+        return;
+    }
+    // Drop a selection that's no longer in the set.
+    if (state.selected && !state.records.some((r) => r.cid === state.selected)) {
+        state.selected = null;
+    }
+    renderView();
+    renderDetail();
+}
+
+// ---- view switching ------------------------------------------------------
+
+function renderView() {
+    $("graph-region").hidden = state.view !== "graph";
+    $("list-region").hidden = state.view !== "list";
+    if (state.records.length === 0) {
+        setRegionMessage(
+            state.network === "private"
+                ? "No private assets you own yet. Unowned or pipeline records are reachable via the SDK/MCP."
+                : "No public assets on this network yet."
+        );
+        return;
+    }
+    setRegionMessage(null);
+    if (state.view === "graph") renderGraph();
+    else renderList();
+}
+
+function setRegionMessage(msg, isError) {
+    for (const id of ["graph-region", "list-region"]) {
+        const region = $(id);
+        region.querySelectorAll(".region-empty, .region-error").forEach((e) => e.remove());
+    }
+    if (!msg) return;
+    const active = state.view === "graph" ? $("graph-region") : $("list-region");
+    const div = document.createElement("div");
+    div.className = isError ? "region-error" : "region-empty";
+    div.textContent = msg;
+    active.appendChild(div);
+}
+
+// ---- graph ---------------------------------------------------------------
+
+function buildGraph(records) {
+    const capped = records.slice(0, NODE_CAP);
+    const byCid = new Map(capped.map((r) => [r.cid, r]));
+    const nodes = capped.map((r) => ({ cid: r.cid, rec: r, deg: 0 }));
+    const nodeByCid = new Map(nodes.map((n) => [n.cid, n]));
+    const edges = [];
+    for (const r of capped) {
+        for (const k of relKeys(r.keyvalues)) {
+            const target = r.keyvalues[k];
+            if (byCid.has(target) && target !== r.cid) {
+                edges.push({ source: r.cid, target, label: k.slice(0, -4) });
+                nodeByCid.get(r.cid).deg++;
+                nodeByCid.get(target).deg++;
+            }
+        }
+    }
+    return { nodes, edges, nodeByCid, truncated: records.length > NODE_CAP };
+}
+
+// A short static force simulation: charge repulsion + edge springs + center
+// gravity, run for a fixed number of iterations then drawn once. No animation
+// loop — the background starfield owns the motion budget.
+function layout(nodes, edges, W, H) {
+    const cx = W / 2, cy = H / 2;
+    const PAD = 28;
+    nodes.forEach((n, i) => {
+        const a = (i / Math.max(1, nodes.length)) * Math.PI * 2;
+        n.x = cx + Math.cos(a) * Math.min(W, H) * 0.3;
+        n.y = cy + Math.sin(a) * Math.min(W, H) * 0.3;
+        n.vx = 0; n.vy = 0;
+    });
+    const pos = new Map(nodes.map((n) => [n.cid, n]));
+    const REPULSE = 2600, SPRING_LEN = 90, SPRING_K = 0.02, GRAVITY = 0.015, FRICTION = 0.85;
+    const iters = nodes.length > 60 ? 160 : 280;
+    for (let it = 0; it < iters; it++) {
+        for (let i = 0; i < nodes.length; i++) {
+            for (let j = i + 1; j < nodes.length; j++) {
+                const a = nodes[i], b = nodes[j];
+                let dx = a.x - b.x, dy = a.y - b.y;
+                let d2 = dx * dx + dy * dy || 0.01;
+                let d = Math.sqrt(d2);
+                let f = REPULSE / d2;
+                let fx = (f * dx) / d, fy = (f * dy) / d;
+                a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
+            }
+        }
+        for (const e of edges) {
+            const a = pos.get(e.source), b = pos.get(e.target);
+            let dx = b.x - a.x, dy = b.y - a.y;
+            let d = Math.sqrt(dx * dx + dy * dy) || 0.01;
+            let f = (d - SPRING_LEN) * SPRING_K;
+            let fx = (f * dx) / d, fy = (f * dy) / d;
+            a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
+        }
+        for (const n of nodes) {
+            n.vx += (cx - n.x) * GRAVITY;
+            n.vy += (cy - n.y) * GRAVITY;
+            n.x += n.vx; n.y += n.vy;
+            n.vx *= FRICTION; n.vy *= FRICTION;
+            n.x = Math.max(PAD, Math.min(W - PAD, n.x));
+            n.y = Math.max(PAD, Math.min(H - PAD, n.y));
+        }
+    }
+}
+
+function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+    );
+}
+
+function renderGraph() {
+    const host = $("graph-host");
+    const W = host.clientWidth || $("graph-region").clientWidth || 800;
+    const H = 420;
+    const g = buildGraph(state.records);
+    layout(g.nodes, g.edges, W, H);
+
+    const cap = $("graph-cap");
+    if (g.truncated) {
+        cap.hidden = false;
+        cap.textContent = "Showing " + NODE_CAP + " of " + state.records.length + " — narrow with filters";
+    } else {
+        cap.hidden = true;
+    }
+
+    let edgeSvg = "";
+    for (const e of g.edges) {
+        const a = g.nodeByCid.get(e.source), b = g.nodeByCid.get(e.target);
+        edgeSvg += `<line class="edge" data-src="${esc(e.source)}" data-dst="${esc(e.target)}" x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" />`;
+    }
+    let nodeSvg = "";
+    for (const n of g.nodes) {
+        const r = 6 + Math.min(6, n.deg * 1.5);
+        const sel = n.cid === state.selected ? " selected" : "";
+        const label = esc(n.rec.name || shortCid(n.cid));
+        nodeSvg += `<g class="node${sel}" data-cid="${esc(n.cid)}" transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})"><circle r="${r.toFixed(1)}"></circle><text y="${(r + 11).toFixed(1)}">${label}</text></g>`;
+    }
+    host.innerHTML = `<svg class="asset-graph" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet"><g class="edges">${edgeSvg}</g><g class="nodes">${nodeSvg}</g></svg>`;
+}
+
+// Graph interaction (delegated on the host so re-renders need no rebinding).
+function graphTip(rec, x, y) {
+    const tip = $("graph-tip");
+    const kv = rec.keyvalues || {};
+    let rows = "";
+    for (const k of Object.keys(kv)) {
+        if (k === "asset") continue;
+        rows += `<dt>${esc(k)}</dt><dd>${esc(kv[k])}</dd>`;
+    }
+    tip.innerHTML = `<div class="tip-type">${esc(assetType(rec))}</div><dl>${rows}</dl>`;
+    const region = $("graph-region").getBoundingClientRect();
+    let left = x - region.left + 14, top = y - region.top + 14;
+    tip.style.display = "block";
+    // Keep inside the region.
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    if (left + tw > region.width) left = region.width - tw - 8;
+    if (top + th > region.height) top = region.height - th - 8;
+    tip.style.left = left + "px";
+    tip.style.top = top + "px";
+}
+
+function highlightNeighbors(cid, on) {
+    const svg = $("graph-host").querySelector("svg");
+    if (!svg) return;
+    svg.querySelectorAll(".edge").forEach((line) => {
+        const hot = line.dataset.src === cid || line.dataset.dst === cid;
+        line.classList.toggle("hot", on && hot);
+        if (on && hot) {
+            const other = line.dataset.src === cid ? line.dataset.dst : line.dataset.src;
+            const g = svg.querySelector(`.node[data-cid="${cssEscape(other)}"]`);
+            if (g) g.classList.add("hot");
+        }
+    });
+    if (!on) svg.querySelectorAll(".node.hot").forEach((g) => g.classList.remove("hot"));
+}
+
+function cssEscape(s) {
+    return window.CSS && CSS.escape ? CSS.escape(s) : s.replace(/["\\]/g, "\\$&");
+}
+
+$("graph-host").addEventListener("pointerover", (e) => {
+    const g = e.target.closest(".node");
+    if (!g) return;
+    const rec = state.records.find((r) => r.cid === g.dataset.cid);
+    if (rec) { graphTip(rec, e.clientX, e.clientY); highlightNeighbors(g.dataset.cid, true); }
+});
+$("graph-host").addEventListener("pointermove", (e) => {
+    const tip = $("graph-tip");
+    if (tip.style.display !== "block") return;
+    const g = e.target.closest(".node");
+    if (g) {
+        const region = $("graph-region").getBoundingClientRect();
+        let left = e.clientX - region.left + 14;
+        if (left + tip.offsetWidth > region.width) left = region.width - tip.offsetWidth - 8;
+        tip.style.left = left + "px";
+    }
+});
+$("graph-host").addEventListener("pointerout", (e) => {
+    const g = e.target.closest(".node");
+    if (!g) return;
+    if (e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest(".node") === g) return;
+    $("graph-tip").style.display = "none";
+    highlightNeighbors(g.dataset.cid, false);
+});
+$("graph-host").addEventListener("click", (e) => {
+    const g = e.target.closest(".node");
+    if (g) { selectAsset(g.dataset.cid); return; }
+    // Click on empty canvas clears the selection.
+    if (e.target.closest("svg")) { state.selected = null; renderView(); renderDetail(); }
+});
+
+// ---- list ----------------------------------------------------------------
+
+function renderList() {
+    const body = $("list-body");
+    body.innerHTML = "";
+    for (const r of state.records) {
+        const tr = document.createElement("tr");
+        tr.dataset.cid = r.cid;
+        if (r.cid === state.selected) tr.classList.add("selected");
+        const kv = r.keyvalues || {};
+        const mini = Object.keys(kv)
+            .filter((k) => k !== "asset" && k !== "_owner")
+            .map((k) => esc(k) + "=" + esc(kv[k]))
+            .join(", ");
+        tr.innerHTML =
+            `<td class="col-cid">${esc(shortCid(r.cid))}<button class="copy-cid" data-copy="${esc(r.cid)}" title="Copy CID">⧉</button></td>` +
+            `<td>${esc(r.name || "")}</td>` +
+            `<td>${esc(owner(r))}</td>` +
+            `<td><span class="badge type">${esc(assetType(r))}</span></td>` +
+            `<td class="kv-mini">${mini}</td>` +
+            `<td><a class="btn btn-muted" href="/assets/download/${encodeURIComponent(r.cid)}?network=${state.network}">Download</a></td>`;
+        body.appendChild(tr);
+    }
+}
+
+$("list-body").addEventListener("click", (e) => {
+    const copy = e.target.closest("[data-copy]");
+    if (copy) { e.stopPropagation(); navigator.clipboard?.writeText(copy.dataset.copy); flash(copy, "✓"); return; }
+    if (e.target.closest("a")) return; // let download links work
+    const tr = e.target.closest("tr[data-cid]");
+    if (tr) selectAsset(tr.dataset.cid);
+});
+
+function flash(el, txt) {
+    const orig = el.textContent;
+    el.textContent = txt;
+    setTimeout(() => (el.textContent = orig), 1200);
+}
+
+// ---- selection + detail card --------------------------------------------
+
+function selectAsset(cid) {
+    if (state.editing && state.editing !== cid) state.editing = null;
+    state.selected = cid;
+    // Reflect selection in whichever view is live without a full re-layout.
+    if (state.view === "list") {
+        $("list-body").querySelectorAll("tr").forEach((tr) =>
+            tr.classList.toggle("selected", tr.dataset.cid === cid)
+        );
+    } else {
+        const svg = $("graph-host").querySelector("svg");
+        if (svg) svg.querySelectorAll(".node").forEach((g) =>
+            g.classList.toggle("selected", g.dataset.cid === cid)
+        );
+    }
+    renderDetail();
+}
+
+function renderDetail() {
+    const el = $("detail");
+    const rec = state.records.find((r) => r.cid === state.selected);
+    if (!rec) {
+        state.editing = null;
+        el.className = "asset-detail empty";
+        el.textContent = "Select an asset node or row to see its metadata and download it.";
+        return;
+    }
+    el.className = "asset-detail";
+    if (state.editing === rec.cid) { renderDetailEditor(el, rec); return; }
+
+    const kv = rec.keyvalues || {};
+    let meta = "";
+    for (const k of Object.keys(kv)) {
+        if (k === "asset") continue;
+        const sys = k.startsWith("_") ? " sys" : "";
+        meta += `<dt class="${sys.trim()}">${esc(k)}${sys ? " (system)" : ""}</dt><dd>${esc(kv[k])}</dd>`;
+    }
+    // Linked assets — resolve in-view targets to a clickable chip; the rest
+    // are dangling (cross-network / out of view) and shown read-only.
+    let links = "";
+    for (const k of relKeys(kv)) {
+        const target = kv[k];
+        const found = state.records.find((r) => r.cid === target);
+        const label = esc(k.slice(0, -4));
+        if (found) {
+            links += `<span class="link-chip" data-goto="${esc(target)}">${label}: ${esc(found.name || shortCid(target))}</span>`;
+        } else {
+            links += `<span class="link-chip dangling" title="${esc(target)}">${label}: ${esc(shortCid(target))} (not in this view)</span>`;
+        }
+    }
+    // Editing is owner-only and server-enforced (fail-closed 403); only show
+    // the affordance when the session user owns this record.
+    const canEdit = AUTHED && owner(rec) === USERNAME && USERNAME;
+    el.innerHTML =
+        `<div class="detail-head"><h3>${esc(rec.name || "(unnamed)")}</h3><span class="badge type">${esc(assetType(rec))}</span><span class="badge">${esc(owner(rec))}</span></div>` +
+        `<div class="detail-cid">${esc(rec.cid)} <button class="copy-cid" data-copy="${esc(rec.cid)}" title="Copy CID">⧉</button></div>` +
+        (meta ? `<dl class="detail-grid">${meta}</dl>` : "") +
+        (links ? `<div class="detail-links"><strong>Linked:</strong> ${links}</div>` : "") +
+        `<div class="detail-actions">` +
+        `<a class="btn btn-notebook" href="/assets/download/${encodeURIComponent(rec.cid)}?network=${state.network}">Download</a>` +
+        (canEdit ? `<button class="btn btn-muted" data-edit="${esc(rec.cid)}">Edit metadata</button>` : "") +
+        `</div>`;
+}
+
+// Inline metadata editor. Values of existing keys are editable (the headline
+// case: fix a typo'd asset type or field); new keys can be added. Keys aren't
+// renamable/removable — Pinata's update merges, so a renamed key would orphan
+// the old one. Reserved/system keys are never shown or sent; the route
+// re-stamps _owner.
+function renderDetailEditor(el, rec) {
+    const kv = rec.keyvalues || {};
+    let rows = "";
+    for (const k of Object.keys(kv)) {
+        if (k.startsWith("_") || k === "cid" || k === "name") continue;
+        rows += kvEditRow(k, kv[k], true);
+    }
+    el.innerHTML =
+        `<div class="detail-head"><h3>Edit metadata</h3><span class="detail-cid">${esc(shortCid(rec.cid))}</span></div>` +
+        `<div class="detail-edit" id="edit-rows">${rows}</div>` +
+        `<div><button type="button" class="btn btn-muted" data-edit-add>+ Add field</button></div>` +
+        `<p class="edit-note">Editing changes values and adds fields (Pinata merges) — it can't remove a key. <code>asset</code> is required; non-text values should be JSON (<code>true</code>, <code>42</code>).</p>` +
+        `<p class="edit-err" id="edit-err" hidden></p>` +
+        `<div class="detail-actions">` +
+        `<button type="button" class="btn btn-notebook" data-edit-save="${esc(rec.cid)}">Save</button>` +
+        `<button type="button" class="btn btn-muted" data-edit-cancel>Cancel</button>` +
+        `</div>`;
+}
+
+function kvEditRow(k, v, lockKey) {
+    return (
+        `<div class="kv-row">` +
+        `<input type="text" class="kv-k" value="${esc(k)}" placeholder="key"${lockKey ? " readonly" : ""} />` +
+        `<input type="text" class="kv-v" value="${esc(v)}" placeholder="value" />` +
+        (lockKey ? "" : `<button type="button" class="kv-del">✕</button>`) +
+        `</div>`
+    );
+}
+
+async function saveEdit(cid) {
+    const errEl = $("edit-err");
+    errEl.hidden = true;
+    const keyvalues = {};
+    for (const row of $("edit-rows").querySelectorAll(".kv-row")) {
+        const k = row.querySelector(".kv-k").value.trim();
+        const v = row.querySelector(".kv-v").value;
+        if (!k) continue;
+        if (k.startsWith("_") || k === "cid" || k === "name") {
+            errEl.textContent = `"${k}" is reserved.`; errEl.hidden = false; return;
+        }
+        keyvalues[k] = v;
+    }
+    if (!keyvalues.asset) {
+        errEl.textContent = "asset key is required."; errEl.hidden = false; return;
+    }
+    const saveBtn = $("detail").querySelector("[data-edit-save]");
+    saveBtn.disabled = true;
+    try {
+        const resp = await fetch("/assets/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ cid, network: state.network, keyvalues }),
+        });
+        const body = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(body.detail || "HTTP " + resp.status);
+        // Reflect the merged result locally and leave edit mode.
+        const rec = state.records.find((r) => r.cid === cid);
+        if (rec) rec.keyvalues = body.keyvalues || rec.keyvalues;
+        state.editing = null;
+        renderView();
+        renderDetail();
+    } catch (err) {
+        errEl.textContent = "Save failed: " + err.message;
+        errEl.hidden = false;
+        saveBtn.disabled = false;
+    }
+}
+
+$("detail").addEventListener("click", (e) => {
+    const copy = e.target.closest("[data-copy]");
+    if (copy) { navigator.clipboard?.writeText(copy.dataset.copy); flash(copy, "✓"); return; }
+    const goto = e.target.closest("[data-goto]");
+    if (goto) { selectAsset(goto.dataset.goto); return; }
+    const edit = e.target.closest("[data-edit]");
+    if (edit) { state.editing = edit.dataset.edit; renderDetail(); return; }
+    const cancel = e.target.closest("[data-edit-cancel]");
+    if (cancel) { state.editing = null; renderDetail(); return; }
+    if (e.target.closest("[data-edit-add]")) {
+        $("edit-rows").insertAdjacentHTML("beforeend", kvEditRow("", "", false));
+        return;
+    }
+    if (e.target.closest(".kv-del")) { e.target.closest(".kv-row").remove(); return; }
+    const save = e.target.closest("[data-edit-save]");
+    if (save) saveEdit(save.dataset.editSave);
+});
+
+// ---- controls ------------------------------------------------------------
+
+$("network-tabs").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-network]");
+    if (!btn) return;
+    state.network = btn.dataset.network;
+    $("network-tabs").querySelectorAll("button").forEach((b) =>
+        b.setAttribute("aria-selected", String(b === btn))
+    );
+    $("mine-wrap").hidden = state.network !== "public" || !AUTHED;
+    fetchRecords();
+});
+
+$("view-toggle").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-view]");
+    if (!btn) return;
+    state.view = btn.dataset.view;
+    $("view-toggle").querySelectorAll("button").forEach((b) =>
+        b.setAttribute("aria-selected", String(b === btn))
+    );
+    renderView();
+});
+
+$("filter-apply").addEventListener("click", () => {
+    state.filters = {
+        type: $("filter-type").value.trim(),
+        key: $("filter-key").value.trim(),
+        val: $("filter-val").value.trim(),
+    };
+    fetchRecords();
+});
+
+const mine = $("mine-only");
+if (mine) mine.addEventListener("change", () => { state.mineOnly = mine.checked; fetchRecords(); });
+
+// ---- upload --------------------------------------------------------------
+
+function populateTypeControls() {
+    const keys = Object.keys(state.schema).sort();
+    const dl = $("type-options");
+    if (dl) dl.innerHTML = keys.map((k) => `<option value="${esc(k)}">`).join("");
+    const sel = $("up-type");
+    if (!sel) return;
+    sel.innerHTML =
+        keys.map((k) => `<option value="${esc(k)}">${esc(k)}</option>`).join("") +
+        `<option value="__custom__">custom / bare asset…</option>`;
+    renderTypedFields();
+}
+
+function renderTypedFields() {
+    const sel = $("up-type");
+    if (!sel) return;
+    const key = sel.value;
+    const custom = key === "__custom__";
+    $("custom-editor").hidden = !custom;
+    const wrap = $("typed-fields");
+    wrap.hidden = custom;
+    wrap.innerHTML = "";
+    if (custom) { if (!$("kv-rows").children.length) addKvRow(); return; }
+    for (const f of state.schema[key] || []) {
+        const label = document.createElement("label");
+        label.className = "upload-label";
+        let input;
+        if (f.type === "bool") {
+            input = document.createElement("input");
+            input.type = "checkbox";
+        } else if (f.type === "int" || f.type === "float") {
+            input = document.createElement("input");
+            input.type = "number";
+        } else {
+            input = document.createElement("input");
+            input.type = "text";
+        }
+        input.dataset.field = f.name;
+        input.dataset.ftype = f.type;
+        label.appendChild(document.createTextNode(f.name + " (" + f.type + ")"));
+        label.appendChild(input);
+        wrap.appendChild(label);
+    }
+}
+
+function addKvRow(k = "", v = "") {
+    const row = document.createElement("div");
+    row.className = "kv-row";
+    row.innerHTML =
+        `<input type="text" class="kv-k" placeholder="key" value="${esc(k)}" />` +
+        `<input type="text" class="kv-v" placeholder="value (JSON for non-text)" value="${esc(v)}" />` +
+        `<button type="button" class="kv-del">✕</button>`;
+    $("kv-rows").appendChild(row);
+}
+
+const upType = $("up-type");
+if (upType) upType.addEventListener("change", renderTypedFields);
+const addKv = $("add-kv");
+if (addKv) addKv.addEventListener("click", () => addKvRow());
+const kvRows = $("kv-rows");
+if (kvRows) kvRows.addEventListener("click", (e) => {
+    if (e.target.closest(".kv-del")) e.target.closest(".kv-row").remove();
+});
+
+const RESERVED = new Set(["asset", "cid", "name"]);
+
+function collectKeyvalues() {
+    const sel = $("up-type");
+    if (sel.value === "__custom__") {
+        const key = $("custom-key").value.trim();
+        if (!key) throw new Error("custom asset key is required");
+        const kv = { asset: key };
+        for (const row of $("kv-rows").querySelectorAll(".kv-row")) {
+            const k = row.querySelector(".kv-k").value.trim();
+            const v = row.querySelector(".kv-v").value;
+            if (!k) continue;
+            if (RESERVED.has(k) || k.startsWith("_")) {
+                throw new Error(`"${k}" is reserved and can't be set here`);
+            }
+            kv[k] = v;
+        }
+        return kv;
+    }
+    const kv = { asset: sel.value };
+    for (const input of $("typed-fields").querySelectorAll("[data-field]")) {
+        const name = input.dataset.field;
+        if (input.dataset.ftype === "bool") {
+            kv[name] = input.checked ? "true" : "false";
+        } else if (input.type === "number") {
+            if (input.value !== "") kv[name] = input.value; // already valid JSON
+        } else if (input.value !== "") {
+            kv[name] = input.value;
+        }
+    }
+    return kv;
+}
+
+async function doUpload() {
+    const status = $("up-status");
+    const file = $("up-file").files[0];
+    status.className = "upload-status";
+    if (!file) { status.textContent = "Choose a file first."; status.className = "upload-status err"; return; }
+    let keyvalues;
+    try { keyvalues = collectKeyvalues(); }
+    catch (err) { status.textContent = err.message; status.className = "upload-status err"; return; }
+    const network = document.querySelector('input[name="net"]:checked').value;
+
+    const btn = $("up-submit");
+    btn.disabled = true;
+    status.textContent = "Validating…";
+
+    // Phase 1: mint. Single-use URL, so a mint pairs with exactly one PUT.
+    async function mint() {
+        const resp = await fetch("/assets/sign", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ filename: file.name, keyvalues, network }),
+        });
+        const body = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(body.detail || "HTTP " + resp.status);
+        return body;
+    }
+
+    try {
+        let minted = await mint();
+        status.textContent = "Uploading…";
+        const fd = new FormData();
+        fd.append("file", file, file.name);
+        let upResp = await fetch(minted.url, { method: "POST", body: fd });
+        if (!upResp.ok) {
+            // Signed URLs are single-use; re-mint once and retry.
+            minted = await mint();
+            const fd2 = new FormData();
+            fd2.append("file", file, file.name);
+            upResp = await fetch(minted.url, { method: "POST", body: fd2 });
+        }
+        if (!upResp.ok) throw new Error("upload failed: HTTP " + upResp.status);
+        const upBody = await upResp.json().catch(() => ({}));
+        const rec = upBody.data || upBody;
+        // Optimistic insert — Pinata's list can lag a fresh upload. The row
+        // persists in memory until a later fetchRecords() reflects it.
+        const optimistic = {
+            cid: rec.cid,
+            name: rec.name || file.name,
+            keyvalues: rec.keyvalues || minted.keyvalues,
+            network,
+        };
+        if (network === state.network && !state.records.some((r) => r.cid === optimistic.cid)) {
+            state.records = [optimistic, ...state.records];
+            renderView();
+        }
+        status.className = "upload-status ok";
+        status.textContent = "Uploaded ✓ " + shortCid(rec.cid);
+        $("up-file").value = "";
+    } catch (err) {
+        status.className = "upload-status err";
+        status.textContent = "Upload failed: " + err.message;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+const upSubmit = $("up-submit");
+if (upSubmit) upSubmit.addEventListener("click", doUpload);
+
+// Close the user menu when clicking outside.
+document.addEventListener("click", (e) => {
+    document.querySelectorAll("details.user-menu[open]").forEach((d) => {
+        if (!d.contains(e.target)) d.removeAttribute("open");
+    });
+});
+
+// ---- boot ----------------------------------------------------------------
+
+(async function boot() {
+    // Reflect the default network tab selection in the controls.
+    $("network-tabs").querySelectorAll("button").forEach((b) =>
+        b.setAttribute("aria-selected", String(b.dataset.network === state.network))
+    );
+    $("mine-wrap").hidden = state.network !== "public" || !AUTHED;
+    await fetchSchema();
+    populateTypeControls();
+    await fetchRecords();
+})();
+</script>
+{% endif %}
+{% endblock %}
