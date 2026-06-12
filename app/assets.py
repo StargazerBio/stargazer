@@ -193,6 +193,48 @@ async def assets_sign(request: Request):
     return {"url": url, "keyvalues": keyvalues}
 
 
+@router.post("/assets/update")
+async def assets_update(request: Request):
+    """Update (merge) metadata on a record the session user owns.
+
+    Fail-closed ownership: the record's current `_owner` must match the
+    session user (checked server-side, never trusted from the request), so
+    nobody can rewrite another user's — or an unowned — record from the page
+    even though the Pinata JWT is shared. Validation reuses `build_asset()`,
+    `_owner` is re-stamped after it, and Pinata merges the patch onto the
+    existing keyvalues (the CID and bytes are untouched, so provenance edges
+    survive). SDK/MCP edits stay unenforced by design (shared JWT).
+    """
+    _require_pinata()
+    session = _require_session(request)
+
+    body = await request.json()
+    cid = body.get("cid", "")
+    network = body.get("network", "private")
+    if not cid:
+        raise HTTPException(status_code=400, detail="cid is required")
+    if network not in ("private", "public"):
+        raise HTTPException(
+            status_code=400, detail="network must be 'private' or 'public'"
+        )
+
+    # Fail-closed: only the owner of record may edit it. Read fresh (not the
+    # public TTL cache) so a mutation never decides off stale ownership.
+    records = await _pinata().query({}, network=network)
+    current = next((r for r in records if r["cid"] == cid), None)
+    if current is None or current["keyvalues"].get("_owner") != session.github_username:
+        raise HTTPException(status_code=403, detail="you can only edit assets you own")
+
+    try:
+        build_asset(body.get("keyvalues") or {})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    patch = dict(body.get("keyvalues") or {})
+    patch["_owner"] = session.github_username
+    return await _pinata().update_metadata(cid, patch, network=network)
+
+
 @router.get("/assets/download/{cid}")
 async def assets_download(request: Request, cid: str):
     """Redirect to the file bytes — they never transit the admin pod.

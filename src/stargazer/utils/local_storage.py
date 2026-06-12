@@ -270,6 +270,45 @@ class LocalStorageClient:
                 local_path.unlink()
             self.db.remove(File.cid == component.cid)
 
+    async def update_metadata(
+        self,
+        cid: str,
+        keyvalues: dict[str, str],
+        network: Optional[str] = None,
+    ) -> dict:
+        """Merge a metadata patch onto an existing record by CID.
+
+        Delegates to the remote (Pinata PUT) if attached, otherwise merges
+        into the local TinyDB record. Merge semantics match Pinata: supplied
+        keys are added or overwritten, omitted keys preserved, bytes/CID
+        untouched.
+
+        Args:
+            cid: Content identifier of the record to update
+            keyvalues: Metadata patch to merge
+            network: "private"/"public" forwarded to the remote (ignored locally)
+
+        Returns:
+            The updated record dict (``cid``, ``name``, ``keyvalues``)
+
+        Raises:
+            ValueError: when no record exists for ``cid``
+        """
+        if self.remote:
+            return await self.remote.update_metadata(cid, keyvalues, network=network)
+
+        File = Query()
+        record = self.db.get(File.cid == cid)
+        if not record:
+            raise ValueError(f"No local record for cid {cid}")
+        merged = {**record.get("keyvalues", {}), **keyvalues}
+        self.db.update({"keyvalues": merged}, File.cid == cid)
+        return {
+            "cid": cid,
+            "name": record.get("name", ""),
+            "keyvalues": merged,
+        }
+
     def _materialize(self, src: Path, dest: Path, *, overwrite: bool) -> None:
         """Place ``src`` at ``dest`` under local_dir, hardlinking when possible.
 

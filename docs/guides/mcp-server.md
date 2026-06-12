@@ -52,6 +52,7 @@ run_workflow(
 | `upload_file(path="/data/ref.fa", keyvalues={"asset": "reference", "build": "GRCh38"})` | Upload with metadata |
 | `download_file(file_id="abc123")` | Download to local cache |
 | `delete_file(file_id="abc123")` | Remove a file |
+| `update_file(cid="abc123", keyvalues={"asset": "reference", "build": "GRCh38"})` | Fix a mis-tagged record's metadata in place (merge, CID unchanged) |
 
 ## Inspecting Resources
 

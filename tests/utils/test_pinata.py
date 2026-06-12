@@ -172,6 +172,59 @@ async def test_create_signed_upload_url_end_to_end(tmp_path):
 
 @pytest.mark.pinata
 @pytest.mark.asyncio
+async def test_update_metadata_merges(tmp_path):
+    """Update metadata on an existing private file and verify Pinata MERGES.
+
+    Uploads a probe with two keyvalues, PUTs a patch that changes one and
+    adds a new key, then re-queries: the untouched key must survive (merge,
+    not replace) and the CID must be unchanged (metadata edit doesn't touch
+    bytes). Cleans up regardless.
+    """
+    import aiohttp
+
+    client = PinataClient(visibility="private")
+
+    url = await client.create_signed_upload_url(
+        filename="update_meta_test.txt",
+        keyvalues={"asset": "never_registered_key", "stage": "before", "keep": "me"},
+        network="private",
+        expires=120,
+        max_file_size=1024,
+    )
+    test_file = tmp_path / "update_meta_test.txt"
+    test_file.write_text("update metadata test\n")
+    async with aiohttp.ClientSession() as session:
+        data = aiohttp.FormData()
+        data.add_field("file", test_file.open("rb"), filename=test_file.name)
+        async with session.post(url, data=data) as resp:
+            cid = (await resp.json())["data"]["cid"]
+
+    try:
+        result = await client.update_metadata(
+            cid,
+            {"asset": "never_registered_key", "stage": "after", "added": "yes"},
+            network="private",
+        )
+        assert result["cid"] == cid, "metadata edit must not change the CID"
+
+        found = await client.query({"asset": "never_registered_key"}, network="private")
+        rec = next((r for r in found if r["cid"] == cid), None)
+        assert rec is not None, "updated record should still be queryable"
+        kv = rec["keyvalues"]
+        assert kv["stage"] == "after", "changed key not applied"
+        assert kv["added"] == "yes", "new key not added"
+        assert kv["keep"] == "me", (
+            "untouched key wiped — update REPLACED, expected MERGE"
+        )
+    finally:
+        try:
+            await client.delete(Asset(cid=cid))
+        except Exception as exc:
+            print(f"Cleanup skipped: {exc}")
+
+
+@pytest.mark.pinata
+@pytest.mark.asyncio
 async def test_query():
     """Query Pinata by keyvalues and verify the filter narrows to the right file.
 

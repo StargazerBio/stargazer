@@ -393,3 +393,63 @@ class PinataClient:
                 headers=self._headers(),
             ) as response:
                 response.raise_for_status()
+
+    async def update_metadata(
+        self,
+        cid: str,
+        keyvalues: dict[str, str],
+        network: Optional[str] = None,
+    ) -> dict:
+        """Merge keyvalues onto an existing file's metadata (Pinata PUT).
+
+        Pinata's update is a **merge/upsert** (verified empirically): the
+        supplied keys are added or overwritten, keys omitted from the patch
+        are preserved — there is no key *removal*. The file bytes and CID are
+        untouched (the CID is content-addressed; keyvalues live in the
+        account index, not the file), so existing ``*_cid`` provenance edges
+        pointing at this record stay valid. Looks up the internal file id by
+        CID first (Pinata keys updates off the UUID, not the CID), then PUTs.
+        ``_owner`` is restamped from ``STARGAZER_OWNER`` (env wins, unset
+        passes through) so a re-attributed edit stays consistent with upload.
+
+        Args:
+            cid: Content identifier of the file to update
+            keyvalues: Metadata patch to merge (partial — only these keys
+                change). Reserved ``_*`` keys should be left out; ``_owner``
+                is stamped here.
+            network: "private" or "public"; defaults to the client visibility
+
+        Returns:
+            The updated record: ``{cid, name, keyvalues, network}``
+
+        Raises:
+            ValueError: when no file exists on ``network`` for ``cid``
+        """
+        network = network or self.visibility
+        kv = _stamp_owner(dict(keyvalues))
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{self.API_BASE}/files/{network}",
+                headers=self._headers(),
+                params={"cid": cid},
+            ) as response:
+                response.raise_for_status()
+                files = (await response.json()).get("data", {}).get("files", [])
+            if not files:
+                raise ValueError(f"No file on {network} network for cid {cid}")
+            file_id = files[0]["id"]
+
+            async with session.put(
+                f"{self.API_BASE}/files/{network}/{file_id}",
+                headers=self._headers(),
+                json={"keyvalues": kv},
+            ) as response:
+                response.raise_for_status()
+                data = (await response.json()).get("data", {})
+
+        return {
+            "cid": data.get("cid", cid),
+            "name": data.get("name", ""),
+            "keyvalues": data.get("keyvalues", kv),
+            "network": network,
+        }

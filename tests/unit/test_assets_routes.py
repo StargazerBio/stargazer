@@ -45,6 +45,7 @@ class FakePinata:
     def __init__(self):
         self.query_calls = []
         self.sign_calls = []
+        self.update_calls = []
 
     async def query(self, keyvalues, network=None):
         self.query_calls.append({"keyvalues": dict(keyvalues), "network": network})
@@ -62,6 +63,17 @@ class FakePinata:
             }
         )
         return "https://uploads.example/signed"
+
+    async def update_metadata(self, cid, keyvalues, network=None):
+        self.update_calls.append(
+            {"cid": cid, "keyvalues": dict(keyvalues), "network": network}
+        )
+        return {
+            "cid": cid,
+            "name": "x",
+            "keyvalues": dict(keyvalues),
+            "network": network,
+        }
 
     async def _get_signed_url(self, cid, expires=300):
         return f"https://gw.example/signed/{cid}"
@@ -252,6 +264,86 @@ class TestSign:
         assert resp.status_code == 400
 
 
+class TestUpdate:
+    """`POST /assets/update` — owner-only metadata merge (plan 21 follow-up)."""
+
+    def _post(self, client, **body):
+        return client.post("/assets/update", json=body)
+
+    def test_owner_can_update(self, fake_pinata, client):
+        _auth(client, "octocat")  # owns CANNED bafybam
+        resp = self._post(
+            client,
+            cid="bafybam",
+            network="public",
+            keyvalues={"asset": "alignment", "sample_id": "S2"},
+        )
+        assert resp.status_code == 200
+        call = fake_pinata.update_calls[0]
+        assert call["cid"] == "bafybam"
+        # _owner re-stamped from the session, after validation.
+        assert call["keyvalues"]["_owner"] == "octocat"
+        assert call["keyvalues"]["sample_id"] == "S2"
+
+    def test_non_owner_403(self, fake_pinata, client):
+        _auth(client, "mallory")  # bafybam is owned by octocat
+        resp = self._post(
+            client, cid="bafybam", network="public", keyvalues={"asset": "alignment"}
+        )
+        assert resp.status_code == 403
+        assert fake_pinata.update_calls == []
+
+    def test_unowned_record_403(self, fake_pinata, client):
+        """Fail closed: an unowned record (CANNED bafyr1) edits for nobody."""
+        _auth(client, "octocat")
+        resp = self._post(
+            client, cid="bafyr1", network="public", keyvalues={"asset": "r1"}
+        )
+        assert resp.status_code == 403
+        assert fake_pinata.update_calls == []
+
+    def test_unknown_cid_403(self, fake_pinata, client):
+        _auth(client, "octocat")
+        resp = self._post(
+            client, cid="nope", network="public", keyvalues={"asset": "alignment"}
+        )
+        assert resp.status_code == 403
+
+    def test_anonymous_401(self, fake_pinata, client):
+        resp = self._post(
+            client, cid="bafybam", network="public", keyvalues={"asset": "alignment"}
+        )
+        assert resp.status_code == 401
+
+    def test_validation_400(self, fake_pinata, client):
+        _auth(client, "octocat")
+        # Owns the record, but the patch is invalid → 400 (ownership checked first).
+        missing = self._post(
+            client, cid="bafybam", network="public", keyvalues={"x": "1"}
+        )
+        assert missing.status_code == 400
+        reserved = self._post(
+            client,
+            cid="bafybam",
+            network="public",
+            keyvalues={"asset": "alignment", "_owner": "me"},
+        )
+        assert reserved.status_code == 400
+        assert fake_pinata.update_calls == []
+
+    def test_missing_cid_400(self, fake_pinata, client):
+        _auth(client, "octocat")
+        assert self._post(client, keyvalues={"asset": "alignment"}).status_code == 400
+
+    def test_not_configured_503(self, fake_pinata, client, monkeypatch):
+        monkeypatch.delenv("PINATA_JWT", raising=False)
+        _auth(client, "octocat")
+        resp = self._post(
+            client, cid="bafybam", network="public", keyvalues={"asset": "alignment"}
+        )
+        assert resp.status_code == 503
+
+
 class TestDownload:
     def test_private_redirects_to_signed_url(self, fake_pinata, client):
         _auth(client)
@@ -292,3 +384,38 @@ class TestNotConfigured:
             json={"filename": "x.bam", "keyvalues": {"asset": "alignment"}},
         )
         assert resp.status_code == 503
+
+
+class TestPage:
+    """`GET /assets` renders assets.html (plan 21, piece 3)."""
+
+    def test_authed_gets_private_tab_and_upload(self, fake_pinata, client):
+        _auth(client)
+        resp = client.get("/assets")
+        assert resp.status_code == 200
+        html = resp.text
+        # Private tab + upload panel only show for a session.
+        assert 'data-network="private"' in html
+        assert 'id="upload-panel"' in html
+        # The page knows who it's for (drives the "Mine" filter + optimistic row).
+        assert 'USERNAME = "octocat"' in html
+        assert "AUTHED = true" in html
+
+    def test_anonymous_gets_public_only(self, fake_pinata, client):
+        resp = client.get("/assets")
+        assert resp.status_code == 200
+        html = resp.text
+        # No private tab, no upload panel, a sign-in link instead.
+        assert 'data-network="private"' not in html
+        assert 'id="upload-panel"' not in html
+        assert "/auth/login" in html
+        assert "AUTHED = false" in html
+
+    def test_not_configured_renders_notice(self, fake_pinata, client, monkeypatch):
+        monkeypatch.delenv("PINATA_JWT", raising=False)
+        _auth(client)
+        resp = client.get("/assets")
+        assert resp.status_code == 200
+        assert "Pinata not configured" in resp.text
+        # Controls/upload are suppressed without a backing store.
+        assert 'id="upload-panel"' not in resp.text

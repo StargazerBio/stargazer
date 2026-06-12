@@ -130,6 +130,23 @@ async def delete_file(cid: str) -> str:
     return f"Deleted file {cid}"
 
 
+@mcp.tool()
+async def update_file(cid: str, keyvalues: dict[str, str]) -> dict:
+    """Update (merge) metadata on an existing file by CID — fix a typo'd or
+    mis-tagged record without re-uploading the bytes (the CID is unchanged).
+
+    keyvalues is a patch: the supplied keys are added or overwritten, keys
+    you omit are preserved (Pinata merge — there is no key removal). It must
+    include "asset"; the patch validates through the same rules as upload
+    (registered keys check their declared fields; reserved underscore keys
+    like _owner are stamped automatically and must not be supplied).
+
+    When displaying results, always show a table with the CID and all keyvalues.
+    """
+    build_asset(keyvalues)  # validate the patch (raises ValueError on bad input)
+    return await default_client.update_metadata(cid, keyvalues)
+
+
 # ---------------------------------------------------------------------------
 # Bundle tools
 # ---------------------------------------------------------------------------

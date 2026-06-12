@@ -91,9 +91,12 @@ system and browsing what's there. Users navigate from the dashboard to
 fields, and upload. A query/browse table shows existing assets filtered by
 metadata.
 
-**v1 scope is upload + browse + download.** There is no metadata edit and no
-delete — a mis-tagged record can only be fixed via the MCP tools (delete +
-re-upload) for now. The page should not pretend otherwise.
+**v1 scope is upload + browse + download.** No page-level delete yet (the MCP
+`delete_file` tool remains the escape hatch). **Metadata edit landed**
+(2026-06-11, plan 21 follow-up): Pinata's `PUT` merges keyvalues in place
+without touching bytes/CID, so a mis-tagged record is fixed via the detail
+card's **Edit metadata** (owner-only, fail-closed) or the MCP `update_file`
+tool — no more delete-and-re-upload, and `*_cid` edges survive.
 
 This is a web-tier feature: routes + template live in `app/`, with two small
 SDK additions (`stargazer.assets`): the bare-Asset keyvalues round-trip
@@ -331,8 +334,8 @@ an "Assets" nav link.
 
 ## Out of scope (later pieces, only if needed)
 
-- Delete-by-CID with confirm, and metadata edit (fix-a-typo'd-record). Until
-  these land the MCP `delete_file` tool is the escape hatch.
+- Delete-by-CID with confirm (page-level). The MCP `delete_file` tool is the
+  escape hatch. (Metadata edit has since landed — see the scope note above.)
 - Ownership *enforcement* — `_owner` (Design above) is attribution +
   default filtering only; the shared Pinata JWT means anyone with SDK/MCP
   access can read or delete anything. Per-user credentials or
@@ -423,10 +426,15 @@ Confirm during implementation (none block starting):
       `app.assets._pinata_client`, fail-closed and cache behavior covered.
       The page route renders `assets.html`, which lands in Piece 3 (no
       page-route test until then).
-- [ ] **Piece 3 — template.** Split into its own plan:
-      [`21_asset_manager_template.md`](./21_asset_manager_template.md)
-      (`assets.html`, client JS, dashboard nav link, page-route tests,
-      manual verify). Iterated separately from the backend.
+- [x] **Piece 3 — template.** ✅ 2026-06-11. Built in its own plan:
+      [`21_asset_manager_template.md`](./21_asset_manager_template.md).
+      `app/templates/assets.html` (in the dashboard box, untouched reactive
+      background), dependency-free graph + list views with a Graph/List
+      toggle, public/private tabs, hover-peek + click-to-pin detail card with
+      download, schema-driven typed/custom upload via signed URLs with
+      optimistic insert; dashboard avatar menu gained an **Assets** link.
+      Page-route tests in `tests/unit/test_assets_routes.py` (`TestPage`, 3).
+      Docs: `app.md` + `app_internals.md` frontend sections.
 - [x] **Docs (backend).** ✅ 2026-06-10. `docs/architecture/app.md` gained
       an Asset Manager section (ownership model, public/private tabs,
       anonymous public browsing); `app_internals.md` route table + asset

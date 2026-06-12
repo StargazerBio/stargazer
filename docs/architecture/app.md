@@ -108,6 +108,32 @@ Private tabs mapping to Pinata's two networks:
   bandwidth. `_owner` is stamped on public uploads too, as a publisher
   byline. Rate limiting of the anonymous surface is deferred.
 
+**The page lives in the dashboard's box.** `assets.html` renders in the same
+glassy card as the notebook dashboard (reached from the avatar menu's
+**Assets** link), and the reactive starfield background is left untouched —
+the asset graph is a separate foreground SVG. The browse surface offers two
+interchangeable renderings of the same listing, switched by a Graph/List
+toggle (Graph is the default):
+
+- **Graph** draws assets as nodes and their `*_cid` provenance links
+  (`reference_cid`, `mate_cid`, `alignment_cid`, …) as edges — a foreground
+  constellation echoing the background field. Hovering a node peeks its
+  metadata; clicking pins a detail card with the full metadata, its linked
+  assets, and a download button. Links to assets outside the current view
+  (cross-network or owner-scoped-out) aren't drawn but are listed on the card,
+  so provenance is never hidden. It is dependency-free (a small static force
+  layout, capped past 150 nodes), consistent with the rest of the app shipping
+  only hand-written client JS. On a record the session user owns, the card also
+  offers **Edit metadata** — an in-place fix for a mis-tagged record that
+  merges the change (the CID is unchanged, so provenance edges survive). The
+  edit route fail-closes on ownership server-side; the same fix is available
+  via the MCP `update_file` tool.
+- **List** is the same records as a sortable table (CID, name, owner, type,
+  metadata, download). The upload panel below is schema-driven — pick a
+  registered type or a bare/custom asset, fill metadata, choose the network —
+  and uploads go browser→Pinata via the signed URL, appearing optimistically
+  before Pinata's listing catches up.
+
 ## Images
 
 The admin app and the per-notebook pods use **different images by design**:

@@ -42,8 +42,9 @@ Tasks and workflows are not registered as individual MCP tools. The client disco
 | `upload_file` | Upload a file with metadata | `path: str, keyvalues: dict[str, str]` |
 | `download_file` | Download a file by CID to local cache | `cid: str` |
 | `delete_file` | Delete a file by CID | `cid: str` |
+| `update_file` | Merge a metadata patch onto an existing file | `cid: str, keyvalues: dict[str, str]` |
 
-`upload_file` validates that `keyvalues["asset"]` is a registered asset key and that all other keys are declared fields on that asset subclass.
+`upload_file` validates that `keyvalues["asset"]` is a registered asset key and that all other keys are declared fields on that asset subclass. `update_file` runs the same validation on its patch, then merges it onto the stored record — supplied keys are added or overwritten, omitted keys preserved (no key removal), and the bytes/CID are untouched so `*_cid` provenance edges stay valid. It's the in-place fix for a mis-tagged record (no delete-and-re-upload, no CID churn).
 
 ### Bundles
 
