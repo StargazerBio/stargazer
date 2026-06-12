@@ -4,6 +4,8 @@
 
 When you hit a deploy/runtime issue against devbox that takes more than one round-trip to diagnose, append it here with a one-line description and the minimum the next session needs to know.
 
+**Automation:** the *cluster-side* workarounds below (signed-URL endpoint, `FLYTE_AWS_ENDPOINT`, serving domain off `.localhost`, CoreDNS wildcard, and the restarts that race the addon controller) are applied to a fresh devbox by [`scripts/devbox-setup.sh`](../../scripts/devbox-setup.sh) — run it once after recreating the container (`./scripts/devbox-setup.sh`, or `--dry-run` to preview, `--laptop` to also apply the macOS DNS steps, `--domain` to override). It's idempotent. The remaining entries are app-code/design (already in the codebase), not scriptable; keep this file and the script in sync when you add a new cluster-side quirk.
+
 ---
 
 ## Storage signed URLs use `localhost`
