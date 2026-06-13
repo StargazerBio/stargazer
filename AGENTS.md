@@ -25,6 +25,7 @@
 - When adding a task that wraps a new CLI tool, check the `TaskEnvironment` it is decorated against in `src/stargazer/config.py` and confirm the tool is layered onto that env's `flyte.Image` (via `with_apt_packages`, `with_commands`, or the bioconda block in `_BIOCONDA_INSTALL`). If it is missing, add it and notify the user.
 - When defining a new `TaskEnvironment` in `src/stargazer/config.py`, always call `.with_uv_project(PROJECT_ROOT / "pyproject.toml")` on its image so the stargazer package and its pip deps end up installed, and set explicit `resources=` (e.g. `flyte.Resources(memory=("2Gi", "6Gi"))`). The devbox node has a hard ~7.5 GiB memory budget — see `.opencode/reference/devbox_workarounds.md`.
 - **CRITICAL** Do not consider backwards compatibility unless explicitly requested!
+- **Keep development minutiae out of user-facing surfaces.** App UI strings/pages, user guides, and the README describe behavior in product terms — a limit, what a control does, what an error means. Do **not** leak implementation detail into them: internal vendor/service names, env vars, workaround mechanisms, ticket/plan references, or "X limit, not ours" rationalizations. (E.g. an upload cap reads "100 MB", not "100 MB — a Pinata limit; larger needs TUS".) That rationale lives in code comments, `.opencode/` references, and plans — and architecture docs under `docs/architecture/` may name internals since they're the technical spec, not a product surface.
 - Run `ruff --fix` after every set of changes to satisfy the pre-commit
 
 ## OpenCode Agent Definitions

@@ -111,7 +111,7 @@ Private tabs mapping to Pinata's two networks:
 **The page lives in the dashboard's box.** `assets.html` renders in the same
 glassy card as the notebook dashboard (reached from the avatar menu's
 **Assets** link), and the reactive starfield background is left untouched —
-the asset graph is a separate foreground SVG. The browse surface offers two
+the asset graph is a separate foreground canvas. The browse surface offers two
 interchangeable renderings of the same listing, switched by a Graph/List
 toggle (Graph is the default):
 
@@ -119,11 +119,11 @@ toggle (Graph is the default):
   (`reference_cid`, `mate_cid`, `alignment_cid`, …) as edges — a foreground
   constellation echoing the background field. Hovering a node peeks its
   metadata; clicking pins a detail card with the full metadata, its linked
-  assets, and a download button. Links to assets outside the current view
-  (cross-network or owner-scoped-out) aren't drawn but are listed on the card,
-  so provenance is never hidden. It is dependency-free (a small static force
-  layout, capped past 150 nodes), consistent with the rest of the app shipping
-  only hand-written client JS. On a record the session user owns, the card also
+  assets, and a download button. It's rendered with **Cytoscape.js** (vendored,
+  no build step), so it's interactive: scroll to zoom, drag to pan, drag a node
+  to reposition it, double-click to reset, capped at 150 nodes. Links to assets
+  outside the current view (cross-network or owner-scoped-out) aren't drawn but
+  are listed on the card, so provenance is never hidden. On a record the session user owns, the card also
   offers **Edit metadata** — an in-place fix for a mis-tagged record that
   merges the change (the CID is unchanged, so provenance edges survive). The
   edit route fail-closes on ownership server-side; the same fix is available

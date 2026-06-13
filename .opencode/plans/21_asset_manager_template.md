@@ -19,17 +19,18 @@ unless a gap surfaces during implementation (see "Backend: reuse only").
   list consume the *same* fetched record set; the network tab (public /
   private) and any keyvalue filters apply to both. Switching Graph⇄List
   re-renders from memory — no refetch.
-- **Dependency-free SVG, no graph library.** Consistent with the starfield
-  ethos in `base.html` ("the pod only ships this text") and plan 20's "vanilla
-  JS, `fetch` + JSON" rule. The asset account in a personal Pinata is small
-  (tens, not thousands, of nodes), so a hand-rolled layout is plenty. SVG over
-  canvas because it gives free hit-testing for hover/click and native
-  `<title>`/event handlers per node — no manual pixel math. The constellation
-  aesthetic is reused deliberately: nodes are violet "stars," `_cid` edges are
-  the same violet links the cursor draws in the background field, so the graph
-  reads as *foreground constellations* over the *background* sky. **The
-  reactive background (`#sky` canvas + `#sky-glow` in `base.html`) is not
-  touched** — the asset graph is a separate SVG inside the `.dashboard` card.
+- **Dependency-free SVG, no graph library.** ~~Consistent with the starfield
+  ethos…~~ **Reversed 2026-06-11 (Piece 3e).** The hand-rolled SVG force layout
+  + wheel-zoom/drag-pan grew to ~250 lines reinventing solved problems, and the
+  next asks (node drag, better layouts) were more of the same. Swapped to
+  **Cytoscape.js**, vendored as `app/static/cytoscape.min.js` (pinned 3.30.2,
+  ~370 KB, no build step — the existing `/static` mount serves it). Zoom, pan,
+  node-drag, the `cose` force layout, tooltips, and selection are now the
+  library's job; `GRAPH_STYLE` keeps the violet constellation palette. This is
+  the one deliberate break from the "ship only hand-written JS" convention
+  (the starfield stays hand-rolled). **The reactive background (`#sky` canvas +
+  `#sky-glow`) is still not touched** — the graph is a separate Cytoscape
+  canvas inside the `.dashboard` card.
 - **Same box as the dashboard.** `assets.html` extends `base.html` and renders
   inside a single `.dashboard` glassy card (same `position:relative; z-index:1`
   surface the notebook dashboard uses), with the identical header (brand link
@@ -282,3 +283,13 @@ Against the devbox admin deploy (or a local run with `PINATA_JWT` set):
       the route end-to-end (403 non-owner, 200 owner+merge, 400 invalid) and
       the MCP tool registration/validation. Docs: mcp-server (arch+guide),
       app.md, app_internals, types.md.
+- [x] **Piece 3e — Cytoscape.js graph (follow-up).** ✅ 2026-06-11. Replaced
+      the hand-rolled SVG force layout + zoom/pan (~250 lines) with vendored
+      **Cytoscape.js** (`app/static/cytoscape.min.js`, pinned 3.30.2). New JS:
+      `graphElements()`, `GRAPH_STYLE`/`GRAPH_LAYOUT` (cose), `bindGraphEvents()`,
+      `showGraphTip()`; `selectAsset()` graph branch now drives a `.selected`
+      class on the `cy` instance. Gains node-drag + a robust layout for free.
+      Headless-Chromium verified: render (3 nodes/2 edges), zoom, pan,
+      node-drag (43 px), tap-select, dblclick-reset. Reverses the Piece 3b
+      "dependency-free SVG" decision (see Status). The 31 route tests still
+      pass; docs updated (app.md, app_internals, this plan).

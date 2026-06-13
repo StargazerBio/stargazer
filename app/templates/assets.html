@@ -47,14 +47,6 @@
     font-family: inherit;
 }
 .asset-filters input:focus { outline: none; border-color: var(--accent); }
-.mine-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.82rem;
-    color: var(--text-dim);
-    cursor: pointer;
-}
 .controls-spacer { flex: 1; }
 
 /* Display region — graph and list are siblings; one is [hidden] at a time. */
@@ -67,6 +59,8 @@
     margin-bottom: 1.25rem;
 }
 .asset-region[hidden] { display: none; }
+/* The list scrolls inside its rounded box rather than overflowing the card. */
+#list-region { max-height: 60vh; overflow: auto; }
 .region-empty, .region-error {
     position: absolute;
     inset: 0;
@@ -82,33 +76,9 @@
 }
 .region-error { color: var(--danger); }
 
-/* Graph */
-.asset-graph { width: 100%; height: 420px; display: block; }
-.asset-graph .edge { stroke: var(--accent-line); stroke-width: 0.8; }
-.asset-graph .edge.hot { stroke: var(--accent); stroke-width: 1.4; }
-.asset-graph .node circle {
-    fill: var(--accent-soft);
-    stroke: var(--accent-line);
-    stroke-width: 1.2;
-    cursor: pointer;
-    transition: fill 0.15s ease, stroke 0.15s ease;
-}
-.asset-graph .node.green circle { fill: var(--green-soft); stroke: var(--green-line); }
-.asset-graph .node:hover circle,
-.asset-graph .node.hot circle { stroke: var(--accent); }
-.asset-graph .node.selected circle {
-    fill: var(--accent-softer);
-    stroke: var(--accent);
-    stroke-width: 2;
-}
-.asset-graph .node text {
-    fill: var(--text-dim);
-    font-family: var(--mono);
-    font-size: 9px;
-    text-anchor: middle;
-    pointer-events: none;
-    user-select: none;
-}
+/* Graph — Cytoscape mounts into #graph-host; node/edge appearance is set in
+   the JS style array (canvas-rendered, not CSS-selectable). */
+#graph-host { width: 100%; height: 420px; }
 .graph-cap {
     position: absolute;
     top: 0.5rem;
@@ -131,10 +101,21 @@
     pointer-events: none;
     display: none;
 }
+.graph-tip .tip-name { color: var(--text); font-weight: 600; word-break: break-all; margin-bottom: 0.15rem; }
 .graph-tip .tip-type { color: var(--accent); font-family: var(--mono); font-weight: 600; }
 .graph-tip dl { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.5rem; margin-top: 0.35rem; }
 .graph-tip dt { color: var(--text-dim); font-family: var(--mono); }
 .graph-tip dd { margin: 0; word-break: break-all; }
+.graph-hint {
+    position: absolute;
+    bottom: 0.5rem;
+    right: 0.75rem;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    opacity: 0.6;
+    pointer-events: none;
+}
 
 /* List */
 .asset-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
@@ -155,8 +136,12 @@
 .asset-table tbody tr { cursor: pointer; transition: background 0.12s ease; }
 .asset-table tbody tr:hover { background: var(--surface-2); }
 .asset-table tbody tr.selected { background: var(--accent-soft); }
+/* Public assets owned by the signed-in user read green (the "yours" signal). */
+.asset-table tbody tr.mine td { background: var(--green-soft); }
+.asset-table td { word-break: break-word; }
 .asset-table .col-cid { font-family: var(--mono); color: var(--text-dim); white-space: nowrap; }
 .asset-table .kv-mini { color: var(--text-dim); font-size: 0.76rem; }
+.badge.owner-me { color: var(--green); border-color: var(--green-line); }
 .badge {
     display: inline-block;
     padding: 0.05rem 0.45rem;
@@ -249,6 +234,10 @@
 }
 .upload-body input:focus, .upload-body select:focus { outline: none; border-color: var(--accent); }
 .typed-fields { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+/* These flex displays would otherwise beat the UA `[hidden]{display:none}`
+   (author rule wins regardless of specificity), leaving the custom editor
+   visible even when hidden — so make [hidden] explicit. */
+.custom-editor[hidden], .typed-fields[hidden] { display: none; }
 /* Custom mode gets its own dashed framing so the strictness asymmetry reads
    as a different contract, not an arbitrary quirk. */
 .custom-editor {
@@ -332,24 +321,20 @@
             <input id="filter-val" placeholder="value" size="10" />
             <button class="btn btn-muted" id="filter-apply" type="button">Filter</button>
         </div>
-        <label class="mine-toggle" id="mine-wrap" hidden>
-            <input type="checkbox" id="mine-only" />
-            Mine only
-        </label>
     </div>
 
     <div class="asset-region" id="graph-region">
         <div class="graph-cap" id="graph-cap" hidden></div>
         <div id="graph-host"></div>
         <div class="graph-tip" id="graph-tip"></div>
+        <div class="graph-hint" id="graph-hint" hidden>scroll = zoom · drag = pan · drag node = move · double-click = reset</div>
     </div>
 
     <div class="asset-region" id="list-region" hidden>
         <table class="asset-table">
             <thead>
                 <tr>
-                    <th>CID</th><th>Name</th><th>Owner</th><th>Type</th>
-                    <th>Metadata</th><th></th>
+                    <th>Name</th><th>Owner</th><th>Type</th><th></th>
                 </tr>
             </thead>
             <tbody id="list-body"></tbody>
@@ -398,9 +383,7 @@
             </div>
 
             <p class="upload-note">
-                Uploads are capped at <strong>100&nbsp;MB</strong> — a Pinata
-                limit, not ours. Larger files need resumable (TUS) upload, not
-                yet wired into this page.
+                Uploads are capped at <strong>100&nbsp;MB</strong>.
             </p>
 
             <div class="upload-row">
@@ -414,6 +397,7 @@
 </div>
 {% endblock %} {% block scripts %}
 {% if pinata_configured %}
+<script src="/static/cytoscape.min.js"></script>
 <script>
 const AUTHED = {{ 'true' if username else 'false' }};
 const USERNAME = {{ username | tojson }};
@@ -422,7 +406,6 @@ const NODE_CAP = 150;
 const state = {
     network: AUTHED ? "private" : "public",
     view: "graph",
-    mineOnly: false,
     filters: {},
     records: [],
     schema: {},
@@ -434,6 +417,9 @@ const $ = (id) => document.getElementById(id);
 const shortCid = (c) => (c && c.length > 14 ? c.slice(0, 8) + "…" + c.slice(-4) : c || "");
 const assetType = (r) => (r.keyvalues && r.keyvalues.asset) || "(bare)";
 const owner = (r) => (r.keyvalues && r.keyvalues._owner) || "shared";
+// On the public tab, flag records the signed-in user owns so they read green.
+// (Private is already all-yours, so it gets no green — that would be noise.)
+const ownedByUser = (r) => state.network === "public" && !!USERNAME && owner(r) === USERNAME;
 // Relationship keys: any keyvalue ending in _cid with a non-empty value.
 // Bare "cid" is excluded (no underscore prefix on the suffix boundary).
 function relKeys(kv) {
@@ -453,7 +439,6 @@ function listParams() {
     const p = new URLSearchParams({ network: state.network });
     if (state.filters.type) p.set("asset", state.filters.type);
     if (state.filters.key && state.filters.val) p.set(state.filters.key, state.filters.val);
-    if (state.network === "public" && state.mineOnly && USERNAME) p.set("_owner", USERNAME);
     return p;
 }
 
@@ -487,8 +472,18 @@ function renderView() {
     $("graph-region").hidden = state.view !== "graph";
     $("list-region").hidden = state.view !== "list";
     if (state.records.length === 0) {
+        // Clear any stale graph/list from the previous (non-empty) result —
+        // the empty-state message is a transparent overlay, so leftover nodes
+        // or rows would otherwise show through it.
+        if (cy) cy.elements().remove();
+        $("list-body").innerHTML = "";
+        $("graph-cap").hidden = true;
+        $("graph-hint").hidden = true;
+        const filtered = state.filters.type || (state.filters.key && state.filters.val);
         setRegionMessage(
-            state.network === "private"
+            filtered
+                ? "No assets match this filter."
+                : state.network === "private"
                 ? "No private assets you own yet. Unowned or pipeline records are reachable via the SDK/MCP."
                 : "No public assets on this network yet."
         );
@@ -514,70 +509,80 @@ function setRegionMessage(msg, isError) {
 
 // ---- graph ---------------------------------------------------------------
 
-function buildGraph(records) {
+// Build Cytoscape elements from the loaded records. Nodes are assets; edges
+// are *_cid relationships resolved to in-view targets only (dangling links are
+// listed on the detail card, not drawn). Node size scales with degree.
+function graphElements(records) {
     const capped = records.slice(0, NODE_CAP);
-    const byCid = new Map(capped.map((r) => [r.cid, r]));
-    const nodes = capped.map((r) => ({ cid: r.cid, rec: r, deg: 0 }));
-    const nodeByCid = new Map(nodes.map((n) => [n.cid, n]));
+    const ids = new Set(capped.map((r) => r.cid));
+    const deg = {};
     const edges = [];
     for (const r of capped) {
         for (const k of relKeys(r.keyvalues)) {
-            const target = r.keyvalues[k];
-            if (byCid.has(target) && target !== r.cid) {
-                edges.push({ source: r.cid, target, label: k.slice(0, -4) });
-                nodeByCid.get(r.cid).deg++;
-                nodeByCid.get(target).deg++;
+            const tgt = r.keyvalues[k];
+            if (ids.has(tgt) && tgt !== r.cid) {
+                edges.push({ data: { id: r.cid + "__" + k + "__" + tgt, source: r.cid, target: tgt, label: k.slice(0, -4) } });
+                deg[r.cid] = (deg[r.cid] || 0) + 1;
+                deg[tgt] = (deg[tgt] || 0) + 1;
             }
         }
     }
-    return { nodes, edges, nodeByCid, truncated: records.length > NODE_CAP };
+    const nodes = capped.map((r) => ({
+        data: { id: r.cid, label: r.name || shortCid(r.cid), size: 16 + Math.min(28, (deg[r.cid] || 0) * 5) },
+        classes: ownedByUser(r) ? "mine" : "",
+    }));
+    return { elements: nodes.concat(edges), truncated: records.length > NODE_CAP };
 }
 
-// A short static force simulation: charge repulsion + edge springs + center
-// gravity, run for a fixed number of iterations then drawn once. No animation
-// loop — the background starfield owns the motion budget.
-function layout(nodes, edges, W, H) {
-    const cx = W / 2, cy = H / 2;
-    const PAD = 28;
-    nodes.forEach((n, i) => {
-        const a = (i / Math.max(1, nodes.length)) * Math.PI * 2;
-        n.x = cx + Math.cos(a) * Math.min(W, H) * 0.3;
-        n.y = cy + Math.sin(a) * Math.min(W, H) * 0.3;
-        n.vx = 0; n.vy = 0;
-    });
-    const pos = new Map(nodes.map((n) => [n.cid, n]));
-    const REPULSE = 2600, SPRING_LEN = 90, SPRING_K = 0.02, GRAVITY = 0.015, FRICTION = 0.85;
-    const iters = nodes.length > 60 ? 160 : 280;
-    for (let it = 0; it < iters; it++) {
-        for (let i = 0; i < nodes.length; i++) {
-            for (let j = i + 1; j < nodes.length; j++) {
-                const a = nodes[i], b = nodes[j];
-                let dx = a.x - b.x, dy = a.y - b.y;
-                let d2 = dx * dx + dy * dy || 0.01;
-                let d = Math.sqrt(d2);
-                let f = REPULSE / d2;
-                let fx = (f * dx) / d, fy = (f * dy) / d;
-                a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
-            }
-        }
-        for (const e of edges) {
-            const a = pos.get(e.source), b = pos.get(e.target);
-            let dx = b.x - a.x, dy = b.y - a.y;
-            let d = Math.sqrt(dx * dx + dy * dy) || 0.01;
-            let f = (d - SPRING_LEN) * SPRING_K;
-            let fx = (f * dx) / d, fy = (f * dy) / d;
-            a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
-        }
-        for (const n of nodes) {
-            n.vx += (cx - n.x) * GRAVITY;
-            n.vy += (cy - n.y) * GRAVITY;
-            n.x += n.vx; n.y += n.vy;
-            n.vx *= FRICTION; n.vy *= FRICTION;
-            n.x = Math.max(PAD, Math.min(W - PAD, n.x));
-            n.y = Math.max(PAD, Math.min(H - PAD, n.y));
-        }
-    }
-}
+// Constellation palette (Cytoscape renders to canvas, so hex/rgba not CSS
+// vars). Mirrors base.html: violet accent for nodes/edges, brighter on
+// select/hover; a target arrow shows provenance direction (child → parent).
+const GRAPH_STYLE = [
+    { selector: "node", style: {
+        "background-color": "rgba(167,139,250,0.18)",
+        "border-color": "rgba(167,139,250,0.5)", "border-width": 1.5,
+        "width": "data(size)", "height": "data(size)",
+        "label": "data(label)", "color": "#8b949e",
+        "font-family": "IBM Plex Mono, monospace", "font-size": 9,
+        "text-valign": "bottom", "text-margin-y": 4,
+        // Bound label width (full name still in the tooltip + detail card) so a
+        // long name can't sprawl across neighbors.
+        "text-max-width": 96, "text-wrap": "ellipsis",
+    } },
+    // Public assets owned by the signed-in user (selected/hot override below).
+    { selector: "node.mine", style: { "border-color": "#9cd47f", "border-width": 2 } },
+    { selector: "node.selected", style: {
+        "background-color": "rgba(167,139,250,0.30)",
+        "border-color": "#b9a0ec", "border-width": 3, "color": "#f0f6fc",
+    } },
+    { selector: "node.hot", style: { "border-color": "#b9a0ec" } },
+    { selector: "edge", style: {
+        "width": 1.2, "curve-style": "bezier",
+        "line-color": "rgba(167,139,250,0.42)",
+        "target-arrow-color": "rgba(167,139,250,0.42)",
+        "target-arrow-shape": "triangle", "arrow-scale": 0.7,
+    } },
+    { selector: "edge.hot", style: {
+        "line-color": "#b9a0ec", "target-arrow-color": "#b9a0ec", "width": 2,
+    } },
+];
+
+// `nodeDimensionsIncludeLabels` makes cose space nodes by their label-inclusive
+// bounding box (not just the circle), so labels stop overlapping; the wider
+// spacing reinforces it.
+const GRAPH_LAYOUT = {
+    name: "cose",
+    animate: false,
+    padding: 30,
+    nodeDimensionsIncludeLabels: true,
+    idealEdgeLength: 120,
+    nodeRepulsion: 16000,
+    nodeOverlap: 28,
+    componentSpacing: 100,
+    fit: true,
+};
+
+let cy = null;
 
 function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) =>
@@ -587,36 +592,76 @@ function esc(s) {
 
 function renderGraph() {
     const host = $("graph-host");
-    const W = host.clientWidth || $("graph-region").clientWidth || 800;
-    const H = 420;
-    const g = buildGraph(state.records);
-    layout(g.nodes, g.edges, W, H);
+    const { elements, truncated } = graphElements(state.records);
 
     const cap = $("graph-cap");
-    if (g.truncated) {
+    if (truncated) {
         cap.hidden = false;
         cap.textContent = "Showing " + NODE_CAP + " of " + state.records.length + " — narrow with filters";
     } else {
         cap.hidden = true;
     }
+    $("graph-hint").hidden = elements.length === 0;
 
-    let edgeSvg = "";
-    for (const e of g.edges) {
-        const a = g.nodeByCid.get(e.source), b = g.nodeByCid.get(e.target);
-        edgeSvg += `<line class="edge" data-src="${esc(e.source)}" data-dst="${esc(e.target)}" x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" />`;
+    if (!window.cytoscape) { host.textContent = "Graph library failed to load."; return; }
+
+    if (!cy) {
+        cy = cytoscape({
+            container: host,
+            elements,
+            style: GRAPH_STYLE,
+            layout: GRAPH_LAYOUT,
+            boxSelectionEnabled: false,
+            autounselectify: true, // selection is driven via a .selected class
+            wheelSensitivity: 0.25,
+            minZoom: 0.2,
+            maxZoom: 4,
+        });
+        bindGraphEvents();
+    } else {
+        // The container may have been display:none (list view) — resize so the
+        // layout fits the now-visible box.
+        cy.elements().remove();
+        cy.add(elements);
+        cy.resize();
+        cy.layout(GRAPH_LAYOUT).run();
     }
-    let nodeSvg = "";
-    for (const n of g.nodes) {
-        const r = 6 + Math.min(6, n.deg * 1.5);
-        const sel = n.cid === state.selected ? " selected" : "";
-        const label = esc(n.rec.name || shortCid(n.cid));
-        nodeSvg += `<g class="node${sel}" data-cid="${esc(n.cid)}" transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})"><circle r="${r.toFixed(1)}"></circle><text y="${(r + 11).toFixed(1)}">${label}</text></g>`;
+    if (state.selected) {
+        const n = cy.getElementById(state.selected);
+        if (n && n.length) n.addClass("selected");
     }
-    host.innerHTML = `<svg class="asset-graph" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet"><g class="edges">${edgeSvg}</g><g class="nodes">${nodeSvg}</g></svg>`;
 }
 
-// Graph interaction (delegated on the host so re-renders need no rebinding).
-function graphTip(rec, x, y) {
+// Cytoscape gives zoom (scroll), pan (drag background), and node drag for
+// free; these bind the app behaviors on top, once, when cy is first created.
+function bindGraphEvents() {
+    cy.on("tap", "node", (evt) => selectAsset(evt.target.id()));
+    cy.on("tap", (evt) => {
+        if (evt.target === cy) { // tap on empty canvas clears the selection
+            state.selected = null;
+            cy.nodes().removeClass("selected");
+            renderDetail();
+        }
+    });
+    cy.on("mouseover", "node", (evt) => {
+        const node = evt.target;
+        const rec = state.records.find((r) => r.cid === node.id());
+        if (rec) showGraphTip(rec, node);
+        node.addClass("hot");
+        node.connectedEdges().addClass("hot");
+        node.neighborhood("node").addClass("hot");
+    });
+    cy.on("mouseout", "node", () => {
+        $("graph-tip").style.display = "none";
+        cy.elements().removeClass("hot");
+    });
+    cy.on("drag", "node", () => { $("graph-tip").style.display = "none"; });
+}
+
+// Double-click the canvas to reset the view (zoom-to-fit).
+$("graph-host").addEventListener("dblclick", () => { if (cy) cy.fit(undefined, 30); });
+
+function showGraphTip(rec, node) {
     const tip = $("graph-tip");
     const kv = rec.keyvalues || {};
     let rows = "";
@@ -624,67 +669,21 @@ function graphTip(rec, x, y) {
         if (k === "asset") continue;
         rows += `<dt>${esc(k)}</dt><dd>${esc(kv[k])}</dd>`;
     }
-    tip.innerHTML = `<div class="tip-type">${esc(assetType(rec))}</div><dl>${rows}</dl>`;
-    const region = $("graph-region").getBoundingClientRect();
-    let left = x - region.left + 14, top = y - region.top + 14;
+    // On-canvas labels are truncated, so the tooltip carries the full name.
+    tip.innerHTML =
+        `<div class="tip-name">${esc(rec.name || shortCid(rec.cid))}</div>` +
+        `<div class="tip-type">${esc(assetType(rec))}</div><dl>${rows}</dl>`;
     tip.style.display = "block";
-    // Keep inside the region.
-    const tw = tip.offsetWidth, th = tip.offsetHeight;
-    if (left + tw > region.width) left = region.width - tw - 8;
-    if (top + th > region.height) top = region.height - th - 8;
-    tip.style.left = left + "px";
-    tip.style.top = top + "px";
+    // node.renderedPosition() is relative to the cy container (#graph-host),
+    // which sits at the region's top-left, so it maps onto region coords.
+    const pos = node.renderedPosition();
+    const region = $("graph-region");
+    let left = pos.x + 16, top = pos.y + 12;
+    if (left + tip.offsetWidth > region.clientWidth) left = region.clientWidth - tip.offsetWidth - 8;
+    if (top + tip.offsetHeight > region.clientHeight) top = region.clientHeight - tip.offsetHeight - 8;
+    tip.style.left = Math.max(4, left) + "px";
+    tip.style.top = Math.max(4, top) + "px";
 }
-
-function highlightNeighbors(cid, on) {
-    const svg = $("graph-host").querySelector("svg");
-    if (!svg) return;
-    svg.querySelectorAll(".edge").forEach((line) => {
-        const hot = line.dataset.src === cid || line.dataset.dst === cid;
-        line.classList.toggle("hot", on && hot);
-        if (on && hot) {
-            const other = line.dataset.src === cid ? line.dataset.dst : line.dataset.src;
-            const g = svg.querySelector(`.node[data-cid="${cssEscape(other)}"]`);
-            if (g) g.classList.add("hot");
-        }
-    });
-    if (!on) svg.querySelectorAll(".node.hot").forEach((g) => g.classList.remove("hot"));
-}
-
-function cssEscape(s) {
-    return window.CSS && CSS.escape ? CSS.escape(s) : s.replace(/["\\]/g, "\\$&");
-}
-
-$("graph-host").addEventListener("pointerover", (e) => {
-    const g = e.target.closest(".node");
-    if (!g) return;
-    const rec = state.records.find((r) => r.cid === g.dataset.cid);
-    if (rec) { graphTip(rec, e.clientX, e.clientY); highlightNeighbors(g.dataset.cid, true); }
-});
-$("graph-host").addEventListener("pointermove", (e) => {
-    const tip = $("graph-tip");
-    if (tip.style.display !== "block") return;
-    const g = e.target.closest(".node");
-    if (g) {
-        const region = $("graph-region").getBoundingClientRect();
-        let left = e.clientX - region.left + 14;
-        if (left + tip.offsetWidth > region.width) left = region.width - tip.offsetWidth - 8;
-        tip.style.left = left + "px";
-    }
-});
-$("graph-host").addEventListener("pointerout", (e) => {
-    const g = e.target.closest(".node");
-    if (!g) return;
-    if (e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest(".node") === g) return;
-    $("graph-tip").style.display = "none";
-    highlightNeighbors(g.dataset.cid, false);
-});
-$("graph-host").addEventListener("click", (e) => {
-    const g = e.target.closest(".node");
-    if (g) { selectAsset(g.dataset.cid); return; }
-    // Click on empty canvas clears the selection.
-    if (e.target.closest("svg")) { state.selected = null; renderView(); renderDetail(); }
-});
 
 // ---- list ----------------------------------------------------------------
 
@@ -695,17 +694,17 @@ function renderList() {
         const tr = document.createElement("tr");
         tr.dataset.cid = r.cid;
         if (r.cid === state.selected) tr.classList.add("selected");
-        const kv = r.keyvalues || {};
-        const mini = Object.keys(kv)
-            .filter((k) => k !== "asset" && k !== "_owner")
-            .map((k) => esc(k) + "=" + esc(kv[k]))
-            .join(", ");
+        const mineRow = ownedByUser(r);
+        if (mineRow) tr.classList.add("mine");
+        const ownerCell = mineRow
+            ? `<span class="badge owner-me">${esc(owner(r))}</span>`
+            : esc(owner(r));
+        // CID + full metadata live on the detail card (click a row); the table
+        // stays scannable with just name, owner, type, and download.
         tr.innerHTML =
-            `<td class="col-cid">${esc(shortCid(r.cid))}<button class="copy-cid" data-copy="${esc(r.cid)}" title="Copy CID">⧉</button></td>` +
             `<td>${esc(r.name || "")}</td>` +
-            `<td>${esc(owner(r))}</td>` +
+            `<td>${ownerCell}</td>` +
             `<td><span class="badge type">${esc(assetType(r))}</span></td>` +
-            `<td class="kv-mini">${mini}</td>` +
             `<td><a class="btn btn-muted" href="/assets/download/${encodeURIComponent(r.cid)}?network=${state.network}">Download</a></td>`;
         body.appendChild(tr);
     }
@@ -735,11 +734,10 @@ function selectAsset(cid) {
         $("list-body").querySelectorAll("tr").forEach((tr) =>
             tr.classList.toggle("selected", tr.dataset.cid === cid)
         );
-    } else {
-        const svg = $("graph-host").querySelector("svg");
-        if (svg) svg.querySelectorAll(".node").forEach((g) =>
-            g.classList.toggle("selected", g.dataset.cid === cid)
-        );
+    } else if (cy) {
+        cy.nodes().removeClass("selected");
+        const n = cy.getElementById(cid);
+        if (n && n.length) n.addClass("selected");
     }
     renderDetail();
 }
@@ -890,7 +888,6 @@ $("network-tabs").addEventListener("click", (e) => {
     $("network-tabs").querySelectorAll("button").forEach((b) =>
         b.setAttribute("aria-selected", String(b === btn))
     );
-    $("mine-wrap").hidden = state.network !== "public" || !AUTHED;
     fetchRecords();
 });
 
@@ -912,9 +909,6 @@ $("filter-apply").addEventListener("click", () => {
     };
     fetchRecords();
 });
-
-const mine = $("mine-only");
-if (mine) mine.addEventListener("change", () => { state.mineOnly = mine.checked; fetchRecords(); });
 
 // ---- upload --------------------------------------------------------------
 
@@ -1096,7 +1090,6 @@ document.addEventListener("click", (e) => {
     $("network-tabs").querySelectorAll("button").forEach((b) =>
         b.setAttribute("aria-selected", String(b.dataset.network === state.network))
     );
-    $("mine-wrap").hidden = state.network !== "public" || !AUTHED;
     await fetchSchema();
     populateTypeControls();
     await fetchRecords();

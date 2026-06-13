@@ -118,8 +118,12 @@ fi
 # ---------------------------------------------------------------------------
 log "Restarting flyte-binary"
 run kc rollout restart deployment/flyte-binary -n flyte
-run kc rollout status  deployment/flyte-binary -n flyte --timeout=180s
-ok "flyte-binary restarted"
+# Non-fatal: a slow rollout shouldn't abort the script before later steps run.
+# (flyte-binary needs healthy cluster DNS to start, so a stall here usually
+# means coredns is unhealthy — the verify section reports the true state.)
+run kc rollout status deployment/flyte-binary -n flyte --timeout=180s \
+    || warn "flyte-binary rollout slow/incomplete — continuing; check 'kubectl get pods -n flyte'"
+ok "flyte-binary restart issued"
 
 # ---------------------------------------------------------------------------
 # 4. CoreDNS wildcard: *.${DOMAIN} → node InternalIP. App.endpoint carries the
@@ -141,16 +145,23 @@ metadata:
 data:
   devbox-domain.server: |
     ${DOMAIN}:53 {
-        template IN A    { match .*\\.${DOMAIN_RE}\\.\$ ; answer "{{ .Name }} 60 IN A ${NODEIP}" }
-        template IN AAAA { match .*\\.${DOMAIN_RE}\\.\$ ; rcode NOERROR }
+        template IN A {
+            match .*\\.${DOMAIN_RE}\\.\$
+            answer "{{ .Name }} 60 IN A ${NODEIP}"
+        }
+        template IN AAAA {
+            match .*\\.${DOMAIN_RE}\\.\$
+            rcode NOERROR
+        }
     }
 YAML
     ok "coredns-custom applied (*.$DOMAIN → $NODEIP)"
 fi
 log "Restarting coredns"
 run kc rollout restart deployment/coredns -n kube-system
-run kc rollout status  deployment/coredns -n kube-system --timeout=120s
-ok "coredns restarted"
+run kc rollout status deployment/coredns -n kube-system --timeout=120s \
+    || warn "coredns rollout slow/incomplete — a CrashLoop here means the custom config is invalid; check 'kubectl logs -n kube-system -l k8s-app=kube-dns'"
+ok "coredns restart issued"
 
 # ---------------------------------------------------------------------------
 # Verify (read-only)

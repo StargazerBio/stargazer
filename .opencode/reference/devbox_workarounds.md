@@ -165,10 +165,25 @@ metadata: { name: coredns-custom, namespace: kube-system }
 data:
   devbox-domain.server: |
     devbox.stargazer.bio:53 {
-        template IN A    { match .*\.devbox\.stargazer\.bio\.$ ; answer "{{ .Name }} 60 IN A $NODEIP" }
-        template IN AAAA { match .*\.devbox\.stargazer\.bio\.$ ; rcode NOERROR }
+        template IN A {
+            match .*\.devbox\.stargazer\.bio\.$
+            answer "{{ .Name }} 60 IN A $NODEIP"
+        }
+        template IN AAAA {
+            match .*\.devbox\.stargazer\.bio\.$
+            rcode NOERROR
+        }
     }
 YAML
+
+**CoreDNS template syntax is line-based — do not collapse to one line.** Each
+`match`/`answer`/`rcode` directive must be on its own line inside the
+`template … { }` block. The one-line `{ match … ; answer … }` form is invalid
+Corefile syntax (`;` isn't a separator there) — CoreDNS rejects it with
+`plugin/template: … Wrong argument count or unexpected line ending after 'template'`
+and **CrashLoopBackOff**s, which takes cluster DNS down and cascades into
+`flyte-binary` failing to start. (`cli/devbox-setup.sh` generates the
+multi-line form.)
 docker exec flyte-devbox kubectl rollout restart deployment/coredns -n kube-system
 ```
 
