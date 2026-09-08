@@ -249,3 +249,45 @@ Not strictly devbox-specific. Bites any AppEnvironment whose image bakes a Pytho
 **Cause:** Flyte's `loaded_modules` bundler ships every `.py` file imported by the deploying Python process into the pod's WORKDIR (`/home/flyte`). If that bundle includes a `<pkg>/__init__.py` (because the deployer imports `<pkg>.something_else`), the unpacked `/home/flyte/<pkg>/` shadows the image-baked `/usr/local/lib/<pkg>/` on `sys.path` — Python's cwd entry (`''`) comes before `PYTHONPATH`. The cwd version doesn't contain the baked module that wasn't separately imported by the deployer, so the import fails.
 
 **Workaround:** Bake the runtime-only file as a TOP-LEVEL module under a name the deployer doesn't import. E.g. `/usr/local/lib/sg_proxy.py` (not `/usr/local/lib/app/proxy.py`); reference it as `uvicorn sg_proxy:asgi_app`. The top-level slot is free; only package directories collide.
+
+---
+
+## Laptop-side Flyte cache goes stale when the devbox is recreated/restarted
+
+**Symptom (two faces, same cause).** After recreating or restarting the devbox, `python -m app.admin_app` fails in one of two places:
+
+1. **Image stage** — `flyte.build` logs `Image localhost:30000/notebook-app:<hash> already exists, skipping build`, then the retag dies:
+
+   ```
+   ERROR: localhost:30000/notebook-app:<hash>: not found
+   CalledProcessError: docker buildx imagetools create -t .../notebook-app:latest .../notebook-app:<hash>
+   ```
+
+2. **Serve stage** — images are fine, `flyte.serve` logs `Code bundle found in cache, skipping upload`, then `RuntimeError: App deployment for app admin-app has failed!` and the App pod CrashLoopBackOffs with:
+
+   ```
+   FileNotFoundError: Object at location uploads/flytesnacks/development/.../fast<hash>.tar.gz not found
+   … Server returned non-2xx status code: 404 Not Found (HEAD http://rustfs-svc.flyte:9000/flyte-data/…)
+   ```
+
+**Cause:** the devbox wipes **all** of its persistent state on recreate — the in-container docker registry *and* rustfs object storage. The Flyte SDK's cache lives on the **laptop** and survives. `PersistentCacheImageChecker` is first in the image-existence checker chain and returns a cached URI **without ever contacting the registry** (`flyte/_internal/imagebuild/image_builder.py`); `bundle_cache` does the same for code-bundle uploads. So the SDK skips work whose artifacts no longer exist, and the failure surfaces later as a missing manifest or a 404 on bundle download.
+
+Entries have a **1-day TTL** (`_IMAGE_CACHE_TTL_DAYS`), so this is intermittent: it bites when you recreate the devbox within a day of a successful deploy, and self-heals after that.
+
+**Clearing `image_cache` alone is not enough** — the same wipe invalidates `bundle_cache`, which just moves the failure from the image stage to the serve stage.
+
+**Where the cache actually lives.** `LocalDB._get_cache_dir()` uses the **config file's parent** when a config is found, so with this repo's `.flyte/config.yaml` the DB is at `<project>/.flyte/local-cache/cache.db` — **not** `~/.flyte/local-cache`, which is what `flyte delete local-cache` documents. Check which one exists before trusting that command to have done anything.
+
+**Workaround:** after any devbox recreate/restart, clear the cache before deploying:
+
+```bash
+python - <<'PY'
+import sqlite3
+c = sqlite3.connect(".flyte/local-cache/cache.db")
+for t in ("image_cache", "bundle_cache", "task_cache", "runs"):
+    c.execute(f"DELETE FROM {t}")
+c.commit()
+PY
+```
+
+`task_cache` and `runs` point at the same wiped object storage, so clear them too. Then delete any failed ksvc (`kubectl delete ksvc admin-app-flytesnacks-development -n flyte`) so the redeploy gets a clean revision.
