@@ -218,6 +218,16 @@ printf 'nameserver 127.0.0.1\n' | sudo tee /etc/resolver/devbox.stargazer.bio
 
 ---
 
+## `flyte.serve()` watch can report "failed" on a successful redeploy
+
+**Symptom:** Redeploying an existing App (e.g. `python -m app.admin_app` after changing `env_vars`) raises `RuntimeError: App deployment for app admin-app has failed!` from `watch(wait_for="activated")` — but the app is actually fine.
+
+**Cause:** The redeploy rolls a new Knative revision. While the rollout converges, the app's status can sample as failed and the SDK watch surfaces the first failed state it sees instead of waiting out the transition.
+
+**Workaround:** Before re-running the deploy, check reality: `kubectl get ksvc -n flyte` (READY True, LATESTREADY = newest revision) and curl the endpoint. If the ksvc is ready, the deploy succeeded and the error is noise. Observed 2026-06-11 redeploying admin-app with a new `PINATA_JWT`: watch raised, yet both revisions were Running 2/2 and `/assets` served 200 seconds later. Distinct from the CrashLoopBackOff "has failed!" below, where the pod really is down.
+
+---
+
 ## Auth cookies are non-`Secure` on devbox (http), `Secure` in prod (TLS)
 
 **Symptom (if mis-defaulted):** With `Secure` cookies forced on, login over devbox's plain HTTP silently fails — the browser never sends a `Secure` cookie over http, so every request looks unauthenticated and you bounce back to the login page.
@@ -237,6 +247,20 @@ Not strictly devbox-specific but bites on every devbox deploy.
 **Workaround:** Add `include=("dir/",)` (relative to the file where the env is instantiated) to the `AppEnvironment` / `TaskEnvironment`. Prefer `Path(__file__).parent / "asset_dir"` over `importlib.resources.files("pkg")` for asset lookup.
 
 Related Python-side gotcha: modules imported only inside function bodies are excluded from Flyte's static-analysis code bundle. Make them statically reachable (e.g. import in the package `__init__.py`) or add to `include`.
+
+---
+
+## Static assets cache for years (1981 mtime + no Cache-Control)
+
+Not devbox-specific in mechanism, but the code bundle is what triggers it, so it bites every deploy that changes a file under `app/static/`.
+
+**Symptom:** After redeploying the admin app with a changed static file (e.g. `cytoscape.min.js`), the browser keeps using the *old* file — surviving ordinary reloads — even though `curl .../static/<file>` returns the new one.
+
+**Cause:** Flyte's code bundle unpacks every file with a fixed **1981** mtime, and stock Starlette `StaticFiles` sends `Last-Modified: 1981` with **no `Cache-Control`**. Browsers then apply *heuristic* freshness — roughly 10% of (now − Last-Modified), about 4.5 years from a 1981 date — so the asset is considered fresh for years and never revalidated.
+
+**Workaround (in code):** `app/admin_app.py` mounts `_RevalidatingStatic`, a `StaticFiles` subclass that stamps `Cache-Control: no-cache` on every file response ("store but always revalidate"). The response already carries an ETag, so it is a cheap 304 when unchanged and a fresh 200 when changed.
+
+A browser that cached a file *before* this fix still holds it under the old heuristic and will not ask again — one hard reload (or cache clear) moves it onto the revalidating path. If that ever proves insufficient (many stuck clients), the next layer is a content-hash `?v=` query on static URLs so a changed file gets a URL the browser has never cached; it was prototyped on the abandoned `asset-manager-frontend` branch (commit `5a4e5b6`, not merged).
 
 ---
 

@@ -280,13 +280,33 @@ async def lifespan(_: FastAPI):
     await http_client.aclose()
 
 
+class _RevalidatingStatic(StaticFiles):
+    """StaticFiles that forces conditional revalidation on every request.
+
+    Flyte's code bundle unpacks files with a fixed 1981 mtime, and stock
+    StaticFiles sends no Cache-Control — so browsers apply *heuristic*
+    freshness (~10% of now-minus-last-modified, years from a 1981 date) and
+    keep serving a stale asset after a redeploy changes it.
+    `Cache-Control: no-cache` means "store but always revalidate"; the
+    response already carries an ETag, so this is a cheap 304 when unchanged
+    and a fresh 200 once a redeploy changes the file. See
+    devbox_workarounds.md.
+    """
+
+    def file_response(self, *args, **kwargs):
+        """Return the stock file response with `Cache-Control: no-cache` set."""
+        resp = super().file_response(*args, **kwargs)
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+
 asgi_app = FastAPI(title="Stargazer", docs_url=None, redoc_url=None, lifespan=lifespan)
 # The dashboard HTML and the asset listings compress well; tiny responses
 # (health checks, redirects) are left alone.
 asgi_app.add_middleware(GZipMiddleware, minimum_size=1024)
 asgi_app.mount(
     "/static",
-    StaticFiles(directory=str(Path(__file__).parent / "static")),
+    _RevalidatingStatic(directory=str(Path(__file__).parent / "static")),
     name="static",
 )
 asgi_app.include_router(assets_router)
