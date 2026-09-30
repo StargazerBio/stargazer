@@ -189,3 +189,7 @@ src/stargazer/notebooks/**/__marimo__/
 # Frozen v1 snapshot, kept out of the repo. Was tracked reference material;
 # untracked deliberately — nothing imports it and it is not maintained.
 .opencode/reference/stargazer_flyte_v1/
+
+# Unslotted, not-yet-planned ideas (moonshots, economics). Local only; promote
+# to a numbered plan in .opencode/plans/ when the work is activated.
+.opencode/brainstorm/

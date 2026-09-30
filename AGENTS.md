@@ -109,7 +109,7 @@ The `spec:` line is **module-level only** — class and function docstrings do n
 - **`.opencode/plans/`** - Step by step instructions for building new features and fixing bugs
   - Only place outside src where code snippets are allowed
   - Keep track of progress and check off completed work as you go
-  - **Prefix every new plan file with the next sequential two-digit integer** so the landing order is visible at a glance and sorts correctly in `ls`: `15_initial_thing.md`, `16_next_thing.md`, `17_followup.md`. Pick the next number by looking at the highest existing prefix across both the top level AND `archive/` (archive is numbered chronologically, top-level continues from where it left off). Do not renumber `future/` until those plans are activated.
+  - **Prefix every new plan file with the next sequential two-digit integer** so the landing order is visible at a glance and sorts correctly in `ls`: `15_initial_thing.md`, `16_next_thing.md`, `17_followup.md`. Pick the next number by looking at the highest existing prefix across both the top level AND `archive/` (archive is numbered chronologically, top-level continues from where it left off). Unslotted ideas and moonshots live in the gitignored `.opencode/brainstorm/`, unnumbered, until activated as a plan.
 
 ## Project Structure
 
