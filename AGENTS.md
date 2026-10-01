@@ -18,9 +18,14 @@
 - You will implement features piece by piece in a sequential fashion
 - Handle a single case well at first instead of trying to anticipate every way the app will be used
 - Do not add complexity until it is needed, which may be never
-- Simple tests will be written before implementation and you will pause to ensure they're capturing the right behavior
+- Simple tests will be written before implementation, then implementation follows without pausing for test review. Since no human checks the tests up front, they have to check themselves:
+  - Run each new test before implementing and confirm it fails for the expected reason (missing behavior, not an import error or broken fixture)
+  - Assert observable behavior against literal expected values. If a test would still pass when the code under test returns `None`, rewrite the assertion or delete the test
+  - Prefer no new test over a bad test. When a real test would need heavy mocking, production-only state, or slow infrastructure for a small change, use the closest real check instead (a local Flyte run, a script, a repro command), run it before and after the change, and say so
+- The review checkpoint is the commit. The user reviews every commit, so tests and implementation are reviewed together in the diff
 - Implementation will be tightly scoped so it can be understood
 - Tests will run until they pass
+- Every claim in a report carries its evidence or a label: measured, inferred, or guess. Never hand the user a check you could run yourself
 - All necessary CLI tools e.g. parabricks, bwa etc, are available in PATH. Use them to generate test assets as needed and alert the user if they are not available.
 - When adding a task that wraps a new CLI tool, check the `TaskEnvironment` it is decorated against in `src/stargazer/config.py` and confirm the tool is layered onto that env's `flyte.Image` (via `with_apt_packages`, `with_commands`, or the bioconda block in `_BIOCONDA_INSTALL`). If it is missing, add it and notify the user.
 - When defining a new `TaskEnvironment` in `src/stargazer/config.py`, always call `.with_uv_project(PROJECT_ROOT / "pyproject.toml")` on its image so the stargazer package and its pip deps end up installed, and set explicit `resources=` (e.g. `flyte.Resources(memory=("2Gi", "6Gi"))`). The devbox node has a hard ~7.5 GiB memory budget — see `.opencode/reference/devbox_workarounds.md`.
@@ -109,7 +114,12 @@ The `spec:` line is **module-level only** — class and function docstrings do n
 - **`.opencode/plans/`** - Step by step instructions for building new features and fixing bugs
   - Only place outside src where code snippets are allowed
   - Keep track of progress and check off completed work as you go
-  - **Prefix every new plan file with the next sequential two-digit integer** so the landing order is visible at a glance and sorts correctly in `ls`: `15_initial_thing.md`, `16_next_thing.md`, `17_followup.md`. Pick the next number by looking at the highest existing prefix across both the top level AND `archive/` (archive is numbered chronologically, top-level continues from where it left off). Unslotted ideas and moonshots live in the gitignored `.opencode/brainstorm/`, unnumbered, until activated as a plan.
+  - **Prefix every new plan file with the next sequential two-digit integer** so the landing order is visible at a glance and sorts correctly in `ls`: `15_initial_thing.md`, `16_next_thing.md`, `17_followup.md`. Pick the next number by looking at the highest existing prefix across both the top level AND `archive/` (archive is numbered chronologically, top-level continues from where it left off). Unslotted ideas go in `.opencode/brainstorm/` (below), not here.
+- **`.opencode/brainstorm/`** - Unslotted ideas, moonshots, and exploratory design that are not on the roadmap. **Gitignored and local only** — nothing here is committed or pushed, so it is the place for drafts that should not become public history.
+  - Files are unnumbered and free-form; they don't follow plan conventions or need to stay in sync with the code
+  - Never link to a brainstorm file from anything tracked (`docs/`, ROADMAP, plans, code comments) — the link would dangle for everyone else
+  - Read it for context when asked about future direction, but don't treat it as a spec or a commitment
+  - **Promoting** an idea: write a fresh numbered plan in `.opencode/plans/` (next `NN_` prefix) and add a ROADMAP entry. Copy in what survives rather than moving the brainstorm file, and leave the brainstorm file in place
 
 ## Project Structure
 
@@ -143,6 +153,7 @@ The project follows this structure:
   - `guides/` - Step-by-step walkthroughs with code examples
   - `reference/` - API reference (catalog of tasks and types)
 - `.opencode/reference/` - Agent-facing reference materials (Flyte docs, tool refs)
+- `.opencode/brainstorm/` - Gitignored, local-only unslotted ideas and moonshots
 - `scratch/` - Scratch materials
 
 ### Types Directory (`src/stargazer/assets/`)

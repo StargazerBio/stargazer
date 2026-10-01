@@ -26,10 +26,12 @@ Write comprehensive but focused tests for Flyte v2 tasks and workflows following
 
 The Stargazer project follows this process:
 1. **Write simple tests first** - before implementation
-2. **Pause to ensure tests capture right behavior** - user confirms
+2. **Confirm each test fails for the expected reason** - missing behavior, not an import error or broken fixture. No pause for user review
 3. **Implement tightly scoped functionality**
 4. **Run tests until they pass**
-5. **Small, meaningful commits**
+5. **Small, meaningful commits** - the user reviews every commit, tests and implementation together
+
+Assert observable behavior against literal expected values. If a test would still pass when the code under test returns `None`, rewrite the assertion or delete it.
 
 ## Test Organization
 
