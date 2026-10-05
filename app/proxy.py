@@ -1,62 +1,59 @@
 """
-### Cookie-validating reverse proxy in front of marimo, with workspace endpoints.
+### Owner-gated reverse proxy in front of marimo, with workspace hydrate + sync.
 
-Standalone ASGI app baked into the `notebook-app` image. Listens on
-the per-notebook pod's public port (8080), validates the pod pass the admin
-app issues (encrypted under this pod's own `SG_POD_KEY`, never the admin's
-`SESSION_SECRET`), then forwards HTTP + websocket traffic to marimo on `127.0.0.1:8081`.
+Standalone ASGI app baked into the `notebook-app` image. Listens on the
+per-notebook pod's public port (8080) and forwards HTTP + websocket traffic to
+marimo on `127.0.0.1:8081`.
+
+**Auth.** The pod runs behind the platform login (`requires_auth=True`), which
+forwards the signed-in user's id as `X-User-Subject` and overwrites any
+client-sent value. The platform only proves the visitor is a member of the
+org, so this proxy adds the ownership check: every request and websocket must
+carry the subject in `SG_OWNER_SUBJECT` (baked in at launch), or it gets a 403.
+A pod that doesn't know its owner denies everyone. Platform cookies and
+`X-User-*` headers are stripped before anything reaches marimo, so notebook
+code never sees the visitor's platform token through a request.
+
+**Workspace.** The user's notebooks live in the workspace store, one object per
+notebook, under `<STARGAZER_WORKSPACE_ROOT>/users/<subject>/` — the layout
+`app.workspace_store` owns (mirrored here because this module can't import the
+`app` package). At launch, `hydrate()` copies the owner's notebooks into
+`/workspace` and their own snapshots into `/snapshots`. While the pod runs, a
+background loop uploads any `/workspace` notebook whose content changed, every
+`SYNC_INTERVAL_SECONDS`, and the `lifespan` shutdown hook does a final flush
+when the pod scales to zero. Snapshots are never written back, and deletions
+are not propagated (deleting is a dashboard action).
 
 It also injects a Quake-style dropdown terminal into marimo's HTML: every
 `text/html` response gets an xterm.js overlay (loaded from CDN) spliced in
 before `</body>`, toggled with Ctrl+` and wired to the `/__sg__/term`
-websocket below. This makes the terminal app chrome present on every notebook
-page rather than a per-notebook cell.
+websocket below.
 
-Five reserved paths the proxy handles itself instead of forwarding:
+Reserved paths the proxy handles itself instead of forwarding:
 
-- `GET  /__sg__/dashboard` — 302 to the admin app's URL (read from
-  `STARGAZER_ADMIN_URL`). Lets notebooks link back to the dashboard
-  with a stable relative path instead of plumbing the admin URL into
-  each notebook's Python.
-- `GET  /__sg__/ready` — unauthenticated readiness probe; returns 200
-  once local marimo answers, 503 while it's still cold-starting. Polled
-  by the admin app's `/launch` handler so the dashboard spinner only
-  resolves once the pod is actually serving.
-- `GET  /__sg__/workspace/list` — directory listing of the user's
-  workspace from the pod-local `/workspace` clone of their fork. Admin
-  app queries this on dashboard render so workspace state is read
-  straight off disk.
-- `POST /__sg__/workspace/sync` — `git add` + `git commit` + `git push`
-  to the fork's `main`. No GitHub credential is baked into the pod: the push
-  exchanges the signed `SG_POD_TOKEN` capability for a fresh, fork-scoped, ~1h
-  token from the admin's `/workspace/pod-token` endpoint and feeds it to git
-  via `GIT_ASKPASS`, so it never lands in argv or `.git/config`. Only the
-  `notebooks/workspace/` dir is staged, so the fork's `main` never collides
-  with upstream's shipped files. Called by the launch script's SIGTERM hook on
-  idle-down, and exposed to the admin app as a "save" affordance.
-- `WS   /__sg__/term` — cookie-gated PTY websocket. Spawns a login `bash`
-  via `pty.fork()` and bridges it to the injected xterm.js overlay. The
-  child's environment is scrubbed of auth-critical secrets (`SG_POD_KEY`,
-  `SG_POD_TOKEN`, anything ending `_SECRET`/`_TOKEN`/`_JWT`/`_KEY`/`_PASSWORD`).
-  That's tidiness, not the security boundary: notebook code and the shell can
-  still read the proxy's env via `/proc`, which is why the pod only ever holds
-  credentials scoped to itself. The shell has full run of the pod's own
-  ephemeral `/workspace`.
+- `GET /__sg__/dashboard` — 302 to the admin app (`STARGAZER_ADMIN_URL`), so
+  notebooks can link back with a stable relative path.
+- `GET /__sg__/ready` — 200 once local marimo answers, 503 while it's still
+  cold-starting.
+- `WS  /__sg__/term` — owner-gated PTY websocket. Spawns a login `bash` and
+  bridges it to the injected xterm.js overlay. The child's environment is
+  scrubbed of secret-shaped vars; that's tidiness, not a boundary.
 
-Self-contained on purpose: the notebook image installs only `fastapi`,
-`uvicorn`, `itsdangerous`, `httpx`, `websockets`, `cryptography` at system
-level and COPYs this file in as `/usr/local/lib/sg_proxy.py` (alongside
-`terminal_overlay.html`, the injected dropdown-terminal markup it reads at
-import) — no stargazer or app-package install needed, and the top-level module
-name avoids colliding with Flyte's loaded_modules code bundle which
-ships an `app/` package into the pod's `/home/flyte` cwd at deploy
-time.
+While marimo is still starting, a browser request gets a small self-refreshing
+"Starting your notebook…" page instead of an error.
+
+Self-contained on purpose: the notebook image installs `fastapi`, `uvicorn`,
+`httpx` and `websockets` at system level next to the `flyte` SDK the base image
+already carries (used here for storage), and COPYs this file in as
+`/usr/local/lib/sg_proxy.py` (alongside `terminal_overlay.html`) — no stargazer
+or app-package install needed, and the top-level module name avoids colliding
+with Flyte's loaded_modules code bundle which ships an `app/` package into the
+pod's `/home/flyte` cwd at deploy time.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import asyncio
-import base64
 import fcntl
 import hashlib
 import json
@@ -64,52 +61,66 @@ import os
 import pty
 import signal
 import struct
-import subprocess
-import tempfile
 import termios
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
-from urllib.parse import urlencode
 
+import flyte
+import flyte.storage
 import httpx
 import websockets
-from cryptography.fernet import Fernet
 from fastapi import FastAPI, Request, Response, WebSocket
-from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from starlette.background import BackgroundTask
 
-SESSION_COOKIE = "sg_session"
-SESSION_MAX_AGE = 60 * 60 * 24 * 30  # 30 days, matches app.session
-LAUNCH_QUERY_PARAM = "sg_launch"
 MARIMO_HOST = "127.0.0.1"
 MARIMO_HTTP_PORT = 8081
-WORKSPACE_ROOT = Path("/workspace")
-WORKSPACE_NOTEBOOK_DIR = WORKSPACE_ROOT / "src/stargazer/notebooks/workspace"
-WORKSPACE_REL = "src/stargazer/notebooks/workspace"
+# Flat pod-local dirs the launch hydrates into. Mirrors
+# `app.per_notebook.WORKSPACE_NOTEBOOK_DIR` / `SNAPSHOT_NOTEBOOK_DIR`.
+WORKSPACE_DIR = Path("/workspace")
+SNAPSHOT_DIR = Path("/snapshots")
+# How often edited notebooks are written back to the store. Notebooks are
+# kilobytes, so a short interval costs little and bounds what a crash can lose.
+SYNC_INTERVAL_SECONDS = 5
 
-# Env keys never handed to the interactive shell. Every credential in this pod is
-# scoped to the pod itself (the master SESSION_SECRET never reaches it), so this
-# keeps them out of casual `env` output rather than guarding a shared secret. The
-# suffix list catches future secret-shaped vars without an explicit entry per name.
-_TERM_SECRET_KEYS = {"SG_POD_KEY", "SG_POD_TOKEN", "PINATA_JWT"}
+# Env keys never handed to the interactive shell. The suffix list catches future
+# secret-shaped vars without an explicit entry per name.
+_TERM_SECRET_KEYS = {"PINATA_JWT"}
 _TERM_SECRET_SUFFIXES = ("_SECRET", "_TOKEN", "_JWT", "_KEY", "_PASSWORD")
+
+# Request headers that never reach marimo: the platform session cookies and the
+# identity headers it injects (notably `X-User-Token`, the visitor's ID token).
+_STRIPPED_PREFIXES = ("x-user-",)
+_STRIPPED_HEADERS = {"host", "cookie"}
 
 # Quake-style dropdown terminal markup, spliced into every marimo HTML page
 # before </body>. Kept as a static asset (terminal_overlay.html) so it gets real
 # HTML/CSS/JS tooling instead of living as a Python string. Read once at import.
 # In the notebook image it's baked next to this module (see per_notebook.py), so
-# resolving it relative to __file__ works both in-repo and in-pod. xterm.js + the
-# fit addon load from CDN (browser-side, no pod dep); the overlay talks to the
-# /__sg__/term PTY websocket. Self-contained — no marimo plugin needed.
+# resolving it relative to __file__ works both in-repo and in-pod.
 _TERM_INJECTION = (Path(__file__).parent / "terminal_overlay.html").read_bytes()
 
+_STARTING_PAGE = """<!doctype html>
+<html><head><meta charset="utf-8"><meta http-equiv="refresh" content="2">
+<title>Starting your notebook…</title>
+<style>body{font-family:system-ui,sans-serif;background:#0b0b14;color:#ddd;
+display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+</style></head>
+<body><p>Starting your notebook… this page refreshes on its own.</p></body></html>
+"""
+
 # One shared client with keep-alive to the loopback marimo server, reused for
-# every proxied request and readiness probe — a per-request client would pay
-# construction plus a fresh TCP connection on the hottest path in the pod.
-# Lazily created (import must stay side-effect-free for tests), closed by the
-# lifespan hook at shutdown. Timeout is per-request: unbounded for proxied
-# traffic (marimo holds long-poll connections), short for readiness probes.
+# every proxied request and readiness probe. Lazily created (import must stay
+# side-effect-free for tests), closed by the lifespan hook at shutdown. Timeout
+# is per-request: unbounded for proxied traffic (marimo holds long-poll
+# connections), short for readiness probes.
 _upstream: httpx.AsyncClient | None = None
+
+# filename -> sha256 of the content last known to be in the store. Seeded at
+# proxy startup from the freshly hydrated disk, so nothing re-uploads needlessly.
+_synced: dict[str, str] = {}
+
+_storage_ready = False
 
 
 def _upstream_client() -> httpx.AsyncClient:
@@ -120,117 +131,184 @@ def _upstream_client() -> httpx.AsyncClient:
     return _upstream
 
 
-def _fetch_pod_git_token() -> str | None:
-    """Exchange the pod capability for a fresh fork-scoped git token.
+# ---------------------------------------------------------------------------
+# Owner gate
+# ---------------------------------------------------------------------------
 
-    Calls the admin's `/workspace/pod-token` with the `SG_POD_TOKEN` capability
-    baked into the pod env. Returns the bare token string, or None if the
-    capability/admin URL is missing or the admin declines — the caller turns
-    None into a push failure. The token is fetched at use (never persisted), so
-    it's always fresh even past the ~1h installation-token expiry.
+
+def _is_owner(headers) -> bool:
+    """True iff the platform-forwarded subject is this pod's owner.
+
+    Fails closed: an unset `SG_OWNER_SUBJECT` or a missing header denies.
     """
-    capability = os.environ.get("SG_POD_TOKEN")
-    admin_url = os.environ.get("STARGAZER_ADMIN_URL")
-    if not capability or not admin_url:
+    owner = os.environ.get("SG_OWNER_SUBJECT", "")
+    return bool(owner) and headers.get("x-user-subject") == owner
+
+
+def _forwardable(headers) -> dict[str, str]:
+    """Request headers safe to hand to marimo (no cookies, no identity)."""
+    return {
+        k: v
+        for k, v in headers.items()
+        if k.lower() not in _STRIPPED_HEADERS
+        and not k.lower().startswith(_STRIPPED_PREFIXES)
+    }
+
+
+# ---------------------------------------------------------------------------
+# Workspace store: hydrate at launch, sync while running and at shutdown
+# ---------------------------------------------------------------------------
+
+
+def _init_storage() -> None:
+    """Configure the Flyte client in-cluster once, so storage credentials resolve.
+
+    A no-op outside a pod (tests, local runs), where a plain path root needs no
+    client at all.
+    """
+    global _storage_ready
+    if _storage_ready:
+        return
+    if os.environ.get("_U_EP_OVERRIDE"):
+        flyte.init_in_cluster()
+    _storage_ready = True
+
+
+def _user_prefix(kind: str) -> str | None:
+    """`<root>/users/<owner>/<kind>`, or None when the store isn't configured.
+
+    Same layout as `app.workspace_store.workspace_uri` / `snapshots_uri`.
+    """
+    root = os.environ.get("STARGAZER_WORKSPACE_ROOT", "").rstrip("/")
+    owner = os.environ.get("SG_OWNER_SUBJECT", "")
+    if not root or not owner:
         return None
+    return f"{root}/users/{owner}/{kind}"
+
+
+def _is_notebook(name: str) -> bool:
+    """A syncable notebook: a top-level `.py` file that isn't `_`/`.`-prefixed."""
+    return name.endswith(".py") and not name.startswith(("_", "."))
+
+
+def _digest(data: bytes) -> str:
+    """Content hash used to decide whether a notebook needs uploading."""
+    return hashlib.sha256(data).hexdigest()
+
+
+async def _download_prefix(prefix: str, dest: Path) -> int:
+    """Copy every notebook object directly under `prefix` into `dest`.
+
+    Returns how many were written. A missing prefix (a new user) writes none.
+    """
+    fs = flyte.storage.get_underlying_filesystem(path=prefix)
     try:
-        resp = httpx.post(
-            f"{admin_url.rstrip('/')}/workspace/pod-token",
-            headers={"Authorization": f"Bearer {capability}"},
-            timeout=10.0,
-        )
-    except Exception:
-        return None
-    if resp.status_code != 200 or not resp.text.strip():
-        return None
-    return resp.text.strip()
+        entries = await asyncio.to_thread(fs.ls, prefix, detail=False)
+    except FileNotFoundError:
+        return 0
+    count = 0
+    for entry in entries:
+        name = str(entry).rstrip("/").rsplit("/", 1)[-1]
+        if not _is_notebook(name):
+            continue
+        chunks = [c async for c in flyte.storage.get_stream(f"{prefix}/{name}")]
+        (dest / name).write_bytes(b"".join(chunks))
+        count += 1
+    return count
 
 
-def _sync_workspace() -> tuple[dict, int]:
-    """git add + commit + push the workspace dir to the user's fork.
+async def hydrate_async() -> None:
+    """Async body of `hydrate()`; also records the hydrated content as synced."""
+    WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+    SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
+    notebooks, snapshots = _user_prefix("notebooks"), _user_prefix("snapshots")
+    if notebooks is None or snapshots is None:
+        print("[sg] workspace store not configured; starting with an empty workspace")
+        return
+    _init_storage()
+    n = await _download_prefix(notebooks, WORKSPACE_DIR)
+    s = await _download_prefix(snapshots, SNAPSHOT_DIR)
+    print(f"[sg] hydrated {n} notebook(s) and {s} snapshot(s)")
+    _seed_from_disk()
 
-    Returns `(payload, http_status)`. `{"status": "clean"}` means there were
-    no on-disk changes to push. Shared by the `/__sg__/workspace/sync` route
-    and the shutdown hook so manual Save and scale-to-zero use one code path.
-    The push fetches a fresh fork-scoped token (`_fetch_pod_git_token`) and
-    supplies it via `GIT_ASKPASS`, so no credential is stored in `.git/config`.
+
+def hydrate() -> None:
+    """Fill `/workspace` and `/snapshots` from the owner's stored notebooks.
+
+    Run by the launch script, as its own process, before marimo starts, so the
+    notebook marimo opens already exists on disk. Always leaves both dirs in
+    place, empty for a new user or an unconfigured store.
     """
-    if not (WORKSPACE_ROOT / ".git").exists():
-        return {"error": "workspace not initialized"}, 409
-
-    def git(*args: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["git", "-C", str(WORKSPACE_ROOT), *args],
-            capture_output=True,
-            text=True,
-            check=False,  # callers inspect returncode themselves
-        )
-
-    add = git("add", WORKSPACE_REL)
-    if add.returncode != 0:
-        return {"error": "git add failed", "stderr": add.stderr}, 500
-    status = git("status", "--porcelain", WORKSPACE_REL)
-    if not status.stdout.strip():
-        return {"status": "clean"}, 200
-    # Name the touched notebook(s) in the message — the porcelain paths are the
-    # only authoritative signal here (the pod isn't told its own slug). For
-    # renames ("R old -> new") the last token is the new path.
-    saved = sorted(
-        {
-            Path(line.split()[-1]).stem
-            for line in status.stdout.splitlines()
-            if line.strip()
-        }
-    )
-    commit = git("commit", "-m", f"workspace: save {', '.join(saved)}")
-    if commit.returncode != 0:
-        return {"error": "git commit failed", "stderr": commit.stderr}, 500
-    push, err = _git_push()
-    if not push:
-        return {"error": "git push failed", "stderr": err}, 500
-    return {"status": "pushed"}, 200
+    asyncio.run(hydrate_async())
 
 
-def _git_push() -> tuple[bool, str]:
-    """Push `HEAD:main` to origin using a freshly-minted token via GIT_ASKPASS.
+def _seed_from_disk() -> None:
+    """Record the current `/workspace` content as already stored.
 
-    Returns `(ok, stderr)`. The remote URL is token-free
-    (`https://x-access-token@github.com/...`), so git asks GIT_ASKPASS for the
-    password; we point that at a throwaway script echoing the just-fetched
-    token. The token lives only in the push subprocess's env and a temp file we
-    delete immediately — never in argv or `.git/config`.
+    Called at proxy startup, right after hydration, so the first sync pass
+    doesn't re-upload every notebook that was just downloaded.
     """
-    token = _fetch_pod_git_token()
-    if not token:
-        return False, "could not obtain a fork-scoped push token from the admin"
-    askpass = tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False)
-    try:
-        askpass.write('#!/bin/sh\necho "$SG_GIT_TOKEN"\n')
-        askpass.close()
-        os.chmod(askpass.name, 0o700)
-        env = {
-            **os.environ,
-            "SG_GIT_TOKEN": token,
-            "GIT_ASKPASS": askpass.name,
-            "GIT_TERMINAL_PROMPT": "0",
-        }
-        push = subprocess.run(
-            ["git", "-C", str(WORKSPACE_ROOT), "push", "origin", "HEAD:main"],
-            check=False,  # returncode inspected below
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-        return push.returncode == 0, push.stderr
-    finally:
-        os.unlink(askpass.name)
+    if not WORKSPACE_DIR.is_dir():
+        return
+    for path in WORKSPACE_DIR.iterdir():
+        if path.is_file() and _is_notebook(path.name):
+            _synced.setdefault(path.name, _digest(path.read_bytes()))
+
+
+async def _upload(uri: str, data: bytes) -> None:
+    """Write one notebook object (one PUT, atomic per object)."""
+    parent = uri.rsplit("/", 1)[0]
+    # Object stores have no directories; a local root does. A no-op on S3.
+    fs = flyte.storage.get_underlying_filesystem(path=parent)
+    await asyncio.to_thread(fs.makedirs, parent, exist_ok=True)
+    await flyte.storage.put_stream(data, to_path=uri)
+
+
+async def sync_once() -> list[str]:
+    """Upload every `/workspace` notebook whose content changed; return their names.
+
+    Only top-level, non-`_`-prefixed `.py` files sync, each to its own object.
+    A failed upload is logged and retried on the next pass rather than raised.
+    """
+    prefix = _user_prefix("notebooks")
+    if prefix is None or not WORKSPACE_DIR.is_dir():
+        return []
+    _init_storage()
+    uploaded = []
+    for path in sorted(WORKSPACE_DIR.iterdir()):
+        if not (path.is_file() and _is_notebook(path.name)):
+            continue
+        data = path.read_bytes()
+        digest = _digest(data)
+        if _synced.get(path.name) == digest:
+            continue
+        try:
+            await _upload(f"{prefix}/{path.name}", data)
+        except Exception as exc:
+            print(f"[sg] saving {path.name} failed: {exc}")
+            continue
+        _synced[path.name] = digest
+        uploaded.append(path.name)
+    if uploaded:
+        print(f"[sg] saved {', '.join(uploaded)}")
+    return uploaded
+
+
+async def _sync_loop() -> None:
+    """Sync on an interval for the life of the pod."""
+    while True:
+        await asyncio.sleep(SYNC_INTERVAL_SECONDS)
+        try:
+            await sync_once()
+        except Exception as exc:  # keep the loop alive whatever happens
+            print(f"[sg] workspace sync pass failed: {exc}")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """On shutdown (Knative SIGTERM at scale-to-zero), flush pending edits.
+    """Run the sync loop while serving; flush pending edits on shutdown.
 
-    `/workspace` is ephemeral, so anything not pushed before the pod idles is
+    `/workspace` is ephemeral, so anything not written before the pod idles is
     lost. Flyte's `fserve` wrapper is PID 1 and forwards the Knative SIGTERM to
     its one direct child; the launch script's `exec` chain (args prepend `exec`,
     then the script `exec`s uvicorn) makes uvicorn that direct child, so it
@@ -238,10 +316,14 @@ async def lifespan(_: FastAPI):
     intermediate shell anywhere in that chain would swallow the signal and skip
     this flush.
     """
+    _seed_from_disk()
+    loop_task = asyncio.create_task(_sync_loop())
     yield
+    loop_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await loop_task
     try:
-        payload, _code = await asyncio.to_thread(_sync_workspace)
-        print(f"[sg] workspace shutdown sync: {payload}")
+        await sync_once()
     except Exception as exc:  # never block shutdown
         print(f"[sg] workspace shutdown sync failed: {exc}")
     global _upstream
@@ -255,83 +337,6 @@ asgi_app = FastAPI(
 )
 
 
-def _fernet(secret: str) -> Fernet:
-    """Derive the pod-pass cipher from `SG_POD_KEY`.
-
-    Mirrors `app.session._fernet` exactly (sha256 → urlsafe-base64 key) so this
-    standalone proxy can decrypt the admin-minted pass without importing the
-    app package. Keep the two derivations in lockstep.
-    """
-    key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
-    return Fernet(key)
-
-
-def _cookie_secure() -> bool:
-    """Whether the session cookie gets `Secure` — mirrors `app.config.SECURE_COOKIES`.
-
-    Off on devbox/http, on under production TLS. This standalone proxy can't
-    import `app.config`, so it re-reads `STARGAZER_SECURE_COOKIES` (which the
-    admin bakes into this pod's env at launch from that single source of truth);
-    keep this read in lockstep so both sides set the cookie identically.
-    """
-    return os.environ.get("STARGAZER_SECURE_COOKIES", "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
-
-
-def _cookie_is_valid(cookie_value: str | None) -> bool:
-    """Verify the pod pass against this pod's `SG_POD_KEY`.
-
-    Returns False (denying access) if the key env var is missing, the cookie
-    is absent, or it does not decrypt/authenticate within the max age window.
-    Fernet authenticates on decrypt, so a forged pass — or the admin's own
-    session cookie, or a pass for another user's pod — fails here.
-    """
-    secret = os.environ.get("SG_POD_KEY")
-    if not secret or not cookie_value:
-        return False
-    try:
-        _fernet(secret).decrypt(cookie_value.encode("ascii"), ttl=SESSION_MAX_AGE)
-        return True
-    except Exception:
-        # Deny on *any* failure — this is an auth gate, so an unexpected
-        # exception must fail closed (401), never propagate as a 500.
-        return False
-
-
-@asgi_app.middleware("http")
-async def redeem_launch_token(request: Request, call_next):
-    """Convert an `?sg_launch=<token>` URL into a host-only session cookie.
-
-    The admin app at `admin-…<parent>` and this per-notebook host at
-    `nb-…<parent>` are sibling subdomains that intentionally use host-only
-    cookies (no shared `Domain=` parent), so a notebook can't read the admin's
-    cookie. So `/launch` redirects here with the signed session value as a
-    one-shot query param; we set our own host-only cookie and bounce the
-    browser to the clean URL.
-    """
-    token = request.query_params.get(LAUNCH_QUERY_PARAM)
-    if not token or not _cookie_is_valid(token):
-        return await call_next(request)
-    remaining = {
-        k: v for k, v in request.query_params.multi_items() if k != LAUNCH_QUERY_PARAM
-    }
-    clean = request.url.path + (f"?{urlencode(remaining)}" if remaining else "")
-    response = RedirectResponse(clean, status_code=303)
-    response.set_cookie(
-        SESSION_COOKIE,
-        token,
-        httponly=True,
-        secure=_cookie_secure(),
-        max_age=SESSION_MAX_AGE,
-        samesite="lax",
-    )
-    return response
-
-
 # ---------------------------------------------------------------------------
 # Reserved /__sg__/* endpoints (handled locally, NOT forwarded to marimo).
 # Declared before the catch-all proxy routes so FastAPI matches them first.
@@ -340,13 +345,10 @@ async def redeem_launch_token(request: Request, call_next):
 
 @asgi_app.get("/__sg__/dashboard")
 async def dashboard_redirect() -> Response:
-    """Redirect back to the admin dashboard.
+    """Redirect back to the admin dashboard (`STARGAZER_ADMIN_URL`).
 
-    Admin and per-notebook live on sibling subdomains, so a notebook
-    can't just link to `/`. The admin pod stamps its own URL into the
-    per-notebook's `STARGAZER_ADMIN_URL` env var at launch time; this
-    route just 302s the browser there. No cookie check — the dashboard
-    is the place users go to *re*-authenticate.
+    Admin and per-notebook live on different hosts, so a notebook can't just
+    link to `/`. Not owner-gated: it reveals nothing.
     """
     target = os.environ.get("STARGAZER_ADMIN_URL") or "/"
     return RedirectResponse(target, status_code=302)
@@ -354,62 +356,23 @@ async def dashboard_redirect() -> Response:
 
 @asgi_app.get("/__sg__/ready")
 async def ready() -> Response:
-    """Probe local marimo on 127.0.0.1:8081; 200 if reachable, else 503.
-
-    Polled cross-origin from the dashboard JS so the spinner can resolve
-    once the pod is actually serving. The probe runs from the browser (which
-    already has a route to the notebook URL) rather than the admin pod, so
-    readiness is judged from the same vantage point the user will open from.
-    Hence the `Access-Control-Allow-Origin: *` header — readiness leaks no
-    data so wildcard is fine. Unauthenticated by design.
-    """
-    headers = {"Access-Control-Allow-Origin": "*"}
+    """200 once local marimo answers, else 503. Reveals nothing, so not gated."""
     try:
         resp = await _upstream_client().get(
             f"http://{MARIMO_HOST}:{MARIMO_HTTP_PORT}/", timeout=2.0
         )
         if resp.status_code < 500:
-            return Response("ready", status_code=200, headers=headers)
+            return Response("ready", status_code=200)
     except Exception:
         pass
-    return Response("not ready", status_code=503, headers=headers)
-
-
-@asgi_app.get("/__sg__/workspace/list")
-async def workspace_list(request: Request) -> Response:
-    """Return `.py` filenames in the locally-mounted workspace dir."""
-    if not _cookie_is_valid(request.cookies.get(SESSION_COOKIE)):
-        return Response("Unauthorized", status_code=401)
-    if not WORKSPACE_NOTEBOOK_DIR.exists():
-        return JSONResponse({"files": []})
-    files = sorted(
-        p.name
-        for p in WORKSPACE_NOTEBOOK_DIR.glob("*.py")
-        if not p.name.startswith("_")
-    )
-    return JSONResponse({"files": files})
-
-
-@asgi_app.post("/__sg__/workspace/sync")
-async def workspace_sync(request: Request) -> Response:
-    """Commit + push pending workspace edits to the user's fork (manual Save).
-
-    Invoked by the admin app's `/workspace/save` with the user's session
-    cookie. Idle/shutdown flushes go through the proxy's `lifespan` hook
-    instead, which calls `_sync_workspace` directly (no HTTP round-trip).
-    """
-    if not _cookie_is_valid(request.cookies.get(SESSION_COOKIE)):
-        return Response("Unauthorized", status_code=401)
-    payload, code = await asyncio.to_thread(_sync_workspace)
-    return JSONResponse(payload, status_code=code)
+    return Response("not ready", status_code=503)
 
 
 def _shell_env() -> dict[str, str]:
     """Pod env with auth-critical secrets stripped, for the interactive shell.
 
     Drops every key in `_TERM_SECRET_KEYS` plus anything ending in a
-    secret-shaped suffix, so the pod key and fork capability stay out of casual
-    `env` output. Not a boundary (see the module docstring). Sets a sane `TERM` so curses apps render.
+    secret-shaped suffix, so credentials stay out of casual `env` output. Not a boundary (see the module docstring). Sets a sane `TERM` so curses apps render.
     """
     env = {
         k: v
@@ -433,14 +396,14 @@ def _set_winsize(fd: int, rows: int, cols: int) -> None:
 async def term_proxy(websocket: WebSocket) -> None:
     """Bridge the injected xterm.js overlay to a login bash via a PTY.
 
-    Cookie-gated like the marimo proxy. Forks a `bash -l` on a pseudo-terminal
+    Owner-gated like the marimo proxy. Forks a `bash -l` on a pseudo-terminal
     with a secret-scrubbed environment (`_shell_env`) and pumps bytes both ways:
     PTY output is read off the master fd (registered with the event loop) and
     sent as binary frames; the client sends JSON text frames — `{"type":
     "input", ...}` for keystrokes and `{"type": "resize", ...}` for geometry.
     The child is killed and reaped when either side closes.
     """
-    if not _cookie_is_valid(websocket.cookies.get(SESSION_COOKIE)):
+    if not _is_owner(websocket.headers):
         await websocket.close(code=1008)
         return
     await websocket.accept()
@@ -539,22 +502,24 @@ _HOP_BY_HOP = {
     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
 )
 async def http_proxy(request: Request, path: str) -> Response:
-    """Forward any HTTP method to marimo on localhost:8081 after cookie check.
+    """Forward any HTTP method to marimo on localhost:8081 after the owner check.
 
-    Runs on the shared keep-alive client. Only `text/html` responses are
-    buffered — the dropdown-terminal overlay is spliced in before `</body>`
-    (app chrome on every page, no marimo plugin needed). Everything else —
-    static bundles, API JSON, downloads — streams through chunk-by-chunk
-    with its original headers, so large bodies never sit in proxy memory.
-    The raw query string passes through untouched (duplicate params intact).
+    Runs on the shared keep-alive client. Platform cookies and identity headers
+    are dropped before forwarding. Only `text/html` responses are buffered —
+    the dropdown-terminal overlay is spliced in before `</body>` (app chrome on
+    every page, no marimo plugin needed). Everything else — static bundles, API
+    JSON, downloads — streams through chunk-by-chunk with its original headers,
+    so large bodies never sit in proxy memory. The raw query string passes
+    through untouched (duplicate params intact). While marimo is still starting,
+    browsers get a self-refreshing starting page and other callers a plain 503.
     """
-    if not _cookie_is_valid(request.cookies.get(SESSION_COOKIE)):
-        return Response("Unauthorized", status_code=401)
+    if not _is_owner(request.headers):
+        return Response("Forbidden", status_code=403)
 
     upstream = f"http://{MARIMO_HOST}:{MARIMO_HTTP_PORT}/{path}"
     if request.url.query:
         upstream = f"{upstream}?{request.url.query}"
-    headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
+    headers = _forwardable(request.headers)
     # Stream the request body through only when there is one — chunked framing
     # on a bodyless GET would be gratuitous.
     has_body = "content-length" in request.headers or (
@@ -567,7 +532,12 @@ async def http_proxy(request: Request, path: str) -> Response:
         headers=headers,
         content=request.stream() if has_body else None,
     )
-    resp = await client.send(req, stream=True)
+    try:
+        resp = await client.send(req, stream=True)
+    except httpx.ConnectError:
+        if "text/html" in request.headers.get("accept", ""):
+            return HTMLResponse(_STARTING_PAGE, status_code=503)
+        return Response("Notebook is starting", status_code=503)
 
     if "text/html" in resp.headers.get("content-type", "").lower():
         # Buffer + splice the terminal overlay. `aread()` decodes any
@@ -608,8 +578,12 @@ async def http_proxy(request: Request, path: str) -> Response:
 
 @asgi_app.websocket("/{path:path}")
 async def ws_proxy(websocket: WebSocket, path: str) -> None:
-    """Bridge a client websocket to marimo's websocket after cookie check."""
-    if not _cookie_is_valid(websocket.cookies.get(SESSION_COOKIE)):
+    """Bridge a client websocket to marimo's websocket after the owner check.
+
+    The upstream connection is opened without the client's headers, so no
+    cookie or identity header reaches marimo here either.
+    """
+    if not _is_owner(websocket.headers):
         await websocket.close(code=1008)
         return
 

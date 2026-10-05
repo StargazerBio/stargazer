@@ -21,9 +21,7 @@ def _nb_env():
         slug="demo",
         mode="edit",
         notebook_path="/workspace/x.py",
-        fork_full_name="octocat/stargazer",
-        pod_capability="cap",
-        pod_key="key",
+        owner_subject="387300641116005877",
         admin_url="http://admin",
     )
 
