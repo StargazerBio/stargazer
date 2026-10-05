@@ -11,7 +11,6 @@ required) and gives every page the shared chrome via `{% extends
 Layout:
 
 - `base.html` — `<html>` shell, CSS, blocks `body` and `scripts`.
-- `login.html` — extends base for the unauthenticated landing.
 - `dashboard.html` — extends base for the post-login dashboard, with
   the user-menu avatar, the four tile sections, and the launch JS.
 - `_tile.html` — partial for one notebook tile (rendered per tile
@@ -21,14 +20,19 @@ Layout:
 Context shape consumed by `dashboard.html`:
 
 - `title` (str) — `<title>` chrome.
-- `github_username` (str) — for the avatar URL and "Signed in as".
+- `user` (`app.identity.User`) — the avatar initial and "Signed in as".
+- `workspace_configured` (bool) — whether this deploy can save notebooks;
+  False renders a notice in place of the Workspace grid.
+- `provision_error` (bool) — the user's project isn't ready yet.
 - `workflows`, `snapshots`, `workspace`, `tutorials` (list of tile
   dicts) — each dict has `slug`, `title`, `description`, `section` (plus
   `cpu`/`memory` for workspace tiles). The dashboard loops and includes
   `_tile.html` for each. `snapshots` tiles are frozen: a Run-only launch
-  (no Edit/gear/trash); a Workspace tile's 📸 button freezes it into this
-  section. Workflows and Snapshots tiles also carry a Copy-to-workspace
-  button.
+  (no Edit/gear); a Workspace tile's 📸 button freezes it into this
+  section. Shipped public snapshots carry `source == "public-snapshots"`
+  (what launch/copy/download send) and no delete. Workflows and Snapshots
+  tiles carry a Copy-to-workspace button; Workspace and Snapshots tiles a
+  Download link.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """

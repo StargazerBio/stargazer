@@ -285,27 +285,22 @@
 .upload-status { font-size: 0.82rem; }
 .upload-status.err { color: var(--danger); }
 .upload-status.ok { color: var(--green); }
-.signin-link { color: var(--accent); text-decoration: none; font-size: 0.85rem; }
-.signin-link:hover { text-decoration: underline; }
 {% endblock %} {% block body %}
 <div class="dashboard">
     <header class="dash-header">
         <a href="/" class="dash-brand" aria-label="Stargazer home">
             <img src="/static/8-bit_stargazer_no-bg.jpg" alt="Stargazer" />
         </a>
-        {% if username %}
+        {% if user %}
         <details class="user-menu">
             <summary aria-label="User menu">
-                <img src="https://github.com/{{ username }}.png?size=80" alt="" />
+                <span class="avatar-initial">{{ user.initial }}</span>
             </summary>
             <div class="menu">
-                <div class="menu-user">Signed in as <strong>@{{ username }}</strong></div>
+                <div class="menu-user">Signed in as <strong>{{ user.display }}</strong></div>
                 <a class="menu-item" href="/">Dashboard</a>
-                <a class="menu-item" href="/auth/logout">Sign out</a>
             </div>
         </details>
-        {% else %}
-        <a class="signin-link" href="/auth/login">Sign in</a>
         {% endif %}
     </header>
 
@@ -796,7 +791,7 @@ function renderDetail() {
         }
     }
     // Editing is owner-only and server-enforced (fail-closed 403); only show
-    // the affordance when the session user owns this record.
+    // the affordance when the signed-in user owns this record.
     const canEdit = AUTHED && owner(rec) === USERNAME && USERNAME;
     el.innerHTML =
         `<div class="detail-head"><h3>${esc(rec.name || "(unnamed)")}</h3><span class="badge type">${esc(assetType(rec))}</span><span class="badge">${esc(owner(rec))}</span></div>` +

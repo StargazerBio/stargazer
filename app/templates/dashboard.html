@@ -7,20 +7,29 @@
 
         <details class="user-menu">
             <summary aria-label="User menu">
-                <img
-                    src="https://github.com/{{ github_username }}.png?size=80"
-                    alt=""
-                />
+                <span class="avatar-initial">{{ user.initial }}</span>
             </summary>
             <div class="menu">
                 <div class="menu-user">
-                    Signed in as <strong>@{{ github_username }}</strong>
+                    Signed in as <strong>{{ user.display }}</strong>
+                    {% if user.email and user.email != user.display %}
+                    <span class="menu-email">{{ user.email }}</span>
+                    {% endif %}
                 </div>
                 <a class="menu-item" href="/assets">Assets</a>
-                <a class="menu-item" href="/auth/logout">Sign out</a>
             </div>
         </details>
     </header>
+
+    {% if provision_error %}
+    <div class="notice">
+        <p class="notice-head">⚠ Your workspace is still being set up</p>
+        <p class="section-desc">
+            Notebooks can't start until it's ready. Reload this page in a
+            moment.
+        </p>
+    </div>
+    {% endif %}
 
     <section>
         <h2>
@@ -65,18 +74,16 @@
             Workspace
             <span class="section-tag">Author and save your own notebooks.</span>
         </h2>
-        {% if workspace_enabled %}
+        {% if workspace_configured %}
         <p class="section-desc">
-            Author your own notebooks from scratch and commit them to your
-            branch. Use the <strong>New notebook</strong> tile or start from the
+            Author your own notebooks from scratch or start from the
             <a
                 href="https://github.com/StargazerBio/stargazer/blob/main/src/stargazer/notebooks/workspace/template.py"
                 target="_blank"
                 rel="noopener"
                 >template</a
-            >
-            — anything you save lands in <code>notebooks/workspace/</code> on
-            your fork.
+            >. Your edits are saved automatically while a notebook is open,
+            and they're there the next time you open it.
         </p>
         <div class="grid" id="workspace-grid">
             {% for tile in workspace %}{% include "_tile.html" %}{% endfor %}
@@ -101,50 +108,12 @@
         </div>
         {% else %}
         <div class="notice">
-            {% if fork_error %}
-            <p class="notice-head">⚠ Couldn't enable workspace saving</p>
+            <p class="notice-head">⚠ Saving notebooks isn't available</p>
             <p class="section-desc">
-                We couldn't create a fork for your account. This happens if your
-                account already owns the upstream repo or a repo whose name
-                redirects to it — GitHub returns the source instead of a fork,
-                and Stargazer won't write to the shared upstream. Use a
-                different account, or contact the maintainers.
+                This deployment has nowhere to keep your own notebooks.
+                Tutorials and Workflows still run — your changes just aren't
+                kept.
             </p>
-            {% else %}
-            <p class="notice-head">⚠ Workspace saving is off</p>
-            {% endif %}
-            <p class="section-desc">
-                Turn it on to author your own notebooks from scratch and keep
-                your work across sessions. Enabling will:
-            </p>
-            <ul class="notice-list">
-                <li>
-                    Fork the public <code>StargazerBio/stargazer</code> repo
-                    into your GitHub account.
-                </li>
-                <li>
-                    Send you to GitHub to install the Stargazer app — choose
-                    <strong>Only select repositories</strong> and pick your new
-                    <code>stargazer</code> fork, so it can read and write just
-                    that one repo.
-                </li>
-                <li>
-                    Save notebooks you create or edit to your fork's
-                    <code>main</code>, under <code>notebooks/workspace/</code>.
-                </li>
-            </ul>
-            <p class="section-desc">
-                Stargazer never holds a broad token — the app is scoped to your
-                fork, and you can revoke it anytime from your GitHub settings.
-                Saving starts working once the app is installed; nothing is
-                written until then. Tutorials and Workflow notebooks work
-                without it — they just aren't saved.
-            </p>
-            <form method="post" action="/workspace/enable" style="margin: 0">
-                <button class="btn btn-github" type="submit">
-                    Enable workspace saving
-                </button>
-            </form>
         </div>
         {% endif %}
     </section>
@@ -219,32 +188,6 @@
         });
     });
 
-    // Intercept tile Edit/Run submits: POST /launch (returns the URL
-    // immediately), then poll the per-notebook's /__sg__/ready directly
-    // cross-origin until 200, then swap the spinner for an "Open" link.
-    // Polling from the browser (rather than admin → pod) checks readiness
-    // from the same vantage point the user will open the notebook from.
-    async function pollReady(notebookUrl, deadlineMs) {
-        // Build the absolute /__sg__/ready URL by replacing the path on the
-        // notebookUrl (which has a ?sg_launch=… token). Strip the query
-        // because /__sg__/ready needs no auth and shouldn't burn the
-        // one-shot launch token.
-        const u = new URL(notebookUrl);
-        const readyUrl = u.origin + "/__sg__/ready";
-        while (Date.now() < deadlineMs) {
-            try {
-                // Keep this a "simple" CORS request (no custom headers) so
-                // the browser doesn't issue an OPTIONS preflight.
-                const resp = await fetch(readyUrl, { method: "GET" });
-                if (resp.ok) return true;
-            } catch (_) {
-                /* CORS or network blip — keep trying */
-            }
-            await new Promise((r) => setTimeout(r, 2000));
-        }
-        return false;
-    }
-
     // Append an "Open" link + "Stop" button beside a launched notebook's
     // Edit/Run button. The original button stays so the notebook can be
     // re-launched; the extras are tagged `.launched-extra` so a re-launch or
@@ -256,8 +199,7 @@
         // Edit/Run button (Open/Stop take over) and the *other* mode's button
         // too, so a running notebook offers no path to a second pod. Stop
         // restores both. See docs/architecture/app.md. Don't hide a sibling
-        // that's itself already launched (a legacy both-running pod hydrated
-        // from /launch/status keeps its own Open/Stop visible).
+        // that's itself already launched.
         const mode = form.querySelector('input[name="mode"]').value;
         const tile = row.closest(".tile");
         row.hidden = false;
@@ -274,16 +216,12 @@
             mode === "run" ? "Open: Run Mode" : "Open: Edit Mode";
         open.target = "_blank";
         open.rel = "noopener";
-        // A `fresh` URL just came back from /launch, so its pod is serving with
-        // a key derived from the admin's *current* SESSION_SECRET and will accept the handoff
-        // token — a direct link is safe. A hydrated URL (from /launch/status on
-        // load) can point at a pod that's scaled to zero or stale: baked with a
-        // pre-redeploy secret/image, it would reject the current session's token
-        // and 401 ("Unauthorized"). Re-serve through /launch on click to
-        // reconcile that pod to the current spec (a no-op for a warm, current
-        // pod) and hand off a token it will accept, then navigate. The tab is
-        // opened synchronously in the click handler so the re-serve's await
-        // can't cost us the user-gesture and trip the popup blocker.
+        // A hydrated URL (from /launch/status on load) can point at a pod
+        // that's scaled to zero or was served before a redeploy. Re-serve
+        // through /launch on click to reconcile it to the current spec (a
+        // no-op for a warm, current pod), then navigate. The tab is opened
+        // synchronously in the click handler so the await can't cost us the
+        // user-gesture and trip the popup blocker.
         if (!fresh) {
             open.addEventListener("click", (e) => {
                 e.preventDefault();
@@ -301,58 +239,17 @@
 
         row.appendChild(open);
         row.appendChild(stop);
-
-        // Workspace notebooks can be committed to the fork; tutorials/workflows
-        // are ephemeral, so no Save for them.
-        const section = form.querySelector('input[name="section"]');
-        if (section && section.value === "workspace") {
-            const save = document.createElement("button");
-            save.type = "button";
-            save.className = "btn btn-save launched-extra";
-            save.textContent = "Save";
-            save.title = "Commit this notebook to your fork";
-            save.addEventListener("click", () => saveNotebook(save, form));
-            row.appendChild(save);
-        }
     }
 
-    // Paint a "starting" placeholder into a freshly-opened blank tab so a cold
-    // start reads as intentional (not a broken about:blank) until we navigate it.
-    function paintStartingTab(win) {
-        if (!win) return;
-        const doc = win.document;
-        doc.title = "Starting notebook…";
-        doc.body.style.cssText =
-            "margin:0;height:100vh;display:grid;place-items:center;" +
-            "font:16px/1.5 system-ui,sans-serif;color:#555;background:#fafafa";
-        const box = doc.createElement("div");
-        box.style.textAlign = "center";
-        box.append("Starting your notebook…", doc.createElement("br"));
-        const hint = doc.createElement("small");
-        hint.style.color = "#999";
-        hint.textContent = "This can take a minute on a cold start.";
-        box.append(hint);
-        doc.body.replaceChildren(box);
-    }
-
-    // Re-open a hydrated (possibly scaled-to-zero or stale) notebook: re-serve
-    // it through /launch so the pod is reconciled to the current spec — a pod key
-    // from the current SESSION_SECRET and the `:latest` image — then point the pre-opened tab at the
-    // fresh handoff URL once the pod is ready. `win` is opened synchronously by
-    // the caller to survive the awaits without popup-blocking, shows a "starting"
-    // placeholder while the pod comes up, and is navigated on success / closed on
-    // failure. Re-serve is a no-op for a warm, current pod, so this stays quick
-    // unless the pod actually needs a cold start.
+    // Re-open a hydrated notebook: re-serve it through /launch, then point
+    // the pre-opened tab at it. The notebook shows its own starting page
+    // until it's ready, so there's nothing to wait for here.
     async function reopenHydrated(openBtn, form, win) {
-        paintStartingTab(win);
         const label = openBtn.textContent;
         openBtn.style.pointerEvents = "none";
         openBtn.textContent = "Starting…";
         try {
             const url = await requestLaunch(new FormData(form));
-            const ready = await pollReady(url, Date.now() + 180000);
-            if (!ready)
-                throw new Error("timed out waiting for notebook to start");
             if (win) win.location = url;
             else window.open(url, "_blank", "noopener");
         } catch (err) {
@@ -361,34 +258,6 @@
         } finally {
             openBtn.textContent = label;
             openBtn.style.pointerEvents = "";
-        }
-    }
-
-    // Commit one running notebook's workspace to the fork via the admin, which
-    // syncs that pod (per-notebook, so it can't clobber another pod's edits).
-    async function saveNotebook(saveBtn, form) {
-        const original = saveBtn.textContent;
-        saveBtn.disabled = true;
-        saveBtn.innerHTML = '<span class="spinner-inline"></span>';
-        try {
-            const resp = await fetch("/workspace/save", {
-                method: "POST",
-                body: new FormData(form),
-                headers: { Accept: "application/json" },
-            });
-            const payload = await resp.json().catch(() => ({}));
-            if (!resp.ok)
-                throw new Error(payload.error || "HTTP " + resp.status);
-            saveBtn.textContent =
-                payload.status === "clean" ? "No changes" : "Saved ✓";
-            setTimeout(() => {
-                saveBtn.textContent = original;
-                saveBtn.disabled = false;
-            }, 2500);
-        } catch (err) {
-            saveBtn.disabled = false;
-            saveBtn.textContent = original;
-            alert("Save failed: " + err.message);
         }
     }
 
@@ -467,8 +336,8 @@
         return payload.url;
     }
 
-    // Run the launch flow for one tile: spinner → /launch → poll ready →
-    // show Open+Stop beside the button.
+    // Run the launch flow for one tile: spinner → /launch → Open+Stop.
+    // The notebook shows its own starting page while it warms up.
     async function handleLaunch(form) {
         const button = form.querySelector('button[type="submit"]');
         const row = form.closest(".launch-row");
@@ -477,11 +346,6 @@
         button.innerHTML = '<span class="spinner-inline"></span>';
         try {
             const url = await requestLaunch(new FormData(form));
-            // Poll for readiness for up to 3 min — covers cold-start plus
-            // uv's sandbox-venv install (~90 packages).
-            const ready = await pollReady(url, Date.now() + 180000);
-            if (!ready)
-                throw new Error("timed out waiting for notebook to start");
             button.disabled = false;
             button.textContent = originalLabel;
             showLaunched(row, form, url, true);
@@ -501,13 +365,13 @@
         handleLaunch(form);
     });
 
-    // Delete a workspace notebook from the fork. Delegated so freshly created
+    // Delete a workspace notebook. Delegated so freshly created
     // tiles get it too. Confirm (destructive), POST, then drop the tile.
     async function deleteNotebook(btn) {
         const slug = btn.dataset.deleteSlug;
         if (
             !confirm(
-                `Delete notebook "${slug}"? This removes it from your fork.`,
+                `Delete notebook "${slug}"? This can't be undone from here.`,
             )
         )
             return;
@@ -584,14 +448,14 @@
         snapshotNotebook(btn);
     });
 
-    // Delete a frozen snapshot from the fork. Mirrors deleteNotebook but hits
+    // Delete one of your own snapshots. Mirrors deleteNotebook but hits
     // /snapshot/delete (the snapshots dir, not workspace); on success drop the
     // tile and bring the empty-state hint back if the grid is now empty.
     async function deleteSnapshot(btn) {
         const slug = btn.dataset.snapshotDeleteSlug;
         if (
             !confirm(
-                `Delete snapshot "${slug}"? This removes it from your fork.`,
+                `Delete snapshot "${slug}"? This can't be undone from here.`,
             )
         )
             return;

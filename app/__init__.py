@@ -1,28 +1,25 @@
 """
 ### Stargazer deployment infrastructure.
 
-Two-app architecture:
+Two-app architecture, both behind Union's login (`requires_auth=True`):
 
-- `app.admin_app.app_env` — shared FastAPI service. Hosts the
-  unauthenticated landing + GitHub OAuth, runs per-user provisioning
-  (Flyte project + GitHub fork), renders the post-login dashboard tile
-  grid, and brokers Edit/Run clicks into per-notebook apps via
+- `app.admin_app.app_env` — shared FastAPI service. Reads the signed-in
+  user from the identity Union forwards (`app.identity`), ensures their
+  Flyte project (`app.provision`), renders the dashboard tile grid, and
+  brokers Edit/Run clicks into per-notebook apps via
   `app.per_notebook.per_notebook_env(...)`.
 - `app.per_notebook.per_notebook_env(...)` — factory for per-notebook
-  AppEnvironments, spawned by the admin app's `/launch` handler. The
-  image is `notebook-app` (uv + marimo + system tools + cookie-
-  validating reverse proxy); the proxy serves `/__sg__/workspace/list`
-  off the pod's local `/workspace` directory (cloned from the user's
-  fork on startup) and `/__sg__/workspace/sync` pushes edits back to
-  the fork. Persistence is the GitHub fork itself; per-notebook pods
-  are working copies. No PVC — Flyte v2 doesn't yet support pod
-  templates on AppEnvironments.
+  AppEnvironments, spawned by the admin app's `/launch` handler and owned by
+  the user who launched them. The image is `notebook-app` (uv + marimo +
+  system tools + an owner-checking reverse proxy). Each pod hydrates the
+  user's notebooks from the workspace store at startup and saves edits back
+  to it; the store (`app.workspace_store`, object storage keyed by the
+  user's Union subject) is the durable copy, pods are working copies.
 
-Plus supporting modules: `oauth`, `github`, `installation_tokens`,
-`http_client` (the shared pooled HTTP client every outbound admin call
-rides), `notebooks`, `notebook_meta`, `assets`, `proxy`, `session`,
-`templates`, `provision`, `init`. Lives outside `src/stargazer` because
-it is deployment glue, not part of the bioinformatics SDK.
+Plus supporting modules: `identity`, `provision`, `workspace_store`,
+`notebooks`, `notebook_meta`, `assets`, `proxy`, `templates`, `init`.
+Lives outside `src/stargazer` because it is deployment glue, not part of
+the bioinformatics SDK.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
