@@ -68,8 +68,6 @@ from app.notebook_meta import (
 )
 from app.notebooks import (
     SEED_SLUGS,
-    SNAPSHOT_NOTEBOOK_DIR,
-    WORKSPACE_NOTEBOOK_DIR,
     Notebook,
     by_section,
     by_slug,
@@ -80,6 +78,8 @@ from app.notebooks import (
     slugify,
 )
 from app.per_notebook import (
+    SNAPSHOT_NOTEBOOK_DIR,
+    WORKSPACE_NOTEBOOK_DIR,
     list_project_apps,
     notebook_app_img_recipe,
     per_notebook_env,

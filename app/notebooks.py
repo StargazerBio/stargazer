@@ -18,11 +18,8 @@ from typing import Literal
 import stargazer.notebooks
 
 # Image-shipped notebooks live at /stargazer/<src/...> in the notebook pod.
-# A user's workspace notebooks are hydrated into /workspace and their own
-# snapshots into /snapshots by the pod's launch script, flat, by filename.
+# (A user's own notebooks are hydrated elsewhere; see `app.per_notebook`.)
 IMAGE_WORKDIR = "/stargazer"
-WORKSPACE_NOTEBOOK_DIR = "/workspace"
-SNAPSHOT_NOTEBOOK_DIR = "/snapshots"
 
 # The installed `stargazer.notebooks` package: the same files the notebook
 # image ships under IMAGE_WORKDIR, readable from the admin process.
