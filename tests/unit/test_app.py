@@ -283,7 +283,7 @@ async def test_resolve_workspace_files_uses_installation_token(monkeypatch):
         access_token="oauth_tok",
         app_installed=True,
     )
-    files = await admin_app._resolve_workspace_files(session, cookie_value="")
+    files = await admin_app._resolve_workspace_files(session)
 
     assert files == ["my_analysis.py"]
     assert used == {"fork": "octocat/stargazer", "token": INSTALL_TOKEN}
@@ -488,7 +488,13 @@ def test_app_install_callback_without_session_redirects_home(secret_env, client)
 
 
 def _patch_oauth(monkeypatch):
-    """Stub the OAuth handshake so /auth/callback reaches the fork lookup."""
+    """Stub the OAuth handshake so /auth/callback reaches the fork lookup.
+
+    The callback reads the OAuth App credentials before exchanging the code, so
+    placeholders are set here; otherwise these tests depend on the shell.
+    """
+    monkeypatch.setenv("GITHUB_CLIENT_ID", "test-client-id")
+    monkeypatch.setenv("GITHUB_CLIENT_SECRET", "test-client-secret")
 
     async def fake_exchange(**_kw):
         return "gho_token"
@@ -1910,3 +1916,25 @@ def test_created_notebook_slug_is_a_launchable_app_name(name, slug):
     # Flyte validates the name on construction, exactly as `/launch` does.
     env = flyte.app.AppEnvironment(name=f"nb-{_notebook_slug(name)}-edit", image="img")
     assert env.name == f"nb-{slug}-edit"
+
+
+def test_launch_status_queries_configured_domain(secret_env, client, monkeypatch):
+    """Status discovery and re-fetch both use the deploy's domain."""
+    seen = []
+
+    async def fake_list(project, domain="development", limit=500):
+        seen.append(("list", domain))
+        return [SimpleNamespace(name="nb-assets-edit")]
+
+    class _Get:
+        async def aio(self, name, project, domain):
+            seen.append(("get", domain))
+            return _FakeApp(True, "http://nb.example")
+
+    monkeypatch.setattr("app.admin_app.config.FLYTE_DOMAIN", "production")
+    monkeypatch.setattr("app.admin_app.list_project_apps", fake_list)
+    monkeypatch.setattr("app.admin_app.App", SimpleNamespace(get=_Get()))
+
+    _auth(client)
+    client.get("/launch/status", headers={"Accept": "application/json"})
+    assert seen == [("list", "production"), ("get", "production")]

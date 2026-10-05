@@ -5,7 +5,7 @@ repos:
   # exactly what happened between 0.14 and 0.16 (default selection went from
   # 59 rules to 413). Bump both together.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.2
+    rev: v0.16.10
     hooks:
       - id: ruff
         args: [--fix]

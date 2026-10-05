@@ -37,6 +37,8 @@ All env vars are centralized in `utils/config.py`. If set (even to empty string)
 | `PINATA_JWT` | Pinata API authentication | None (unset) | Only for authenticated operations |
 | `PINATA_GATEWAY` | Public IPFS gateway URL | `https://dweb.link` | No (set to empty string to disable) |
 | `PINATA_VISIBILITY` | `public` or `private` | `private` | No |
+| `STARGAZER_TARGET` | Flyte backend for images and deploys: `devbox` or `union` | `devbox` | No |
+| `STARGAZER_REGISTRY` | Image push registry | `localhost:30000` on `devbox`; unset on `union` (the builder's own registry) | No |
 
 ## Resolution Logic
 

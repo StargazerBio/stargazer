@@ -55,7 +55,7 @@ If provisioning fails, the user lands on a provisioning page with a sign-out lin
 
 **Workspace saving also has a deployment prerequisite.** The GitHub App credentials (`GITHUB_APP_ID` *and* `GITHUB_APP_PRIVATE_KEY`) are baked into the admin pod from the deployer's shell, and both are required to sign the JWT that mints fork-scoped tokens. Deploying with only one of them yields an admin that looks healthy but reports saving as *disabled for every user*, however correctly they've forked and installed — so the deploy entrypoint refuses to start on a half-configured pair. Omitting both is fine and supported: that's a deployment predating the GitHub App. Full secret table and failure modes in `.opencode/reference/architecture/app_internals.md`.
 
-**The security posture is "the broad credential never touches user code."** A short-lived OAuth token does the one-time fork, then is dropped; all later GitHub operations use a fork-scoped GitHub App installation token (~1h, minted on demand). Notebook pods never receive any GitHub credential — only a signed capability they exchange for a fresh fork-scoped token at clone/push time. The session cookie is encrypted. Full handshake and token-lifetime table in `.opencode/reference/architecture/app_internals.md`.
+**The security posture is "the broad credential never touches user code."** A short-lived OAuth token does the one-time fork, then is dropped; all later GitHub operations use a fork-scoped GitHub App installation token (~1h, minted on demand). Notebook pods never receive any GitHub credential — only a signed capability they exchange for a fresh fork-scoped token at clone/push time. The session cookie is encrypted, and it never leaves the admin: each notebook pod gets its own key, derived from the session secret, and is entered with a pass that opens that pod only. User code can read anything in its pod, so nothing in a pod works against another user's. Full handshake and token-lifetime table in `.opencode/reference/architecture/app_internals.md`.
 
 **Notebooks persist on the fork's `main`** — no side branch. The launch pod clones `main`, edits sync back to `main` on Save and on pod shutdown, and the dashboard lists from `main`. Upstream conflicts are avoided by path discipline (only `notebooks/workspace/` is ever committed) rather than branch isolation. Execution is unaffected by fork drift: the SDK comes from the image (`/stargazer`), not the checkout.
 
@@ -143,6 +143,10 @@ toggle (Graph is the default):
 The admin app and the per-notebook pods use **different images by design**:
 
 - `app_env.image` is Flyte-built via `with_uv_project` — the admin is small Python with no heavy deps.
-- Per-notebook envs use the programmatically-defined `notebook-app` image, referenced by a stable tag so the admin pod (no Docker daemon) never rebuilds it. The deploy entrypoint builds and publishes it before serving.
+- Per-notebook envs use the programmatically-defined `notebook-app` image. The deploy entrypoint builds it and hands the admin the exact build, so every notebook pod runs the image that shipped with its admin and the admin pod (no Docker daemon) never rebuilds it.
+
+## Deploy Targets
+
+One switch, `STARGAZER_TARGET`, picks the backend: `devbox` (the default, a local cluster for lightweight testing) or `union` (the hosted tenant). It selects the deployer's Flyte config, where images are pushed, and whether auth cookies require HTTPS. The Flyte domain is set separately, so the same target can serve a development or a production deployment. The per-target table is in `.opencode/reference/architecture/app_internals.md`.
 
 Note the `note` target in the project `Dockerfile` (`stargazer-note`) is a separate, local-`docker run`-only image — **not** the hosted one. Build/publish detail in `.opencode/reference/architecture/app_internals.md`.

@@ -70,30 +70,16 @@ _PROXY_MODULE = "sg_proxy"
 _LAUNCH_BIN = "/usr/local/bin"
 
 
-# Mutable tag the deployer publishes (`admin_app._build_and_push_notebook_image`)
-# and that running admin pods reference when spawning per-notebook apps. A fixed
-# tag decouples per-notebook serve calls from whatever content hash the in-pod
-# Python state would otherwise compute for `notebook_app_img_recipe`.
-#
-# `:latest` is load-bearing: it flips K8s's default `imagePullPolicy` to `Always`,
-# so per-notebook pods pull on every cold-start and pick up code changes after a
-# `python -m app.admin_app` redeploy. Any other tag defaults to `IfNotPresent`,
-# and nodes that already cached the previous manifest digest skip the pull —
-# meaning new proxy code (e.g. a new `/__sg__/*` route) never reaches the pod.
-# In prod with a remote builder, this drops out: each deploy gets a unique URI.
-NOTEBOOK_IMAGE_TAG = "latest"
-NOTEBOOK_IMAGE_URI = (
-    f"{os.environ['STARGAZER_REGISTRY']}/notebook-app:{NOTEBOOK_IMAGE_TAG}"
-)
-
-
-# Layered build recipe. Consumed only by the deployer's build step; the admin
-# pod never resolves this to a URI (`Image.from_base` below is what its
-# per-notebook serve calls reference).
+# Layered build recipe. Consumed only by the deployer's build step
+# (`admin_app._build_notebook_image`), which bakes the built, content-hashed URI
+# into the admin pod as `STARGAZER_NOTEBOOK_IMAGE`. The admin pod never resolves
+# this recipe itself: it has no Docker daemon or project layout, and the hash
+# its Python state would compute could differ from the deployer's. A unique URI
+# per deploy also means nodes can never serve a stale cached image.
 notebook_app_img_recipe = (
     flyte.Image.from_debian_base(
         name="notebook-app",
-        registry=os.environ["STARGAZER_REGISTRY"],
+        registry=os.environ.get("STARGAZER_REGISTRY"),
         platform=("linux/amd64", "linux/arm64"),
     )
     .with_apt_packages("ca-certificates", "curl", "git", "bzip2")
@@ -181,12 +167,6 @@ notebook_app_img_recipe = (
 )
 
 
-# Stable-tag reference. `Image.from_base` keeps `_is_cloned=False` so the SDK
-# treats the URI as preexisting and skips any build/existence check; the admin
-# pod just hands the URI to Flyte at per-notebook serve time.
-notebook_app_img = flyte.Image.from_base(NOTEBOOK_IMAGE_URI)
-
-
 def per_notebook_env(
     *,
     slug: str,
@@ -194,7 +174,7 @@ def per_notebook_env(
     notebook_path: str,
     fork_full_name: str,
     pod_capability: str,
-    session_secret: str,
+    pod_key: str,
     admin_url: str,
     resources: NotebookResources | None = None,
 ) -> flyte.app.AppEnvironment:
@@ -214,9 +194,10 @@ def per_notebook_env(
     push time the pod presents it to the admin's `/workspace/pod-token`
     endpoint, which mints a fresh, fork-scoped, ~1h installation token — so the
     broad token never reaches code the user controls and nothing durable lands
-    in `.git/config`. `session_secret` keys the proxy's cookie validation so
-    authenticated browser sessions are accepted while drive-by requests get
-    401s. `admin_url` is the admin app's public base URL; the proxy's
+    in `.git/config`. `pod_key` (from `app.session.pod_key`) keys the proxy's
+    pass check. It is derived per pod because notebook code can read this env:
+    the master `SESSION_SECRET` must never be here, or any user could forge an
+    admin session for anyone. `admin_url` is the admin app's public base URL; the proxy's
     `/__sg__/dashboard` route 302s here, and the pod calls it back for tokens.
 
     `resources` is the notebook's declared `[tool.stargazer]` spec, honored
@@ -224,6 +205,11 @@ def per_notebook_env(
     notebooks — the env falls back to the legacy `("2Gi", "6Gi")`
     request/limit, which the memory-heavy scRNA notebook depends on.
     """
+    if not config.NOTEBOOK_IMAGE:
+        raise RuntimeError(
+            "STARGAZER_NOTEBOOK_IMAGE is unset: deploy with `python -m app.admin_app`, "
+            "which builds the notebook image and bakes its URI in."
+        )
     flyte_resources = (
         flyte.Resources(cpu=resources.cpu, memory=resources.memory)
         if resources is not None
@@ -232,7 +218,9 @@ def per_notebook_env(
     return flyte.app.AppEnvironment(
         name=f"nb-{slug}-{mode}",
         description=f"Per-notebook app: {slug} ({mode})",
-        image=notebook_app_img,
+        # `from_base` marks the URI as prebuilt, so serving skips any build or
+        # existence check and just hands the URI to Flyte.
+        image=flyte.Image.from_base(config.NOTEBOOK_IMAGE),
         # `exec` is load-bearing, not cosmetic. Flyte's `fserve` (PID 1) runs
         # these args via `Popen(" ".join(args), shell=True)` and, on the Knative
         # SIGTERM at scale-to-zero, forwards the signal to that single direct
@@ -254,22 +242,20 @@ def per_notebook_env(
         resources=flyte_resources,
         env_vars={
             **STARGAZER_ENV_VARS,
-            "FLYTE_DOMAIN": "development",
+            "FLYTE_DOMAIN": config.FLYTE_DOMAIN,
             "FORK_FULL_NAME": fork_full_name,
             "FORK_OWNER": fork_full_name.split("/", 1)[0],
             "SG_POD_TOKEN": pod_capability,
-            "SESSION_SECRET": session_secret,
+            "SG_POD_KEY": pod_key,
             "STARGAZER_ADMIN_URL": admin_url,
             # Propagate the cookie-Secure policy so the proxy sets the session
             # cookie identically to the admin (off on devbox/http, on under TLS).
-            "STARGAZER_SECURE_COOKIES": "1" if config.SECURE_COOKIES else "",
+            "STARGAZER_SECURE_COOKIES": "1" if config.SECURE_COOKIES else "0",
         },
     )
 
 
-async def list_project_apps(
-    project: str, domain: str = "development", limit: int = 500
-) -> list[App]:
+async def list_project_apps(project: str, domain: str, limit: int = 500) -> list[App]:
     """List every App deployment in `project`, regardless of name or state.
 
     `flyte.remote.App.listall` only honors the ambient init-config project (the
