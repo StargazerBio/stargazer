@@ -13,6 +13,28 @@ identity**. Executions run under the admin pod's in-cluster identity into a
 project named for the GitHub user; the user themself has no Union principal
 and no access.
 
+## Status (2026-10-05)
+
+Pieces 0–3 are settled, mostly by measurement on the tenant. What's left is
+the access grant (Pieces 4–5) and the link (Piece 6).
+
+- **Piece 0, identity forwarding:** answered. A `requires_auth=True` app
+  receives `X-User-Subject` (numeric Union id), email/name claims and an ID
+  token, unforgeable by the client, and **no** GitHub login. Policy-binding
+  wildcards and admin permissions are still open.
+- **Piece 1, Union's GitHub IdP:** done. The tenant's sign-in page already
+  offers "Continue with Github (Stargazer Bio)".
+- **Piece 2, collapse to one OAuth App:** moved into
+  [plan 25](./25_workspace_state_object_storage.md), which removes our
+  OAuth App and every other GitHub dependency from the app tier.
+- **Piece 3, subject format:** the subject is a stable numeric id. Plan 25
+  names user projects `u-<subject>`.
+- **Piece 5:** with no OAuth callback, the grant runs where plan 25 ensures
+  the project (first dashboard request per process), and is keyed on
+  `X-User-Subject`. Users are already Union principals when they reach the
+  dashboard, so the "assignment creates the user" trick is no longer
+  needed.
+
 ## What Union confirmed
 
 Answers from Union, which fix the shape of this plan:
