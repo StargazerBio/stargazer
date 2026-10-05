@@ -67,7 +67,7 @@ async def qc_filter(
     ad = ad[ad.obs["pct_counts_mt"] < max_pct_mt]
     ad = ad[~ad.obs["predicted_doublet"]]
 
-    out_path = _storage.default_client.local_dir / "qc_filtered.h5ad"
+    out_path = _storage.default_client.local_dir / f"{adata.sample_id}_qc_filtered.h5ad"
     ad.write_h5ad(out_path)
 
     result = AnnData(

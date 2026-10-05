@@ -38,7 +38,7 @@ async def cluster(
         ad, flavor="igraph", n_iterations=2, resolution=resolution, key_added=key_added
     )
 
-    out_path = _storage.default_client.local_dir / "clustered.h5ad"
+    out_path = _storage.default_client.local_dir / f"{adata.sample_id}_clustered.h5ad"
     ad.write_h5ad(out_path)
 
     result = AnnData(

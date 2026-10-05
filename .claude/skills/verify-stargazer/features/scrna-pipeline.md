@@ -29,7 +29,7 @@ Steps:
 
 ## Gotchas
 
-- An export exit of `0` with check lines reading `MISMATCH` or `SHARED` means the notebook rendered another sample's data. Every scRNA task writes a fixed filename (`qc_filtered.h5ad`, `reduced.h5ad`, and so on) into the shared store, so parallel samples overwrite each other in local runs. Known product bug, tracked on the ROADMAP. Until it is fixed, this feature fails its check.
+- An export exit of `0` with check lines reading `MISMATCH` or `SHARED` means the notebook rendered another sample's data. Parallel samples share one store, so each scRNA task must write a per-sample filename (`<sample_id>_qc_filtered.h5ad`, and so on). A `SHARED` line means a task has gone back to a fixed name.
 - If a sample is missing from later stages in the check output, two samples produced byte-identical files. The local store upserts records by CID, so the second record replaced the first.
 - `scrna-fetch` hits public IPFS gateways, which rate-limit with HTTP `429` after a few full downloads. Drive it at most once per run, and only when the change touches fetching.
 - With a real `PINATA_JWT` in the environment, every task output also uploads to Pinata. Uploads have failed with `408` and connection resets, and they put verification data in the user's Pinata account.
