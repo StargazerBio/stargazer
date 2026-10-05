@@ -1,225 +1,252 @@
-# 25 — Workspace State on Object Storage
+# 25 — One Login: Union Auth + Workspace State on Object Storage
 
-Make workspace persistence automatic and credential-free. The GitHub fork
-stops being the storage backend and becomes an **opt-in path for graduating
-notebooks** — publishing them upstream where they reach everyone else.
+Make Union's GitHub SSO the **only** login a user ever sees, and make saving
+notebooks automatic. The app tier stops talking to GitHub entirely: no OAuth
+App, no fork, no GitHub App install, no session cookie of our own.
 
-**Why.** Saving a notebook currently costs the user a fork of the upstream
-repo plus a GitHub App install, before a single byte is persisted. That was
-never a product decision: it is a workaround for missing persistent volumes.
-`app/provision.py`'s docstring says so — *"Workspace state used to live on a
-per-user PVC, but Flyte v2 doesn't support pod templates on AppEnvironments
-yet."*
+**Why.** Users already sign in to Union with GitHub to reach anything on the
+tenant. Today the dashboard then asks them to sign in to GitHub *again* (our
+own OAuth App), and saving a notebook asks a third time (fork + GitHub App
+install). Two extra GitHub consent steps in front of the core feature is
+terrible UX. Both exist only because the app had to own identity and had no
+durable storage. Union now provides the first and object storage the second.
 
-That premise is now false (`app_serde.py:361` serializes `pod_template` for
-app envs), but a PVC is the wrong fix anyway: a per-user ReadWriteMany volume
-is both more expensive and *slower* than pod-local disk. Object storage with
-pod-local working state is cheaper and faster than either.
+This plan absorbs plan 24's Piece 2 (collapse to a single OAuth App) and the
+roadmap's **identity-gated production auth** and **async OAuth provisioning**
+items. With no OAuth callback, there is nothing left to make async.
 
 ## What the user sees
 
-Three tiers instead of today's two:
-
-| Tier | Today | After |
+| Step | Today | After |
 |---|---|---|
-| Run tutorials / workflows | Nothing required | Unchanged |
-| Save your own notebooks | Fork + GitHub App install | **Nothing required** — saving just works |
-| Graduate a notebook upstream | (same fork) | Opt-in: connect GitHub, PR it upstream |
+| Sign in | Union login (GitHub), then the dashboard's own GitHub login | Union login only |
+| Run tutorials / workflows | Nothing more | Unchanged |
+| Save your own notebooks | Fork + GitHub App install | **Nothing.** Saving just works |
+| Share a notebook upstream | PR from the fork | Download the `.py`, PR it like any contribution |
+
+## Verified on the tenant (2026-10-05)
+
+Measured against `stargazerbio.us-west-2.unionai.cloud` with throwaway apps
+before writing this plan:
+
+- **`requires_auth=True` gates on Union login.** An anonymous request gets a
+  302 to the tenant's sign-in page (Google / GitHub (Stargazer Bio) /
+  Microsoft).
+- **Identity is forwarded, and can't be forged.** A signed-in request carries
+  `X-User-Subject` (stable Union user id, e.g. `387300641116005877`),
+  `X-User-Claim-Email`, `X-User-Claim-Name`, and `X-User-Token: IDToken <JWT>`.
+  Client-sent `X-User-*` headers are overwritten by the proxy. **No GitHub
+  login, id or token is forwarded** (`preferred_username` is an opaque
+  `u-…`).
+- **The browser's Union session cookies reach the app pod** (`flyte_idt`,
+  `flyte_at_1/2`, `flyte_user_info`).
+- **App pods can use object storage, across projects.** `flyte.storage.put` /
+  `get` with `recursive=True` work from an app pod after
+  `flyte.init_in_cluster()`. An app in project `flytesnacks` read what an app
+  in project `default` wrote, and vice versa. Bucket:
+  `s3://union-us-west-2-stargazerbio`.
+- **Every project runs as one IAM role**
+  (`union-us-west-2-stargazerbio-userflyterole`), for tasks and apps alike.
 
 ## Settled design decisions
 
 Recorded so they are not relitigated mid-build.
 
-- **Object storage, not a PVC.** Hot state lives on pod-local disk; the
-  object store is the durable copy. No idle volume cost, no RWX storage
-  class, no volume lifecycle per user.
-- **Directory sync, not a tarball.** `flyte.storage` exposes `get`/`put`
-  with `recursive=True` (plus `put_stream`, `get_stream`, `exists`, `join`,
-  over `S3`/`GCS`/`ABFS`). Each notebook stays an individually addressable
-  object, which the dashboard depends on — see Piece 4. A tarball would turn
-  every per-notebook header read into a download-and-unpack of the whole
-  archive, and add pack/unpack CPU to cold start.
-- **Keyed per notebook, not per user.** The one-modality-at-a-time rule caps
-  one pod per *notebook*, not per user, so a user may legitimately run two
-  notebooks at once. A single per-user object would let the second pod to
-  scale down clobber the first's edits. Per-notebook keys make
-  one-writer-per-object structural rather than a rule we rely on
-  remembering.
-- **The SIGTERM sync chain stays load-bearing.** State is still
-  ephemeral-pending-upload, exactly as today. The `exec` discipline through
-  `fserve` → launch script → uvicorn and
-  `--timeout-graceful-shutdown 15` remain correctness-critical. (This is the
-  one property a PVC would have bought us.)
-- **Recoverable deletes come from bucket versioning**, replacing what git
-  history provided.
+- **Union auth on both app kinds.** The admin and every per-notebook app run
+  `requires_auth=True`. Identity comes from `X-User-Subject` on each request.
+  No session cookie, no `SESSION_SECRET`, no Fernet.
+- **The user key is the Union subject.** It is stable, unique, and the only
+  identifier Union guarantees. Email and name are display-only. Derived:
+  - Flyte project: `u-<subject>` (replaces `sanitize_project_id(github_username)`)
+  - object-store prefix: `<root>/users/<subject>/`
+  - `_owner` stamped on assets: the subject (an email would leak into public
+    asset bylines)
+- **Notebook pods check ownership, not just login.** Union only proves the
+  visitor is an org member. The proxy compares `X-User-Subject` with the
+  owner subject baked into the pod's env and 403s anyone else. This replaces
+  the pod pass, `SG_POD_KEY` and the `sg_launch` handoff.
+- **No admin→pod calls.** A pod behind `requires_auth=True` is unreachable
+  for the admin's server-to-server calls. So:
+  - The dashboard lists notebooks from the object store (Piece 4), not from
+    pods.
+  - The pod saves itself: the proxy syncs `/workspace` to the object store
+    when a file changes and on shutdown. The dashboard's Save button goes.
+  - Readiness: the proxy answers immediately and serves a "starting…" page
+    that refreshes until marimo answers, so the admin no longer polls
+    `/__sg__/ready`.
+- **Object storage, not a PVC.** Hot state on pod-local disk, the object
+  store is the durable copy. Root is a deploy setting,
+  `STARGAZER_WORKSPACE_ROOT` (e.g. `s3://union-us-west-2-stargazerbio/stargazer`).
+- **Directory sync, not a tarball.** Each notebook stays an individually
+  addressable object, which the dashboard listing depends on.
+- **Keyed per notebook.** Each pod writes only its own notebook's object, so
+  two running notebooks can never clobber each other.
+- **The SIGTERM sync chain stays load-bearing.** The `exec` discipline through
+  `fserve` → launch script → uvicorn and `--timeout-graceful-shutdown 15`
+  remain correctness-critical; only the verb at the end changes.
+- **No GitHub in the app tier at all.** No "publish to GitHub" path either.
+  Sharing upstream is a normal contribution from a downloaded file.
+- **Public snapshots ship in the image**, like tutorials. Own snapshots live
+  in the object store.
+- **Recoverable deletes come from bucket versioning**, replacing git history.
 
-## Scope
+## Accepted risks (recorded, not solved here)
 
-**In:** workspace notebook persistence, snapshot persistence, the launch
-hydrate path, the sync path, the dashboard's listing/metadata reads, and
-demoting the fork to opt-in.
+- **Shared IAM role.** Any notebook pod's user code can read and write every
+  user's workspace objects, because all projects share one role. This is
+  already true of task data in the same bucket. Today's fork model gave
+  per-user isolation for notebook sources; this plan gives that up. Fix is
+  per-project roles on Union's side → ROADMAP.
+- **Union cookies reach notebook pods.** The proxy strips them before
+  forwarding to marimo, but a pod's own code could still capture a visiting
+  org member's Union token. The ownership check stops other members using the
+  notebook, not a malicious owner luring them to its URL → ROADMAP.
+- **Onboarding is a Union invite.** Only `stargazerbio` org members get past
+  the login. Union does not auto-provision users on first login, so new users
+  need an invite until it does → ROADMAP.
+- **The devbox has no Union auth**, so the app tier won't run there after this
+  change. Per the Union-first priority, a devbox identity shim is a follow-up
+  → ROADMAP.
+- **Anonymous pages go.** The logged-out landing page and anonymous public
+  asset browsing sit behind the login like everything else.
 
-**Out:** assets (already on Pinata), task/workflow data (already the Flyte
-data plane), and the Union console work in
-[`24_union_console_handoff.md`](./24_union_console_handoff.md).
+## Delivery
+
+Two PRs:
+
+1. **Storage layer** (Piece 1) — new module + tests, nothing wired in. Lands
+   independently.
+2. **The cut-over** (Pieces 2–7) — auth, hydrate/sync, dashboard, deletions
+   and docs together. They can't land separately: the dashboard can't lose its
+   own login while workspace still depends on the OAuth token for the fork.
 
 ---
 
 ## Piece 0 — Verify before building
 
-- [ ] `flyte.storage.put(..., recursive=True)` and `get(..., recursive=True)`
-      work **from inside an app pod**, not just a task pod. App pods take a
-      different init path (`flyte.init_in_cluster()`, `app/init.py`); confirm
-      the blob-store credentials are present there.
-- [ ] The **admin** pod can read too — it needs per-notebook header reads for
-      the dashboard listing (Piece 4). If it cannot, that path needs its own
-      credential and a new entry in the deploy-secret contract.
-- [ ] A storage backend is actually configured on **both** devbox and the
-      target Union deployment, and they can be different URIs without a code
-      change. Devbox diverges from production by habit — check
-      `devbox_workarounds.md` and append anything new.
-- [ ] Bucket **versioning** is available and enabled on the target bucket.
-      Without it there is no recoverable-delete story at all.
+- [x] `flyte.storage` `put`/`get` with `recursive=True` work from an app pod
+      (`flyte.init_in_cluster()`).
+- [x] Cross-project access: the admin (project `flytesnacks`) can read objects
+      written by a pod in another project.
+- [x] Identity forwarded to `requires_auth=True` apps, and unforgeable.
+- [ ] `flyte.storage` is importable by the proxy: it runs at system level in
+      the notebook image, outside any sandbox venv. Confirm `flyte` is
+      installed there, or add it.
+- [ ] Bucket versioning is enabled on `union-us-west-2-stargazerbio`. (Union
+      manages the bucket — ask them if the console doesn't show it.)
+- [ ] A per-notebook app with `requires_auth=True` still receives the
+      Knative SIGTERM and runs the shutdown flush (auth sits in front of the
+      pod and shouldn't affect it; prove it once).
 
----
+## Piece 1 — The storage layer (PR 1)
 
-## Piece 1 — The storage layer
-
-A single module owning the key layout and the read/write primitives, so no
-route composes URIs by hand.
+One module, `app/workspace_store.py`, owns the key layout and the
+read/write primitives, so no route composes URIs by hand.
 
 ### Tests first
 
 - [ ] Round-trip: write a notebook, read it back byte-identical.
 - [ ] List returns only that user's notebooks, never another user's.
-- [ ] Key derivation rejects a slug that would escape the user's prefix
-      (`../`, absolute paths, empty slug).
-- [ ] Reading a missing notebook returns `None`, does not raise.
-- [ ] Delete is idempotent — deleting twice succeeds.
+- [ ] Key derivation rejects a slug or subject that would escape its prefix
+      (`../`, `/`, empty).
+- [ ] Reading a missing notebook returns `None` and doesn't raise.
+- [ ] Create refuses to overwrite (the 409 rule `/workspace/create` and
+      `/workspace/copy` depend on).
+- [ ] Delete is idempotent.
+
+Tests run against a `file://` root in a temp dir, through the real
+`flyte.storage` calls. No mocks.
 
 ### Implementation
 
-- [ ] Key layout: `<root>/users/<user-key>/notebooks/<slug>.py` and
-      `<root>/users/<user-key>/snapshots/<slug>.py`.
-- [ ] **`<user-key>` must be the stable identifier.** Plan 24 Piece 3 decides
-      whether that is the GitHub numeric id or the login; use whatever it
-      lands on. A rename must not orphan someone's notebooks — this is the
-      one place where getting it wrong is unrecoverable without a migration.
-- [ ] Functions mirroring today's GitHub helpers so call sites change shape
-      as little as possible: list, get, create (no-overwrite), update,
-      delete, for workspace and snapshots.
-- [ ] No-overwrite create, preserving the existing 409 collision rule that
-      `/workspace/create` and `/workspace/copy` depend on.
+- [ ] Key layout: `<root>/users/<subject>/notebooks/<slug>.py` and
+      `<root>/users/<subject>/snapshots/<slug>.py`.
+- [ ] Functions mirroring today's GitHub helpers so call sites change shape as
+      little as possible: list, get, create (no-overwrite), update, delete,
+      for workspace and snapshots.
+- [ ] `STARGAZER_WORKSPACE_ROOT` in `app/config.py`.
 
----
+## Piece 2 — Identity from Union
 
-## Piece 2 — Hydrate the pod at launch
+- [ ] `requires_auth=True` on `app_env` and in `per_notebook_env`.
+- [ ] A FastAPI dependency returning the current user (`subject`, `email`,
+      `name`) from `X-User-*`, 401 when absent. Replaces `_require_session`,
+      `SessionData` and every `session.github_username` read.
+- [ ] Ensure the user's project on first request per process (an in-memory
+      seen-set in front of the idempotent `_ensure_project`). No login
+      callback is left to do it in.
+- [ ] `/assets` routes: owner from the subject. The private tab, sign and
+      update keep their fail-closed ownership checks.
+- [ ] Delete `/auth/login`, `/auth/callback`, `/auth/logout`, the login page,
+      and the session/OAuth modules.
 
-- [ ] `launch-notebook.sh` replaces `git clone` with a recursive `get` of the
-      notebook's object into `/workspace`.
-- [ ] Drop `SG_POD_TOKEN` minting and the `GIT_ASKPASS` wiring from the
-      launch path — there is no GitHub credential to protect any more.
-- [ ] A missing object (brand-new notebook) hydrates as an empty workspace
-      rather than failing the launch.
-- [ ] Confirm cold-start latency does not regress. Notebook sources are
-      kilobytes, so this should be strictly faster than a clone.
+## Piece 3 — Pod hydrate, ownership, and self-sync
 
----
+- [ ] `launch-notebook.sh`: recursive `get` of the user's notebooks prefix
+      into `/workspace` instead of `git clone`. A brand-new user hydrates an
+      empty workspace rather than failing.
+- [ ] Pod env: `SG_OWNER_SUBJECT`, `STARGAZER_WORKSPACE_ROOT`. Drop
+      `FORK_*`, `SG_POD_TOKEN`, `SG_POD_KEY`, `STARGAZER_SECURE_COOKIES`.
+- [ ] Proxy: 403 unless `X-User-Subject == SG_OWNER_SUBJECT`; strip `Cookie`
+      and `X-User-Token` before forwarding to marimo.
+- [ ] Proxy: sync changed notebooks to the store on a short interval and in
+      the `lifespan` shutdown hook. **Don't touch the signal chain.**
+- [ ] Proxy: "starting…" page while marimo is cold, replacing the admin's
+      `/__sg__/ready` polling.
+- [ ] Verify an interrupted upload can't leave a corrupt object (a single PUT
+      is atomic per object).
 
-## Piece 3 — Sync on save and shutdown
+## Piece 4 — Dashboard on the store
 
-- [ ] `/workspace/save` and the proxy's `lifespan` shutdown hook both write
-      through the Piece 1 layer instead of `git add`/`commit`/`push`.
-- [ ] **Do not touch the shutdown signal chain.** The `exec` discipline and
-      `--timeout-graceful-shutdown 15` stay exactly as they are; only the
-      verb at the end changes. Re-read the Working Branch & Sync section of
-      `app_internals.md` before editing anything in this path.
-- [ ] Keep sync **per notebook** — each pod writes only its own object, so
-      one pod can never clobber another's.
-- [ ] Verify an interrupted upload cannot leave a corrupt object. A single
-      PUT is atomic per object; if the implementation ever chunks, it must
-      complete-or-discard rather than partially overwrite.
+- [ ] Workspace and own-snapshot listings, and the per-notebook
+      `[tool.stargazer]` header reads, come from the store.
+- [ ] `/workspace/create`, `/settings`, `/delete`, `/snapshot`, `/copy` move to
+      the Piece 1 layer.
+- [ ] `/workspace/copy` reads Workflows notebooks from the image, not a fork
+      source tree.
+- [ ] Public snapshots list from the image; own snapshots from the store.
+- [ ] Remove the opt-in gate (`workspace_enabled`) everywhere. Saving needs
+      nothing.
+- [ ] Add a per-notebook **Download** action, the path for sharing a notebook
+      upstream.
 
----
+## Piece 5 — What gets deleted
 
-## Piece 4 — Dashboard listing and metadata
+Track the simplification. If something here survives, the design drifted.
 
-This is the piece the tarball decision was made for.
+- [ ] `app/oauth.py`, `app/session.py`, `app/github.py`,
+      `app/installation_tokens.py` and their tests.
+- [ ] `/workspace/enable`, `/auth/app-install-callback`, `/workspace/pod-token`,
+      `/workspace/save`.
+- [ ] `SG_POD_TOKEN`, `SG_POD_KEY`, `GIT_ASKPASS`, the `sg_launch` handoff, the
+      proxy's cookie check.
+- [ ] Deploy secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`,
+      `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_SLUG`,
+      `SESSION_SECRET`, `_partial_app_creds()`. Only `PINATA_JWT` remains.
+- [ ] `STARGAZER_SECURE_COOKIES` / `config.SECURE_COOKIES` — no cookie left
+      to secure.
+- [ ] The GitHub OAuth App and the GitHub App themselves (manual, after the
+      cut-over is verified on the tenant).
 
-- [ ] Tile listing reads from the object store instead of the GitHub API.
-- [ ] The per-notebook `[tool.stargazer]` header fetches that seed each gear
-      modal's `data-*` at page load become per-object GETs — same parallel,
-      best-effort shape as today, one request per notebook. **This is why
-      notebooks stay individual objects.**
-- [ ] `/workspace/settings`, `/workspace/create`, `/workspace/delete`,
-      `/workspace/snapshot` all move to the Piece 1 layer. The blob `sha`
-      threading that `update_workspace_notebook` needs disappears.
-- [ ] **Remove the opt-in gate from every save path.** `workspace_enabled`
-      currently requires `fork_full_name` **and** `app_installed`; saving
-      must no longer consult either. Audit every route that returns 403 on
-      "not opted in" and confirm which of them still should.
+## Piece 6 — Verify on the tenant
 
----
+- [ ] Deploy to Union; sign in once; dashboard renders with no further
+      GitHub step.
+- [ ] Create a notebook, edit it in a pod, let the pod scale to zero, reopen:
+      edits survive.
+- [ ] A second org member gets 403 on the first user's notebook URL.
+- [ ] Snapshot, copy, delete, settings round-trip through the store.
 
-## Piece 5 — Two couplings that break when the fork is optional
+## Piece 7 — Docs
 
-Both are non-obvious and will surface as bugs if missed.
-
-- [ ] **`/workspace/copy` reads Workflows notebooks from the fork's source
-      tree** (`get_repo_file`, path derived by stripping `IMAGE_WORKDIR` off
-      `Notebook.path_in_image`). A user with no fork has no source tree to
-      read. Re-point it at the notebook baked into the image, which is where
-      that content actually lives.
-- [ ] **Public snapshots currently travel *through* the fork.** Because a
-      fork is a full copy of upstream, it already carries every merged public
-      snapshot, and `list_snapshots(fork)` returns public and own together —
-      `app_internals.md` is explicit that there is no separate
-      upstream-listing path. Without a fork, that source is gone. Decide:
-      ship public snapshots in the image like tutorials (simplest, and
-      consistent with how every other shipped notebook reaches users), or
-      build an upstream-listing path. Own snapshots move to object storage
-      with everything else.
-
----
-
-## Piece 6 — Demote GitHub to opt-in graduation
-
-- [ ] Reframe the Workspace opt-in as **"Publish to GitHub"** — offered per
-      notebook at the moment someone wants to graduate one, not as a gate on
-      the whole Workspace section.
-- [ ] Keep the existing fork + App-install handshake intact for this path;
-      it is correct, it is just no longer mandatory. `installation_tokens.py`
-      and the fork-scoped token model stay.
-- [ ] Per AGENTS.md, the UI describes the feature in product terms — what
-      publishing does for the user — not the fork/install mechanism.
-- [ ] Confirm the freeze-then-publish story still reads coherently: a
-      snapshot is frozen to object storage, and publishing pushes it to the
-      fork for a PR upstream.
-
----
-
-## Piece 7 — What gets deleted
-
-Track the simplification; if none of this can go, the design drifted.
-
-- [ ] `POST /workspace/pod-token` and the `SG_POD_TOKEN` capability, in
-      `app/per_notebook.py`, `app/proxy.py`, and `launch-notebook.sh`.
-- [ ] The `GIT_ASKPASS` wiring and token-free-remote handling.
-- [ ] Fork-token plumbing on the *storage* paths. `installation_tokens.py`
-      survives for Piece 6, but nothing in the save path should call it.
-- [ ] The `workspace_enabled` gate on saving (not on publishing).
-
----
-
-## Piece 8 — Docs
-
-- [ ] `.opencode/reference/architecture/app_internals.md` — the Credential
-      Model table, Workspace Opt-In, Working Branch & Sync, and Snapshots
-      sections all describe the fork-as-storage design and all become wrong.
-      This is the largest doc delta in the plan.
-- [ ] `docs/architecture/app.md` and `docs/architecture/notebook.md`
-      (Promotion Paths) — the human-facing companions.
-- [ ] `app/provision.py` — the docstring's PVC rationale is now historical;
-      replace it rather than leaving a stale premise.
-- [ ] Module docstrings on every module touched, per the always-refresh rule.
-- [ ] Mark ✅ and move to Complete in `ROADMAP.md`.
+- [ ] `.opencode/reference/architecture/app_internals.md`: Workspace Opt-In,
+      Credential Model, Deploy-Time Secret Contract, Working Branch & Sync,
+      Snapshots, Copy, and the route table all describe the fork design and
+      all change. Largest doc delta in the plan.
+- [ ] `docs/architecture/app.md` and `docs/architecture/notebook.md` (the
+      section table and Promotion Paths).
+- [ ] `.env` template and `.opencode/reference/devbox_workarounds.md` (the
+      deploy-secret table).
+- [ ] Module docstrings on every module touched.
+- [ ] Plan 24: strike Pieces 1–3 (settled here), keep the console-access grant.
+- [ ] ROADMAP: mark ✅ and move to Complete; add the accepted-risk follow-ups.
