@@ -81,7 +81,7 @@ dev = [
     # Pinned to the same minor as .pre-commit-config.yaml's ruff rev — a
     # floating range let the lock drift to a ruff whose *default* rule set
     # differed from the pinned hook's. Bump both together.
-    "ruff>=0.16.2,<0.17",
+    "ruff>=0.16.10,<0.17",
     "zensical>=0.0.24",
 ]
 
