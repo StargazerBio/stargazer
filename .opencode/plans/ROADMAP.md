@@ -19,7 +19,28 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 - **Union production deploy** (tenant: `stargazerbio.us-west-2.unionai.cloud`).
    Done in PRs: per-pod session keys (#2), the `STARGAZER_TARGET`
    devbox/union switch, a configurable domain, and a fixed per-deploy
-   notebook image (#3). Remaining:
+   notebook image (#3), plus the flyte 2.10.7 upgrade. Remaining:
+   - **Tenant checks first (one test deploy).** Log in with
+     `flyte --config .flyte/union.yaml get project` (browser PKCE), then
+     deploy a throwaway app to answer, before building on any of them:
+     - Does `AppEnvironment(secrets=[...])` inject on Union? (Gates the
+       app-secrets item below.)
+     - Does the remote builder produce images that run as `root` or
+       `flyte`? The local builder runs them as root (see the SDK bug item
+       below). If remote is also root, it's a prod problem, not just a
+       devbox one.
+     - Behind `requires_auth=True`: does Union admit any org member, or
+       enforce project RBAC? What identity does the app see
+       (`FastAPIPassthroughAuthMiddleware` + `remote.User.get()` →
+       `subject()`), and is it the GitHub login or an opaque id? Does
+       marimo's WebSocket survive the auth gate on app subdomains?
+       The answers decide whether `requires_auth` replaces the pod pass
+       (`SG_POD_KEY` / `sg_launch`) and the admin session cookie. It does
+       not replace the GitHub token exchange (`SG_POD_TOKEN`); that goes
+       with workspace state on object storage.
+   - **Real admin deploy.** `STARGAZER_TARGET=union FLYTE_DOMAIN=production
+     python -m app.admin_app`, then point the GitHub OAuth App callback at
+     the printed admin URL.
    - **Union-native app secrets.** The admin's OAuth, GitHub App and
      Pinata secrets are baked into `env_vars`, so anyone who can view the
      app spec sees them. On Union, move to `flyte create secret` plus
@@ -39,6 +60,23 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
      callback URLs on both GitHub OAuth Apps and the GitHub App.
    - **Admin identity.** A dedicated API key with project-create (and,
      for the Union console handoff, policy/assignment) permissions.
+   - **Small follow-ups.** The `sg_launch` pod pass is a 30-day bearer
+     token in a URL; make the handoff one-shot or short-lived. httpx
+     deprecates the per-request `cookies=` the admin uses for pod calls
+     (`_list_workspace_from_pods`, `workspace_save`). Plan 24 cites
+     `auth.hosted.unionai.cloud` as the IdP callback host; confirm it for
+     the us-west-2 tenant.
+- **🐛 Flyte SDK images run as root (local builder).** For images on the
+  prebuilt base (`from_debian_base`), the SDK's Dockerfile template sets
+  `USER root` and only restores `USER flyte` when the image's own layers
+  created that user, so every local build (notebook, admin, gatk, scrna)
+  runs as root. That contradicts the SDK's own comment
+  (`docker_builder.py`, "run as whatever USER their base declares").
+  Present in 2.5.19 and 2.10.7; images built on 2.2.4 ran as `flyte`. On
+  the devbox it crashes every notebook launch for a user with workspace
+  saving on (`git clone` into `flyte`-owned `/workspace` fails with
+  "dubious ownership"). Report upstream to `flyteorg/flyte-sdk`. Don't
+  work around it in our recipes; revisit after the remote-builder check.
 - **Union console handoff (per-user project access).** Users click through
    from the dashboard to the Union console to view executions in their own
    project. `provision_user()` creates the per-user project but grants no
