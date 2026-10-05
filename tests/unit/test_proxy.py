@@ -17,37 +17,44 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import proxy
-from app.session import SessionData, create_session_cookie
+from app.session import SessionData, create_pod_pass, create_session_cookie, pod_key
 
 # ---------------------------------------------------------------------------
 # Encrypted session cookie — the proxy must validate what the admin issues
 # ---------------------------------------------------------------------------
 
 
-def test_proxy_validates_admin_issued_cookie(monkeypatch):
-    """The proxy's Fernet derivation matches app.session, so it accepts the cookie."""
-    secret = "shared-session-secret"
-    monkeypatch.setenv("SESSION_SECRET", secret)
-    cookie = create_session_cookie(
-        SessionData("octocat", 1, fork_full_name="octocat/stargazer"), secret
-    )
-    assert proxy._cookie_is_valid(cookie) is True
+def test_proxy_validates_admin_issued_pod_pass(monkeypatch):
+    """The proxy accepts a pass the admin minted with this pod's key."""
+    key = pod_key("shared-session-secret", "octocat", "nb-demo-edit")
+    monkeypatch.setenv("SG_POD_KEY", key)
+    assert proxy._cookie_is_valid(create_pod_pass(key, "octocat")) is True
 
 
-def test_proxy_rejects_tampered_or_foreign_cookie(monkeypatch):
-    """A wrong-secret, tampered, absent, or unencrypted cookie is rejected."""
+def test_proxy_rejects_admin_session_cookie(monkeypatch):
+    """The admin's own session cookie is not a pass into any notebook pod."""
     secret = "shared-session-secret"
-    cookie = create_session_cookie(SessionData("octocat", 1), "a-different-secret")
-    monkeypatch.setenv("SESSION_SECRET", secret)
+    monkeypatch.setenv("SG_POD_KEY", pod_key(secret, "octocat", "nb-demo-edit"))
+    cookie = create_session_cookie(SessionData("octocat", 1), secret)
     assert proxy._cookie_is_valid(cookie) is False
+
+
+def test_proxy_rejects_pass_for_another_users_pod(monkeypatch):
+    """A pass for mallory's pod doesn't open octocat's pod of the same notebook."""
+    secret = "shared-session-secret"
+    monkeypatch.setenv("SG_POD_KEY", pod_key(secret, "octocat", "nb-demo-edit"))
+    foreign = create_pod_pass(pod_key(secret, "mallory", "nb-demo-edit"), "mallory")
+    assert proxy._cookie_is_valid(foreign) is False
     assert proxy._cookie_is_valid(None) is False
     assert proxy._cookie_is_valid("not-a-real-cookie") is False
 
 
-def test_proxy_denies_when_secret_missing(monkeypatch):
-    """No SESSION_SECRET in the pod env → deny everything."""
-    monkeypatch.delenv("SESSION_SECRET", raising=False)
-    assert proxy._cookie_is_valid("anything") is False
+def test_proxy_denies_when_key_missing(monkeypatch):
+    """No SG_POD_KEY in the pod env → deny everything, even with SESSION_SECRET."""
+    monkeypatch.delenv("SG_POD_KEY", raising=False)
+    monkeypatch.setenv("SESSION_SECRET", "shared-session-secret")
+    cookie = create_session_cookie(SessionData("octocat", 1), "shared-session-secret")
+    assert proxy._cookie_is_valid(cookie) is False
 
 
 def test_proxy_cookie_check_fails_closed_on_unexpected_error(monkeypatch):
@@ -57,7 +64,7 @@ def test_proxy_cookie_check_fails_closed_on_unexpected_error(monkeypatch):
     narrow `except` tuple would let a surprise exception escape the middleware
     and surface as a 500 from the notebook pod instead of a clean deny.
     """
-    monkeypatch.setenv("SESSION_SECRET", "shared-session-secret")
+    monkeypatch.setenv("SG_POD_KEY", "a-pod-key")
 
     def boom(_secret):
         raise MemoryError("not a ValueError/TypeError/InvalidToken")
@@ -120,15 +127,15 @@ def test_fetch_token_non_200_returns_none(monkeypatch):
 
 
 def test_shell_env_scrubs_named_secrets(monkeypatch):
-    """The big risk: a shell that could read SESSION_SECRET could forge cookies."""
-    monkeypatch.setenv("SESSION_SECRET", "shared-cookie-key")
+    """A shell that could read the pod key could mint passes into this pod."""
+    monkeypatch.setenv("SG_POD_KEY", "pod-cookie-key")
     monkeypatch.setenv("SG_POD_TOKEN", "fork-capability")
     monkeypatch.setenv("PINATA_JWT", "pinata-secret")
     monkeypatch.setenv("PINATA_GATEWAY", "https://dweb.link")  # not a secret
 
     env = proxy._shell_env()
 
-    assert "SESSION_SECRET" not in env
+    assert "SG_POD_KEY" not in env
     assert "SG_POD_TOKEN" not in env
     assert "PINATA_JWT" not in env
     assert env["PINATA_GATEWAY"] == "https://dweb.link"
@@ -203,17 +210,16 @@ def upstream(monkeypatch):
 @pytest.fixture
 def authed_client(monkeypatch):
     """A TestClient (no lifespan) holding a valid admin-issued session cookie."""
-    secret = "shared-session-secret"
-    monkeypatch.setenv("SESSION_SECRET", secret)
+    key = pod_key("shared-session-secret", "octocat", "nb-demo-edit")
+    monkeypatch.setenv("SG_POD_KEY", key)
     client = TestClient(proxy.asgi_app)
-    cookie = create_session_cookie(SessionData("octocat", 1), secret)
-    client.cookies.set(proxy.SESSION_COOKIE, cookie)
+    client.cookies.set(proxy.SESSION_COOKIE, create_pod_pass(key, "octocat"))
     return client
 
 
 def test_proxy_401s_without_cookie(monkeypatch, upstream):
     """No session cookie → 401, and the request never reaches marimo."""
-    monkeypatch.setenv("SESSION_SECRET", "shared-session-secret")
+    monkeypatch.setenv("SG_POD_KEY", "a-pod-key")
     recorder = upstream(lambda req: httpx.Response(200, text="never"))
     client = TestClient(proxy.asgi_app)
 
