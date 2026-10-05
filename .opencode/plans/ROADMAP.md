@@ -4,6 +4,18 @@ Upcoming work is ordered — the **next feature is at the top**. Move items into
 
 ## Upcoming
 
+0. **🐛 scRNA tasks overwrite each other's outputs in local runs.** Every
+   scRNA task writes a fixed filename into the shared store
+   (`local_dir / "qc_filtered.h5ad"`, `"reduced.h5ad"`, and so on). When the
+   scRNA pipeline notebook fans samples out in-process with `asyncio.gather`,
+   later samples overwrite earlier ones. The earlier sample's asset keeps its
+   own `n_obs` keyvalue but points at the other sample's file, and every
+   downstream stage reads the wrong data. Measured with `verify-stargazer`:
+   s1d1 claims 6,307 cells at `qc_filtered`, and its file holds s1d3's 7,157.
+   The notebook still runs every cell without error. Remote runs are likely
+   unaffected because each task gets its own pod (inferred, not checked).
+   Repro: `.claude/skills/verify-stargazer/features/scrna-pipeline.md`.
+   Placed at the top as a data-correctness bug. Reorder as needed.
 1. **Union console handoff (per-user project access).** Users click through
    from the dashboard to the Union console to view executions in their own
    project. `provision_user()` creates the per-user project but grants no

@@ -25,6 +25,7 @@
 - The review checkpoint is the commit. The user reviews every commit, so tests and implementation are reviewed together in the diff
 - Implementation will be tightly scoped so it can be understood
 - Tests will run until they pass
+- Passing tests are not proof a feature works. Before declaring user-facing work done, drive it on its real surface with the `verify-stargazer` skill when its feature map covers it, and report the evidence
 - Every claim in a report carries its evidence or a label: measured, inferred, or guess. Never hand the user a check you could run yourself
 - All necessary CLI tools e.g. parabricks, bwa etc, are available in PATH. Use them to generate test assets as needed and alert the user if they are not available.
 - When adding a task that wraps a new CLI tool, check the `TaskEnvironment` it is decorated against in `src/stargazer/config.py` and confirm the tool is layered onto that env's `flyte.Image` (via `with_apt_packages`, `with_commands`, or the bioconda block in `_BIOCONDA_INSTALL`). If it is missing, add it and notify the user.
@@ -78,6 +79,16 @@ The markdown body contains detailed instructions including:
 - **workflow agent**: When composing tasks into pipelines
 - **code-review agent**: Before merging code, to catch issues early
 - **technical-writer agent**: When writing or revising prose in `docs/` — tone, framing, and doc conventions
+
+## Agent Skills
+
+`.claude/skills/<name>/SKILL.md` holds workflow skills in the shared Agent Skills format. Claude Code and OpenCode both discover this directory. Several are adapted from [pstack](https://github.com/cursor/plugins/tree/main/pstack) (MIT).
+
+| Skill | Use it when |
+|-------|-------------|
+| `bug-fix` | A defect is reported. Reproduce on the same surface, find the cause by elimination, fix at the root, verify on the same surface |
+| `blast-radius` | A change could break something outside its diff (stored keyvalues, MCP wire format, Flyte images, notebook imports). Proves the one fact it's safe because of by running code |
+| `verify-stargazer` | Before declaring a task, workflow, or notebook change done. Drives notebooks headless against an isolated asset store and checks the stored outputs. Its `features/` map is the maintained list of what can be verified and how; add a feature file once a feature has been driven end to end |
 
 ## Docstring Spec References
 
@@ -154,6 +165,7 @@ The project follows this structure:
   - `reference/` - API reference (catalog of tasks and types)
 - `.opencode/reference/` - Agent-facing reference materials (Flyte docs, tool refs)
 - `.opencode/brainstorm/` - Gitignored, local-only unslotted ideas and moonshots
+- `.claude/skills/` - Agent workflow skills (see Agent Skills above)
 - `scratch/` - Scratch materials
 
 ### Types Directory (`src/stargazer/assets/`)

@@ -176,6 +176,7 @@ Thumbs.db
 # Local configuration
 .claude/*
 !.claude/settings.json
+!.claude/skills/
 *.local.*
 wt/
 
