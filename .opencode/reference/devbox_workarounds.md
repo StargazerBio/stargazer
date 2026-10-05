@@ -33,7 +33,7 @@ There is no single host/IP that's reachable from both the laptop and from in-clu
    - DNS / `/etc/hosts`: `rustfs-svc.flyte → 127.0.0.1`
    - Port-forward: `kubectl port-forward -n flyte svc/rustfs-svc 9000:9000`
 
-   `app/admin_app.py:main()` starts the port-forward automatically (`_start_storage_port_forward()`) so `python -m app.admin_app` "just works" given the DNS step is done once.
+   `app/admin_app.py:main()` starts the port-forward automatically (`_start_storage_port_forward()`) so `python -m app.admin_app` "just works" given the DNS step is done once. It only does so with `STARGAZER_TARGET=devbox` (the default).
 
 ---
 
@@ -234,7 +234,7 @@ printf 'nameserver 127.0.0.1\n' | sudo tee /etc/resolver/devbox.stargazer.bio
 
 **Cause:** Devbox serves the admin and per-notebook apps over `http://…:30081` (no TLS). A `Secure` cookie is dropped by the browser on http, so it can never round-trip.
 
-**Workaround / design:** The `Secure` attribute is **parametrized**, not hardcoded — `app.config.SECURE_COOKIES` (the app-tier config home) parses `STARGAZER_SECURE_COOKIES` (truthy = `1/true/yes/on`), defaulting **off** for devbox/http. In production behind TLS, `export STARGAZER_SECURE_COOKIES=1` before `python -m app.admin_app`; it's baked into the admin App env (`_PUBLIC_CONFIG`, re-serialized from `config.SECURE_COOKIES`) and propagated into each notebook pod's env (`per_notebook_env`), so the standalone proxy's mirror (`sg_proxy._cookie_secure`) — which can't import `app.config` — sets the cookie identically. `httponly=True` and `samesite="lax"` stay constant — only `Secure` is environment-dependent. All cookie writes go through `admin_app._session_redirect` (session) / the proxy middleware (launch handoff); there is no other set-cookie site to keep in sync.
+**Workaround / design:** The `Secure` attribute is **parametrized**, not hardcoded — `app.config.SECURE_COOKIES` (the app-tier config home) parses `STARGAZER_SECURE_COOKIES` (truthy = `1/true/yes/on`), defaulting **off** under `STARGAZER_TARGET=devbox` and **on** under `union`; an explicit value overrides either. The resolved value is baked as `1`/`0` into the admin App env (`_PUBLIC_CONFIG`, re-serialized from `config.SECURE_COOKIES`) and propagated into each notebook pod's env (`per_notebook_env`), so the standalone proxy's mirror (`sg_proxy._cookie_secure`) — which can't import `app.config` — sets the cookie identically. `httponly=True` and `samesite="lax"` stay constant — only `Secure` is environment-dependent. All cookie writes go through `admin_app._session_redirect` (session) / the proxy middleware (launch handoff); there is no other set-cookie site to keep in sync.
 
 ---
 

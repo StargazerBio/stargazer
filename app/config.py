@@ -25,20 +25,43 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 
 import os
 
+from stargazer.config import PROJECT_ROOT
+
 _TRUTHY = ("1", "true", "yes", "on")
 
 
-def _flag(name: str) -> bool:
-    """Parse an env var as a boolean flag (`1/true/yes/on`, case-insensitive)."""
-    return os.environ.get(name, "").strip().lower() in _TRUTHY
+def _flag(name: str, default: bool = False) -> bool:
+    """Parse an env var as a boolean flag (`1/true/yes/on`, case-insensitive).
+
+    Unset (or empty) returns `default`; any other value is parsed.
+    """
+    raw = os.environ.get(name, "").strip().lower()
+    return raw in _TRUTHY if raw else default
 
 
-# Auth cookies get the `Secure` attribute (HTTPS-only) only under production TLS.
-# Default **off**: devbox serves over plain HTTP, where a Secure cookie is never
-# sent, so defaulting on would make local login silently impossible. Export
-# `STARGAZER_SECURE_COOKIES=1` in production. The proxy mirrors this (via the
-# value baked into each notebook pod's env) so all cookie writers agree.
-SECURE_COOKIES: bool = _flag("STARGAZER_SECURE_COOKIES")
+# Which backend this deploy aims at: `devbox` (local cluster) or `union` (the
+# hosted tenant). Validated and defaulted by `stargazer.config`, which also
+# forwards it into every pod. The settings below take their defaults from it.
+TARGET: str = os.environ["STARGAZER_TARGET"]
+
+# The deployer's Flyte config file. Both live under the gitignored `.flyte/`:
+# `config.yaml` points at the devbox, `union.yaml` at the hosted tenant (remote
+# image builder). Only the deployer shell reads it; pods init in-cluster.
+FLYTE_CONFIG = (
+    PROJECT_ROOT / ".flyte" / ("union.yaml" if TARGET == "union" else "config.yaml")
+)
+
+# Auth cookies get the `Secure` attribute (HTTPS-only). Defaults on for union
+# (TLS) and off for devbox, which serves plain HTTP — a Secure cookie is never
+# sent there, so local login would silently fail. `STARGAZER_SECURE_COOKIES`
+# overrides either way. The proxy mirrors this (via the value baked into each
+# notebook pod's env) so all cookie writers agree.
+SECURE_COOKIES: bool = _flag("STARGAZER_SECURE_COOKIES", default=TARGET == "union")
+
+# The notebook-app image every per-notebook pod runs, as the exact URI built at
+# deploy time (`admin_app.main` bakes it into the admin pod's env). Unset in a
+# bare local `uvicorn` run, where launching a notebook then errors clearly.
+NOTEBOOK_IMAGE: str | None = os.environ.get("STARGAZER_NOTEBOOK_IMAGE") or None
 
 # The GitHub App's public URL handle (e.g. `stargazer-workspaces`), used to build
 # the install-redirect URL at `/workspace/enable`. Unset → installs aren't wired
@@ -51,6 +74,7 @@ GITHUB_APP_SLUG: str | None = os.environ.get("GITHUB_APP_SLUG") or None
 LANDING_BASE_URL: str | None = os.environ.get("LANDING_BASE_URL") or None
 
 # Default Flyte project/domain the admin pod targets for code-bundle uploads
-# during per-user `serve.aio(...)` calls.
+# during per-user `serve.aio(...)` calls. The domain is also where every
+# per-notebook app is served and looked up — `production` for a prod deploy.
 FLYTE_PROJECT: str = os.environ.get("FLYTE_PROJECT", "flytesnacks")
 FLYTE_DOMAIN: str = os.environ.get("FLYTE_DOMAIN", "development")

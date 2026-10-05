@@ -101,7 +101,6 @@ from app.notebooks import (
 )
 from app.oauth import exchange_code, get_github_user, github_auth_url
 from app.per_notebook import (
-    NOTEBOOK_IMAGE_URI,
     list_project_apps,
     notebook_app_img_recipe,
     per_notebook_env,
@@ -196,7 +195,7 @@ _FLYTE_CONTEXT = {
 # it. `STARGAZER_SECURE_COOKIES` is re-serialized from the parsed flag so a
 # single source of truth (`config.SECURE_COOKIES`) drives every cookie writer.
 _PUBLIC_CONFIG = {
-    "STARGAZER_SECURE_COOKIES": "1" if config.SECURE_COOKIES else "",
+    "STARGAZER_SECURE_COOKIES": "1" if config.SECURE_COOKIES else "0",
 }
 
 
@@ -206,7 +205,7 @@ app_env = flyte.app.AppEnvironment(
     image=(
         flyte.Image.from_debian_base(
             name="admin-app",
-            registry=os.environ["STARGAZER_REGISTRY"],
+            registry=os.environ.get("STARGAZER_REGISTRY"),
             platform=("linux/amd64", "linux/arm64"),
         )
         .with_apt_packages("ca-certificates", "git")
@@ -1085,12 +1084,14 @@ async def _teardown_notebook_pods(session: SessionData, slug: str) -> None:
     for mode in ("edit", "run"):
         name = f"nb-{slug}-{mode}"
         try:
-            app = await App.get.aio(name=name, project=project, domain="development")
+            app = await App.get.aio(
+                name=name, project=project, domain=config.FLYTE_DOMAIN
+            )
             await app.deactivate.aio()
         except Exception:
             pass
         try:
-            await App.delete.aio(name=name, project=project, domain="development")
+            await App.delete.aio(name=name, project=project, domain=config.FLYTE_DOMAIN)
         except Exception:
             pass
         _launched.get(session.github_username, {}).pop((slug, mode), None)
@@ -1301,14 +1302,14 @@ async def launch(
     # the app genuinely isn't there yet.
     try:
         deployment = await flyte.with_servecontext(
-            project=project, domain="development"
+            project=project, domain=config.FLYTE_DOMAIN
         ).serve.aio(env)
         endpoint = deployment.endpoint
     except Exception as exc:
         logger.warning(f"serve watch unconfirmed for {slug!r}/{mode!r}: {exc}")
         try:
             app = await App.get.aio(
-                name=f"nb-{slug}-{mode}", project=project, domain="development"
+                name=f"nb-{slug}-{mode}", project=project, domain=config.FLYTE_DOMAIN
             )
             endpoint = app.endpoint
         except Exception:
@@ -1352,7 +1353,7 @@ async def stop(
     project = sanitize_project_id(session.github_username)
     name = f"nb-{slug}-{mode}"
     try:
-        app = await App.get.aio(name=name, project=project, domain="development")
+        app = await App.get.aio(name=name, project=project, domain=config.FLYTE_DOMAIN)
         await app.deactivate.aio()
     except Exception as exc:
         logger.error(f"Stop failed for {name!r} in {project!r}: {exc}")
@@ -1383,7 +1384,7 @@ async def launch_status(request: Request):
         return JSONResponse({"error": "not authenticated"}, status_code=401)
     project = sanitize_project_id(session.github_username)
     try:
-        apps = await list_project_apps(project, domain="development")
+        apps = await list_project_apps(project, domain=config.FLYTE_DOMAIN)
     except Exception as exc:
         logger.warning(f"status listing failed for {project!r}: {exc}")
         return JSONResponse({"running": []})
@@ -1394,7 +1395,9 @@ async def launch_status(request: Request):
     async def _probe(name: str, slug: str, mode: str) -> dict | None:
         """Return run info for a discovered app if it's active, else None."""
         try:
-            app = await App.get.aio(name=name, project=project, domain="development")
+            app = await App.get.aio(
+                name=name, project=project, domain=config.FLYTE_DOMAIN
+            )
         except Exception:
             return None  # vanished between list and get
         if app.is_active() and app.endpoint:
@@ -1438,7 +1441,7 @@ async def workspace_save(
     project = sanitize_project_id(session.github_username)
     try:
         app = await App.get.aio(
-            name=f"nb-{slug}-{mode}", project=project, domain="development"
+            name=f"nb-{slug}-{mode}", project=project, domain=config.FLYTE_DOMAIN
         )
     except Exception:
         return JSONResponse({"error": "notebook not running"}, status_code=409)
@@ -1484,7 +1487,7 @@ async def workspace_cleanup(request: Request):
         return JSONResponse({"error": "not authenticated"}, status_code=401)
     project = sanitize_project_id(session.github_username)
     try:
-        apps = await list_project_apps(project, domain="development")
+        apps = await list_project_apps(project, domain=config.FLYTE_DOMAIN)
     except Exception as exc:
         logger.error(f"cleanup listing failed for {project!r}: {exc}")
         return JSONResponse({"error": f"cleanup failed: {exc}"}, status_code=502)
@@ -1494,13 +1497,15 @@ async def workspace_cleanup(request: Request):
     async def _cleanup(name: str) -> str | None:
         """Delete `name` if it's still a deactivated deployment."""
         try:
-            app = await App.get.aio(name=name, project=project, domain="development")
+            app = await App.get.aio(
+                name=name, project=project, domain=config.FLYTE_DOMAIN
+            )
         except Exception:
             return None  # vanished between list and get
         if not app.is_deactivated():
             return None
         try:
-            await App.delete.aio(name=name, project=project, domain="development")
+            await App.delete.aio(name=name, project=project, domain=config.FLYTE_DOMAIN)
             return name
         except Exception as exc:
             logger.warning(f"cleanup delete failed for {name!r}: {exc}")
@@ -1547,41 +1552,21 @@ async def health():
 # ---------------------------------------------------------------------------
 
 
-def _build_and_push_notebook_image() -> None:
-    """Build the per-notebook recipe and publish it under a stable tag.
+def _build_notebook_image() -> str:
+    """Build the per-notebook image recipe and return its content-hashed URI.
 
-    The admin pod cannot build images itself, so the deployer's machine
-    must publish `notebook-app` to `STARGAZER_REGISTRY` before any
-    user's `/launch` click can spawn a per-notebook app — the
-    AppEnvironment image reference resolves at pod-pull time, not at
-    deploy time.
-
-    `flyte.build` produces a content-hashed URI; we then retag that
-    manifest as `NOTEBOOK_IMAGE_URI` (`.../notebook-app:stable`) via
-    `docker buildx imagetools create` so the multi-arch manifest is
-    preserved without re-pulling. Per-notebook AppEnvironments reference
-    the stable tag (`Image.from_base(NOTEBOOK_IMAGE_URI)`) so the admin
-    pod never needs to recompute the content hash from in-pod Python
-    state.
+    The admin pod can't build images (no Docker daemon, no project layout), so
+    the deployer builds here and `main()` bakes the URI into the admin pod as
+    `STARGAZER_NOTEBOOK_IMAGE`; every per-notebook app then runs exactly this
+    build. The builder comes from the Flyte config: local docker pushing to the
+    devbox registry, or Union's remote builder pushing to Union's registry.
     """
     logger.info("Building per-notebook flyte.Image (recipe)")
     result = flyte.build(notebook_app_img_recipe)
     if result.uri is None:
         raise RuntimeError("flyte.build did not return an image URI")
-    logger.info(f"Retagging {result.uri} as {NOTEBOOK_IMAGE_URI}")
-    subprocess.run(
-        [
-            "docker",
-            "buildx",
-            "imagetools",
-            "create",
-            "-t",
-            NOTEBOOK_IMAGE_URI,
-            result.uri,
-        ],
-        check=True,
-    )
-    logger.info(f"Per-notebook image published at {NOTEBOOK_IMAGE_URI}")
+    logger.info(f"Per-notebook image: {result.uri}")
+    return result.uri
 
 
 def _start_storage_port_forward() -> None:
@@ -1593,9 +1578,12 @@ def _start_storage_port_forward() -> None:
     resolves to `127.0.0.1` (NAS DNS or `/etc/hosts`) AND there's a
     port-forward to the in-cluster service.
 
-    Skip silently if the port is already serving (e.g. user ran their
-    own port-forward) or if `kubectl` is missing (production deploy).
+    Devbox only: elsewhere kubectl may point at an unrelated cluster. Also
+    skipped if the port is already serving (e.g. user ran their own
+    port-forward) or if `kubectl` is missing.
     """
+    if config.TARGET != "devbox":
+        return
     if _port_open("127.0.0.1", 9000):
         logger.info("Storage port 9000 already open; skipping port-forward")
         return
@@ -1647,9 +1635,9 @@ def main():
             "tokens would fail and Workspace saving would read as disabled "
             "for every user. Export both (or neither) before deploying."
         )
-    init(root_dir=PROJECT_ROOT)
+    init(config.FLYTE_CONFIG, root_dir=PROJECT_ROOT)
     _start_storage_port_forward()
-    _build_and_push_notebook_image()
+    app_env.env_vars["STARGAZER_NOTEBOOK_IMAGE"] = _build_notebook_image()
     deployment = flyte.serve(app_env)
     print(f"App URL: {deployment.endpoint}")
 

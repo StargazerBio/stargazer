@@ -8,8 +8,8 @@ Selects the right init path for the runtime context:
   before spawning the app subprocess — needed because uvicorn runs in a
   separate process and does not inherit fserve's Python-side client init.
 - per-user notebook with `FLYTE_API_KEY` → `flyte.init_from_api_key()`
-- local dev / deployer shell → `flyte.init_from_config()` (reads
-  `.flyte/config.yaml`)
+- local dev / deployer shell → `flyte.init_from_config()`, reading the
+  target's config file (`app.config.FLYTE_CONFIG`) when one is passed
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -21,8 +21,12 @@ import flyte
 from stargazer.config import logger
 
 
-def init(**kwargs):
-    """Initialize Flyte for the current runtime context."""
+def init(path_or_config=None, **kwargs):
+    """Initialize Flyte for the current runtime context.
+
+    `path_or_config` only applies to the config-file path (the deployer's shell);
+    in-cluster and API-key inits ignore it.
+    """
     if os.environ.get("FLYTE_API_KEY"):
         logger.info("Flyte init: api-key path (FLYTE_API_KEY)")
         flyte.init_from_api_key(
@@ -41,4 +45,4 @@ def init(**kwargs):
         )
     else:
         logger.info("Flyte init: config-file path")
-        flyte.init_from_config(**kwargs)
+        flyte.init_from_config(path_or_config, **kwargs)

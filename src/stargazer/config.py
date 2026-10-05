@@ -15,6 +15,12 @@ Rules:
 - PINATA_VISIBILITY: Defaults to "private" if unset.
   Only evaluated by PinataClient — if JWT is unset, downloads are always public.
 - STARGAZER_LOCAL: Local storage directory. Defaults to ~/.stargazer/local.
+- STARGAZER_TARGET: Which Flyte backend images and deploys aim at — `devbox`
+  (default, the local cluster) or `union` (the hosted tenant). Anything else
+  is an error. Forwarded into every pod so in-pod builds resolve the same way.
+- STARGAZER_REGISTRY: Image push registry. Defaults to the devbox's in-cluster
+  registry on `devbox`; left unset on `union`, where the remote builder pushes
+  to Union's own registry. An explicit value wins on either target.
 
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
@@ -34,7 +40,15 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 os.environ.setdefault("PINATA_GATEWAY", "https://dweb.link")
 os.environ.setdefault("PINATA_VISIBILITY", "private")
 os.environ.setdefault("STARGAZER_LOCAL", str(Path.home() / ".stargazer" / "local"))
-os.environ.setdefault("STARGAZER_REGISTRY", "localhost:30000")
+
+TARGETS = ("devbox", "union")
+os.environ.setdefault("STARGAZER_TARGET", "devbox")
+if os.environ["STARGAZER_TARGET"] not in TARGETS:
+    raise ValueError(
+        f"STARGAZER_TARGET={os.environ['STARGAZER_TARGET']!r}; expected one of {TARGETS}"
+    )
+if os.environ["STARGAZER_TARGET"] == "devbox":
+    os.environ.setdefault("STARGAZER_REGISTRY", "localhost:30000")
 
 _log_dir = Path.home() / ".stargazer" / "logs"
 _log_dir.mkdir(parents=True, exist_ok=True)
@@ -49,12 +63,18 @@ def _stargazer_env_vars() -> dict[str, str]:
     The spec serializes from the submitting process, so STARGAZER_OWNER is
     included when the submitter carries it (hosted workspaces) — task pods
     then stamp ``_owner`` onto pipeline outputs. Strictly optional: absent
-    locally, nothing requires it.
+    locally, nothing requires it. STARGAZER_TARGET (and an explicit
+    STARGAZER_REGISTRY) ride along so a pod that builds or submits images —
+    the admin app, a notebook, a parent task — resolves them like the deployer.
     """
     env = {
         "PINATA_GATEWAY": os.environ.get("PINATA_GATEWAY", "https://dweb.link"),
         "PINATA_VISIBILITY": os.environ.get("PINATA_VISIBILITY", "private"),
+        "STARGAZER_TARGET": os.environ["STARGAZER_TARGET"],
     }
+    registry = os.environ.get("STARGAZER_REGISTRY")
+    if registry:
+        env["STARGAZER_REGISTRY"] = registry
     owner = os.environ.get("STARGAZER_OWNER")
     if owner:
         env["STARGAZER_OWNER"] = owner
@@ -106,7 +126,7 @@ def log_execution() -> str:
         f"Execution started: {execution_id} | storage={storage_mode} "
         f"| PINATA_JWT={'set (' + str(jwt_len) + ' bytes)' if jwt_len else 'unset'} "
         f"| gateway={os.environ['PINATA_GATEWAY']} | visibility={os.environ['PINATA_VISIBILITY']} "
-        f"| local_dir={os.environ['STARGAZER_LOCAL']} | registry={os.environ['STARGAZER_REGISTRY']}"
+        f"| local_dir={os.environ['STARGAZER_LOCAL']} | target={os.environ['STARGAZER_TARGET']}"
     )
     return execution_id
 
@@ -120,7 +140,7 @@ scrna_env = flyte.TaskEnvironment(
     image=(
         flyte.Image.from_debian_base(
             name="stargazer-scrna",
-            registry=os.environ["STARGAZER_REGISTRY"],
+            registry=os.environ.get("STARGAZER_REGISTRY"),
         )
         .with_apt_packages("ca-certificates")
         .with_pip_packages("scanpy>=1.12")
@@ -142,7 +162,7 @@ gatk_env = flyte.TaskEnvironment(
     image=(
         flyte.Image.from_debian_base(
             name="stargazer-gatk",
-            registry=os.environ["STARGAZER_REGISTRY"],
+            registry=os.environ.get("STARGAZER_REGISTRY"),
             platform=("linux/amd64", "linux/arm64"),
         )
         .with_apt_packages("ca-certificates", "curl", "bzip2")
