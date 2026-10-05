@@ -35,7 +35,6 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 import asyncio
 import atexit
 import os
-import re
 import secrets
 import socket
 import subprocess
@@ -823,22 +822,19 @@ async def app_install_callback(request: Request):
     return _session_redirect("/", session)
 
 
-_NOTEBOOK_WS_RE = re.compile(r"\s+")
-_NOTEBOOK_UNSAFE_RE = re.compile(r"[^a-z0-9._-]+")
-
-
 def _notebook_slug(name: str) -> str | None:
-    """Derive a filesystem-safe filename slug from a notebook name.
+    """Derive a filename slug from a notebook name that is also a valid pod name.
 
-    Lowercases everything and substitutes dashes for spaces; the original
-    name is preserved verbatim as the display title (stored in the notebook
-    header — see `parse_notebook_name`). Any character outside `[a-z0-9._-]`
-    is dropped so the slug stays a safe, traversal-free filename, then
-    leading/trailing separators are trimmed. Returns None when the result is
-    empty or collides with a reserved seed slug (`SEED_SLUGS`).
+    The slug is both the filename stem and the pod name (`nb-{slug}-{mode}`),
+    and Flyte app names allow only `[a-z0-9-]`, the same rule as project ids.
+    So it reuses `sanitize_project_id`: lowercase, every other character to a
+    dash, runs collapsed and the ends trimmed, which also keeps the filename
+    traversal-free. The original name is preserved verbatim as the display
+    title (stored in the notebook header — see `parse_notebook_name`). Returns
+    None when the result is empty or collides with a reserved seed slug
+    (`SEED_SLUGS`).
     """
-    slug = _NOTEBOOK_WS_RE.sub("-", name.strip().lower())
-    slug = _NOTEBOOK_UNSAFE_RE.sub("", slug).strip("-._")
+    slug = sanitize_project_id(name)
     if not slug or slug in SEED_SLUGS:
         return None
     return slug
