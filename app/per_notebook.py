@@ -15,8 +15,9 @@ The image layers, on top of the Flyte debian base:
 - `claude` (Claude Code CLI) — the AI agent, on PATH for the dropdown
   terminal the proxy injects. Pinned standalone binary (auto-update off);
   auth is interactive (`claude` browser login) and ephemeral.
-- `marimo` plus the cookie-validating reverse proxy's web deps
-  (`fastapi`, `uvicorn`, `itsdangerous`, `httpx`, `websockets`).
+- `marimo` plus the owner-gated reverse proxy's web deps (`fastapi`,
+  `uvicorn`, `httpx`, `websockets`). The proxy's storage calls use the
+  `flyte` SDK the base image already carries.
 - `app/proxy.py` baked at `/usr/local/lib/sg_proxy.py` (top-level module,
   importable via `PYTHONPATH=/usr/local/lib` as `sg_proxy:asgi_app`; not
   under `app/` so it doesn't get shadowed by Flyte's loaded_modules
@@ -31,17 +32,16 @@ Stargazer itself is NOT installed at the system level — every notebook
 declares its deps inline via PEP 723 and the sandbox venv resolves them
 at boot, including `stargazer` via `[tool.uv.sources]`.
 
-Persistence model: the per-notebook pod owns its workspace as container-
-local ephemeral storage. The launch script sparse-clones only the fork's
-`src/stargazer` subtree into `/workspace` on startup (cone mode; tests/docs/
-app are never materialized) and cd's into `src/stargazer/notebooks/workspace`,
-the sole work surface. The proxy's `/__sg__/workspace/sync` stages just that
-dir and pushes edits back to the fork; the SIGTERM hook fires the same sync
-before Knative idles the pod. Because sparse checkout only filters the working
-tree (out-of-cone files stay in the index as SKIP_WORKTREE), those commits
-still preserve the rest of the fork on `main`. The fork is the source of
-truth; the pod is the working copy. No PVC — Flyte v2 doesn't yet support
-`K8sPod` payloads on app environments anyway.
+Persistence model: the workspace store (`app.workspace_store`) is the
+source of truth and the pod is a working copy. At launch the script hydrates
+the owner's notebooks into `WORKSPACE_NOTEBOOK_DIR` and their own snapshots
+into `SNAPSHOT_NOTEBOOK_DIR`, both flat (`<dir>/<slug>.py`). The proxy writes
+edited notebooks back on a short interval and once more when the pod scales
+to zero. No PVC: pod-local disk plus the object store is cheaper and faster.
+
+Auth: pods run `requires_auth=True`, so only signed-in org members reach them,
+and the proxy admits only the owner (`SG_OWNER_SUBJECT`). No credential of any
+kind is baked into the pod env.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -68,6 +68,11 @@ from stargazer.config import PROJECT_ROOT, STARGAZER_ENV_VARS
 _PROXY_LIB_DIR = "/usr/local/lib"
 _PROXY_MODULE = "sg_proxy"
 _LAUNCH_BIN = "/usr/local/bin"
+
+# Where a launch hydrates the owner's notebooks, flat as `<dir>/<slug>.py`. The
+# admin builds `notebook_path` from these; the proxy mirrors them.
+WORKSPACE_NOTEBOOK_DIR = "/workspace"
+SNAPSHOT_NOTEBOOK_DIR = "/snapshots"
 
 
 # Layered build recipe. Consumed only by the deployer's build step
@@ -125,11 +130,8 @@ notebook_app_img_recipe = (
         "marimo==0.23.6",
         "fastapi>=0.115",
         "uvicorn>=0.34",
-        "itsdangerous>=2.1",
         "httpx>=0.27",
         "websockets>=12",
-        # The proxy decrypts the Fernet session cookie (app.session._fernet).
-        "cryptography>=43",
     )
     # `/usr/local/lib/` already exists in the base image, so the COPY drops
     # `proxy.py` into it without needing a directory-creating trailing-slash.
@@ -153,10 +155,10 @@ notebook_app_img_recipe = (
         [
             f"mv {_PROXY_LIB_DIR}/proxy.py {_PROXY_LIB_DIR}/{_PROXY_MODULE}.py",
             f"chmod +x {_LAUNCH_BIN}/launch-notebook.sh",
-            # Pre-create /workspace owned by the flyte runtime user so
-            # launch-notebook.sh's `git clone … /workspace` can write into
-            # the root-owned filesystem at startup.
-            "mkdir -p /workspace && chown -R flyte:flyte /workspace",
+            # Pre-create the hydration targets owned by the flyte runtime
+            # user so the launch script can write into them at startup.
+            f"mkdir -p {WORKSPACE_NOTEBOOK_DIR} {SNAPSHOT_NOTEBOOK_DIR} "
+            f"&& chown -R flyte:flyte {WORKSPACE_NOTEBOOK_DIR} {SNAPSHOT_NOTEBOOK_DIR}",
         ]
     )
     # PYTHONPATH lets the proxy import as `sg_proxy`. DISABLE_AUTOUPDATER pins
@@ -172,33 +174,24 @@ def per_notebook_env(
     slug: str,
     mode: Literal["edit", "run"],
     notebook_path: str,
-    fork_full_name: str,
-    pod_capability: str,
-    pod_key: str,
+    owner_subject: str,
     admin_url: str,
     resources: NotebookResources | None = None,
 ) -> flyte.app.AppEnvironment:
     """Build a per-notebook AppEnvironment for one (slug, mode) launch.
 
-    `notebook_path` is the absolute path inside the spawned pod — for
-    image-baked notebooks that's `/stargazer/...`, for workspace notebooks
-    it's `/workspace/...` (populated by the launch script's
-    clone-on-startup against the user's fork).
+    `notebook_path` is the absolute path inside the spawned pod: image-baked
+    notebooks live under `/stargazer/...`, the owner's notebooks under
+    `WORKSPACE_NOTEBOOK_DIR` and their own snapshots under
+    `SNAPSHOT_NOTEBOOK_DIR`, both hydrated by the launch script.
 
-    `fork_full_name` (`owner/repo` of the verified fork) tells the launch
-    script which fork to clone — the full name handles the collision case
-    where GitHub named the fork `…-1` — and `FORK_OWNER` is derived for the
-    git commit identity. No GitHub credential is injected: instead
-    `pod_capability` (a `SESSION_SECRET`-signed token carrying only the fork
-    name, **not** a GitHub credential) goes in as `SG_POD_TOKEN`. At clone /
-    push time the pod presents it to the admin's `/workspace/pod-token`
-    endpoint, which mints a fresh, fork-scoped, ~1h installation token — so the
-    broad token never reaches code the user controls and nothing durable lands
-    in `.git/config`. `pod_key` (from `app.session.pod_key`) keys the proxy's
-    pass check. It is derived per pod because notebook code can read this env:
-    the master `SESSION_SECRET` must never be here, or any user could forge an
-    admin session for anyone. `admin_url` is the admin app's public base URL; the proxy's
-    `/__sg__/dashboard` route 302s here, and the pod calls it back for tokens.
+    `owner_subject` is the owner's platform user id. The pod sits behind the
+    platform login (`requires_auth=True`) and its proxy admits only requests
+    whose forwarded subject matches `SG_OWNER_SUBJECT`. It also keys where the
+    pod hydrates from and saves to in the workspace store
+    (`STARGAZER_WORKSPACE_ROOT`). `admin_url` is the admin app's public base
+    URL, which the proxy's `/__sg__/dashboard` route redirects to. No
+    credential is baked into the env: notebook code can read it.
 
     `resources` is the notebook's declared `[tool.stargazer]` spec, honored
     as-authored (no ceiling). When None — image-baked tutorials and workflows
@@ -227,7 +220,7 @@ def per_notebook_env(
         # child only. Without `exec`, Debian's `/bin/sh -c "launch-notebook.sh …"`
         # can linger as an intermediate shell that swallows SIGTERM, so the
         # launch script's final `exec uvicorn` never receives it and the proxy's
-        # shutdown flush (commit+push of workspace edits) is silently skipped.
+        # shutdown flush (the final save of workspace edits) is silently skipped.
         # Prepending `exec` forces the `sh -c` wrapper to replace itself with the
         # script, which then `exec`s uvicorn into that same direct-child slot —
         # so the proxy is the process `fserve` signals. See launch-notebook.sh.
@@ -238,19 +231,14 @@ def per_notebook_env(
             notebook_path,
         ],
         port=8080,
-        requires_auth=False,
+        requires_auth=True,
         resources=flyte_resources,
         env_vars={
             **STARGAZER_ENV_VARS,
             "FLYTE_DOMAIN": config.FLYTE_DOMAIN,
-            "FORK_FULL_NAME": fork_full_name,
-            "FORK_OWNER": fork_full_name.split("/", 1)[0],
-            "SG_POD_TOKEN": pod_capability,
-            "SG_POD_KEY": pod_key,
+            "SG_OWNER_SUBJECT": owner_subject,
+            "STARGAZER_WORKSPACE_ROOT": config.WORKSPACE_ROOT,
             "STARGAZER_ADMIN_URL": admin_url,
-            # Propagate the cookie-Secure policy so the proxy sets the session
-            # cookie identically to the admin (off on devbox/http, on under TLS).
-            "STARGAZER_SECURE_COOKIES": "1" if config.SECURE_COOKIES else "0",
         },
     )
 
