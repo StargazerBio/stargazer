@@ -17,8 +17,7 @@ Reads and writes go through `flyte.storage`, listing and deletes through the
 fsspec filesystem it resolves for the root (obstore on `s3://`, the local
 filesystem for a plain path). The same calls work on the tenant and in tests.
 
-The function names mirror the GitHub-fork helpers this module replaced, with
-the fork and token arguments collapsed into the user's subject.
+Every function takes the user's subject first; callers never compose keys.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
