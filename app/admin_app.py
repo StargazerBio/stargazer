@@ -49,6 +49,7 @@ from fastapi import FastAPI, Form, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from flyte._initialize import get_init_config
 from flyte.remote import App
 
 from app import config, provision
@@ -844,6 +845,10 @@ async def launch(
         resources=resources,
     )
     env.env_vars["FLYTE_PROJECT"] = project
+    # App pods aren't given the org (task pods get `_U_ORG_NAME`); pass ours on
+    # so in-pod SDK calls address the tenant's org.
+    if os.environ.get("FLYTE_ORG"):
+        env.env_vars["FLYTE_ORG"] = os.environ["FLYTE_ORG"]
     # Owner attribution: workspace MCP/SDK uploads stamp `_owner` from this
     # (and config.py forwards it onward into task pods at run submission).
     env.env_vars["STARGAZER_OWNER"] = user.subject
@@ -1059,6 +1064,9 @@ def main():
         )
     init(config.FLYTE_CONFIG, root_dir=PROJECT_ROOT)
     _start_storage_port_forward()
+    # In-cluster init can't discover the org in an app pod; bake the deployer's.
+    if org := get_init_config().org:
+        app_env.env_vars["FLYTE_ORG"] = org
     app_env.env_vars["STARGAZER_NOTEBOOK_IMAGE"] = _build_notebook_image()
     deployment = flyte.serve(app_env)
     print(f"App URL: {deployment.endpoint}")

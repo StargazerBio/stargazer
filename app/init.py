@@ -39,7 +39,11 @@ def init(path_or_config=None, **kwargs):
         # `with_servecontext(project=...)` does not propagate to the client
         # used for code-bundle upload during serve, so we must seed a default
         # project on init. `FLYTE_PROJECT` is set in `app_env.env_vars`.
+        # App pods don't get `_U_ORG_NAME` (the default org source), so the
+        # deployer bakes `FLYTE_ORG`; without it org-scoped calls fail
+        # validation with an empty organization.
         flyte.init_in_cluster(
+            org=os.environ.get("FLYTE_ORG"),
             project=os.environ.get("FLYTE_PROJECT"),
             domain=os.environ.get("FLYTE_DOMAIN", "development"),
         )
