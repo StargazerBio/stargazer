@@ -48,6 +48,29 @@ Pre-commit enforces `ruff` formatting and `docstr-coverage` (100% module-level d
 
 Ruff is pinned twice — `rev:` in `.pre-commit-config.yaml` and the `ruff` entry in `pyproject.toml`'s dev group — because pre-commit runs hooks in its own isolated environment rather than your project venv. **Bump both together**, or `ruff --fix .` and the commit hook will enforce different rule sets. Rule exceptions live in `[tool.ruff.lint]` in `pyproject.toml`, each annotated with the reason; if a rule is fighting a deliberate pattern (a blind `except` used for graceful degradation, a bare expression that is how a marimo cell renders), add it there rather than contorting the code.
 
+## Submitting Changes
+
+Every change goes through a pull request — nothing is committed directly to `main`.
+
+1. Cut a branch from an up-to-date `main`, named after the change in short kebab-case:
+
+    ```bash
+    git switch main && git pull
+    git switch -c fix/scrna-oom
+    ```
+
+2. Commit as you go. Keep the branch to one change; an unrelated fix gets its own branch.
+3. When tests pass and the change works on its real surface, push and open a PR against `main`:
+
+    ```bash
+    git push -u origin fix/scrna-oom
+    gh pr create --base main
+    ```
+
+    Say what changed and why, how you verified it, and anything you deferred.
+
+4. A maintainer reviews the PR and merges it. Address review feedback with further commits on the same branch.
+
 ## Building Images
 
 Image rebuilds are only needed when you change `config.py` (a Flyte task tool/env) or the `Dockerfile` (a system tool in the human-runnable note/chat images). Routine code work doesn't need this — `uv add` covers Python deps via the lockfile, and contributors pulling your branch pick the change up automatically on their next `uv sync`. See [Configuration → Container Images](../architecture/configuration.md#container-images) for the split between Flyte task images and human-runnable images.

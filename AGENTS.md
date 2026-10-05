@@ -7,8 +7,14 @@
 - This project uses UV so the appropriate commands are `uv add` and `uv pip install -e .`
 - If something is changed that you didn't change, it's not a typo, it's a manual change. I do still write code occassionally..
 - Don't use the "if TYPE_CHECKING:" pattern anywhere, Flyte will always check types
-- Do not make any git commits unless explicitly requested
 - The README is a document written exclusively BY HUMANS FOR HUMANS. Never modify the README. Notify if it is out of spec only.
+
+**Git Workflow**
+- Every change gets its own branch, cut from an up-to-date `main`. Name it after the change in short kebab-case (e.g. `fix/scrna-oom`, `docs/branch-pr-workflow`). Never commit directly to `main`
+- One change per branch. An unrelated fix spotted along the way gets its own branch and PR, or a ROADMAP entry
+- Commit on the branch as the work progresses; no need to ask first. Never force-push `main`
+- When the change is done (tests pass, verified on its real surface), push the branch and open a PR against `main` with `gh pr create`. The description says what changed and why, the verification evidence, and anything deferred
+- The PR is where human review happens. Never merge a PR yourself — the user reviews and merges it. Review feedback is addressed with further commits on the same branch
 
 **Positioning**
 - The marimo notebook is Stargazer's primary user surface for both experimentation (`marimo edit`) and reproducible production (`marimo run`) — it's the most approachable entry point, so default new feature designs to the notebook surface (marimo, `mo.ui`) over CLI or other entry points. The SDK (`src/stargazer/tasks/`, `src/stargazer/workflows/`) is a first-class user surface too: authoring workflows in an IDE by importing SDK tasks directly is a fully supported use case, not a maintainer-only path.
@@ -22,7 +28,7 @@
   - Run each new test before implementing and confirm it fails for the expected reason (missing behavior, not an import error or broken fixture)
   - Assert observable behavior against literal expected values. If a test would still pass when the code under test returns `None`, rewrite the assertion or delete the test
   - Prefer no new test over a bad test. When a real test would need heavy mocking, production-only state, or slow infrastructure for a small change, use the closest real check instead (a local Flyte run, a script, a repro command), run it before and after the change, and say so
-- The review checkpoint is the commit. The user reviews every commit, so tests and implementation are reviewed together in the diff
+- The review checkpoint is the pull request. The user reviews every PR before merging, so tests and implementation are reviewed together in its diff
 - Implementation will be tightly scoped so it can be understood
 - Tests will run until they pass
 - Passing tests are not proof a feature works. Before declaring user-facing work done, drive it on its real surface with the `verify-stargazer` skill when its feature map covers it, and report the evidence
