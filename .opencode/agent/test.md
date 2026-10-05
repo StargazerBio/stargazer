@@ -29,7 +29,7 @@ The Stargazer project follows this process:
 2. **Confirm each test fails for the expected reason** - missing behavior, not an import error or broken fixture. No pause for user review
 3. **Implement tightly scoped functionality**
 4. **Run tests until they pass**
-5. **Small, meaningful commits** - the user reviews every commit, tests and implementation together
+5. **Small, meaningful commits on the change's branch** - the user reviews the pull request, tests and implementation together
 
 Assert observable behavior against literal expected values. If a test would still pass when the code under test returns `None`, rewrite the assertion or delete it.
 
