@@ -78,3 +78,9 @@ LANDING_BASE_URL: str | None = os.environ.get("LANDING_BASE_URL") or None
 # per-notebook app is served and looked up — `production` for a prod deploy.
 FLYTE_PROJECT: str = os.environ.get("FLYTE_PROJECT", "flytesnacks")
 FLYTE_DOMAIN: str = os.environ.get("FLYTE_DOMAIN", "development")
+
+# Root URI of the workspace store (`app.workspace_store`): every user's
+# notebooks live under `<root>/users/<subject>/`. On Union this is a prefix in
+# the tenant bucket, e.g. `s3://union-us-west-2-stargazerbio/stargazer`. Unset
+# means workspace saving isn't configured for this deploy.
+WORKSPACE_ROOT: str = os.environ.get("STARGAZER_WORKSPACE_ROOT", "")
