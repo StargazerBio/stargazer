@@ -36,7 +36,7 @@ async def find_markers(
 
     sc.tl.rank_genes_groups(ad, groupby=groupby, method=method, layer="counts")
 
-    out_path = _storage.default_client.local_dir / "markers.h5ad"
+    out_path = _storage.default_client.local_dir / f"{adata.sample_id}_markers.h5ad"
     ad.write_h5ad(out_path)
 
     result = AnnData(

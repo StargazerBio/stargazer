@@ -4,18 +4,6 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 
 ## Upcoming
 
-- **🐛 scRNA tasks overwrite each other's outputs in local runs.** Every
-   scRNA task writes a fixed filename into the shared store
-   (`local_dir / "qc_filtered.h5ad"`, `"reduced.h5ad"`, and so on). When the
-   scRNA pipeline notebook fans samples out in-process with `asyncio.gather`,
-   later samples overwrite earlier ones. The earlier sample's asset keeps its
-   own `n_obs` keyvalue but points at the other sample's file, and every
-   downstream stage reads the wrong data. Measured with `verify-stargazer`:
-   s1d1 claims 6,307 cells at `qc_filtered`, and its file holds s1d3's 7,157.
-   The notebook still runs every cell without error. Remote runs are likely
-   unaffected because each task gets its own pod (inferred, not checked).
-   Repro: `.claude/skills/verify-stargazer/features/scrna-pipeline.md`.
-   Placed at the top as a data-correctness bug. Reorder as needed.
 - **Union production deploy** (tenant: `stargazerbio.us-west-2.unionai.cloud`).
    Done in PRs: per-pod session keys (#2), the `STARGAZER_TARGET`
    devbox/union switch, a configurable domain, and a fixed per-deploy
@@ -118,6 +106,7 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 
 ## Complete
 
+- ✅ scRNA per-sample output filenames (2026-10-05): every scRNA task wrote a fixed filename (`qc_filtered.h5ad`, `reduced.h5ad`, …) into the shared store, so samples fanned out in-process with `asyncio.gather` overwrote each other and downstream stages read the wrong sample's data. Outputs are now prefixed with `sample_id`, matching the GATK tasks. Verified with `verify-stargazer` on the scRNA pipeline notebook (every stage `ok` for both samples), and locked in by `tests/tasks/scrna/test_sample_isolation.py`.
 - ✅ Toolchain pinning + lint/SDK catch-up (2026-08-07): ruff pinned to one version across `.pre-commit-config.yaml` and `pyproject.toml` (they had drifted 0.14→0.16, where ruff's default rule set grew 59→413 and the two gates diverged); 322 findings resolved — auto-fixes applied, deliberate patterns declared in `[tool.ruff.lint]` with rationale, the frozen v1 reference snapshot untracked and gitignored. MCP SDK migrated to 2.x (`FastMCP` → `MCPServer`, `mcp.server.fastmcp` → `mcp.server`) and bounded to `<3`; that import had been broken, taking 3 unit tests and a pre-commit hook with it.
 - ✅ GitHub App deploy-credential gate (2026-08-07): a half-exported App credential pair (`GITHUB_APP_ID` without `GITHUB_APP_PRIVATE_KEY`) made Workspace saving read as disabled for every user, silently, for two months. `main()` now refuses to deploy on a partial pair, module import warns, and the previously-silent "no fork found" login path logs. Deploy-secret contract documented in [`app_internals.md`](../reference/architecture/app_internals.md).
 - ✅ App-tier performance & modernization audit (2026-07-06): one pooled HTTP client per process (aiohttp out of the app tier), streaming notebook proxy, `/launch/status` via a single project deployment list, gzip on the admin, single-flight public-asset cache. [`archive/22_app_tier_performance_audit.md`](./archive/22_app_tier_performance_audit.md)

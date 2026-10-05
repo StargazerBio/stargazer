@@ -38,7 +38,7 @@ async def reduce_dimensions(
     sc.pp.neighbors(ad, n_neighbors=n_neighbors, n_pcs=n_pcs)
     sc.tl.umap(ad)
 
-    out_path = _storage.default_client.local_dir / "reduced.h5ad"
+    out_path = _storage.default_client.local_dir / f"{adata.sample_id}_reduced.h5ad"
     ad.write_h5ad(out_path)
 
     result = AnnData(

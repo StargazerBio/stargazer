@@ -32,7 +32,7 @@ async def normalize(adata: AnnData) -> AnnData:
     ad.layers["counts"] = ad.X.copy()
     sc.pp.log1p(ad)
 
-    out_path = _storage.default_client.local_dir / "normalized.h5ad"
+    out_path = _storage.default_client.local_dir / f"{adata.sample_id}_normalized.h5ad"
     ad.write_h5ad(out_path)
 
     result = AnnData(

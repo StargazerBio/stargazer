@@ -39,7 +39,9 @@ async def select_features(
         hvg_kwargs["batch_key"] = batch_key
     sc.pp.highly_variable_genes(ad, **hvg_kwargs)
 
-    out_path = _storage.default_client.local_dir / "features_selected.h5ad"
+    out_path = (
+        _storage.default_client.local_dir / f"{adata.sample_id}_features_selected.h5ad"
+    )
     ad.write_h5ad(out_path)
 
     result = AnnData(
