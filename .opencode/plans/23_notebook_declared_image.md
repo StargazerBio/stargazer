@@ -7,10 +7,8 @@ expression in the setup block:
 with app.setup:
     from stargazer.notebooks import notebook_base
 
-    main_img = (
-        notebook_base
-        .with_apt_packages("bcftools")
-        .with_commands(["micromamba install -y -c bioconda vcftools"])
+    main_img = notebook_base.with_apt_packages("bcftools").with_commands(
+        ["micromamba install -y -c bioconda vcftools"]
     )
 ```
 
@@ -84,18 +82,21 @@ Marimo files are valid Python, so `ast` is enough.
 @dataclass(frozen=True)
 class ImageStep:
     """One whitelisted `flyte.Image` method call, with literal arguments."""
+
     method: str
     args: tuple
     kwargs: dict
 
 
-_ALLOWED_METHODS = frozenset({
-    "with_apt_packages",
-    "with_pip_packages",
-    "with_commands",
-    "with_env_vars",
-    "with_workdir",
-})
+_ALLOWED_METHODS = frozenset(
+    {
+        "with_apt_packages",
+        "with_pip_packages",
+        "with_commands",
+        "with_env_vars",
+        "with_workdir",
+    }
+)
 
 _BASE_NAME = "notebook_base"
 

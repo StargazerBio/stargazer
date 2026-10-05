@@ -143,6 +143,10 @@ toggle (Graph is the default):
 The admin app and the per-notebook pods use **different images by design**:
 
 - `app_env.image` is Flyte-built via `with_uv_project` — the admin is small Python with no heavy deps.
-- Per-notebook envs use the programmatically-defined `notebook-app` image, referenced by a stable tag so the admin pod (no Docker daemon) never rebuilds it. The deploy entrypoint builds and publishes it before serving.
+- Per-notebook envs use the programmatically-defined `notebook-app` image. The deploy entrypoint builds it and hands the admin the exact build, so every notebook pod runs the image that shipped with its admin and the admin pod (no Docker daemon) never rebuilds it.
+
+## Deploy Targets
+
+One switch, `STARGAZER_TARGET`, picks the backend: `devbox` (the default, a local cluster for lightweight testing) or `union` (the hosted tenant). It selects the deployer's Flyte config, where images are pushed, and whether auth cookies require HTTPS. The Flyte domain is set separately, so the same target can serve a development or a production deployment. The per-target table is in `.opencode/reference/architecture/app_internals.md`.
 
 Note the `note` target in the project `Dockerfile` (`stargazer-note`) is a separate, local-`docker run`-only image — **not** the hosted one. Build/publish detail in `.opencode/reference/architecture/app_internals.md`.

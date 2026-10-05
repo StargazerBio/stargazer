@@ -83,9 +83,12 @@ Three unknowns can invalidate the rest of the plan. Settle all three first.
       ```python
       Policy.create(
           "Team Prod Access",
-          bindings=[{"role": "Production Runner",
-                     "resource": {"project": "my-project",
-                                  "domain": "production"}}],
+          bindings=[
+              {
+                  "role": "Production Runner",
+                  "resource": {"project": "my-project", "domain": "production"},
+              }
+          ],
       )
       ```
 
@@ -238,8 +241,10 @@ Blocked on Union finishing the IdP wiring. No round-trip with them needed.
       from it (launches come from the dashboard under the admin identity).
 
       ```python
-      Role.update("Stargazer Notebook Viewer",
-                  actions=["view_flyte_inventory", "view_flyte_executions"])
+      Role.update(
+          "Stargazer Notebook Viewer",
+          actions=["view_flyte_inventory", "view_flyte_executions"],
+      )
       ```
 
       Tighter than built-in Contributor. Confirm these two action names

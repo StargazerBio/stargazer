@@ -1898,3 +1898,25 @@ def test_main_refuses_to_deploy_a_half_configured_app(monkeypatch):
 
     with pytest.raises(SystemExit, match="GITHUB_APP_PRIVATE_KEY"):
         main()
+
+
+def test_launch_status_queries_configured_domain(secret_env, client, monkeypatch):
+    """Status discovery and re-fetch both use the deploy's domain."""
+    seen = []
+
+    async def fake_list(project, domain="development", limit=500):
+        seen.append(("list", domain))
+        return [SimpleNamespace(name="nb-assets-edit")]
+
+    class _Get:
+        async def aio(self, name, project, domain):
+            seen.append(("get", domain))
+            return _FakeApp(True, "http://nb.example")
+
+    monkeypatch.setattr("app.admin_app.config.FLYTE_DOMAIN", "production")
+    monkeypatch.setattr("app.admin_app.list_project_apps", fake_list)
+    monkeypatch.setattr("app.admin_app.App", SimpleNamespace(get=_Get()))
+
+    _auth(client)
+    client.get("/launch/status", headers={"Accept": "application/json"})
+    assert seen == [("list", "production"), ("get", "production")]

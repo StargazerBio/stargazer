@@ -192,9 +192,22 @@ FastAPI's lifespan calls `init()` once at startup so subsequent SDK calls have a
 The admin app and the per-notebook pods share a strict split:
 
 - `app_env.image` is Flyte-built via `with_uv_project` — the admin is small Python with no heavy deps, and the Flyte builder is the natural fit.
-- Per-notebook envs use the **`notebook-app`** image, defined programmatically as `notebook_app_img_recipe` in `app/per_notebook.py` (proxy, launch script, bioconda CLIs, Claude Code, SDK source at `/stargazer`). The admin pod references it by a stable tag via `Image.from_base(NOTEBOOK_IMAGE_URI)` so it never tries to (re)build the image itself — the admin pod has no Docker daemon or project source layout. (The `note` target in the project `Dockerfile` — `stargazer-note` — is for local `docker run` exploration only and is *not* the hosted image.)
+- Per-notebook envs use the **`notebook-app`** image, defined programmatically as `notebook_app_img_recipe` in `app/per_notebook.py` (proxy, launch script, bioconda CLIs, Claude Code, SDK source at `/stargazer`). The admin pod references the exact build via `Image.from_base(config.NOTEBOOK_IMAGE)` so it never tries to (re)build the image itself — the admin pod has no Docker daemon or project source layout. (The `note` target in the project `Dockerfile` — `stargazer-note` — is for local `docker run` exploration only and is *not* the hosted image.)
 
-The admin deploy entrypoint (`python -m app.admin_app` / `stargazer-app`) runs `flyte.build` on the recipe and retags the result as `notebook-app:latest` in `STARGAZER_REGISTRY` before calling `flyte.serve(app_env)`, so the image is always pullable when a user's `/launch` click first spawns a per-notebook pod. The `:latest` tag is load-bearing — it flips Kubernetes to `imagePullPolicy: Always` so pods pick up new proxy/launch code after a redeploy.
+The admin deploy entrypoint (`python -m app.admin_app` / `stargazer-app`) runs `flyte.build` on the recipe (`_build_notebook_image`) and bakes the returned content-hashed URI into the admin pod as `STARGAZER_NOTEBOOK_IMAGE` before calling `flyte.serve(app_env)`. Every per-notebook pod therefore runs exactly the build that shipped with its admin: no mutable tag, no `docker buildx` retag, and no chance of a node serving a stale cached `:latest`. A per-notebook pod picks up new proxy/launch code on its next re-serve after a redeploy (the dashboard's Open re-serves).
+
+## Deploy targets (devbox vs union)
+
+`STARGAZER_TARGET` (`devbox` default, or `union`) is the one switch between the local devbox and the hosted Union tenant. `stargazer.config` validates it (a typo is an import error, not a silent devbox), and forwards it, plus any explicit `STARGAZER_REGISTRY`, into every pod via `STARGAZER_ENV_VARS`, so in-pod builds resolve images the same way the deployer does.
+
+| Setting | devbox | union |
+|---|---|---|
+| Deployer's Flyte config (`app.config.FLYTE_CONFIG`) | `.flyte/config.yaml` | `.flyte/union.yaml` (remote builder) |
+| `STARGAZER_REGISTRY` default | `localhost:30000` | unset: the remote builder pushes to Union's registry |
+| `SECURE_COOKIES` default | off (plain HTTP) | on (TLS) |
+| Storage port-forward at deploy | yes | never (kubectl may point anywhere) |
+
+`FLYTE_DOMAIN` (default `development`) is independent of the target: it's where the admin serves and looks up every per-notebook app, so a prod deploy sets `FLYTE_DOMAIN=production`. Both `.flyte/` files are gitignored; create `union.yaml` with `flyte create config --endpoint dns:///<tenant> --image-builder remote -o .flyte/union.yaml`.
 
 ## Known Gaps
 
