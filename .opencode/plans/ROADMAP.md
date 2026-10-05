@@ -16,7 +16,7 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    unaffected because each task gets its own pod (inferred, not checked).
    Repro: `.claude/skills/verify-stargazer/features/scrna-pipeline.md`.
    Placed at the top as a data-correctness bug. Reorder as needed.
-- **Union production deploy** (tenant: `stargazerbio.hosted.unionai.cloud`).
+- **Union production deploy** (tenant: `stargazerbio.us-west-2.unionai.cloud`).
    Done in PRs: per-pod session keys (#2), the `STARGAZER_TARGET`
    devbox/union switch, a configurable domain, and a fixed per-deploy
    notebook image (#3). Remaining:
