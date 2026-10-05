@@ -9,6 +9,7 @@ is injected per test and signed session cookies are minted with the real
 
 from types import SimpleNamespace
 
+import flyte.app
 import httpx
 import pytest
 from fastapi.testclient import TestClient
@@ -16,6 +17,7 @@ from fastapi.testclient import TestClient
 from app.admin_app import (
     _SECRET_NAMES,
     _dashboard_context,
+    _notebook_slug,
     _partial_app_creds,
     _workspace_tiles,
     asgi_app,
@@ -1892,3 +1894,19 @@ def test_main_refuses_to_deploy_a_half_configured_app(monkeypatch):
 
     with pytest.raises(SystemExit, match="GITHUB_APP_PRIVATE_KEY"):
         main()
+
+
+@pytest.mark.parametrize(
+    ("name", "slug"),
+    [("pr_verify", "pr-verify"), ("QC v1.2", "qc-v1-2"), ("a__b..c", "a-b-c")],
+)
+def test_created_notebook_slug_is_a_launchable_app_name(name, slug):
+    """Create's slug must survive Flyte's app-name rules, or the notebook can't launch.
+
+    The slug becomes the pod name `nb-{slug}-{mode}`, which allows only
+    `[a-z0-9-]`; `_` and `.` used to pass through and 500 every launch.
+    """
+    assert _notebook_slug(name) == slug
+    # Flyte validates the name on construction, exactly as `/launch` does.
+    env = flyte.app.AppEnvironment(name=f"nb-{_notebook_slug(name)}-edit", image="img")
+    assert env.name == f"nb-{slug}-edit"
