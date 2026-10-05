@@ -486,7 +486,13 @@ def test_app_install_callback_without_session_redirects_home(secret_env, client)
 
 
 def _patch_oauth(monkeypatch):
-    """Stub the OAuth handshake so /auth/callback reaches the fork lookup."""
+    """Stub the OAuth handshake so /auth/callback reaches the fork lookup.
+
+    The callback reads the OAuth App credentials before exchanging the code, so
+    placeholders are set here; otherwise these tests depend on the shell.
+    """
+    monkeypatch.setenv("GITHUB_CLIENT_ID", "test-client-id")
+    monkeypatch.setenv("GITHUB_CLIENT_SECRET", "test-client-secret")
 
     async def fake_exchange(**_kw):
         return "gho_token"

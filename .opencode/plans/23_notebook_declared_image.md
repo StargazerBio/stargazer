@@ -213,8 +213,8 @@ the user.
       polls it, so this is a new status value plus a tile treatment
       ("Building environment…"), not new plumbing.
 - [ ] Decide snapshot behavior: pin the image URI recorded at snapshot time
-      (correct for a frozen record, and a real step toward roadmap item 16's
-      bit-for-bit goal) versus re-resolving from source. Pinning is the
+      (correct for a frozen record, and a real step toward the roadmap's
+      bit-for-bit snapshot reproducibility goal) versus re-resolving from source. Pinning is the
       recommendation.
 
 Note that the `:latest` mutable-tag trick in `per_notebook.py` exists only
