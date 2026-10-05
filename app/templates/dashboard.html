@@ -275,7 +275,7 @@
         open.target = "_blank";
         open.rel = "noopener";
         // A `fresh` URL just came back from /launch, so its pod is serving with
-        // the admin's *current* SESSION_SECRET and will accept the handoff
+        // a key derived from the admin's *current* SESSION_SECRET and will accept the handoff
         // token — a direct link is safe. A hydrated URL (from /launch/status on
         // load) can point at a pod that's scaled to zero or stale: baked with a
         // pre-redeploy secret/image, it would reject the current session's token
@@ -336,8 +336,8 @@
     }
 
     // Re-open a hydrated (possibly scaled-to-zero or stale) notebook: re-serve
-    // it through /launch so the pod is reconciled to the current spec — current
-    // SESSION_SECRET and `:latest` image — then point the pre-opened tab at the
+    // it through /launch so the pod is reconciled to the current spec — a pod key
+    // from the current SESSION_SECRET and the `:latest` image — then point the pre-opened tab at the
     // fresh handoff URL once the pod is ready. `win` is opened synchronously by
     // the caller to survive the awaits without popup-blocking, shows a "starting"
     // placeholder while the pod comes up, and is navigated on success / closed on

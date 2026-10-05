@@ -194,7 +194,7 @@ def per_notebook_env(
     notebook_path: str,
     fork_full_name: str,
     pod_capability: str,
-    session_secret: str,
+    pod_key: str,
     admin_url: str,
     resources: NotebookResources | None = None,
 ) -> flyte.app.AppEnvironment:
@@ -214,9 +214,10 @@ def per_notebook_env(
     push time the pod presents it to the admin's `/workspace/pod-token`
     endpoint, which mints a fresh, fork-scoped, ~1h installation token — so the
     broad token never reaches code the user controls and nothing durable lands
-    in `.git/config`. `session_secret` keys the proxy's cookie validation so
-    authenticated browser sessions are accepted while drive-by requests get
-    401s. `admin_url` is the admin app's public base URL; the proxy's
+    in `.git/config`. `pod_key` (from `app.session.pod_key`) keys the proxy's
+    pass check. It is derived per pod because notebook code can read this env:
+    the master `SESSION_SECRET` must never be here, or any user could forge an
+    admin session for anyone. `admin_url` is the admin app's public base URL; the proxy's
     `/__sg__/dashboard` route 302s here, and the pod calls it back for tokens.
 
     `resources` is the notebook's declared `[tool.stargazer]` spec, honored
@@ -258,7 +259,7 @@ def per_notebook_env(
             "FORK_FULL_NAME": fork_full_name,
             "FORK_OWNER": fork_full_name.split("/", 1)[0],
             "SG_POD_TOKEN": pod_capability,
-            "SESSION_SECRET": session_secret,
+            "SG_POD_KEY": pod_key,
             "STARGAZER_ADMIN_URL": admin_url,
             # Propagate the cookie-Secure policy so the proxy sets the session
             # cookie identically to the admin (off on devbox/http, on under TLS).

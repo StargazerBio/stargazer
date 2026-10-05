@@ -3,9 +3,12 @@
 
 Stores minimal user state in an **encrypted, authenticated** cookie using
 Fernet (AES-CBC + HMAC) keyed off `SESSION_SECRET`. No server-side session
-store — the cookie is the session. Both the admin app and the per-user
-notebook proxy validate the same cookie (the proxy mirrors `_fernet`), so a
-single sign-in carries across every page a user visits.
+store — the cookie is the session, and only the admin app reads it.
+
+Notebook pods never see `SESSION_SECRET` or the admin cookie. Each pod gets a
+`pod_key` derived from the master secret and its own identity, and the admin
+hands browsers a `create_pod_pass` pass encrypted under that key. The proxy
+mirrors `_fernet` to check it, so a pass opens exactly one pod.
 
 Encryption (not just signing) means the cookie's contents — github id /
 username, and the OAuth token during the brief login→opt-in window — are
@@ -18,6 +21,7 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 
 import base64
 import hashlib
+import hmac
 import json
 from dataclasses import asdict, dataclass
 
@@ -160,3 +164,39 @@ def session_from_request(request: Request, secret: str) -> SessionData | None:
     if not cookie:
         return None
     return read_session_cookie(cookie, secret)
+
+
+def pod_key(secret: str, project: str, app_name: str) -> str:
+    """Derive the cookie key for one notebook pod from `SESSION_SECRET`.
+
+    A notebook pod runs user code that can read its own environment, so it must
+    never hold `SESSION_SECRET` — with it, a user could forge an admin session
+    for anyone. Instead each pod gets an HMAC of the master secret over its
+    `(project, app_name)` identity. Leaking it only lets the holder mint passes
+    into that one pod, which its owner can already open. The admin re-derives
+    the same key whenever it hands a browser (or itself) into the pod.
+    """
+    message = f"sg-pod-key|{project}|{app_name}".encode()
+    return hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
+
+
+def create_pod_pass(key: str, github_username: str) -> str:
+    """Mint a pass into one notebook pod, encrypted under that pod's `pod_key`.
+
+    Carries only the username — never the admin session's contents (fork name,
+    OAuth token) — since the pod is user-controlled. The proxy sets it as the
+    pod's host-only cookie and checks it on every request.
+    """
+    raw = json.dumps({"github_username": github_username}).encode("utf-8")
+    return _fernet(key).encrypt(raw).decode("ascii")
+
+
+def read_pod_pass(
+    pod_pass: str, key: str, max_age: int = SESSION_MAX_AGE
+) -> str | None:
+    """Return the pass's username, or None if it wasn't minted under `key`."""
+    try:
+        raw = _fernet(key).decrypt(pod_pass.encode("ascii"), ttl=max_age)
+        return json.loads(raw)["github_username"]
+    except (InvalidToken, ValueError, TypeError, KeyError):
+        return None

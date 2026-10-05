@@ -12,7 +12,7 @@ def _env(**overrides):
         "notebook_path": "/workspace/x.py",
         "fork_full_name": "octocat/stargazer",
         "pod_capability": "signed-cap",
-        "session_secret": "sek",
+        "pod_key": "per-pod-key",
         "admin_url": "http://admin",
     }
     kwargs.update(overrides)
@@ -41,3 +41,10 @@ def test_pod_gets_capability_not_github_token():
     # The fork identity + admin callback URL the launch script needs are present.
     assert env.env_vars["FORK_FULL_NAME"] == "octocat/stargazer"
     assert env.env_vars["STARGAZER_ADMIN_URL"] == "http://admin"
+
+
+def test_pod_gets_its_own_key_not_the_session_secret():
+    """User code in the pod can read its env, so the master secret must not be there."""
+    env = _env()
+    assert "SESSION_SECRET" not in env.env_vars
+    assert env.env_vars["SG_POD_KEY"] == "per-pod-key"

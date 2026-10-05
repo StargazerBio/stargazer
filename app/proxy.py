@@ -2,9 +2,9 @@
 ### Cookie-validating reverse proxy in front of marimo, with workspace endpoints.
 
 Standalone ASGI app baked into the `notebook-app` image. Listens on
-the per-notebook pod's public port (8080), validates the same signed
-session cookie the admin app issues (HMAC-keyed by `SESSION_SECRET`),
-then forwards HTTP + websocket traffic to marimo on `127.0.0.1:8081`.
+the per-notebook pod's public port (8080), validates the pod pass the admin
+app issues (encrypted under this pod's own `SG_POD_KEY`, never the admin's
+`SESSION_SECRET`), then forwards HTTP + websocket traffic to marimo on `127.0.0.1:8081`.
 
 It also injects a Quake-style dropdown terminal into marimo's HTML: every
 `text/html` response gets an xterm.js overlay (loaded from CDN) spliced in
@@ -36,11 +36,12 @@ Five reserved paths the proxy handles itself instead of forwarding:
   idle-down, and exposed to the admin app as a "save" affordance.
 - `WS   /__sg__/term` — cookie-gated PTY websocket. Spawns a login `bash`
   via `pty.fork()` and bridges it to the injected xterm.js overlay. The
-  child's environment is scrubbed of auth-critical secrets (`SESSION_SECRET`,
-  `SG_POD_TOKEN`, anything ending `_SECRET`/`_TOKEN`/`_JWT`/`_KEY`/`_PASSWORD`)
-  so an interactive shell in the pod can't read the shared cookie key and
-  forge sessions for other users. The shell still has full run of the pod's
-  own ephemeral `/workspace`.
+  child's environment is scrubbed of auth-critical secrets (`SG_POD_KEY`,
+  `SG_POD_TOKEN`, anything ending `_SECRET`/`_TOKEN`/`_JWT`/`_KEY`/`_PASSWORD`).
+  That's tidiness, not the security boundary: notebook code and the shell can
+  still read the proxy's env via `/proc`, which is why the pod only ever holds
+  credentials scoped to itself. The shell has full run of the pod's own
+  ephemeral `/workspace`.
 
 Self-contained on purpose: the notebook image installs only `fastapi`,
 `uvicorn`, `itsdangerous`, `httpx`, `websockets`, `cryptography` at system
@@ -86,11 +87,11 @@ WORKSPACE_ROOT = Path("/workspace")
 WORKSPACE_NOTEBOOK_DIR = WORKSPACE_ROOT / "src/stargazer/notebooks/workspace"
 WORKSPACE_REL = "src/stargazer/notebooks/workspace"
 
-# Env keys never handed to the interactive shell. SESSION_SECRET is the big one:
-# it's shared across pods and keys cookie validation, so a shell that could
-# `echo` it could forge sessions for any user. The suffix list catches future
-# secret-shaped vars without an explicit entry per name.
-_TERM_SECRET_KEYS = {"SESSION_SECRET", "SG_POD_TOKEN", "PINATA_JWT"}
+# Env keys never handed to the interactive shell. Every credential in this pod is
+# scoped to the pod itself (the master SESSION_SECRET never reaches it), so this
+# keeps them out of casual `env` output rather than guarding a shared secret. The
+# suffix list catches future secret-shaped vars without an explicit entry per name.
+_TERM_SECRET_KEYS = {"SG_POD_KEY", "SG_POD_TOKEN", "PINATA_JWT"}
 _TERM_SECRET_SUFFIXES = ("_SECRET", "_TOKEN", "_JWT", "_KEY", "_PASSWORD")
 
 # Quake-style dropdown terminal markup, spliced into every marimo HTML page
@@ -255,10 +256,10 @@ asgi_app = FastAPI(
 
 
 def _fernet(secret: str) -> Fernet:
-    """Derive the session-cookie cipher from `SESSION_SECRET`.
+    """Derive the pod-pass cipher from `SG_POD_KEY`.
 
     Mirrors `app.session._fernet` exactly (sha256 → urlsafe-base64 key) so this
-    standalone proxy can decrypt the admin-issued cookie without importing the
+    standalone proxy can decrypt the admin-minted pass without importing the
     app package. Keep the two derivations in lockstep.
     """
     key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
@@ -282,13 +283,14 @@ def _cookie_secure() -> bool:
 
 
 def _cookie_is_valid(cookie_value: str | None) -> bool:
-    """Verify the encrypted session cookie against `SESSION_SECRET`.
+    """Verify the pod pass against this pod's `SG_POD_KEY`.
 
-    Returns False (denying access) if the secret env var is missing, the
-    cookie is absent, or it does not decrypt/authenticate within the max age
-    window. Fernet authenticates on decrypt, so a forged cookie fails here.
+    Returns False (denying access) if the key env var is missing, the cookie
+    is absent, or it does not decrypt/authenticate within the max age window.
+    Fernet authenticates on decrypt, so a forged pass — or the admin's own
+    session cookie, or a pass for another user's pod — fails here.
     """
-    secret = os.environ.get("SESSION_SECRET")
+    secret = os.environ.get("SG_POD_KEY")
     if not secret or not cookie_value:
         return False
     try:
@@ -406,9 +408,8 @@ def _shell_env() -> dict[str, str]:
     """Pod env with auth-critical secrets stripped, for the interactive shell.
 
     Drops every key in `_TERM_SECRET_KEYS` plus anything ending in a
-    secret-shaped suffix, so a shell opened in the pod can't read the shared
-    `SESSION_SECRET` (and thus can't forge other users' session cookies) or the
-    fork capability. Sets a sane `TERM` so curses apps render.
+    secret-shaped suffix, so the pod key and fork capability stay out of casual
+    `env` output. Not a boundary (see the module docstring). Sets a sane `TERM` so curses apps render.
     """
     env = {
         k: v

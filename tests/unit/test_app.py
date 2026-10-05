@@ -281,7 +281,7 @@ async def test_resolve_workspace_files_uses_installation_token(monkeypatch):
         access_token="oauth_tok",
         app_installed=True,
     )
-    files = await admin_app._resolve_workspace_files(session, cookie_value="")
+    files = await admin_app._resolve_workspace_files(session)
 
     assert files == ["my_analysis.py"]
     assert used == {"fork": "octocat/stargazer", "token": INSTALL_TOKEN}

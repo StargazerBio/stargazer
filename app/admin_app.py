@@ -111,7 +111,9 @@ from app.session import (
     SESSION_COOKIE,
     SESSION_MAX_AGE,
     SessionData,
+    create_pod_pass,
     create_session_cookie,
+    pod_key,
     read_pod_capability,
     session_from_request,
     sign_pod_capability,
@@ -352,8 +354,20 @@ def _session_redirect(
 # ---------------------------------------------------------------------------
 
 
+def _pod_pass(session: SessionData, slug: str, mode: str) -> str:
+    """A pass into the user's `nb-{slug}-{mode}` pod, under that pod's own key.
+
+    Used everywhere the admin hands a browser (or itself) into a notebook pod.
+    The admin session cookie never goes to a pod: the pod is user-controlled,
+    and a pass only opens the one pod it was minted for.
+    """
+    project = sanitize_project_id(session.github_username)
+    key = pod_key(_env("SESSION_SECRET"), project, f"nb-{slug}-{mode}")
+    return create_pod_pass(key, session.github_username)
+
+
 async def _list_workspace_from_pods(
-    session_cookie: str, endpoints: dict[tuple[str, str], str]
+    session: SessionData, endpoints: dict[tuple[str, str], str]
 ) -> list[str] | None:
     """Ask the previously-launched per-notebook pods for a workspace listing.
 
@@ -364,13 +378,13 @@ async def _list_workspace_from_pods(
     in-cluster DNS.
     """
 
-    async def _probe(endpoint: str) -> list[str] | None:
+    async def _probe(slug: str, mode: str, endpoint: str) -> list[str] | None:
         """One pod's listing, or None on any failure."""
         url = f"{endpoint.rstrip('/')}/__sg__/workspace/list"
         try:
             resp = await http_client.client().get(
                 url,
-                cookies={SESSION_COOKIE: session_cookie},
+                cookies={SESSION_COOKIE: _pod_pass(session, slug, mode)},
                 timeout=2.0,
                 follow_redirects=True,
             )
@@ -380,16 +394,16 @@ async def _list_workspace_from_pods(
             pass
         return None
 
-    results = await asyncio.gather(*(_probe(e) for e in endpoints.values()))
+    results = await asyncio.gather(
+        *(_probe(slug, mode, e) for (slug, mode), e in endpoints.items())
+    )
     return next((files for files in results if files is not None), None)
 
 
-async def _resolve_workspace_files(
-    session: SessionData, cookie_value: str
-) -> list[str]:
+async def _resolve_workspace_files(session: SessionData) -> list[str]:
     """Return the user's workspace files, preferring a live pod over GitHub."""
     known = _launched.get(session.github_username, {})
-    from_pod = await _list_workspace_from_pods(cookie_value, known)
+    from_pod = await _list_workspace_from_pods(session, known)
     if from_pod is not None:
         return from_pod
     if not session.workspace_enabled:
@@ -607,10 +621,9 @@ async def landing(request: Request):
     files: list[str] = []
     snapshots: list[str] = []
     if session.workspace_enabled:
-        cookie_value = request.cookies.get(SESSION_COOKIE, "")
         # Independent listings (pods/GitHub vs GitHub) — resolve concurrently.
         files, snapshots = await asyncio.gather(
-            _resolve_workspace_files(session, cookie_value),
+            _resolve_workspace_files(session),
             _resolve_snapshot_files(session),
         )
     return templates.TemplateResponse(
@@ -1270,7 +1283,7 @@ async def launch(
         pod_capability=sign_pod_capability(
             session.fork_full_name, _env("SESSION_SECRET")
         ),
-        session_secret=_env("SESSION_SECRET"),
+        pod_key=pod_key(_env("SESSION_SECRET"), project, f"nb-{slug}-{mode}"),
         admin_url=admin_url,
         resources=resources,
     )
@@ -1307,13 +1320,12 @@ async def launch(
             )
     _launched[session.github_username][(slug, mode)] = endpoint
 
-    # Hand off the signed session as a one-shot query param. The admin and the
+    # Hand off a pod pass as a one-shot query param. The admin and the
     # per-notebook live on sibling subdomains and intentionally use host-only
     # cookies (no shared `Domain=` parent) so a notebook can't read the admin's
     # cookie. The proxy validates `sg_launch` on first hit, sets its own
     # host-only cookie, and 302s back to the clean URL.
-    launch_token = request.cookies.get(SESSION_COOKIE, "")
-    handoff = f"{endpoint}?sg_launch={launch_token}"
+    handoff = f"{endpoint}?sg_launch={_pod_pass(session, slug, mode)}"
 
     # AJAX clients get the URL as JSON immediately so the dashboard tile can
     # start polling `/launch/status` for readiness and swap the spinner for
@@ -1370,7 +1382,6 @@ async def launch_status(request: Request):
     if session is None:
         return JSONResponse({"error": "not authenticated"}, status_code=401)
     project = sanitize_project_id(session.github_username)
-    cookie_value = request.cookies.get(SESSION_COOKIE, "")
     try:
         apps = await list_project_apps(project, domain="development")
     except Exception as exc:
@@ -1387,7 +1398,7 @@ async def launch_status(request: Request):
         except Exception:
             return None  # vanished between list and get
         if app.is_active() and app.endpoint:
-            # Hand off the session as a one-shot `sg_launch` token, same as
+            # Hand off a pod pass as a one-shot `sg_launch` token, same as
             # `/launch`. The notebook lives on a sibling subdomain with a
             # host-only cookie the admin can't set directly, so a bare endpoint
             # URL 401s unless the browser already holds that subdomain's cookie
@@ -1396,7 +1407,7 @@ async def launch_status(request: Request):
             return {
                 "slug": slug,
                 "mode": mode,
-                "url": f"{app.endpoint}?sg_launch={cookie_value}",
+                "url": f"{app.endpoint}?sg_launch={_pod_pass(session, slug, mode)}",
             }
         return None
 
@@ -1414,7 +1425,7 @@ async def workspace_save(
     Per-notebook (not global) because each pod owns its own `/workspace`
     clone — syncing one pod can't clobber another's edits. The admin resolves
     that pod's `App.endpoint` and calls its `/__sg__/workspace/sync`
-    (server-to-server, with the session cookie).
+    (server-to-server, with a pass for that pod — never the admin cookie).
     """
     session = _get_session(request)
     if session is None:
@@ -1434,12 +1445,11 @@ async def workspace_save(
     if not app.is_active() or not app.endpoint:
         return JSONResponse({"error": "notebook not running"}, status_code=409)
 
-    cookie = request.cookies.get(SESSION_COOKIE, "")
     sync_url = f"{app.endpoint.rstrip('/')}/__sg__/workspace/sync"
     try:
         resp = await http_client.client().post(
             sync_url,
-            cookies={SESSION_COOKIE: cookie},
+            cookies={SESSION_COOKIE: _pod_pass(session, slug, mode)},
             timeout=20.0,
             follow_redirects=True,
         )
