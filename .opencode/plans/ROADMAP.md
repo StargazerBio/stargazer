@@ -16,20 +16,43 @@ Upcoming work is ordered — the **next feature is at the top**. Move items into
    unaffected because each task gets its own pod (inferred, not checked).
    Repro: `.claude/skills/verify-stargazer/features/scrna-pipeline.md`.
    Placed at the top as a data-correctness bug. Reorder as needed.
-1. **Union console handoff (per-user project access).** Users click through
+1. **Union production deploy** (tenant: `stargazerbio.hosted.unionai.cloud`).
+   Done in PRs: per-pod session keys (#2), the `STARGAZER_TARGET`
+   devbox/union switch, a configurable domain, and a fixed per-deploy
+   notebook image (#3). Remaining:
+   - **Union-native app secrets.** The admin's OAuth, GitHub App and
+     Pinata secrets are baked into `env_vars`, so anyone who can view the
+     app spec sees them. On Union, move to `flyte create secret` plus
+     `secrets=[flyte.Secret(...)]` on the AppEnvironment. Keep the devbox
+     bake, where app secrets are dropped. First confirm that Union injects
+     app secrets at all, since its docs only cover tasks.
+   - **`flyte.deploy` with commit-SHA versions** in place of `flyte.serve`
+     for the admin app, run from CI with a `FLYTE_API_KEY`.
+   - **Pin the admin to one replica** (`Scaling(replicas=(1, 1))`).
+     `_launched` is in-memory, and scaling to zero puts a cold start on
+     login. Set `scaledown_after` on notebook pods deliberately, since
+     scaling down is what triggers the workspace save.
+   - **Resource ceilings.** Notebook resources are honored as-authored. Cap
+     them with `flyte edit settings --domain production` (`task_resource.max.*`),
+     after checking that the cap applies to apps and not only tasks.
+   - **Custom domain** for the admin (`flyte.app.Domain`), plus updated
+     callback URLs on both GitHub OAuth Apps and the GitHub App.
+   - **Admin identity.** A dedicated API key with project-create (and,
+     for item 2, policy/assignment) permissions.
+2. **Union console handoff (per-user project access).** Users click through
    from the dashboard to the Union console to view executions in their own
    project. `provision_user()` creates the per-user project but grants no
    role binding to any Union identity, so the console would show them
    nothing. Adds role/policy/assignment provisioning via
    `flyteplugins.union.remote`, plus the GitHub OAuth App that backs Union's
    IdP. Also folds in **collapsing the two GitHub OAuth Apps into one** by
-   putting the dashboard behind `requires_auth=True` — which pulls item 3
+   putting the dashboard behind `requires_auth=True` — which pulls item 4
    (identity-gated auth) forward, and is gated on what identity Union's
    serving layer forwards to an app. Note: adds two control-plane
-   round-trips to the inline OAuth callback, which makes item 4 (async
+   round-trips to the inline OAuth callback, which makes item 5 (async
    provisioning) more pressing.
    [`24_union_console_handoff.md`](./24_union_console_handoff.md)
-2. **Workspace state on object storage.** Saving a notebook currently
+3. **Workspace state on object storage.** Saving a notebook currently
    requires forking the upstream repo plus a GitHub App install — a
    workaround for missing persistent volumes, not a product decision.
    Persist workspace and snapshot notebooks to the blob store instead
@@ -38,29 +61,29 @@ Upcoming work is ordered — the **next feature is at the top**. Move items into
    an opt-in path for *graduating* a notebook upstream. Collapses the
    `SG_POD_TOKEN` / `GIT_ASKPASS` apparatus.
    [`25_workspace_state_object_storage.md`](./25_workspace_state_object_storage.md)
-3. **Identity-gated production auth.** Per-notebook envs currently set `requires_auth=False` — a devbox concession where the proxy's session-cookie check is the only gate. Production needs auth gated by the user's identity. (Was an Open Issue in `docs/architecture/app.md`.)
-4. **Async OAuth provisioning.** `provision_user()` runs inline in the OAuth callback, so a slow provision can outlive the browser's redirect window. Move to background provisioning + status polling. (Was an Open Issue in `docs/architecture/app.md`.)
-5. **In-notebook local-vs-remote toggle UI.** Formalize the dispatch choice as a reusable `mo.ui` element (radio / segmented control) so individual cells don't need to hardcode `flyte.with_runcontext(mode="local").run` vs `flyte.run`.
-6. **Marimo AI features investigation.** Determine what marimo's native AI surface offers (`mo.ai.chat` / similar), whether tool-calling is supported, and how to wire the registry catalog in.
-7. **Publish `stargazer` to PyPI.** Once the package is published, notebook PEP 723 headers can pin a version (`stargazer == X.Y.Z`) instead of `[tool.uv.sources] stargazer = { path = "/stargazer", editable = true }`. Unlocks fully reproducible community notebooks without baking the source path.
-8. **Upload public assets for quickstart workflow to Pinata.**
-9. **Update README with CLI quickstart and bump to alpha status.**
-10. **Interactive workflow for generating a DB from existing data in `STARGAZER_LOCAL`.**
-11. **Condensed context files for production use (separate from dev).**
-12. **Recurring docs-sync job** so architecture docs never go stale against the code.
-13. **Agentic PR process** for end-to-end automated review/merge of trusted contributors.
-14. **More robust logging.**
+4. **Identity-gated production auth.** Per-notebook envs currently set `requires_auth=False` — a devbox concession where the proxy's session-cookie check is the only gate. Production needs auth gated by the user's identity. (Was an Open Issue in `docs/architecture/app.md`.)
+5. **Async OAuth provisioning.** `provision_user()` runs inline in the OAuth callback, so a slow provision can outlive the browser's redirect window. Move to background provisioning + status polling. (Was an Open Issue in `docs/architecture/app.md`.)
+6. **In-notebook local-vs-remote toggle UI.** Formalize the dispatch choice as a reusable `mo.ui` element (radio / segmented control) so individual cells don't need to hardcode `flyte.with_runcontext(mode="local").run` vs `flyte.run`.
+7. **Marimo AI features investigation.** Determine what marimo's native AI surface offers (`mo.ai.chat` / similar), whether tool-calling is supported, and how to wire the registry catalog in.
+8. **Publish `stargazer` to PyPI.** Once the package is published, notebook PEP 723 headers can pin a version (`stargazer == X.Y.Z`) instead of `[tool.uv.sources] stargazer = { path = "/stargazer", editable = true }`. Unlocks fully reproducible community notebooks without baking the source path.
+9. **Upload public assets for quickstart workflow to Pinata.**
+10. **Update README with CLI quickstart and bump to alpha status.**
+11. **Interactive workflow for generating a DB from existing data in `STARGAZER_LOCAL`.**
+12. **Condensed context files for production use (separate from dev).**
+13. **Recurring docs-sync job** so architecture docs never go stale against the code.
+14. **Agentic PR process** for end-to-end automated review/merge of trusted contributors.
+15. **More robust logging.**
     - Per-task tags so logs can be demultiplexed.
     - One logfile per workflow execution.
     - Stop flushing to stdout/err to keep context windows clean.
     - Env vars for log level and a bool to include actual tool-call output.
-15. **Data-aware caching.** Flyte's input-hash caching is solid but breaks down for keyword/metadata-based workflows — need a higher-level cache keyed on semantic inputs.
-16. **`stargazer promote-task` CLI.** The mechanical step of task promotion — extract the cell function via `ast` (marimo files are valid Python), drop it into the target `src/stargazer/tasks/` module with decorator and types intact, generate a skeleton test, open a PR via the server-side GitHub flow. Waiting for real usage patterns to inform the exact UX. (Was a Roadmap note in `docs/architecture/notebook.md`.)
-17. **In-notebook MCP integration.** marimo does not yet support custom MCP server configuration; when that ships upstream, the stargazer MCP server becomes a one-line config addition to the chat panel, giving the in-notebook assistant direct access to `list_tasks`, `run_task`, `query_files`, etc. (Was a Future note in `docs/architecture/notebook.md`.)
-18. **Bit-for-bit snapshot reproducibility.** Snapshots currently freeze the notebook *source* only; add image-digest pinning and a CID input/output manifest so a snapshot re-run is bit-for-bit. (Was a Deferred note in `docs/architecture/app.md`.)
-19. **Cohesive `marimo.toml` integration.** A root `marimo.toml` exists with `[ai] rules` carrying stargazer authoring conventions, but it's an ad-hoc artifact — no story for how it's baked into the notebook image, kept in sync with the conventions in AGENTS.md/docs, or extended (completions, future MCP wiring, per-notebook overrides). Design one deliberate marimo-config surface and remove the duplication. Subsumes the marimo-AI angle of items 6 and 17.
+16. **Data-aware caching.** Flyte's input-hash caching is solid but breaks down for keyword/metadata-based workflows — need a higher-level cache keyed on semantic inputs.
+17. **`stargazer promote-task` CLI.** The mechanical step of task promotion — extract the cell function via `ast` (marimo files are valid Python), drop it into the target `src/stargazer/tasks/` module with decorator and types intact, generate a skeleton test, open a PR via the server-side GitHub flow. Waiting for real usage patterns to inform the exact UX. (Was a Roadmap note in `docs/architecture/notebook.md`.)
+18. **In-notebook MCP integration.** marimo does not yet support custom MCP server configuration; when that ships upstream, the stargazer MCP server becomes a one-line config addition to the chat panel, giving the in-notebook assistant direct access to `list_tasks`, `run_task`, `query_files`, etc. (Was a Future note in `docs/architecture/notebook.md`.)
+19. **Bit-for-bit snapshot reproducibility.** Snapshots currently freeze the notebook *source* only; add image-digest pinning and a CID input/output manifest so a snapshot re-run is bit-for-bit. (Was a Deferred note in `docs/architecture/app.md`.)
+20. **Cohesive `marimo.toml` integration.** A root `marimo.toml` exists with `[ai] rules` carrying stargazer authoring conventions, but it's an ad-hoc artifact — no story for how it's baked into the notebook image, kept in sync with the conventions in AGENTS.md/docs, or extended (completions, future MCP wiring, per-notebook overrides). Design one deliberate marimo-config surface and remove the duplication. Subsumes the marimo-AI angle of items 7 and 18.
 
-20. **TUS resumable uploads — browser half remaining.** Pinata's plain
+21. **TUS resumable uploads — browser half remaining.** Pinata's plain
     multipart POST is hard-capped at 100MB; larger files need the TUS
     resumable endpoint (per-file ceiling then 10 GiB, chunks <50MB).
     - ✅ **SDK/task outputs (2026-06-10):** `PinataClient.upload()` now
@@ -81,7 +104,7 @@ Upcoming work is ordered — the **next feature is at the top**. Move items into
       real payoff of TUS (survive a dropped multi-GB upload); deferred until
       a flaky large upload demands it.
 
-21. **Notebook-declared pod image (`main_img`).** A notebook declares the image
+22. **Notebook-declared pod image (`main_img`).** A notebook declares the image
     its own pod runs on as a `flyte.Image` expression in its setup block;
     `/launch` parses it statically, replays it onto the base image, builds it,
     and serves the pod on the result. Replaces the growth curve of the
@@ -98,7 +121,7 @@ Upcoming work is ordered — the **next feature is at the top**. Move items into
 - ✅ Toolchain pinning + lint/SDK catch-up (2026-08-07): ruff pinned to one version across `.pre-commit-config.yaml` and `pyproject.toml` (they had drifted 0.14→0.16, where ruff's default rule set grew 59→413 and the two gates diverged); 322 findings resolved — auto-fixes applied, deliberate patterns declared in `[tool.ruff.lint]` with rationale, the frozen v1 reference snapshot untracked and gitignored. MCP SDK migrated to 2.x (`FastMCP` → `MCPServer`, `mcp.server.fastmcp` → `mcp.server`) and bounded to `<3`; that import had been broken, taking 3 unit tests and a pre-commit hook with it.
 - ✅ GitHub App deploy-credential gate (2026-08-07): a half-exported App credential pair (`GITHUB_APP_ID` without `GITHUB_APP_PRIVATE_KEY`) made Workspace saving read as disabled for every user, silently, for two months. `main()` now refuses to deploy on a partial pair, module import warns, and the previously-silent "no fork found" login path logs. Deploy-secret contract documented in [`app_internals.md`](../reference/architecture/app_internals.md).
 - ✅ App-tier performance & modernization audit (2026-07-06): one pooled HTTP client per process (aiohttp out of the app tier), streaming notebook proxy, `/launch/status` via a single project deployment list, gzip on the admin, single-flight public-asset cache. [`archive/22_app_tier_performance_audit.md`](./archive/22_app_tier_performance_audit.md)
-- ✅ Asset manager dashboard page (2026-06-16): graph + list + upload surface for arbitrary assets, on new `app/assets.py` routes (form schema, list, upload, download) plus `update_metadata` across every storage backend. Strict asset-subtype enforcement was loosened so arbitrary assets are first-class, asset building/checking moved out of the MCP server into the assets module where it belongs, exceptions refactored onto FastAPI's `HTTPException`, and the handrolled graph HTML replaced with vendored cytoscape.js. The browser half of TUS did **not** land — uploads through the page are still capped at `MAX_UPLOAD_BYTES` (100MB), tracked as Upcoming item 18. [`archive/20_asset_manager_page.md`](./archive/20_asset_manager_page.md), [`archive/21_asset_manager_template.md`](./archive/21_asset_manager_template.md)
+- ✅ Asset manager dashboard page (2026-06-16): graph + list + upload surface for arbitrary assets, on new `app/assets.py` routes (form schema, list, upload, download) plus `update_metadata` across every storage backend. Strict asset-subtype enforcement was loosened so arbitrary assets are first-class, asset building/checking moved out of the MCP server into the assets module where it belongs, exceptions refactored onto FastAPI's `HTTPException`, and the handrolled graph HTML replaced with vendored cytoscape.js. The browser half of TUS did **not** land — uploads through the page are still capped at `MAX_UPLOAD_BYTES` (100MB), tracked as Upcoming item 21. [`archive/20_asset_manager_page.md`](./archive/20_asset_manager_page.md), [`archive/21_asset_manager_template.md`](./archive/21_asset_manager_template.md)
 - ✅ Tutorial story tightening (2026-06-09): the tutorial sequence simplified and given one coherent arc. [`archive/19_tighten_tutorial_story.md`](./archive/19_tighten_tutorial_story.md)
 - ✅ GitHub token scope tightening (2026-06-05): the broad OAuth token is now used exactly once — to fork the repo — and then discarded. A dedicated GitHub App, installed when the user enables Workspaces, is scoped to the fork alone and mints short-lived installation tokens for every subsequent op (`app/installation_tokens.py`). The 2026-08-07 deploy-credential gate above is the follow-up to this work. **Carry-over:** the plan's deploy checklist is still unchecked — App Setup URL, credential export, notebook image rebuild, and live expiry/revoke verification all need a real deploy. [`archive/18_tighten_github_token_scope.md`](./archive/18_tighten_github_token_scope.md)
 - ✅ Per-notebook apps + marimo `--sandbox` inline deps (2026-05-20): Edit/Run spawns a per-notebook app from a shared static `note` image, with Python deps inlined via PEP 723 and resolved into a per-notebook sandbox venv at boot; container-local fork clone on launch, push-back on shutdown (Flyte v2 rejects pod templates on AppEnvironments, so there is no per-user PVC). The cookie-validating proxy serves `/__sg__/workspace/list` and `/__sg__/workspace/sync` locally and carries a Ctrl+\` terminal overlay for agentic work in the notebook. [`archive/17_per_notebook_apps.md`](./archive/17_per_notebook_apps.md)
