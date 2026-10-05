@@ -138,7 +138,7 @@ Union's serving layer then gates the endpoint behind Union's own auth, which
 is GitHub-backed once the IdP is wired. Both surfaces sit behind the same
 identity, so the hop to the console carries no second authorization.
 
-This is roadmap item 2 ("Identity-gated production auth") arriving early.
+This is the roadmap's "Identity-gated production auth" arriving early.
 Both app envs are `requires_auth=False` today — `app/admin_app.py:227` and
 `app/per_notebook.py:253` — a devbox concession where the proxy's
 session-cookie check is the only gate. `requires_auth` defaults to `True` in
@@ -294,16 +294,16 @@ calls made, not on a live control plane.
 - [ ] Make the grant re-attempted on subsequent logins, so a transient
       failure self-heals rather than stranding the user permanently.
 
-### Interaction with Roadmap #2
+### Interaction with async OAuth provisioning
 
-`provision_user()` runs **inline in the OAuth callback**, and Roadmap item 2
-already flags that a slow provision can outlive the browser's redirect
+`provision_user()` runs **inline in the OAuth callback**, and the roadmap's
+async OAuth provisioning item already flags that a slow provision can outlive the browser's redirect
 window. This plan adds **two more control-plane round-trips** to that path,
 making the existing problem materially worse.
 
 - [ ] Measure the added latency on a cold signup before shipping.
-- [ ] If it is significant, promote Roadmap #2 (async provisioning + status
-      polling) to a prerequisite rather than a follow-up.
+- [ ] If it is significant, promote async OAuth provisioning (background
+      provisioning + status polling) to a prerequisite rather than a follow-up.
 
 ---
 
