@@ -43,22 +43,9 @@ There is no single host/IP that's reachable from both the laptop and from in-clu
 
 **Cause:** `secrets=[...]` is dropped at the flyte-binary → Knative translation — **not** merely the missing label. Verified by deploying an AppEnvironment with `secrets=[flyte.Secret(...)]` and inspecting the rendered ksvc: `kubectl get ksvc <app> -n flyte -o jsonpath='{.spec.template.metadata.annotations}'` shows only `autoscaling.knative.dev/*` — no secret annotations and no `inject-flyte-secrets` label. The `flyte-binary-webhook` (`failurePolicy: Fail`, `objectSelector matchLabels: inject-flyte-secrets=true`) injects from pod *annotations*, so with neither annotation nor label present **no cluster-side webhook change can rescue it** — there is nothing for the webhook to act on. This is a Flyte App-serving limitation, reproducible on any cluster, not a pure devbox quirk.
 
-**Workaround:** Bake secret values into `env_vars={...}` from the deployer's local shell at deploy time. Example in `app/admin_app.py`:
+**Workaround:** Bake secret values into `env_vars={...}` from the deployer's local shell at deploy time, e.g. `env_vars={"MY_SECRET": os.environ["MY_SECRET"]}`.
 
-```python
-_RUNTIME_SECRETS = {
-    name: os.environ[name] for name in ("PINATA_JWT",) if os.environ.get(name)
-}
-app_env = flyte.app.AppEnvironment(..., env_vars={..., **_RUNTIME_SECRETS})
-```
-
-**The deployer's shell is the only source of these.** Since plan 25 (Union auth, workspace on object storage) the app tier carries a single secret; the GitHub OAuth, GitHub App and session secrets are gone. Keep this table in sync with `app/admin_app.py`; a var that isn't exported is silently omitted:
-
-| Env var | Needed for | If missing |
-| --- | --- | --- |
-| `PINATA_JWT` | `/assets` routes | asset manager renders "not configured" |
-
-Non-secret deploy settings (`STARGAZER_TARGET`, `STARGAZER_WORKSPACE_ROOT`, the image-builder overrides) are listed under Deploy Settings in `.opencode/reference/architecture/app_internals.md`. Note the app tier no longer runs on the devbox at all: it needs Union's login.
+**The app tier bakes no secrets today.** Plan 25 removed the GitHub OAuth, GitHub App and session secrets, and plan 26 stopped baking `PINATA_JWT` into dashboards: a user can read their own dashboard's app spec, so any secret there reaches that user. A secret the app tier needs again has to come from real secret injection, or be one each user may see.
 
 **Trade-off / prod gap:** secret values are stored in the App spec in Flyte's DB. This is the one accepted parity gap in `app/` — revisit when Flyte supports App-pod secret injection (then switch to `secrets=[flyte.Secret(key=…, as_env_var=…)]` and drop the baking).
 

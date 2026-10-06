@@ -4,15 +4,6 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 
 ## Upcoming
 
-- **Per-user dashboards.** Replace the shared admin with one dashboard app
-   per user in their own `u-<subject>` project, provisioned by an
-   admin-run onboarding command (user, project, project-only access grant,
-   dashboard). Union's app gate requires view permission on the app's
-   project, so a shared admin would expose its whole project to every user.
-   It also fixes project creation: the shared admin's in-cluster identity is
-   refused `action_administer_project` on Union, so it can't create a new
-   user's project.
-   [`26_per_user_dashboard.md`](./26_per_user_dashboard.md)
 - **Union production deploy** (tenant: `stargazerbio.us-west-2.unionai.cloud`).
    Done in PRs: per-pod session keys (#2), the `STARGAZER_TARGET`
    devbox/union switch, a configurable domain, and a fixed per-deploy
@@ -43,9 +34,19 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    marimo, but code in a pod could still capture a visiting org member's
    token. Look for a way to have Union drop them for an app, or isolate the
    proxy from notebook code.
-- **User onboarding.** Only `stargazerbio` org members get past the login,
-   and Union doesn't auto-provision users on first sign-in yet. New users
-   need an invite until it does.
+- **Self-serve onboarding.** New users are onboarded by an org admin
+   (`stargazer-users onboard`, which sends Union's invite), since Union
+   doesn't auto-provision users on first sign-in. Unverified: that the
+   subject `User.create` returns is the one the user's first GitHub sign-in
+   arrives with; check with a real second address before onboarding anyone
+   new. If Union adds self-serve sign-up, onboarding could run on first
+   sign-in instead.
+- **Union injects third-party analytics into app pages.** Every page our
+   apps serve picks up Heap, Userflow, Reo, Google Analytics (via `/cexr/`)
+   and Cloudflare scripts at Union's edge; Heap's beacon carries the
+   visitor's subject. Those scripts run on the dashboard and likely on
+   notebook pages too, where they can read whatever the page shows. Ask
+   Union whether apps can opt out.
 - **Devbox app tier without Union auth.** The devbox has no Union login in
    front of apps, so the admin and notebook pods won't authenticate there.
    A dev-only fixed identity would make the app tier testable locally
@@ -109,6 +110,7 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 
 ## Complete
 
+- ✅ Per-user dashboards (2026-10-06): the shared admin is replaced by one dashboard per user, in their own readable project (`u-<handle>`), serving only its owner. An org admin runs `stargazer-users onboard` to invite or find the user, create the project, grant `contributor` on it alone, and deploy the dashboard at a stable subdomain; `upgrade` is the release, `offboard` stops apps, removes access and archives. Union's app gate needs project view, so this keeps every user's console to their own project, and no privileged credential is deployed. Verified on the tenant end to end. Still open: whether an invited user's first sign-in arrives with the subject `User.create` returned (needs a real second address). [`26_per_user_dashboard.md`](./26_per_user_dashboard.md)
 - ✅ One login: Union auth + workspace state on object storage (2026-10-06): Union's GitHub SSO is the only login; the app tier no longer talks to GitHub (no OAuth App, fork, GitHub App or session cookie). Workspace notebooks and own snapshots live on object storage keyed by the Union subject; notebook pods hydrate at launch, save every few seconds and at scale-to-zero, and admit only their owner. Verified on the tenant end to end. One finding is still open: the admin's in-cluster identity is refused project creation on Union, so each user's `u-<subject>` project has to be created by an org admin until project creation moves out of the app. [`25_workspace_state_object_storage.md`](./25_workspace_state_object_storage.md)
 - ✅ scRNA per-sample output filenames (2026-10-05): every scRNA task wrote a fixed filename (`qc_filtered.h5ad`, `reduced.h5ad`, …) into the shared store, so samples fanned out in-process with `asyncio.gather` overwrote each other and downstream stages read the wrong sample's data. Outputs are now prefixed with `sample_id`, matching the GATK tasks. Verified with `verify-stargazer` on the scRNA pipeline notebook (every stage `ok` for both samples), and locked in by `tests/tasks/scrna/test_sample_isolation.py`.
 - ✅ Toolchain pinning + lint/SDK catch-up (2026-08-07): ruff pinned to one version across `.pre-commit-config.yaml` and `pyproject.toml` (they had drifted 0.14→0.16, where ruff's default rule set grew 59→413 and the two gates diverged); 322 findings resolved — auto-fixes applied, deliberate patterns declared in `[tool.ruff.lint]` with rationale, the frozen v1 reference snapshot untracked and gitignored. MCP SDK migrated to 2.x (`FastMCP` → `MCPServer`, `mcp.server.fastmcp` → `mcp.server`) and bounded to `<3`; that import had been broken, taking 3 unit tests and a pre-commit hook with it.

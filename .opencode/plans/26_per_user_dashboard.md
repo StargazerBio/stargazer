@@ -207,38 +207,55 @@ calls and their order. Small and explicit; no live control plane.
       the release. It builds each image once (a registry hit when unchanged)
       and redeploys every dashboard. `admin_app.main`, the devbox storage
       port-forward and the `stargazer-app` script are gone.)*
-- [ ] Retire the shared `admin-app` deployment on the tenant once dashboards
-      are verified.
+- [x] Retire the shared `admin-app` deployment on the tenant once dashboards
+      are verified. *(Deactivated and deleted 2026-10-06; `flytesnacks` has
+      no apps left.)*
 
 ## Piece 4 — Verify on the tenant
 
-Using `pryce@stargazer.bio` as the durable test account.
+Using `pryce@stargazer.bio` as the durable test account. All on 2026-10-06,
+images from Union's remote builder.
 
-- [ ] Clean up the front-door probes: role `frontdoor-probe-exec`, policies
-      `frontdoor-probe-*`, apps `front-door-probe` and `auth-probe`.
-- Already in place from plan 25's tenant run: project
-  `u-387300641116005877` (labels `managed-by=stargazer`,
-  `union-subject=387300641116005877`) and policy
-  `stargazer-user-387300641116005877` (contributor on its development domain),
-  assigned to the test account. Onboarding's existing-user path should find
-  both and leave them alone. Also leftover: the `project-create-probe` task
-  in `flytesnacks`.
-- [ ] Onboard the test account (existing-user path). Fresh session → its
-      dashboard loads at the stable URL; the console shows only
-      `u-387300641116005877`.
-- [ ] Signed in as the admin account (who can view every project), the test
-      account's dashboard → 403 from the owner check.
-- [ ] Create, edit, scale to zero, reopen a notebook: edits survive (plan 25's
-      flow, now from a per-user dashboard).
-- [ ] `upgrade --all` redeploys without changing the URL.
+- [x] Clean up the front-door probes: role `frontdoor-probe-exec`, policies
+      `frontdoor-probe-*`, apps `front-door-probe` and `auth-probe`. *(Also
+      `storage-probe-flytesnacks`, the subdomain probes, and plan 25's
+      stand-ins: policy `stargazer-user-387300641116005877` deleted, project
+      `u-387300641116005877` archived, so onboarding would take the
+      readable-id path. The `project-create-probe` task stays: tasks can't
+      be deleted.)*
+- [x] Onboard the test account (existing-user path). Fresh session → its
+      dashboard loads at the stable URL; the console shows only its project.
+      *(`stargazer-users onboard` found the user, created `u-pryce` and
+      policy `stargazer-u-pryce`, deployed the dashboard. After a fresh
+      sign-in the dashboard loaded at
+      `https://u-pryce.apps.stargazerbio.us-west-2.unionai.cloud` (200), and
+      the console's Projects page listed 1 project: `u-pryce`.)*
+- [x] Signed in as the admin account (who can view every project), the test
+      account's dashboard → 403 from the owner check. *(Admin's bearer token:
+      `403 {"error":"this dashboard isn't yours"}` on `/`, `/assets` and
+      `/static/*`; only `/health` answers. Anonymous → 302 to sign-in.)*
+- [x] Create, edit, scale to zero, reopen a notebook: edits survive (plan 25's
+      flow, now from a per-user dashboard). *(`/launch` served
+      `nb-e2e-plan26-edit` into `u-pryce` with `SG_OWNER_SUBJECT`,
+      `FLYTE_PROJECT=u-pryce` and `FLYTE_ORG` set; a marker cell was in the
+      store seconds after saving; the pod scaled to zero at 20:06:59 UTC and
+      the reopened notebook had the cell. Cleaned up after.)*
+- [x] `upgrade --all` redeploys without changing the URL. *(Four `upgrade`
+      runs, same URL each time. Found and fixed on the way: a stale serve
+      watch made the first run exit 1 on a deploy that came up, and the
+      dashboard image rebuilt every run because `.flyte/` sat in its build
+      context. After the fix, an unchanged upgrade is a cache hit for both
+      images.)*
 
 ## Piece 5 — Docs
 
-- [ ] `docs/architecture/app.md` and `app_internals.md`: topology (no shared
+- [x] `docs/architecture/app.md` and `app_internals.md`: topology (no shared
       admin), the onboarding flow, the owner check, the release flow.
-- [ ] The deploy-secret table in `.opencode/reference/devbox_workarounds.md`.
+- [x] The deploy-secret table in `.opencode/reference/devbox_workarounds.md`.
       If the README's deploy notes go stale, flag it (the README is
-      human-owned).
-- [ ] Plan 24: mark the console-access grant as delivered by onboarding.
-- [ ] ROADMAP: move to Complete; keep the Union questions and risks as
+      human-owned). *(The table now says the app tier bakes no secrets. The
+      README has no deploy notes, so nothing to flag. Also added: the
+      `clone_with` quirk.)*
+- [x] Plan 24: mark the console-access grant as delivered by onboarding.
+- [x] ROADMAP: move to Complete; keep the Union questions and risks as
       entries.
