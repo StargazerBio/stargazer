@@ -6,7 +6,7 @@ This doc is the high-level map of the hosting tier. For what the dashboard's not
 
 Two kinds of Flyte `AppEnvironment` are defined here, and both sit behind the platform's login (`requires_auth=True`):
 
-- **`app_env`** (the dashboard) — one per user, deployed into that user's own Flyte project. Renders their notebooks, keeps them in the workspace store, and launches notebook apps. It serves only its owner.
+- **`app_env`** (the dashboard) — one per user, deployed into that user's own Flyte project. Renders their notebooks, keeps them in the workspace store, and launches notebook apps. It is keyed to its owner, and the platform alone decides who may open it.
 - **Per-notebook envs** — built by the `per_notebook_env()` factory (`app/per_notebook.py`), one `nb-{slug}-{mode}` env per launch, deployed into the same project and owned by the same user.
 
 A third piece runs outside the platform: **onboarding** (`app/onboard.py`, the `stargazer-users` command), which an org admin runs from their own machine to give a user their project, access and dashboard.
@@ -44,7 +44,6 @@ sequenceDiagram
     B->>P: GET dashboard URL
     P-->>B: sign in (first visit only)
     P->>D: GET / + signed-in user
-    D->>D: owner check
     D->>S: list the owner's notebooks
     D-->>B: dashboard
     B->>D: POST /launch (tile click)
@@ -62,11 +61,11 @@ sequenceDiagram
 
 **One project per user.** The platform admits a signed-in user to an app only if they can view the app's project, and anyone who can view a project sees every app in it. So each user gets their own project, `u-<handle>`, with access to that project and nothing else. Their dashboard and notebooks live there, and in the platform console they see only their own work. The project id is readable (from their email by default) and permanent; the subject on its label is what onboarding looks it up by.
 
-**Dashboards check ownership too.** Org admins can view every project, so being let in by the platform isn't enough. A dashboard knows its owner from its deploy and refuses everyone else, the same rule notebook pods apply.
+**The platform is the only access control.** The app tier adds no ownership check of its own. Whoever the platform admits to a project (its user, or an org admin) can open that project's dashboard and notebooks. A dashboard knows its owner from its deploy and keys its state by that owner, not by the visitor, so an admin sees the owner's notebooks.
 
 **Onboarding is an admin step.** New users need an invite to the org anyway, so the same command does the rest: invite (or find) the user, create their project, grant them access to it, and deploy their dashboard at a stable, bookmarkable address. Running it again only redeploys. Nothing that runs on the platform needs the right to create projects or grant access, and no privileged credential is deployed anywhere. Releasing a new version redeploys every user's dashboard from the same images; offboarding stops a user's apps, removes their access and archives their project, and leaves their notebooks in the store.
 
-**Notebook pods check ownership, not just login.** The platform only proves the visitor belongs to the org. Each pod is baked with its owner's subject, and its proxy refuses everyone else. Platform cookies and identity headers are stripped before a request reaches the notebook, so notebook code never sees a visitor's platform token through a request.
+**Notebook pods are gated by the platform too.** Each pod is baked with its owner's subject, which only keys where it loads and saves notebooks. Platform cookies and identity headers are stripped before a request reaches the notebook, so notebook code never sees a visitor's platform token through a request.
 
 **Per-user isolation** is enforced by **Flyte project boundaries**, not by varying the env definition. Every per-notebook env is served into the user's project, and Flyte's per-project storage and cache isolation keeps their runs separate. The factory is parameterized by notebook (slug, mode, path, resources) and owner, so which project the env lands in is what separates users.
 

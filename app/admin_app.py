@@ -5,9 +5,8 @@ One deployment per user, in that user's own Flyte project (`u-<handle>`),
 behind Union's login (`requires_auth=True`). The owner's subject is baked
 into the env at deploy (`SG_OWNER_SUBJECT`) and the project is the one the
 dashboard runs in (`FLYTE_PROJECT`); neither is derived from the request.
-Union proves the visitor may view the project, and the owner gate here
-(`app.identity.require_owner`) refuses everyone but the owner, since org
-admins can view every project. There is no OAuth flow, session cookie, or
+Union's login is the only access control: whoever it admits (the owner, or an
+org admin who can view the project) sees the owner's dashboard. There is no OAuth flow, session cookie, or
 GitHub integration. It has three jobs:
 
 1. **Dashboard.** Renders the notebook tile sections: Workflows and
@@ -47,7 +46,7 @@ from pathlib import Path
 
 import flyte
 import flyte.app
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, Form, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -56,7 +55,7 @@ from flyte.remote import App
 from app import config
 from app import workspace_store as store
 from app.assets import router as assets_router
-from app.identity import CurrentUser, User, require_owner
+from app.identity import CurrentUser, User
 from app.init import init
 from app.notebook_meta import (
     DEFAULT_RESOURCES,
@@ -203,22 +202,6 @@ asgi_app.mount(
     name="static",
 )
 asgi_app.include_router(assets_router)
-
-
-@asgi_app.middleware("http")
-async def owner_gate(request: Request, call_next):
-    """Refuse every request but the owner's, before routing.
-
-    Covers static files and the mounted asset routes as well as the
-    dashboard's own routes. Only `/health` is open: the platform's probes
-    carry no identity.
-    """
-    if request.url.path != "/health":
-        try:
-            require_owner(request)
-        except HTTPException as exc:
-            return JSONResponse({"error": exc.detail}, status_code=exc.status_code)
-    return await call_next(request)
 
 
 # ---------------------------------------------------------------------------

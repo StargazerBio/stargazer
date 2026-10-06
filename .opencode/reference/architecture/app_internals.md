@@ -43,8 +43,8 @@ No GitHub login, id or token is forwarded. The browser's Union session cookies (
 
 Union only proves the visitor can view the project, and org admins can view every project. Both app kinds therefore admit only their owner, fail-closed when the owner is unset:
 
-- **Dashboard.** An app-wide middleware (`admin_app.owner_gate` → `identity.require_owner`) compares `X-User-Subject` with `config.OWNER_SUBJECT` (`SG_OWNER_SUBJECT`, baked in by onboarding) and returns a JSON 403 for every path but `/health`, static files and the asset routes included. Routes take the owner via the `CurrentUser` dependency.
-- **Notebook pods.** The proxy (`app/proxy.py`, `_is_owner`) makes the same comparison against the pod's `SG_OWNER_SUBJECT`, baked in at launch, and returns a plain-text `403 Forbidden`, on HTTP and websockets alike. Before forwarding to marimo it strips `Host`, `Cookie` and every `X-User-*` header (`_forwardable`), so notebook code never sees a visitor's Union token through a request.
+- **Dashboard.** No ownership check; Union's login (`requires_auth=True`) is the only gate, so an org admin who can view the project gets in. Routes take `CurrentUser` (`identity.current_user`): 401 without `X-User-Subject`, otherwise the visitor's name/email with `subject` replaced by `config.OWNER_SUBJECT` (`SG_OWNER_SUBJECT`, baked in by onboarding), so storage and pod ownership follow the dashboard's owner. With no owner configured (local run) the visitor's subject is the key.
+- **Notebook pods.** The proxy (`app/proxy.py`) does no identity check; `SG_OWNER_SUBJECT`, baked in at launch, only keys the hydrate/sync prefix. Before forwarding to marimo it strips `Host`, `Cookie` and every `X-User-*` header (`_forwardable`), so notebook code never sees a visitor's Union token through a request.
 
 Measured on the tenant (2026-10-06): the org admin got the proxy's `403 Forbidden` on another user's notebook URL.
 
@@ -133,7 +133,7 @@ Publishing one is a contribution: the author downloads it and adds it to the rep
 
 ## Dashboard Routes (full table)
 
-All on `app/admin_app.py` (`app_env`), all behind Union's login and the owner gate except `/health`. Lifespan runs `init()` at startup. Every route acts on the dashboard's own project (`config.FLYTE_PROJECT`) and its owner's store prefix.
+All on `app/admin_app.py` (`app_env`), all behind Union's login. Lifespan runs `init()` at startup. Every route acts on the dashboard's own project (`config.FLYTE_PROJECT`) and its owner's store prefix.
 
 | Route | Purpose |
 |---|---|
@@ -166,7 +166,7 @@ Asset-manager routes are a separate router (`app/assets.py`, `include_router`ed 
 
 ## Asset Manager (mechanics)
 
-**Off on hosted dashboards.** No `PINATA_JWT` is baked into a dashboard: its owner can read the app spec, so a shared key there would reach every user. Without a key the routes 503 and the page says asset storage isn't available yet; there is no TinyDB fallback for this surface. The routes still work wherever `PINATA_JWT` is in the process env (a local `uvicorn`), which is what the mechanics below describe. On the dashboard the owner gate sits in front of them; `app/assets.py` keeps its own signed-in check so its per-record ownership rules stay testable on a bare router.
+**Off on hosted dashboards.** No `PINATA_JWT` is baked into a dashboard: its owner can read the app spec, so a shared key there would reach every user. Without a key the routes 503 and the page says asset storage isn't available yet; there is no TinyDB fallback for this surface. The routes still work wherever `PINATA_JWT` is in the process env (a local `uvicorn`), which is what the mechanics below describe. On the dashboard Union's login sits in front of them; `app/assets.py` keeps its own signed-in check so its per-record ownership rules stay testable on a bare router.
 
 - **Owner stamping.** `/assets/sign` stamps the signed-in user's subject as `_owner` *after* `build_asset()` validation, so it rides the signature-protected signed URL — unforgeable from the browser. Workspace/SDK uploads stamp from `STARGAZER_OWNER` instead: the launcher injects it into per-notebook pods (`env.env_vars["STARGAZER_OWNER"]` next to `FLYTE_PROJECT`), and `config._stargazer_env_vars()` forwards it into task pods at submission so pipeline outputs are owned too. Stamping lives in `PinataClient.upload()` (`_stamp_owner`, env wins over any stale value) and in the sign route; `build_asset()` rejects user-supplied `_*` keys so the namespace stays clean.
 - **Metadata edit (`update_metadata`).** A mis-tagged record is fixed in place rather than delete-and-re-uploaded. `PinataClient.update_metadata(cid, keyvalues, network)` looks up the file's internal UUID by CID, then `PUT /v3/files/{network}/{id}` with the patch — Pinata **merges** (verified empirically: supplied keys added/overwritten, omitted keys preserved, no key removal), and the bytes/CID are untouched so `*_cid` provenance edges survive. `_stamp_owner` runs here too (env wins; no-op in the dashboard pod, where the route sets `_owner` explicitly). `LocalStorageClient.update_metadata` mirrors the merge into TinyDB when there's no remote. Two surfaces drive it: the MCP `update_file` tool (validate via `build_asset` → delegate, shared-JWT so unenforced by design) and the `POST /assets/update` route (which additionally **fail-closes on ownership** — the record's current `_owner` must match the signed-in user, read fresh from Pinata not the public TTL cache, so a shared-JWT user still can't rewrite another user's or an unowned record from the page). Editing is the headline reason the bare `cid` is *not* treated as a relationship key in the graph — a content-addressed id never changes under a metadata edit.

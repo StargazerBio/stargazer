@@ -11,13 +11,13 @@ user as headers it sets itself, overwriting anything a client sends:
   arrive JSON-encoded (`"\"a@b.c\""`).
 
 There is no session cookie and no sign-in route of our own: Union owns both.
-Each dashboard belongs to one user; `require_owner` admits only them.
+Each dashboard belongs to one user, but Union alone decides who may open it.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
@@ -71,20 +71,23 @@ def user_from_request(request: Request) -> User | None:
     )
 
 
-def require_owner(request: Request) -> User:
-    """FastAPI dependency: the signed-in user if they own this app, else a 403.
+def current_user(request: Request) -> User:
+    """FastAPI dependency: the signed-in user, else a 401.
 
-    A dashboard serves exactly one owner (`config.OWNER_SUBJECT`, baked in at
-    deploy). Union already proved the visitor may view the app's project, but
-    org admins can view every project, so the subject must also match. Fails
-    closed: no forwarded subject, or no configured owner, is a 403.
+    Union's login is the only access control: whoever it admits (the owner, or
+    an org admin who can view the project) gets the dashboard. State is keyed
+    by the dashboard's owner (`config.OWNER_SUBJECT`, baked in at deploy), not
+    the visitor, so an admin sees the owner's notebooks. The visitor's name and
+    email are kept for display. With no owner configured (a local run) the
+    visitor's own subject is the key.
     """
     user = user_from_request(request)
-    owner = config.OWNER_SUBJECT
-    if not owner or user is None or user.subject != owner:
-        raise HTTPException(status_code=403, detail="this dashboard isn't yours")
+    if user is None:
+        raise HTTPException(status_code=401, detail="not signed in")
+    if config.OWNER_SUBJECT:
+        user = replace(user, subject=config.OWNER_SUBJECT)
     return user
 
 
-# Route parameter type for "the dashboard's owner": `user: CurrentUser`.
-CurrentUser = Annotated[User, Depends(require_owner)]
+# Route parameter type for "whose dashboard this is": `user: CurrentUser`.
+CurrentUser = Annotated[User, Depends(current_user)]

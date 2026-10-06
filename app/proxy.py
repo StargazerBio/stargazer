@@ -1,18 +1,16 @@
 """
-### Owner-gated reverse proxy in front of marimo, with workspace hydrate + sync.
+### Reverse proxy in front of marimo, with workspace hydrate + sync.
 
 Standalone ASGI app baked into the `notebook-app` image. Listens on the
 per-notebook pod's public port (8080) and forwards HTTP + websocket traffic to
 marimo on `127.0.0.1:8081`.
 
 **Auth.** The pod runs behind the platform login (`requires_auth=True`), which
-forwards the signed-in user's id as `X-User-Subject` and overwrites any
-client-sent value. The platform only proves the visitor is a member of the
-org, so this proxy adds the ownership check: every request and websocket must
-carry the subject in `SG_OWNER_SUBJECT` (baked in at launch), or it gets a 403.
-A pod that doesn't know its owner denies everyone. Platform cookies and
-`X-User-*` headers are stripped before anything reaches marimo, so notebook
-code never sees the visitor's platform token through a request.
+gates every request, so access control is the platform's alone; the proxy
+adds none. `SG_OWNER_SUBJECT` (baked in at launch) only keys where the pod
+hydrates from and saves to. Platform cookies and `X-User-*` headers are
+stripped before anything reaches marimo, so notebook code never sees the
+visitor's platform token through a request.
 
 **Workspace.** The user's notebooks live in the workspace store, one object per
 notebook, under `<STARGAZER_WORKSPACE_ROOT>/users/<subject>/` — the layout
@@ -35,7 +33,7 @@ Reserved paths the proxy handles itself instead of forwarding:
   notebooks can link back with a stable relative path.
 - `GET /__sg__/ready` — 200 once local marimo answers, 503 while it's still
   cold-starting.
-- `WS  /__sg__/term` — owner-gated PTY websocket. Spawns a login `bash` and
+- `WS  /__sg__/term` — PTY websocket. Spawns a login `bash` and
   bridges it to the injected xterm.js overlay. The child's environment is
   scrubbed of secret-shaped vars; that's tidiness, not a boundary.
 
@@ -134,15 +132,6 @@ def _upstream_client() -> httpx.AsyncClient:
 # ---------------------------------------------------------------------------
 # Owner gate
 # ---------------------------------------------------------------------------
-
-
-def _is_owner(headers) -> bool:
-    """True iff the platform-forwarded subject is this pod's owner.
-
-    Fails closed: an unset `SG_OWNER_SUBJECT` or a missing header denies.
-    """
-    owner = os.environ.get("SG_OWNER_SUBJECT", "")
-    return bool(owner) and headers.get("x-user-subject") == owner
 
 
 def _forwardable(headers) -> dict[str, str]:
@@ -348,7 +337,7 @@ async def dashboard_redirect() -> Response:
     """Redirect back to the owner's dashboard (`STARGAZER_ADMIN_URL`).
 
     The dashboard and the notebook live on different hosts, so a notebook can't just
-    link to `/`. Not owner-gated: it reveals nothing.
+    link to `/`. It reveals nothing.
     """
     target = os.environ.get("STARGAZER_ADMIN_URL") or "/"
     return RedirectResponse(target, status_code=302)
@@ -403,9 +392,6 @@ async def term_proxy(websocket: WebSocket) -> None:
     "input", ...}` for keystrokes and `{"type": "resize", ...}` for geometry.
     The child is killed and reaped when either side closes.
     """
-    if not _is_owner(websocket.headers):
-        await websocket.close(code=1008)
-        return
     await websocket.accept()
 
     pid, master_fd = pty.fork()
@@ -513,9 +499,6 @@ async def http_proxy(request: Request, path: str) -> Response:
     through untouched (duplicate params intact). While marimo is still starting,
     browsers get a self-refreshing starting page and other callers a plain 503.
     """
-    if not _is_owner(request.headers):
-        return Response("Forbidden", status_code=403)
-
     upstream = f"http://{MARIMO_HOST}:{MARIMO_HTTP_PORT}/{path}"
     if request.url.query:
         upstream = f"{upstream}?{request.url.query}"
@@ -583,10 +566,6 @@ async def ws_proxy(websocket: WebSocket, path: str) -> None:
     The upstream connection is opened without the client's headers, so no
     cookie or identity header reaches marimo here either.
     """
-    if not _is_owner(websocket.headers):
-        await websocket.close(code=1008)
-        return
-
     await websocket.accept()
     upstream_url = f"ws://{MARIMO_HOST}:{MARIMO_HTTP_PORT}/{path}"
     if websocket.url.query:

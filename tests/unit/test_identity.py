@@ -2,8 +2,8 @@
 
 Union's auth layer gates every request and forwards the signed-in user as
 `X-User-*` headers. Claim values arrive JSON-encoded (`"\"a@b.c\""`); the
-subject arrives bare. A dashboard serves one owner (`config.OWNER_SUBJECT`);
-everyone else, and every request when the owner is unset, is refused.
+subject arrives bare. Union alone decides who may open a dashboard; state is
+keyed by the dashboard's owner (`config.OWNER_SUBJECT`), whoever is viewing.
 """
 
 import pytest
@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from starlette.requests import Request
 
 from app import config
-from app.identity import User, require_owner, user_from_request
+from app.identity import User, current_user, user_from_request
 
 OWNER = "387300641116005877"
 
@@ -49,30 +49,36 @@ def test_no_subject_is_anonymous():
     assert user_from_request(_request({"X-User-Claim-Name": '"x"'})) is None
 
 
-def test_require_owner_returns_the_owner_with_display_details(monkeypatch):
+def test_current_user_is_the_owner_for_the_owner(monkeypatch):
     """The owner's request yields the owner, named from the claim headers."""
     monkeypatch.setattr(config, "OWNER_SUBJECT", OWNER)
-    user = require_owner(
+    user = current_user(
         _request({"X-User-Subject": OWNER, "X-User-Claim-Name": '"Pryce User"'})
     )
     assert user == User(OWNER, "", "Pryce User")
 
 
-@pytest.mark.parametrize(
-    ("owner", "headers"),
-    [
-        (OWNER, {"X-User-Subject": "111111111111111111"}),  # someone else
-        (OWNER, {}),  # no identity forwarded
-        ("", {"X-User-Subject": OWNER}),  # owner not configured: fail closed
-        ("", {}),
-    ],
-)
-def test_require_owner_refuses_everyone_else_with_403(monkeypatch, owner, headers):
-    """Only the configured owner gets through; an unset owner admits nobody."""
-    monkeypatch.setattr(config, "OWNER_SUBJECT", owner)
+def test_current_user_keys_an_admin_to_the_owner_but_keeps_their_name(monkeypatch):
+    """A different signed-in visitor acts on the owner's state, shown by name."""
+    monkeypatch.setattr(config, "OWNER_SUBJECT", OWNER)
+    user = current_user(
+        _request({"X-User-Subject": "111111111111111111", "X-User-Claim-Name": '"Adm"'})
+    )
+    assert user == User(OWNER, "", "Adm")
+
+
+def test_current_user_without_a_configured_owner_uses_the_visitor(monkeypatch):
+    """A local run (no owner baked in) keys state by the visitor's subject."""
+    monkeypatch.setattr(config, "OWNER_SUBJECT", "")
+    assert current_user(_request({"X-User-Subject": "42"})) == User("42")
+
+
+def test_current_user_without_identity_is_401(monkeypatch):
+    """No forwarded subject is not signed in."""
+    monkeypatch.setattr(config, "OWNER_SUBJECT", OWNER)
     with pytest.raises(HTTPException) as exc:
-        require_owner(_request(headers))
-    assert exc.value.status_code == 403
+        current_user(_request({}))
+    assert exc.value.status_code == 401
 
 
 def test_display_prefers_name_then_email_then_subject():

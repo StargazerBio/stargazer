@@ -1,4 +1,4 @@
-"""Tests for the dashboard: AppEnvironment, owner gate, workspace, and launch routes.
+"""Tests for the dashboard: AppEnvironment, sign-in, workspace, and launch routes.
 
 Route tests use FastAPI's `TestClient` WITHOUT the context manager so the
 app's lifespan (`init()` → Flyte client) never runs. Identity is the
@@ -147,24 +147,29 @@ def test_fork_routes_are_gone(client, path):
 
 
 def test_dashboard_requires_identity(client):
-    """Without Union's identity header the dashboard refuses."""
-    assert client.get("/").status_code == 403
+    """Without Union's identity header the dashboard 401s."""
+    assert client.get("/").status_code == 401
 
 
-def test_dashboard_refuses_anyone_but_its_owner(client):
-    """Another signed-in org member (e.g. an admin) is refused, on every route."""
+def test_admin_sees_the_owners_dashboard(client):
+    """Union is the only gate: another signed-in visitor sees the owner's tiles."""
+    _put(ALICE, "qc-run.py")
     _as(client, BOB, "Bob Admin")
-    assert client.get("/").status_code == 403
-    assert client.get("/assets").status_code == 403
-    assert client.get("/static/cytoscape.min.js").status_code == 403
-    assert client.get("/launch/status").status_code == 403
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "qc-run" in resp.text
+    assert client.get("/launch/status").status_code == 200
 
 
-def test_dashboard_without_an_owner_refuses_everyone(client, monkeypatch):
-    """A dashboard deployed without an owner fails closed."""
+def test_dashboard_without_an_owner_keys_state_by_the_visitor(client, monkeypatch):
+    """A local run with no baked-in owner shows the visitor's own notebooks."""
     monkeypatch.setattr(config, "OWNER_SUBJECT", "")
-    _as(client)
-    assert client.get("/").status_code == 403
+    _put(BOB, "bobs-nb.py")
+    _put(ALICE, "alices-nb.py")
+    _as(client, BOB)
+    resp = client.get("/")
+    assert "bobs-nb" in resp.text
+    assert "alices-nb" not in resp.text
 
 
 def test_health_needs_no_identity(client):
@@ -214,7 +219,7 @@ def test_dashboard_without_store_says_saving_is_unavailable(client, monkeypatch)
 
 def test_create_requires_identity(client):
     """Anonymous create is refused."""
-    assert client.post("/workspace/create", data={"name": "x"}).status_code == 403
+    assert client.post("/workspace/create", data={"name": "x"}).status_code == 401
 
 
 def test_create_writes_a_seeded_notebook_to_the_users_store(client):
@@ -293,15 +298,16 @@ def test_settings_missing_notebook_is_404(client):
     assert resp.status_code == 404
 
 
-def test_another_user_cannot_act_on_the_owners_notebooks(client):
-    """Requests claiming another subject never reach the owner's store."""
+def test_admin_acts_on_the_owners_store_not_their_own(client):
+    """A visitor other than the owner reads and writes the owner's notebooks."""
     _put(ALICE, "qc-run.py")
     _as(client, BOB)
-    assert client.post("/workspace/delete", data={"slug": "qc-run"}).status_code == 403
-    assert client.get("/workspace/download?slug=qc-run").status_code == 403
-    assert client.post("/workspace/create", data={"name": "x"}).status_code == 403
-    assert _get(ALICE, "qc-run.py") == NB_SRC
+    assert client.get("/workspace/download?slug=qc-run").status_code == 200
+    assert client.post("/workspace/create", data={"name": "x"}).status_code == 200
+    assert _get(ALICE, "x.py") is not None
     assert _get(BOB, "x.py") is None
+    assert client.post("/workspace/delete", data={"slug": "qc-run"}).status_code == 200
+    assert _get(ALICE, "qc-run.py") is None
 
 
 def test_delete_removes_only_the_users_notebook(client):
@@ -467,7 +473,7 @@ def _launch(client, slug, section, mode="edit"):
 def test_launch_requires_identity(client):
     """Anonymous launch is refused."""
     resp = _launch(client, "assets", "tutorials")
-    assert resp.status_code == 403
+    assert resp.status_code == 401
 
 
 def test_launch_workspace_serves_the_owners_pod(client, served):
@@ -590,7 +596,7 @@ def test_launch_status_returns_plain_endpoints(client, monkeypatch):
 
 def test_launch_status_requires_identity(client):
     """Anonymous status is refused."""
-    assert client.get("/launch/status").status_code == 403
+    assert client.get("/launch/status").status_code == 401
 
 
 def test_cleanup_deletes_only_stopped_notebook_apps(client, monkeypatch):
@@ -613,7 +619,7 @@ def test_cleanup_deletes_only_stopped_notebook_apps(client, monkeypatch):
 
 def test_stop_requires_identity(client):
     """Anonymous stop is refused."""
-    assert client.post("/stop", data={"slug": "a", "mode": "edit"}).status_code == 403
+    assert client.post("/stop", data={"slug": "a", "mode": "edit"}).status_code == 401
 
 
 # ---------------------------------------------------------------------------

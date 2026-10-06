@@ -15,7 +15,7 @@ The image layers, on top of the Flyte debian base:
 - `claude` (Claude Code CLI) — the AI agent, on PATH for the dropdown
   terminal the proxy injects. Pinned standalone binary (auto-update off);
   auth is interactive (`claude` browser login) and ephemeral.
-- `marimo` plus the owner-gated reverse proxy's web deps (`fastapi`,
+- `marimo` plus the reverse proxy's web deps (`fastapi`,
   `uvicorn`, `httpx`, `websockets`). The proxy's storage calls use the
   `flyte` SDK the base image already carries.
 - `app/proxy.py` baked at `/usr/local/lib/sg_proxy.py` (top-level module,
@@ -39,8 +39,8 @@ into `SNAPSHOT_NOTEBOOK_DIR`, both flat (`<dir>/<slug>.py`). The proxy writes
 edited notebooks back on a short interval and once more when the pod scales
 to zero. No PVC: pod-local disk plus the object store is cheaper and faster.
 
-Auth: pods run `requires_auth=True`, so only signed-in org members reach them,
-and the proxy admits only the owner (`SG_OWNER_SUBJECT`). No credential of any
+Auth: pods run `requires_auth=True`, so access control is the platform's alone;
+`SG_OWNER_SUBJECT` only keys the pod's workspace store. No credential of any
 kind is baked into the pod env.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
@@ -186,9 +186,9 @@ def per_notebook_env(
     `SNAPSHOT_NOTEBOOK_DIR`, both hydrated by the launch script.
 
     `owner_subject` is the owner's platform user id. The pod sits behind the
-    platform login (`requires_auth=True`) and its proxy admits only requests
-    whose forwarded subject matches `SG_OWNER_SUBJECT`. It also keys where the
-    pod hydrates from and saves to in the workspace store
+    platform login (`requires_auth=True`), which is its only access control.
+    `SG_OWNER_SUBJECT` keys where the pod hydrates from and saves to in the
+    workspace store
     (`STARGAZER_WORKSPACE_ROOT`). `admin_url` is the admin app's public base
     URL, which the proxy's `/__sg__/dashboard` route redirects to. No
     credential is baked into the env: notebook code can read it.

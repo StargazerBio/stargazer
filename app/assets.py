@@ -10,9 +10,8 @@ Dashboards are deployed without a Pinata key (a per-user app's spec is
 readable by its owner, so a shared key would leak), so on the hosted deploy
 the page shows that asset storage isn't available and the API routes 503.
 
-Auth model: the dashboard's owner gate (`app.identity.require_owner`) sits in
-front of these routes, so on the hosted deploy every request is the owner.
-The routes still degrade for an anonymous request (a local run): public
+Auth model: Union's login sits in front of these routes, so on the hosted
+deploy every request is a signed-in user. The routes still degrade for an anonymous request (a local run): public
 browsing works, private routes 401. The public listing is served from an
 in-process TTL cache so the dashboard acts as a semi-static read-only mirror
 rather than an open proxy to the Pinata API. Private listing fails closed
