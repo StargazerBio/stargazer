@@ -42,7 +42,9 @@ front-door grant, no shared service, no runtime provisioning.
 
 ## Settled design decisions
 
-- **One dashboard app per user, in `u-<subject>`.** Same app definition for
+- **One dashboard app per user, in `u-<handle>`.** Readable, unique project
+  ids; the user's subject rides on a project label and is what onboarding
+  looks projects up by. Same app definition for
   everyone. The owner is baked into the app's env at deploy, not derived from
   the request.
 - **Owner check in the dashboard.** Union proves the visitor can view the
@@ -61,9 +63,8 @@ front-door grant, no shared service, no runtime provisioning.
 - **Images are built once per release**, not per user. The deployer builds
   the dashboard and notebook images, and onboarding/upgrade deploy those
   exact URIs (the same pattern plan 25 uses for the notebook image).
-- **Stable URLs via `flyte.app.Domain(subdomain=…)`**, derived from a handle
-  chosen at onboarding (default: the email's local part, sanitized), so users
-  can bookmark their dashboard.
+- **Stable URLs via `flyte.app.Domain(subdomain=…)`**: the subdomain is the
+  project id, so it's unique and readable, and users can bookmark it.
 - **Pinata is not baked into dashboards.** A per-user app's spec is readable
   by its owner, so a shared Pinata key would leak to every user. The Assets
   page is disabled until the storage plan lands (storage is tabled).
@@ -88,21 +89,36 @@ Recorded, not solved here. Each has (or gets) a ROADMAP entry.
 
 ## Piece 0 — Verify before building
 
-- [ ] `flyte.app.Domain(subdomain="…")` gives a stable, predictable URL on
-      the tenant, and survives a redeploy.
-- [ ] `User.create(...)` returns a subject immediately, and it is the subject
+- [x] `flyte.app.Domain(subdomain="…")` gives a stable, predictable URL on
+      the tenant, and survives a redeploy. *(2026-10-06: a probe app with
+      `subdomain="sg-probe-pryce"` in `u-387300641116005877` served at
+      `https://sg-probe-pryce.apps.stargazerbio.us-west-2.unionai.cloud`, the
+      same URL after a redeploy; 302 to sign-in anonymous, 200 signed in.
+      **A second app asking for a taken subdomain, in another project, is
+      not rejected: it hangs at "App created" with no endpoint**, so
+      onboarding must detect collisions itself.)*
+- [ ] `User.create(...)` returns a subject immediately (it does, per the
+      plugin source: the create response carries the id), and it is the subject
       the user's first GitHub sign-in arrives with (`X-User-Subject`). Use a
       real second address for this one test.
-- [ ] `flyte create user` without `--policy` attaches no org-wide policy (or
+- [x] `flyte create user` without `--policy` attaches no org-wide policy (or
       record which one it attaches so onboarding can remove it).
-- [ ] An app in `u-<subject>` is reachable by that user with only
+      *(`User.create` sends only the user spec; `--policy` is a separate
+      `Assignment.create` afterwards (plugin 0.15.1 source). The invited test
+      account's assignment has no roles and only the three policies we added
+      by hand, so the server adds nothing either.)*
+- [x] An app in `u-<subject>` is reachable by that user with only
       `contributor` on `u-<subject>/development`, and refused (403) for a user
       with no role there. *Half measured (2026-10-06, plan 25's tenant
       run): the test account, whose only grant on `u-387300641116005877` is
       `contributor` via policy `stargazer-user-387300641116005877`, reached
-      its notebook app there. The no-role 403 is still to check.*
-- [ ] Measure a dashboard cold start after scale-to-zero. If it's bad, decide
-      on `min_replicas=1` per user versus accepting it.
+      its notebook app there. The no-role 403 was measured earlier the same
+      day on the front-door probe (no role on the project → 403).*
+- [x] Measure a dashboard cold start after scale-to-zero. If it's bad, decide
+      on `min_replicas=1` per user versus accepting it. *(Plan 25's admin,
+      same image recipe: 19.6s for the first request after scale-to-zero,
+      0.2s warm. **Accepted for now**: a warm replica per user costs a pod
+      each, all day. Revisit if users complain.)*
 
 ## Piece 1 — Single-owner dashboard
 
@@ -141,42 +157,46 @@ owner.
 
 ## Piece 2 — The onboarding command
 
-`cli/onboard.py` (exposed as a project script), run by an org admin.
+`app/onboard.py` (the `stargazer-users` project script; deploy entrypoints live in `app/` per AGENTS.md), run by an org admin.
 
 ### Tests first
 
 Against a faked `flyteplugins.union.remote` and `flyte.remote`, asserting the
 calls and their order. Small and explicit; no live control plane.
 
-- [ ] New user → user created, project created, policy bound to that
+- [x] New user → user created, project created, policy bound to that
       project only, assignment by `user_subject`, dashboard deployed with
       `SG_OWNER_SUBJECT` and the subdomain. In that order.
-- [ ] Existing user (found by email) → no create, the rest is idempotent.
-- [ ] Re-running for an onboarded user is a no-op apart from redeploying the
+- [x] Existing user (found by email) → no create, the rest is idempotent.
+- [x] Re-running for an onboarded user is a no-op apart from redeploying the
       dashboard.
-- [ ] Handle collisions get a suffix, never overwrite another user's
+- [x] Handle collisions get a suffix, never overwrite another user's
       subdomain.
 
 ### Implementation
 
-- [ ] `onboard --email … --first-name … --last-name … [--handle …]`:
+- [x] `onboard --email … --first-name … --last-name … [--handle …]`:
       1. `User.listall(email=…)` → existing subject, else `User.create(...)`.
-      2. Ensure project `u-<subject>`, labeled `managed-by=stargazer`,
-         `stargazer-handle=<handle>`.
-      3. Ensure policy `stargazer-user-<subject>` binding `contributor` on
-         `u-<subject>/development`; assign it by `user_subject`. Remove any
-         org-wide default the invite attached (Piece 0 tells us whether
-         there is one).
+      2. Ensure the user's project: the active project labeled
+         `managed-by=stargazer`, `union-subject=<subject>` if there is one,
+         else a new `u-<handle>` (suffixed `-2`, `-3`… past any taken id,
+         archived ones included). **Readable ids** replace `u-<subject>`:
+         nothing keys on the project id, so the subject label is the real
+         key and the id only has to be unique.
+      3. Ensure policy `stargazer-<project>` binding `contributor` on
+         `<project>/<domain>`; assign it by `user_subject`. Invites attach
+         nothing org-wide (Piece 0), so there's nothing to remove.
       4. Deploy the dashboard into the project from the release's image URI,
          with `SG_OWNER_SUBJECT`, `STARGAZER_WORKSPACE_ROOT`, `FLYTE_ORG`, and
-         the subdomain.
+         subdomain `<project>` (unique because project ids are; Union
+         won't reject a taken subdomain, per Piece 0).
       5. Print the dashboard URL.
-- [ ] `upgrade [--all | --email …]`: redeploy dashboards from the current
-      release image, enumerating `managed-by=stargazer` projects.
-- [ ] `offboard --email …`: stop the user's apps, unassign their policy.
+- [x] `upgrade`: redeploy every active `managed-by=stargazer` project's
+      dashboard. (No `--email` form until it's needed.)
+- [x] `offboard --email …`: stop the user's apps, unassign their policy.
       Projects can only be archived, never deleted; archive it. Workspace
       objects are left in place.
-- [ ] Add `flyteplugins-union` with a bounded pin (`>=X,<Y`), per AGENTS.md.
+- [x] Add `flyteplugins-union` with a bounded pin (`>=0.15.1,<0.16`, in the `landing` extra), per AGENTS.md.
 
 ## Piece 3 — Release flow
 
