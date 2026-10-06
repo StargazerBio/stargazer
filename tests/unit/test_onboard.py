@@ -340,3 +340,47 @@ def test_union_deploy_without_workspace_root_is_refused(monkeypatch):
     )
     with pytest.raises(SystemExit, match="STARGAZER_WORKSPACE_ROOT"):
         onboard.main()
+
+
+def test_dashboard_deploy_keeps_the_env_resolvable(monkeypatch):
+    """The served env is built where it's defined, with the owner's settings.
+
+    Flyte resolves `include=` paths and the pod's loader from the frame the
+    env was created in; a `clone_with` copy reports `dataclasses.py` instead,
+    and the deploy fails on `templates/`.
+    """
+    served = {}
+
+    def fake_servecontext(**ctx):
+        def serve(env):
+            served.update(
+                ctx=ctx, env=env, env_vars=dict(env.env_vars), domain=env.domain
+            )
+            return SimpleNamespace(endpoint="https://u-jane.apps.example")
+
+        return SimpleNamespace(serve=serve)
+
+    monkeypatch.setattr(onboard.flyte, "with_servecontext", fake_servecontext)
+    monkeypatch.setattr(onboard, "_notebook_image", lambda: "reg/notebook-app:h1")
+    monkeypatch.setattr(
+        onboard, "get_init_config", lambda: SimpleNamespace(org="stargazerbio")
+    )
+    assert onboard.deploy_dashboard("u-jane", ALICE) == "https://u-jane.apps.example"
+    env = served["env"]
+    assert env._caller_frame.filename.endswith("app/admin_app.py")
+    assert served["ctx"] == {"project": "u-jane", "domain": "development"}
+    assert served["domain"].subdomain == "u-jane"
+    assert {
+        k: served["env_vars"][k]
+        for k in (
+            "FLYTE_PROJECT",
+            "SG_OWNER_SUBJECT",
+            "STARGAZER_NOTEBOOK_IMAGE",
+            "FLYTE_ORG",
+        )
+    } == {
+        "FLYTE_PROJECT": "u-jane",
+        "SG_OWNER_SUBJECT": ALICE,
+        "STARGAZER_NOTEBOOK_IMAGE": "reg/notebook-app:h1",
+        "FLYTE_ORG": "stargazerbio",
+    }

@@ -15,7 +15,7 @@ privileged credential is deployed anywhere. Each user gets:
    built-in `contributor` role on the project's domain, assigned by subject.
    Nothing org-wide.
 4. **Their dashboard**, `app.admin_app.app_env` deployed into the project
-   with the owner baked in, at the stable subdomain `<project>`. Union
+   with the owner baked in (set on `app_env` itself before each serve), at the stable subdomain `<project>`. Union
    doesn't reject a second app asking for a taken subdomain (it hangs), so
    uniqueness comes from project ids being unique.
 
@@ -55,6 +55,9 @@ _MANAGED = {"managed-by": "stargazer"}
 _SUBJECT_LABEL = "union-subject"
 # Room for the `u-` prefix and a suffix inside Flyte's id limits.
 _HANDLE_MAX = 30
+# The dashboard's env as defined, before any user's settings are applied, so
+# deploying several users in one run never carries one user's values over.
+_BASE_ENV_VARS = dict(app_env.env_vars)
 
 
 def handle_from_email(email: str) -> str:
@@ -197,7 +200,7 @@ def deploy_dashboard(project: str, owner_subject: str) -> str:
     once and every user's dashboard runs the same build.
     """
     env_vars = {
-        **app_env.env_vars,
+        **_BASE_ENV_VARS,
         "FLYTE_PROJECT": project,
         "SG_OWNER_SUBJECT": owner_subject,
         "STARGAZER_NOTEBOOK_IMAGE": _notebook_image(),
@@ -205,11 +208,13 @@ def deploy_dashboard(project: str, owner_subject: str) -> str:
     # In-cluster init can't discover the org in an app pod; bake the deployer's.
     if org := get_init_config().org:
         env_vars["FLYTE_ORG"] = org
-    env = app_env.clone_with(
-        name=app_env.name,
-        env_vars=env_vars,
-        domain=flyte.app.Domain(subdomain=project),
-    )
+    # Serve `app_env` itself, set up for this user, rather than a
+    # `clone_with` copy: the copy records `dataclasses.py` as the frame it was
+    # created in, and Flyte resolves `include=` and the pod's loader from that
+    # frame, so the deploy fails looking for `templates/` in the stdlib.
+    env = app_env
+    env.env_vars = env_vars
+    env.domain = flyte.app.Domain(subdomain=project)
     ctx = flyte.with_servecontext(project=project, domain=config.FLYTE_DOMAIN)
     # The serve watch can report failure on a redeploy that actually
     # succeeded (devbox_workarounds.md). Trust the app's own state over it.

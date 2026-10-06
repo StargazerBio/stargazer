@@ -308,3 +308,13 @@ PY
 ```
 
 `task_cache` and `runs` point at the same wiped object storage, so clear them too. Then delete any failed ksvc (`kubectl delete ksvc admin-app-flytesnacks-development -n flyte`) so the redeploy gets a clean revision.
+
+## `AppEnvironment.clone_with` breaks `include=` (and the pod loader)
+
+Not devbox-specific: any Flyte target, SDK 2.10.7.
+
+**Symptom:** Serving a `clone_with` copy of an AppEnvironment that has `include=("templates/", ...)` fails before deploy with `ValueError: include path '…/lib/python3.13/templates' is not a file, directory, or matching glob pattern.` — the path is inside the Python install, not the project.
+
+**Cause:** An AppEnvironment records the frame it was created in (`_caller_frame`), skipping SDK and synthesized frames. Flyte resolves `include=` paths relative to that frame's file, and `AppEnvResolver` uses it to find the module the pod imports the env from. `clone_with` builds the copy with `dataclasses.replace`, so the copy's frame is the standard library's `dataclasses.py`. Seen 2026-10-06 on the first real `stargazer-users onboard`.
+
+**Workaround:** Don't serve a `clone_with` copy of an env that uses `include=`. `app/onboard.py` sets the per-user `env_vars` and `domain` on `app_env` itself before each serve (it's a plain, non-frozen dataclass), keeping the original frame. `tests/unit/test_onboard.py::test_dashboard_deploy_keeps_the_env_resolvable` pins this.
