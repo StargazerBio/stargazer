@@ -4,53 +4,64 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 
 ## Upcoming
 
+- **Create users' projects outside the app.** The admin ensures
+   `u-<subject>` on a user's first request, but on Union its in-cluster
+   identity (the org platform key, `contributor`) is refused
+   `action_administer_project`, so new users see "still being set up"
+   until an org admin creates the project. Project creation needs to move to
+   something run with admin rights.
 - **Union production deploy** (tenant: `stargazerbio.us-west-2.unionai.cloud`).
    Done in PRs: per-pod session keys (#2), the `STARGAZER_TARGET`
    devbox/union switch, a configurable domain, and a fixed per-deploy
    notebook image (#3). Remaining:
-   - **Union-native app secrets.** The admin's OAuth, GitHub App and
-     Pinata secrets are baked into `env_vars`, so anyone who can view the
-     app spec sees them. On Union, move to `flyte create secret` plus
-     `secrets=[flyte.Secret(...)]` on the AppEnvironment. Keep the devbox
-     bake, where app secrets are dropped. First confirm that Union injects
-     app secrets at all, since its docs only cover tasks.
+   - **Remote-builder images can't be pulled.** Union's builder pushes
+     Nydus-only images and the tenant's nodes have no Nydus snapshotter, so
+     every remote-built image fails at pull. Ticket filed with Union. Until
+     it's fixed, deploys build locally and push to GHCR
+     (`FLYTE_IMAGE_BUILDER=local`, `STARGAZER_REGISTRY=ghcr.io/stargazerbio`);
+     each new GHCR package starts internal and must be made public once.
+   - **In-pod image builds.** `STARGAZER_REGISTRY` is forwarded into every
+     pod, but pods have no credentials for GHCR, so a task image built from
+     inside a notebook can't be pushed. Resolves itself when the remote
+     builder works again.
+   - **Union-native app secrets.** Only `PINATA_JWT` is left baked into
+     `env_vars`, where anyone who can view the app spec sees it. Move to
+     `flyte create secret` plus `secrets=[flyte.Secret(...)]`, after
+     confirming Union injects app secrets at all.
    - **`flyte.deploy` with commit-SHA versions** in place of `flyte.serve`
      for the admin app, run from CI with a `FLYTE_API_KEY`.
    - **Pin the admin to one replica** (`Scaling(replicas=(1, 1))`).
      `_launched` is in-memory, and scaling to zero puts a cold start on
-     login. Set `scaledown_after` on notebook pods deliberately, since
-     scaling down is what triggers the workspace save.
+     the first dashboard load.
    - **Resource ceilings.** Notebook resources are honored as-authored. Cap
      them with `flyte edit settings --domain production` (`task_resource.max.*`),
      after checking that the cap applies to apps and not only tasks.
-   - **Custom domain** for the admin (`flyte.app.Domain`), plus updated
-     callback URLs on both GitHub OAuth Apps and the GitHub App.
+   - **Custom domain** for the admin (`flyte.app.Domain`).
    - **Admin identity.** A dedicated API key with project-create (and,
      for the Union console handoff, policy/assignment) permissions.
+- **Per-user storage isolation.** Every project on the tenant runs as one
+   IAM role, so a notebook's own code can read and write every user's
+   workspace objects (and all task data). Needs per-project roles scoped to
+   each user's prefix, from Union.
+- **Union session cookies reach notebook pods.** Union forwards the
+   visitor's session cookies to the app. The proxy strips them before
+   marimo, but code in a pod could still capture a visiting org member's
+   token. Look for a way to have Union drop them for an app, or isolate the
+   proxy from notebook code.
+- **User onboarding.** Only `stargazerbio` org members get past the login,
+   and Union doesn't auto-provision users on first sign-in yet. New users
+   need an invite until it does.
+- **Devbox app tier without Union auth.** The devbox has no Union login in
+   front of apps, so the admin and notebook pods won't authenticate there.
+   A dev-only fixed identity would make the app tier testable locally
+   again.
 - **Union console handoff (per-user project access).** Users click through
    from the dashboard to the Union console to view executions in their own
-   project. `provision_user()` creates the per-user project but grants no
-   role binding to any Union identity, so the console would show them
-   nothing. Adds role/policy/assignment provisioning via
-   `flyteplugins.union.remote`, plus the GitHub OAuth App that backs Union's
-   IdP. Also folds in **collapsing the two GitHub OAuth Apps into one** by
-   putting the dashboard behind `requires_auth=True` — which pulls
-   identity-gated production auth forward, and is gated on what identity Union's
-   serving layer forwards to an app. Note: adds two control-plane
-   round-trips to the inline OAuth callback, which makes async
-   OAuth provisioning more pressing.
+   project. Users are already Union principals (they signed in), but
+   `provision_user()` grants no role binding on their project, so the
+   console would show them nothing. Adds role/policy/assignment
+   provisioning via `flyteplugins.union.remote`.
    [`24_union_console_handoff.md`](./24_union_console_handoff.md)
-- **Workspace state on object storage.** Saving a notebook currently
-   requires forking the upstream repo plus a GitHub App install — a
-   workaround for missing persistent volumes, not a product decision.
-   Persist workspace and snapshot notebooks to the blob store instead
-   (pod-local hot state, recursive `flyte.storage` sync, keyed per
-   notebook), making saving automatic and credential-free. The fork becomes
-   an opt-in path for *graduating* a notebook upstream. Collapses the
-   `SG_POD_TOKEN` / `GIT_ASKPASS` apparatus.
-   [`25_workspace_state_object_storage.md`](./25_workspace_state_object_storage.md)
-- **Identity-gated production auth.** Per-notebook envs currently set `requires_auth=False` — a devbox concession where the proxy's session-cookie check is the only gate. Production needs auth gated by the user's identity. (Was an Open Issue in `docs/architecture/app.md`.)
-- **Async OAuth provisioning.** `provision_user()` runs inline in the OAuth callback, so a slow provision can outlive the browser's redirect window. Move to background provisioning + status polling. (Was an Open Issue in `docs/architecture/app.md`.)
 - **In-notebook local-vs-remote toggle UI.** Formalize the dispatch choice as a reusable `mo.ui` element (radio / segmented control) so individual cells don't need to hardcode `flyte.with_runcontext(mode="local").run` vs `flyte.run`.
 - **Marimo AI features investigation.** Determine what marimo's native AI surface offers (`mo.ai.chat` / similar), whether tool-calling is supported, and how to wire the registry catalog in.
 - **Publish `stargazer` to PyPI.** Once the package is published, notebook PEP 723 headers can pin a version (`stargazer == X.Y.Z`) instead of `[tool.uv.sources] stargazer = { path = "/stargazer", editable = true }`. Unlocks fully reproducible community notebooks without baking the source path.
@@ -106,6 +117,7 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 
 ## Complete
 
+- ✅ One login: Union auth + workspace state on object storage (2026-10-06): Union's GitHub SSO is the only login; the app tier no longer talks to GitHub (no OAuth App, fork, GitHub App or session cookie). Workspace notebooks and own snapshots live on object storage keyed by the Union subject; notebook pods hydrate at launch, save every few seconds and at scale-to-zero, and admit only their owner. Verified on the tenant end to end. One finding is still open: the admin's in-cluster identity is refused project creation on Union, so each user's `u-<subject>` project has to be created by an org admin until project creation moves out of the app. [`25_workspace_state_object_storage.md`](./25_workspace_state_object_storage.md)
 - ✅ scRNA per-sample output filenames (2026-10-05): every scRNA task wrote a fixed filename (`qc_filtered.h5ad`, `reduced.h5ad`, …) into the shared store, so samples fanned out in-process with `asyncio.gather` overwrote each other and downstream stages read the wrong sample's data. Outputs are now prefixed with `sample_id`, matching the GATK tasks. Verified with `verify-stargazer` on the scRNA pipeline notebook (every stage `ok` for both samples), and locked in by `tests/tasks/scrna/test_sample_isolation.py`.
 - ✅ Toolchain pinning + lint/SDK catch-up (2026-08-07): ruff pinned to one version across `.pre-commit-config.yaml` and `pyproject.toml` (they had drifted 0.14→0.16, where ruff's default rule set grew 59→413 and the two gates diverged); 322 findings resolved — auto-fixes applied, deliberate patterns declared in `[tool.ruff.lint]` with rationale, the frozen v1 reference snapshot untracked and gitignored. MCP SDK migrated to 2.x (`FastMCP` → `MCPServer`, `mcp.server.fastmcp` → `mcp.server`) and bounded to `<3`; that import had been broken, taking 3 unit tests and a pre-commit hook with it.
 - ✅ GitHub App deploy-credential gate (2026-08-07): a half-exported App credential pair (`GITHUB_APP_ID` without `GITHUB_APP_PRIVATE_KEY`) made Workspace saving read as disabled for every user, silently, for two months. `main()` now refuses to deploy on a partial pair, module import warns, and the previously-silent "no fork found" login path logs. Deploy-secret contract documented in [`app_internals.md`](../reference/architecture/app_internals.md).

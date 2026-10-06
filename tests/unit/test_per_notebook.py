@@ -1,7 +1,14 @@
-"""Tests for resource wiring in `per_notebook_env`."""
+"""Tests for `per_notebook_env`: resources, auth, and what reaches the pod's env."""
 
+from app import config
 from app.notebook_meta import NotebookResources
-from app.per_notebook import per_notebook_env
+from app.per_notebook import (
+    SNAPSHOT_NOTEBOOK_DIR,
+    WORKSPACE_NOTEBOOK_DIR,
+    per_notebook_env,
+)
+
+SUBJECT = "387300641116005877"
 
 
 def _env(**overrides):
@@ -9,10 +16,8 @@ def _env(**overrides):
     kwargs = {
         "slug": "demo",
         "mode": "edit",
-        "notebook_path": "/workspace/x.py",
-        "fork_full_name": "octocat/stargazer",
-        "pod_capability": "signed-cap",
-        "pod_key": "per-pod-key",
+        "notebook_path": f"{WORKSPACE_NOTEBOOK_DIR}/demo.py",
+        "owner_subject": SUBJECT,
         "admin_url": "http://admin",
     }
     kwargs.update(overrides)
@@ -33,18 +38,36 @@ def test_custom_resources_applied_to_env():
     assert env.resources.memory == "4Gi"
 
 
-def test_pod_gets_capability_not_github_token():
-    """No GitHub credential reaches the pod — only the signed capability."""
+def test_pod_sits_behind_union_login():
+    """Notebook pods require the platform login; the proxy then checks ownership."""
+    assert _env().requires_auth is True
+
+
+def test_pod_env_carries_owner_and_store_root(monkeypatch):
+    """The pod learns who owns it and where its notebooks are stored."""
+    monkeypatch.setattr(config, "WORKSPACE_ROOT", "s3://bucket/stargazer")
     env = _env()
-    assert "GITHUB_TOKEN" not in env.env_vars
-    assert env.env_vars["SG_POD_TOKEN"] == "signed-cap"
-    # The fork identity + admin callback URL the launch script needs are present.
-    assert env.env_vars["FORK_FULL_NAME"] == "octocat/stargazer"
+    assert env.env_vars["SG_OWNER_SUBJECT"] == SUBJECT
+    assert env.env_vars["STARGAZER_WORKSPACE_ROOT"] == "s3://bucket/stargazer"
     assert env.env_vars["STARGAZER_ADMIN_URL"] == "http://admin"
 
 
-def test_pod_gets_its_own_key_not_the_session_secret():
-    """User code in the pod can read its env, so the master secret must not be there."""
+def test_pod_env_has_no_git_or_session_credentials():
+    """Nothing from the old fork/session model reaches the pod."""
     env = _env()
-    assert "SESSION_SECRET" not in env.env_vars
-    assert env.env_vars["SG_POD_KEY"] == "per-pod-key"
+    for gone in (
+        "FORK_FULL_NAME",
+        "FORK_OWNER",
+        "SG_POD_TOKEN",
+        "SG_POD_KEY",
+        "SESSION_SECRET",
+        "STARGAZER_SECURE_COOKIES",
+        "GITHUB_TOKEN",
+    ):
+        assert gone not in env.env_vars
+
+
+def test_notebook_dirs_are_flat_hydration_targets():
+    """Workspace and own snapshots hydrate into fixed, flat pod dirs."""
+    assert WORKSPACE_NOTEBOOK_DIR == "/workspace"
+    assert SNAPSHOT_NOTEBOOK_DIR == "/snapshots"

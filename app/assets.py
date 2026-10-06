@@ -6,12 +6,14 @@ for the dynamic upload form, Pinata-backed listing, signed-URL minting for
 direct browser→Pinata uploads (bytes never transit the admin pod), and
 download redirects.
 
-Auth model: the public network is truly public — schema, public listing,
-and public downloads are anonymous, with the listing served from an
+Auth model: the whole admin sits behind Union's login, so on the hosted
+deploy every request carries the signed-in user (`app.identity`). The
+routes still degrade for an anonymous request (a local run): public
+browsing works, private routes 401. The public listing is served from an
 in-process TTL cache so the admin acts as a semi-static read-only mirror
 rather than an open proxy to the Pinata API. Private listing fails closed
-(`_owner == session user` only, stamped and filtered server-side), and
-sign minting always requires a session.
+(`_owner == the user's subject` only, stamped and filtered server-side), and
+sign minting always requires a signed-in user.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -25,7 +27,7 @@ from typing import get_type_hints
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from app.session import SessionData, session_from_request
+from app.identity import User, require_user, user_from_request
 from app.templates import templates
 from stargazer.assets import ASSET_REGISTRY, build_asset
 from stargazer.assets.asset import _BASE_FIELDS
@@ -45,7 +47,7 @@ MAX_UPLOAD_BYTES = 100 * 1024**2
 PUBLIC_CACHE_TTL = 60.0
 
 # Anonymous downloads redirect here instead of PINATA_GATEWAY, which may be
-# a dedicated (bandwidth-metered) gateway — only session-holders spend it.
+# a dedicated (bandwidth-metered) gateway — only signed-in users spend it.
 PUBLIC_FALLBACK_GATEWAY = "https://dweb.link"
 
 # Module attributes resolved at call time so tests can swap in fakes.
@@ -62,22 +64,6 @@ def _pinata() -> PinataClient:
     if _pinata_client is None:
         _pinata_client = PinataClient()
     return _pinata_client
-
-
-def _session(request: Request) -> SessionData | None:
-    """Session from the request cookie, or None (anonymous)."""
-    secret = os.environ.get("SESSION_SECRET")
-    if not secret:
-        return None
-    return session_from_request(request, secret)
-
-
-def _require_session(request: Request) -> SessionData:
-    """Return the session or raise 401 — for routes that require auth."""
-    session = _session(request)
-    if session is None:
-        raise HTTPException(status_code=401, detail="authentication required")
-    return session
 
 
 def _require_pinata() -> None:
@@ -113,13 +99,15 @@ async def _public_records() -> list[dict]:
 @router.get("/assets")
 async def assets_page(request: Request):
     """Render the asset manager. Anonymous visitors get the public tab."""
-    session = _session(request)
+    user: User | None = user_from_request(request)
     return templates.TemplateResponse(
         request,
         "assets.html",
         {
             "title": "Assets",
-            "username": session.github_username if session else "",
+            "user": user,
+            # The owner key the page compares `_owner` against.
+            "username": user.subject if user else "",
             "pinata_configured": bool(os.environ.get("PINATA_JWT")),
         },
     )
@@ -154,8 +142,8 @@ async def assets_list(request: Request):
     """List assets on one network, filtered by keyvalue query params.
 
     Public: anonymous, served from the TTL cache with filters applied
-    in-process. Private: session required; `_owner` is forced to the
-    session user server-side (fail closed — unowned and other-owned
+    in-process. Private: a signed-in user is required; `_owner` is forced
+    to their subject server-side (fail closed — unowned and other-owned
     records are never returned, whatever the query string says).
     """
     _require_pinata()
@@ -170,22 +158,22 @@ async def assets_list(request: Request):
             if all(r["keyvalues"].get(k) == v for k, v in params.items())
         ]
 
-    session = _require_session(request)
-    params["_owner"] = session.github_username
+    user = require_user(request)
+    params["_owner"] = user.subject
     return await _pinata().query(params, network="private")
 
 
 @router.post("/assets/sign")
 async def assets_sign(request: Request):
-    """Validate metadata and mint a signed upload URL (session required).
+    """Validate metadata and mint a signed upload URL (signed-in user required).
 
     `build_asset()` is the same choke point the MCP server uses; the
-    session user is stamped as `_owner` after validation, so the minted
+    user's subject is stamped as `_owner` after validation, so the minted
     URL carries exactly the validated + stamped keyvalues and the browser
     supplies bytes only.
     """
     _require_pinata()
-    session = _require_session(request)
+    user = require_user(request)
 
     body = await request.json()
     filename = body.get("filename", "")
@@ -202,7 +190,7 @@ async def assets_sign(request: Request):
         raise HTTPException(status_code=400, detail=str(exc))
 
     keyvalues = asset.to_keyvalues()
-    keyvalues["_owner"] = session.github_username
+    keyvalues["_owner"] = user.subject
     url = await _pinata().create_signed_upload_url(
         filename=filename,
         keyvalues=keyvalues,
@@ -214,10 +202,10 @@ async def assets_sign(request: Request):
 
 @router.post("/assets/update")
 async def assets_update(request: Request):
-    """Update (merge) metadata on a record the session user owns.
+    """Update (merge) metadata on a record the signed-in user owns.
 
     Fail-closed ownership: the record's current `_owner` must match the
-    session user (checked server-side, never trusted from the request), so
+    user's subject (checked server-side, never trusted from the request), so
     nobody can rewrite another user's — or an unowned — record from the page
     even though the Pinata JWT is shared. Validation reuses `build_asset()`,
     `_owner` is re-stamped after it, and Pinata merges the patch onto the
@@ -225,7 +213,7 @@ async def assets_update(request: Request):
     survive). SDK/MCP edits stay unenforced by design (shared JWT).
     """
     _require_pinata()
-    session = _require_session(request)
+    user = require_user(request)
 
     body = await request.json()
     cid = body.get("cid", "")
@@ -241,7 +229,7 @@ async def assets_update(request: Request):
     # public TTL cache) so a mutation never decides off stale ownership.
     records = await _pinata().query({}, network=network)
     current = next((r for r in records if r["cid"] == cid), None)
-    if current is None or current["keyvalues"].get("_owner") != session.github_username:
+    if current is None or current["keyvalues"].get("_owner") != user.subject:
         raise HTTPException(status_code=403, detail="you can only edit assets you own")
 
     try:
@@ -250,7 +238,7 @@ async def assets_update(request: Request):
         raise HTTPException(status_code=400, detail=str(exc))
 
     patch = dict(body.get("keyvalues") or {})
-    patch["_owner"] = session.github_username
+    patch["_owner"] = user.subject
     return await _pinata().update_metadata(cid, patch, network=network)
 
 
@@ -259,20 +247,20 @@ async def assets_download(request: Request, cid: str):
     """Redirect to the file bytes — they never transit the admin pod.
 
     Public files live on world-readable IPFS, so the redirect is anonymous,
-    but split-gateway: only session-holders go through PINATA_GATEWAY
-    (possibly dedicated and bandwidth-metered); anonymous visitors get the
-    free public gateway. Private files need a session and get a short-lived
-    signed URL.
+    but split-gateway: only signed-in users go through PINATA_GATEWAY
+    (possibly dedicated and bandwidth-metered); anonymous requests get the
+    free public gateway. Private files need a signed-in user and get a
+    short-lived signed URL.
     """
     network = request.query_params.get("network", "private")
     if network == "public":
-        if _session(request) is not None:
+        if user_from_request(request) is not None:
             gateway = os.environ.get("PINATA_GATEWAY", PUBLIC_FALLBACK_GATEWAY)
         else:
             gateway = PUBLIC_FALLBACK_GATEWAY
         return RedirectResponse(f"{gateway}/ipfs/{cid}", status_code=302)
 
-    _require_session(request)
+    require_user(request)
     _require_pinata()
     url = await _pinata()._get_signed_url(cid)
     return RedirectResponse(url, status_code=302)

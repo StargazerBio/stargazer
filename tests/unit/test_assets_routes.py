@@ -1,8 +1,8 @@
 """Tests for the asset-manager API routes (plan 20, piece 2).
 
 Route tests use `TestClient` without the context manager so the admin
-lifespan (Flyte init) never runs. Session cookies are minted with the real
-`app.session` helpers. The Pinata client is swapped for a fake via the
+lifespan (Flyte init) never runs. Identity comes from the `X-User-Subject`
+header Union's auth layer sets on every request. The Pinata client is swapped for a fake via the
 `app.assets._pinata_client` module attribute — sign returns a canned URL,
 query returns canned records, and both capture their call args.
 
@@ -10,16 +10,14 @@ Auth model: public-network browsing (schema, public list, public download)
 is anonymous — public bytes are world-readable on IPFS anyway, and the
 public listing is served from an in-process TTL cache so the admin is a
 semi-static mirror, not an open proxy to the Pinata API. Private routes and
-sign minting require a session.
+sign minting require a signed-in user.
 """
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.admin_app import asgi_app
-from app.session import SESSION_COOKIE, SessionData, create_session_cookie
 
-SECRET = "test-session-secret"
 JWT = "test-pinata-jwt"
 
 CANNED_RECORDS = [
@@ -87,7 +85,6 @@ def fake_pinata(monkeypatch):
     monkeypatch.setattr(assets_mod, "_pinata_client", fake)
     monkeypatch.setattr(assets_mod, "_public_cache", None)
     monkeypatch.setenv("PINATA_JWT", JWT)
-    monkeypatch.setenv("SESSION_SECRET", SECRET)
     return fake
 
 
@@ -96,9 +93,10 @@ def client():
     return TestClient(asgi_app, follow_redirects=False)
 
 
-def _auth(client: TestClient, username: str = "octocat") -> None:
-    data = SessionData(username, 123)
-    client.cookies.set(SESSION_COOKIE, create_session_cookie(data, SECRET))
+def _auth(client: TestClient, subject: str = "octocat") -> None:
+    """Sign the client in as `subject`, the way Union forwards identity."""
+    client.headers["X-User-Subject"] = subject
+    client.headers["X-User-Claim-Name"] = '"Octo Cat"'
 
 
 class TestAuth:
@@ -404,10 +402,10 @@ class TestPage:
         resp = client.get("/assets")
         assert resp.status_code == 200
         html = resp.text
-        # No private tab, no upload panel, a sign-in link instead.
+        # No private tab, no upload panel, and no sign-in link: Union owns login.
         assert 'data-network="private"' not in html
         assert 'id="upload-panel"' not in html
-        assert "/auth/login" in html
+        assert "/auth/login" not in html
         assert "AUTHED = false" in html
 
     def test_not_configured_renders_notice(self, fake_pinata, client, monkeypatch):

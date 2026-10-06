@@ -46,28 +46,19 @@ There is no single host/IP that's reachable from both the laptop and from in-clu
 **Workaround:** Bake secret values into `env_vars={...}` from the deployer's local shell at deploy time. Example in `app/admin_app.py`:
 
 ```python
-_SECRET_NAMES = ("GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "SESSION_SECRET")
-_GITHUB_APP_NAMES = ("GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY", "GITHUB_APP_SLUG")
-_STORAGE_NAMES = ("PINATA_JWT",)
 _RUNTIME_SECRETS = {
-    name: os.environ[name]
-    for name in (*_SECRET_NAMES, *_GITHUB_APP_NAMES, *_STORAGE_NAMES)
-    if os.environ.get(name)
+    name: os.environ[name] for name in ("PINATA_JWT",) if os.environ.get(name)
 }
-app_env = flyte.app.AppEnvironment(..., env_vars=_RUNTIME_SECRETS)
+app_env = flyte.app.AppEnvironment(..., env_vars={..., **_RUNTIME_SECRETS})
 ```
 
-**The deployer's shell is the only source of these — export all of them before `python -m app.admin_app`.** Keep this list in sync with `app/admin_app.py`; a var that isn't exported is silently omitted, so the pod starts fine and misbehaves later:
+**The deployer's shell is the only source of these.** Since plan 25 (Union auth, workspace on object storage) the app tier carries a single secret; the GitHub OAuth, GitHub App and session secrets are gone. Keep this table in sync with `app/admin_app.py`; a var that isn't exported is silently omitted:
 
 | Env var | Needed for | If missing |
 | --- | --- | --- |
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | OAuth login | login fails outright (loud) |
-| `SESSION_SECRET` | session cookie + proxy cookie check | no session survives (loud) |
-| `GITHUB_APP_ID` **and** `GITHUB_APP_PRIVATE_KEY` | signing the App JWT that mints fork-scoped tokens | **silent** — the login-time install check raises, gets swallowed as "app not installed", and Workspace saving reads *disabled* for every user who genuinely has a fork + install |
-| `GITHUB_APP_SLUG` | the App install-redirect URL | `/workspace/enable` skips the install step |
 | `PINATA_JWT` | `/assets` routes | asset manager renders "not configured" |
 
-The two App credentials are **all-or-nothing**: the id is useless without the key. Neither set is a valid pre-App deploy; only *some* set is a deploy mistake, so `app/admin_app.py` logs a `Partial GitHub App config` warning at import for exactly that case. This bit us once already — `GITHUB_APP_PRIVATE_KEY` became required in `916dbdc` (2026-06-05, plan 18, when `workspace_enabled` moved from `fork + OAuth token` to `fork + live App-install check`) and went unexported for two months, because the install callback trusts the install and only a *fresh login* re-checks it.
+Non-secret deploy settings (`STARGAZER_TARGET`, `STARGAZER_WORKSPACE_ROOT`, the image-builder overrides) are listed under Deploy Settings in `.opencode/reference/architecture/app_internals.md`. Note the app tier no longer runs on the devbox at all: it needs Union's login.
 
 **Trade-off / prod gap:** secret values are stored in the App spec in Flyte's DB. This is the one accepted parity gap in `app/` — revisit when Flyte supports App-pod secret injection (then switch to `secrets=[flyte.Secret(key=…, as_env_var=…)]` and drop the baking).
 
@@ -119,7 +110,7 @@ To diagnose: check the actual env on a failed App pod — `kubectl get pod <pod>
 
 **Cause:** Same root as the previous entry — the pod's Flyte connection is auto-discovered from `_U_EP_OVERRIDE` and friends at *Python process startup* by `flyte.init_in_cluster()`. A fresh subprocess inherits those env vars but does not run the discovery logic before its first SDK call, so `ensure_client()` raises. The Flyte v2 docs at `core-concepts/projects-and-domains` further claim that "the Python SDK provides read-only access to projects, to create or modify projects use the `flyte` CLI or the UI" — this is **wrong against the installed SDK**, `flyte.remote.Project.create(...)` exists and is what the CLI itself calls under the hood.
 
-**Workaround:** When provisioning Flyte resources from inside an App pod, always prefer the in-process SDK (`Project.create.aio(...)`, `Project.get.aio(...)`, etc.) over CLI subprocesses. The pod's auto-discovered endpoint is only available to the parent Python process. Trust the SDK's actual surface over the v2 docs when they disagree. See `app/provision.py` for the working pattern.
+**Workaround:** When provisioning Flyte resources from inside an App pod, always prefer the in-process SDK (`Project.create.aio(...)`, `Project.get.aio(...)`, etc.) over CLI subprocesses. The pod's auto-discovered endpoint is only available to the parent Python process. Trust the SDK's actual surface over the v2 docs when they disagree. See `app/provision.py` for the working pattern. (On Union the in-cluster identity isn't allowed to create projects at all; that's a permission, not this quirk.)
 
 ---
 
@@ -229,6 +220,8 @@ printf 'nameserver 127.0.0.1\n' | sudo tee /etc/resolver/devbox.stargazer.bio
 ---
 
 ## Auth cookies are non-`Secure` on devbox (http), `Secure` in prod (TLS)
+
+> **Obsolete since plan 25:** the app tier sets no cookies any more (Union owns sign-in), and `STARGAZER_SECURE_COOKIES` is gone. Kept so a regression is recognizable if cookies come back.
 
 **Symptom (if mis-defaulted):** With `Secure` cookies forced on, login over devbox's plain HTTP silently fails — the browser never sends a `Secure` cookie over http, so every request looks unauthenticated and you bounce back to the login page.
 

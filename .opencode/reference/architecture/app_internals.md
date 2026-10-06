@@ -1,167 +1,168 @@
 # App Tier — Internals (agent reference)
 
-Deep, implementation-level detail for the `app/` deployment tier. This is the verbose companion to the human-facing [docs/architecture/app.md](../../../docs/architecture/app.md) — it carries the cross-cutting protocol detail (credential handshake, opt-in flow, pod lifecycle, sync mechanics) that spans four or five modules and so belongs to no single module docstring. When you change auth, forks, pod launch, or workspace sync, read this first and update it after.
+Deep, implementation-level detail for the `app/` deployment tier. This is the verbose companion to the human-facing [docs/architecture/app.md](../../../docs/architecture/app.md) — it carries the cross-cutting protocol detail (identity, the workspace store, pod lifecycle, hydrate and save) that spans several modules and so belongs to no single module docstring. When you change auth, storage, pod launch, or workspace sync, read this first and update it after.
 
 Module-local behavior lives in each module's own docstring (`spec:`-linked back to the architecture doc); this file is only for the multi-module protocols.
 
-## Workspace Opt-In (two-step handshake)
+## Identity (Union auth)
 
-Forking a user's GitHub account is **opt-in**, not automatic. Login creates the user's Flyte project but writes nothing to GitHub; `SessionData.fork_owner` stays empty (`SessionData.workspace_enabled` is False). Tutorials and Workflows notebooks run from the image and need no fork.
+Both app kinds run `requires_auth=True`. Union's ingress gates every request on its login (an anonymous request gets a 302 to the tenant sign-in page) and forwards the signed-in user as headers it sets itself, **overwriting any client-sent value** (measured on the tenant):
 
-Opt-in is **two steps**, and `SessionData.workspace_enabled` requires both — gated on `fork_full_name` **and** `app_installed`:
-
-1. The Workspace section renders a disclaimer + an **Enable workspace saving** button. `POST /workspace/enable` forks the upstream repo, records the verified `fork_full_name`, then redirects the user to install the GitHub App on the fork.
-2. The App's setup-URL returns to `/auth/app-install-callback`, which sets `app_installed` **and drops the OAuth token** — only *then* is saving on.
-
-A user who forks but abandons the install is **not** shown as enabled (post-fork ops would fail). A returning user's install is re-confirmed at login via `installation_tokens.get_installation_id`. Only when enabled does the section list the user's notebooks and `/launch` permit workspace launches (clone-on-start + push-on-sync against the fork's `main`). The `public_repo` OAuth scope is requested at login, but no fork is created until this explicit action.
-
-## Credential Model
-
-Two GitHub identities, deliberately split so the broad credential is short-lived and never touches code the user controls:
-
-| Step | Credential | Scope | Lifetime | Where it lives |
-|---|---|---|---|---|
-| Login + the one-time fork | **OAuth user token** (`read:user public_repo`) | all public repos | login → opt-in only | admin process + encrypted cookie, then **dropped** at install callback |
-| Admin-side reads/writes (list/get/create/delete on the fork) | **GitHub App installation token** | the fork only | ~1h, minted on demand | admin process memory |
-| Pod clone / push | **GitHub App installation token** via `GIT_ASKPASS` | the fork only | ~1h, minted at use | never persisted — fetched per operation |
-
-The **GitHub App private key** is the trust anchor: held solely by the admin, it mints fork-scoped installation tokens (`app/installation_tokens.py`, `fork_token`) for every post-fork operation. The OAuth token forks once at `/workspace/enable`; the install setup-URL hits `/auth/app-install-callback`, which clears the token from the session — so an *enabled* session carries no GitHub credential. A returning user whose fork already exists never stores the OAuth token at all.
-
-**Pods never receive a GitHub credential.** `per_notebook_env` injects only a signed *capability* (`SG_POD_TOKEN`, carrying the fork name, not a token). At clone (`launch-notebook.sh`) and push (`proxy.py`), the pod exchanges that capability at the admin's `POST /workspace/pod-token` for a fresh fork-scoped token, fed to git via `GIT_ASKPASS` against a token-free remote — so nothing lands in `.git/config` or `os.environ`. The worst a malicious cell can do is mint a fork-scoped, ~1h, revocable token (uninstalling the App cuts it off) — never the broad OAuth token. The session cookie is **encrypted** (Fernet, keyed off `SESSION_SECRET`), so even its identity fields are opaque client-side.
-
-**Pods never receive `SESSION_SECRET` or the admin cookie.** Notebook code can read the pod's env (directly, or via `/proc` from the terminal), so anything there is the user's. Each pod instead gets `SG_POD_KEY = HMAC(SESSION_SECRET, "sg-pod-key|{project}|nb-{slug}-{mode}")` (`app.session.pod_key`). Every admin→pod handoff (`sg_launch` on `/launch` and `/launch/status`, the server-to-server `/__sg__/workspace/list` and `/__sg__/workspace/sync` calls) carries a **pod pass**: a Fernet token under that pod's key holding only the username (`_pod_pass` in `admin_app.py`). The proxy checks passes against `SG_POD_KEY` and nothing else. A leaked pod key mints passes into that one pod only, which its owner can already open; the admin cookie is rejected by the proxy, and a pass is rejected by the admin. The terminal's env scrub is tidiness, not the boundary.
-
-The proxy's `_cookie_is_valid` catches **`Exception`**, deliberately. It is an auth gate: every failure mode — bad token, wrong secret, malformed input, anything unforeseen — must fall through to a clean `401`, never escape the middleware as a `500`. Narrowing that catch to a specific tuple is a regression, not a tightening; it was tried and turned denials into server errors.
-
-## Deploy-Time Secret Contract
-
-App-pod `secrets=[...]` is dropped by this Flyte build (see `devbox_workarounds.md`), so **every secret is baked into `env_vars` from the deployer's shell at deploy time** via `_RUNTIME_SECRETS` in `app/admin_app.py`. That dict is built with `if os.environ.get(name)` — a variable that isn't exported is **silently omitted**, and the pod starts fine and misbehaves later. The full set:
-
-| Env var | Powers | If absent |
+| Header | Value | Used for |
 |---|---|---|
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | OAuth login | login fails outright (loud) |
-| `SESSION_SECRET` | session cookie + the per-pod keys derived from it (never sent to a pod) | no session survives (loud) |
-| `GITHUB_APP_ID` **+** `GITHUB_APP_PRIVATE_KEY` | signing the App JWT that mints fork-scoped tokens | **silent** — see below |
-| `GITHUB_APP_SLUG` | the App install-redirect URL | `/workspace/enable` skips the install step |
-| `PINATA_JWT` | `/assets` routes | asset manager renders "not configured" |
+| `X-User-Subject` | stable Union user id, bare (e.g. `387300641116005877`) | every per-user key |
+| `X-User-Claim-Email`, `X-User-Claim-Name` | JSON-encoded strings (`"\"a@b.c\""`) | display only |
+| `X-User-Token` | `IDToken <JWT>` | unused; stripped by the proxy |
 
-**The App credentials are all-or-nothing, and enforced.** The id cannot sign without the key, so a partial export produces a deploy that *looks* configured while every `get_installation_id` raises — which `/auth/callback` catches and records as `app_installed = False`, so Workspace saving reads **disabled for every user**, including users with a valid fork and a live install. This is a real incident, not a hypothetical: `GITHUB_APP_PRIVATE_KEY` became required in `916dbdc` (2026-06-05, when `workspace_enabled` moved from `fork + OAuth token` to `fork + live App-install check`) and went unexported for two months. It hid because `/auth/app-install-callback` sets `app_installed = True` **on trust** — so the flag flips on right after installing and only a *fresh login* re-checks it against the API.
+No GitHub login, id or token is forwarded. The browser's Union session cookies (`flyte_idt`, `flyte_at_*`, `flyte_user_info`) also reach the pod.
 
-`_partial_app_creds()` now closes this: `main()` refuses to deploy when exactly one of the pair is set (both-set and neither-set are valid — the latter is a pre-App deploy), and module import logs a warning so a pod that somehow starts half-configured says so in its logs rather than just misbehaving.
+`app/identity.py` parses these: `user_from_request` returns a `User(subject, email, name)` or None, and the `CurrentUser` route dependency 401s without a subject (only possible in a local run or a deploy with auth off). Everything per-user derives from the subject:
 
-**Diagnosability.** `find_existing_fork` returning `None` is logged at INFO, not silently — a "no fork" and a "lookup failed" both land on the Enable button, and without the log they are indistinguishable.
+- Flyte project: `u-<subject>` (`app.provision.project_id`)
+- workspace store prefix: `<root>/users/<subject>/`
+- `_owner` on assets: the subject (an email would leak into public bylines)
+
+**Union's gate needs view permission on the app's project.** A signed-in org member with no role on the project gets 403; with `viewer` they get in. Org membership alone isn't enough, so the admin's project needs a grant per user, and so does each user's own project for their notebook pods. Gate decisions are cached per browser session for several minutes. (Measured 2026-10-06; this is what plan 26 restructures around.)
+
+**Bearer tokens work too.** A request with `Authorization: Bearer <access token>` passes the gate as that user, which is how a second identity can be exercised from the CLI.
+
+## Project Provisioning
+
+There's no login callback, so the admin ensures the user's project on their first request to the process (`provision.provision_user`, remembered in an in-memory set; a failure isn't remembered and retries next request). A failure renders the dashboard with a "still being set up" notice and makes `/launch` answer 503.
+
+**On Union this cannot succeed.** App and task pods authenticate as the org's platform key (`stargazerbio-EAGER_API_KEY-union-us-west-2`, application subject `393067446845621194`), which holds org-wide `contributor`. Creating a project needs `action_administer_project`, which only `admin` has. Measured from a task pod on 2026-10-06: `Project.create` is refused with *"Identity [application_id:{subject:"393067446845621194"}] is not permitted to perform action [action_administer_project]"*. Projects therefore have to be created by an org admin outside the app (plan 26's onboarding command).
+
+## Ownership Check (notebook pods)
+
+Union only proves the visitor is an org member who can view the project. The proxy (`app/proxy.py`, `_is_owner`) compares `X-User-Subject` with `SG_OWNER_SUBJECT`, baked into the pod's env at launch, and returns a plain-text `403 Forbidden` to everyone else, on HTTP and websockets alike. An unset owner denies everyone. Before forwarding to marimo it strips `Host`, `Cookie` and every `X-User-*` header (`_forwardable`), so notebook code never sees a visitor's Union token through a request.
+
+Measured on the tenant (2026-10-06): the org admin, who can view every project, got `403 Forbidden` from the proxy on another user's notebook URL, while the same token loaded the shared admin.
+
+**Residual risk.** Code in a pod can still read anything in the pod, and the cookies do reach the pod's proxy process. A malicious owner could serve code that captures a visiting member's token before the strip. On the ROADMAP.
+
+## The Workspace Store
+
+`app/workspace_store.py` owns the layout; no route composes a URI by hand.
+
+```
+<STARGAZER_WORKSPACE_ROOT>/users/<subject>/notebooks/<slug>.py
+<STARGAZER_WORKSPACE_ROOT>/users/<subject>/snapshots/<slug>.py
+```
+
+One object per notebook, so the dashboard can list a user's notebooks and read one header without fetching the rest. Subjects must match `[A-Za-z0-9_-]+` and filenames one plain `.py` segment, so a key can't escape its prefix. Create refuses to overwrite (`NotebookExistsError` → the 409 that create and copy rely on); get of a missing notebook returns None; delete is idempotent. Reads and writes go through `flyte.storage`, listing and deletes through the fsspec filesystem it resolves for the root, so the same code runs against `s3://` on the tenant and a local path in tests.
+
+On Union the root is a prefix in the tenant bucket (`s3://union-us-west-2-stargazerbio/stargazer`). Every project runs as one IAM role (`union-us-west-2-stargazerbio-userflyterole`), so cross-project access works (the admin in `flytesnacks` reads what a pod in `u-<subject>` wrote) and, equally, any pod can read every user's objects. The deployer's laptop has no credentials for the bucket; only pods can reach it.
+
+A Union deploy refuses to start without `STARGAZER_WORKSPACE_ROOT` (`admin_app.main`). Without a root (a local run), store-backed routes return 503 and the Workspace section says saving isn't available.
+
+## Pod Hydrate & Save
+
+The pod is a working copy; the store is the durable one. The admin never calls a pod (a `requires_auth=True` pod is unreachable server-to-server), so the pod does both ends itself.
+
+1. **Hydrate.** `launch-notebook.sh` runs `sg_proxy.hydrate()` before starting marimo: the owner's `notebooks/` prefix lands flat in `/workspace`, their `snapshots/` in `/snapshots`. A brand-new user, or a store failure, starts with empty dirs (logged, never fatal).
+2. **Starting page.** The proxy answers immediately; until marimo is up, a browser request gets a self-refreshing "Starting your notebook…" page. `/__sg__/ready` reports 200/503 for scripts.
+3. **Save on an interval.** A background loop uploads every top-level, non-`_` `.py` in `/workspace` whose content hash changed, every `SYNC_INTERVAL_SECONDS` (5s), each to its own key. The hashes of just-hydrated files are seeded at startup, so the first pass doesn't re-upload them. A failed upload is logged and retried next pass. One PUT per object, so an interrupted upload can't leave a half-written notebook. Snapshots never write back, and deletions don't propagate (deleting is a dashboard action).
+4. **Save at shutdown.** The FastAPI `lifespan` shutdown hook cancels the loop and runs a final pass when Knative scales the pod to zero.
+
+Measured on the tenant (2026-10-06): a cell added in a fresh edit pod was readable through the admin's Download route seconds later; after the pod scaled to zero and was reopened, the cell was still there.
+
+The signal path is load-bearing for step 4. Flyte's `fserve` wrapper is PID 1 and, on the Knative SIGTERM, forwards the signal to its **one direct child only** (`Popen(cmd, shell=True)` + `send_signal`). So uvicorn must be that direct child: the AppEnvironment args prepend `exec` (so the `sh -c` wrapper replaces itself with the launch script rather than lingering; Debian's `/bin/sh` does not reliably exec-collapse a bare `sh -c "script"`), and the launch script then `exec`s uvicorn into that slot. An intermediate shell anywhere in the chain swallows SIGTERM and the final save is silently skipped.
+
+Receiving SIGTERM is necessary but not sufficient: uvicorn drains open connections and in-flight background tasks **before** running the `lifespan` shutdown. The proxy holds a long-lived task to the local marimo backend that never drains on its own, so with uvicorn's default `timeout_graceful_shutdown=None` the drain blocks forever and the final save never fires (verified empirically). The launch script therefore passes `--timeout-graceful-shutdown 15`, which bounds the drain, cancels the lingering task, and then still runs `lifespan.shutdown`. 15s sits well under the pod's 300s termination grace period.
 
 ## Creating Notebooks & Per-Notebook Resources
 
-Once opted in, the Workspace section offers a **New notebook** create tile (name + blank|template seed only — resources and the tile blurb are set afterward). The seeds are real shipped notebooks — `notebooks/workspace/blank.py` and `template.py` — not generated source. `POST /workspace/create` slugifies the name, copies the chosen seed, injects **default** resources into its `[tool.stargazer]` header (`with_stargazer_resources`), writes it to the fork's `main` under `notebooks/workspace/`, and **returns the rendered tile HTML**. (Notebooks don't pin marimo in their PEP 723 headers — `marimo --sandbox` injects the image launcher's version into each kernel venv, so the two never skew without per-notebook bookkeeping.) Create is a pure "add a notebook" action: the browser drops that tile into the Workspace grid; it does not launch or navigate. Both seed slugs are reserved create names and filtered out of the dashboard's tile listing.
+The Workspace section offers a **New notebook** create tile (name + blank|template seed only — resources and the tile blurb are set afterward). The seeds are real shipped notebooks — `notebooks/workspace/blank.py` and `template.py` — not generated source. `POST /workspace/create` slugifies the name, copies the chosen seed, injects **default** resources into its `[tool.stargazer]` header (`with_stargazer_resources`), writes it to the user's store (`create_workspace_notebook`, no-overwrite → 409), and **returns the rendered tile HTML**. The seeds are read from the installed package, not a checkout. (Notebooks don't pin marimo in their PEP 723 headers — `marimo --sandbox` injects the image launcher's version into each kernel venv, so the two never skew without per-notebook bookkeeping.) Create is a pure "add a notebook" action: the browser drops that tile into the Workspace grid; it does not launch or navigate. Both seed slugs are reserved create names and filtered out of the dashboard's tile listing.
 
 Each Workspace tile carries two corner controls:
 
-- **Gear** → settings modal to edit **resources (cpu/memory)** and **description**. Save (`POST /workspace/settings`, workspace-only) rewrites the `[tool.stargazer]` header on the fork (`with_stargazer_resources(..., description=…)` via `update_workspace_notebook`, which carries the blob `sha`) and echoes the normalized values so the browser refreshes the tile blurb + the gear's `data-*` in place. Resource changes take effect at the **next** launch (resources bind at pod-spawn); the description updates immediately. The gear seeds its fields from `data-*` the dashboard renders by fetching each workspace notebook's header (in parallel, best-effort) at page load.
-- **Trash** (`POST /workspace/delete`, workspace-only) removes `<slug>.py` from the fork's `main` (idempotent — a file already gone still succeeds; git history keeps it recoverable) and best-effort deactivates any running edit/run pod for that slug, so deleting can't orphan a pod with no tile left to Stop it.
+- **Gear** → settings modal to edit **resources (cpu/memory)** and **description**. Save (`POST /workspace/settings`, workspace-only) rewrites the `[tool.stargazer]` header in the store (`with_stargazer_resources(..., description=…)` via `update_workspace_notebook`) and echoes the normalized values so the browser refreshes the tile blurb + the gear's `data-*` in place. Resource changes take effect at the **next** launch (resources bind at pod-spawn); the description updates immediately. The gear seeds its fields from `data-*` the dashboard renders by fetching each workspace notebook's header (in parallel, best-effort) at page load.
+- **Trash** (`POST /workspace/delete`, workspace-only) removes `<slug>.py` from the store (idempotent — a file already gone still succeeds; recovery relies on bucket versioning, not yet confirmed enabled) and tears down any edit/run pod for that slug (deactivate, then delete the record), so deleting can't orphan a pod with no tile left to Stop it.
+- **Download** (`GET /workspace/download`) returns the notebook's `.py` as an attachment — the path for sharing a notebook upstream. Also on snapshot tiles (own and published).
 
 Seed slugs are rejected by both. The browser confirms delete, then drops the tile on success.
 
-Resources are honored **as-authored — no ceiling**. At `/launch`, the admin fetches a workspace notebook's source from the fork and `app.notebook_meta.parse_notebook_resources` reads `[tool.stargazer]` (cpu/memory) and passes it to `per_notebook_env(resources=…)`. Parsing is purely textual — the admin never executes notebook code. Image-baked tutorials/workflows notebooks carry no such block and keep the env's legacy `("2Gi", "6Gi")` default.
+Resources are honored **as-authored — no ceiling**. At `/launch`, the admin reads a workspace notebook's source from the store and `app.notebook_meta.parse_notebook_resources` reads `[tool.stargazer]` (cpu/memory) and passes it to `per_notebook_env(resources=…)`. Parsing is purely textual — the admin never executes notebook code. Image-baked tutorials/workflows notebooks carry no such block and keep the env's legacy `("2Gi", "6Gi")` default.
 
 ## Running State (stateful tiles)
 
-Tile run-state is unified and authoritative. The dashboard's launch/stop handlers are **event-delegated**, so dynamically added tiles (a freshly created notebook) work with no re-binding. On load the page calls **`GET /launch/status`**, which discovers deployments with **one control-plane list** (`list_project_apps`, the same project-scoped call cleanup uses — `App.listall` can't be scoped to a per-user project), filters to `nb-{slug}-{mode}` names (`_parse_nb_name`; the mode is the last dash segment since slugs may contain dashes), then re-fetches each discovered name with `App.get` in parallel for authoritative status (list payloads may not carry full conditions). The active ones are returned with their endpoints (each carrying an `sg_launch` handoff token, same as `/launch`); the page flips those tiles straight to **Open + Stop** instead of a fresh Edit/Run. Because it reads the control plane rather than in-memory state, it's correct across admin restarts — and because discovery is name-based, it costs **no GitHub API calls** and never probes notebooks that were never launched. A listing failure degrades to "nothing running" rather than an error.
+Tile run-state is unified and authoritative. The dashboard's launch/stop handlers are **event-delegated**, so dynamically added tiles (a freshly created notebook) work with no re-binding. On load the page calls **`GET /launch/status`**, which discovers deployments with **one control-plane list** (`list_project_apps`, the same project-scoped call cleanup uses — `App.listall` can't be scoped to a per-user project), filters to `nb-{slug}-{mode}` names (`_parse_nb_name`; the mode is the last dash segment since slugs may contain dashes), then re-fetches each discovered name with `App.get` in parallel for authoritative status (list payloads may not carry full conditions). The active ones are returned with their plain endpoints; the page flips those tiles straight to **Open + Stop** instead of a fresh Edit/Run. Because it reads the control plane rather than in-memory state, it's correct across admin restarts, and because discovery is name-based it never probes notebooks that were never launched. A listing failure degrades to "nothing running" rather than an error. Org-scoped calls like this list need the org, which in-cluster init can't discover in an app pod, so the deployer bakes `FLYTE_ORG` into the admin and the admin passes it on to notebook pods.
 
-**Hydrated Open re-serves; fresh Open links directly.** A tile's Open comes in two flavors. A **fresh** launch (Edit/Run click → `/launch`) links straight to the returned handoff URL: that pod was just served with a pod key derived from the admin's *current* `SESSION_SECRET`, so it will accept the pass. A **hydrated** Open (from `/launch/status` on load) instead **re-serves through `/launch` on click** before navigating — because a hydrated pod may be scaled to zero or stale: baked with a pre-redeploy secret/image, it would reject the current session's token and `401` ("Unauthorized"). Re-serving reconciles that pod to the current spec (a no-op for a warm, current pod) and hands off a token it will accept. The Open tab is opened synchronously in the click handler (then navigated once the re-served pod is ready) so the re-serve `await` can't cost the user-gesture and trip the popup blocker. This is why per-notebook pods, whose `SG_POD_KEY` is baked into the spec at serve time, survive a redeploy with a rotated `SESSION_SECRET`: the next Open re-derives the key and self-heals the pod.
+**Hydrated Open re-serves; fresh Open links directly.** A **fresh** launch (Edit/Run click → `/launch`) links straight to the returned URL. A **hydrated** Open (from `/launch/status` on load) instead **re-serves through `/launch` on click** before navigating, because a hydrated pod may have been served before a redeploy with an older image or env. Re-serving reconciles it to the current spec (a no-op for a warm, current pod). The tab is opened synchronously in the click handler and navigated once `/launch` returns, so the await can't cost the user gesture and trip the popup blocker. A scaled-to-zero pod needs no special handling: the platform wakes it on the first request and the proxy shows its starting page.
 
-**One modality at a time.** A notebook runs in either `edit` *or* `run` mode, never both — there's no use case for two live pods of the same notebook, and forbidding it caps pod count at one per notebook. When a tile is launched (or hydrated as already-running), the dashboard hides **both** the launched mode's own Edit/Run button *and* the other mode's, leaving only that pod's controls: **Open: Edit Mode** / **Open: Run Mode**, **Stop**, and **Save** for workspace tiles. **Stop** restores both buttons. This is a client-side affordance: it removes the second-pod path from the UI rather than enforcing mutual exclusion in the control plane.
+**One modality at a time.** A notebook runs in either `edit` *or* `run` mode, never both — there's no use case for two live pods of the same notebook, and forbidding it caps pod count at one per notebook. When a tile is launched (or hydrated as already-running), the dashboard hides **both** the launched mode's own Edit/Run button *and* the other mode's, leaving only that pod's controls: **Open: Edit Mode** / **Open: Run Mode** and **Stop**. **Stop** restores both buttons. This is a client-side affordance: it removes the second-pod path from the UI rather than enforcing mutual exclusion in the control plane. There's no Save button: pods save themselves (see Pod Hydrate & Save).
 
-A running **Workspace** tile also gets a **Save** button (`POST /workspace/save`): the admin resolves that one pod's `App.endpoint` and calls its `/__sg__/workspace/sync` (server-to-server, with the session cookie). It's per-notebook on purpose — each pod owns its own `/workspace` clone, so syncing one can't clobber another's edits; a global commit would race those copies. The call uses the app's public endpoint regardless of where the admin runs (in-cluster pod, local `uvicorn`, prod) — devbox is configured so that hostname resolves inside the cluster too (see [devbox_workarounds.md](../devbox_workarounds.md)).
-
-A global **Clean up stopped apps** control (`POST /workspace/cleanup`) deletes (`App.delete`) the deployment records for every *deactivated* `nb-{slug}-{mode}` candidate — Stop deactivates an app but leaves the record; this removes them. Active/idle apps are left alone.
-
-## Working Branch & Sync
-
-User notebooks live and persist on the fork's **`main`** — there is no side branch. The launch script clones `main`, the proxy's sync commits and pushes back to `main`, and the dashboard lists from `main`. Sync runs on two triggers:
-
-1. The explicit **Save** button.
-2. **Pod shutdown** — because `/workspace` is ephemeral, the proxy registers a FastAPI `lifespan` hook that flushes pending edits when Knative scales the pod to zero. The signal path is load-bearing: Flyte's `fserve` wrapper is PID 1 and, on the Knative SIGTERM, forwards the signal to its **one direct child only** (`Popen(cmd, shell=True)` + `send_signal`). So uvicorn must be that direct child — the AppEnvironment args prepend `exec` (so the `sh -c` wrapper replaces itself with the launch script rather than lingering; Debian's `/bin/sh` does not reliably exec-collapse a bare `sh -c "script"`), and the launch script then `exec`s uvicorn into that slot. An intermediate shell anywhere in the chain swallows SIGTERM and the flush is silently skipped, losing unpushed edits.
-
-   Receiving SIGTERM is necessary but not sufficient: uvicorn drains open connections and in-flight background tasks **before** running the `lifespan` shutdown (the flush). The proxy holds a long-lived task to the local marimo backend that never drains on its own, so with uvicorn's default `timeout_graceful_shutdown=None` the drain blocks forever and the flush never fires — verified empirically (the pod sat at "Waiting for background tasks to complete" indefinitely, even after the browser tab closed). The launch script therefore passes `--timeout-graceful-shutdown 15`, which bounds the drain, cancels the lingering task, and then still runs `lifespan.shutdown` (uvicorn only skips it on a second/force SIGTERM). 15s sits well under the pod's 300s termination grace period, leaving room for the git push.
-
-Conflicts with upstream are avoided not by branch isolation but by **path discipline**: the proxy only ever `git add`s `src/stargazer/notebooks/workspace/`, and users create new-named notebooks rather than editing shipped files, so the fork's `main` and upstream touch disjoint paths. The one shared file, `template.py`, is copied (never edited in place) by the create flow. The fork is also not auto-synced from upstream, and the SDK that notebooks import comes from the per-notebook image (`/stargazer`), not the fork checkout — so a drifting `main` doesn't affect execution.
+A global **Clean up stopped apps** control (`POST /workspace/cleanup`) deletes (`App.delete`) the deployment records for every *deactivated* `nb-{slug}-{mode}` app in the user's project — Stop deactivates an app but leaves the record; this removes them. Active/idle apps are left alone.
 
 ## Snapshots (freeze mechanics)
 
 Conceptual framing (snapshot vs. workflow, the publication path) is in the architecture doc and [Notebooks → Promotion Paths](../../../docs/architecture/notebook.md#promotion-paths). The mechanics:
 
-**Freezing is a move.** `POST /workspace/snapshot` takes a notebook *out* of the editable Workspace surface: it re-creates the notebook's current `main` source verbatim under `notebooks/snapshots/<slug>.py` (`create_snapshot_notebook`), then deletes the workspace original (`delete_workspace_notebook`). The snapshots write happens first, so a failed move leaves the notebook editable rather than lost. The source of truth is the fork's `main` — its last *saved* state — so Save before snapshotting to capture live pod edits. Like delete, snapshot tears down any running pod for the slug (`_teardown_notebook_pods`), since once moved there's no Workspace tile left to Stop it.
+**Freezing is a move.** `POST /workspace/snapshot` takes a notebook *out* of the editable Workspace surface: it re-creates the notebook's current stored source verbatim as a snapshot (`create_snapshot_notebook`), then deletes the workspace original (`delete_workspace_notebook`). The snapshot write happens first, so a failed move leaves the notebook editable rather than lost. The source of truth is the store, which a running pod updates every few seconds, so a freeze captures edits up to the last save pass. Like delete, snapshot tears down any running pod for the slug (`_teardown_notebook_pods`), since once moved there's no Workspace tile left to Stop it. A slug shared with a published snapshot is refused (409), since both would launch as the same `nb-{slug}-run` pod.
 
-Each Workspace tile carries a **📸 snapshot** button (between the gear and trash) that calls this route, then drops the workspace tile and inserts the returned tile into the Snapshots grid. The Snapshots section lists the fork's `notebooks/snapshots/` (`list_snapshots` → `_resolve_snapshot_files`, GitHub-only for the listing — no pod *lists* snapshots). A snapshot tile carries **a single Run button** — no Edit, gear, or trash, since a frozen record isn't edited or re-configured. Launching one goes through the same `/launch` path as workspace notebooks: `section=snapshots` is fork-backed (so it requires opt-in) and **restricted to run mode** (`marimo run`, read-only); the file is read from `SNAPSHOT_NOTEBOOK_DIR` (the snapshots dir in the pod's sparse clone, which already covers `src/stargazer/`) and its `[tool.stargazer]` resources are honored like any workspace launch. A running snapshot's `nb-{slug}-run` app is discovered by `/launch/status`'s project list like any other launch, so it hydrates to Open/Stop on reload and `/workspace/cleanup` reaps its stopped pod.
+Each Workspace tile carries a **📸 snapshot** button (between the gear and trash) that calls this route, then drops the workspace tile and inserts the returned tile into the Snapshots grid. A snapshot tile carries **Run**, **Copy to workspace** and **Download**, plus a delete control on the user's own snapshots (`POST /snapshot/delete`); no Edit or gear, since a frozen record isn't edited or re-configured. Launching one goes through the same `/launch` path, **restricted to run mode** (`marimo run`, read-only), with its `[tool.stargazer]` resources honored like any workspace launch. A running snapshot's `nb-{slug}-run` app is discovered by `/launch/status`'s project list like any other launch, so it hydrates to Open/Stop on reload and `/workspace/cleanup` reaps its stopped pod.
 
-**Public vs. own — both flow through the fork.** Snapshots are not user-specific the way Workspace notebooks are. They live in the repo's `notebooks/snapshots/` and travel with the fork like any other repo content: when a user enables saving, the fork is a full copy of upstream, so it already carries every **public, merged** snapshot — just like the shipped tutorials. The user's own 📸 freezes land in that same dir, and syncing the fork with `main` pulls in newly-merged public ones. So `list_snapshots(fork)` returns both, run launches serve both from the fork clone, and there's no separate upstream-listing or upstream-clone path. (One consequence: freezing a notebook whose slug matches an existing public snapshot is refused by the no-overwrite create — pick a distinct name.) The trade-off is that snapshots are visible only once a fork exists (opt-in), unlike image-baked tutorials which everyone sees.
+**Published vs. own.** The Snapshots section lists both:
 
-**Deferred:** image-digest pinning and an inputs/outputs (CID) manifest. This cut freezes the notebook *source*, which is auditable; bit-for-bit re-run is a later phase. The publication path — a user PRs a fork snapshot into upstream, where it merges and then reaches every other fork on sync — is the GitHub-native flow, not a Stargazer route.
+- **Published** snapshots ship in the image from `src/stargazer/notebooks/snapshots/` (`notebooks.public_snapshots()`), like tutorials. Everyone sees them, and they launch from their path in the image (`section=public-snapshots`).
+- **Own** snapshots live in the user's store under `snapshots/`, and the pod hydrates them into `/snapshots` (`section=snapshots`).
+
+Publishing one is a contribution: the author downloads it and adds it to the repo's `notebooks/snapshots/`; once merged it ships in the next image.
+
+**Deferred:** image-digest pinning and an inputs/outputs (CID) manifest. This cut freezes the notebook *source*, which is auditable; bit-for-bit re-run is a later phase.
 
 ## Copy to workspace
 
-**Copy is the reverse of freeze: a read-only source becomes editable.** Both the Workflows tiles (shipped, image-baked pipelines) and the Snapshots tiles (frozen records) carry a **Copy to workspace** button → `POST /workspace/copy` (`slug` + `section`). The route resolves the source — a Workflows notebook is read from the fork's *source tree* (`get_repo_file`, path derived by stripping `IMAGE_WORKDIR` off `Notebook.path_in_image`, e.g. `src/stargazer/notebooks/workflows/scrna_pipeline.py`); a snapshot is read from `notebooks/snapshots/` (`get_snapshot_notebook`) — then writes it under `notebooks/workspace/` via `create_workspace_notebook`, returning the rendered Workspace tile the browser drops before the New-notebook tile. The copy keeps the source's parsed `[tool.stargazer]` resources but gets its own `name`/`description` (from the workflow's registry title/blurb, or the snapshot's stored header) re-injected with `with_stargazer_resources`, so it tiles and launches like any user notebook. The target slug is derived from the source title (`_notebook_slug`); like `/workspace/create` it reuses the same collision rule — `get_workspace_notebook` returning non-None → **409**, so copy never clobbers an existing notebook (rename the existing one to copy again). Like every fork-backed write it requires the workspace opt-in (403 otherwise) — a Workflows tile shown to a not-yet-opted-in user surfaces that as an alert. Copy is a pure "add a notebook" action: no launch, no navigation.
+**Copy is the reverse of freeze: a read-only source becomes editable.** Workflows tiles and Snapshots tiles carry a **Copy to workspace** button → `POST /workspace/copy` (`slug` + `section`). The route resolves the source (`_copy_source`): a Workflows notebook or a published snapshot is read from the installed package (`shipped_source`, `public_snapshot(...).source()`); an own snapshot from the store. It then writes it to the workspace via `create_workspace_notebook` and returns the rendered Workspace tile the browser drops before the New-notebook tile. The copy keeps the source's parsed `[tool.stargazer]` resources but gets its own `name`/`description` (from the workflow's registry title/blurb, or the snapshot's stored header) re-injected with `with_stargazer_resources`, so it tiles and launches like any user notebook. The target slug is derived from the source title (`_notebook_slug`); the store's no-overwrite create makes a name collision a **409**, so copy never clobbers an existing notebook. Copy is a pure "add a notebook" action: no launch, no navigation.
 
-## Outbound HTTP & the Proxy Data Path (plan 22)
+## The Proxy Data Path
 
-**One pooled client per process — never a client per request.**
-
-- **Admin:** every outbound call — GitHub API traffic (`app.github`, `app.oauth`, `app.installation_tokens`) and admin→pod calls (workspace listing probes, save syncs) — rides the shared `app/http_client.py` client (lazy singleton, closed in the admin lifespan), so connections to `api.github.com` and pod endpoints are pooled instead of paying a TLS handshake per call. aiohttp is gone from the app tier (it remains an SDK dep for `stargazer.utils.pinata`). Redirect-following is **off** on the shared client and re-enabled per call, because httpx differs from the aiohttp it replaced in two ways that both bite on GitHub 3xx:
-
-- httpx does not follow redirects by default (aiohttp did), and its `raise_for_status()` **errors on 3xx** (aiohttp only raised at ≥400). So a redirect that used to be followed transparently now surfaces — which is what the write guards want and what naive reads do not.
-- Writes keep redirects off: `_reject_redirect` must *see* the 3xx, since a transfer redirect silently retargeting the upstream repo is the failure this whole guard exists to prevent.
-- Reads that GitHub legitimately redirects opt in per call. `get_installation_id` passes `follow_redirects=True` because GitHub 301s `/users/{owner}/installation` after an owner login rename; without it the call raises, `/auth/callback` swallows that as "app not installed", and Workspace saving silently reads *disabled* for a user who is correctly set up. Admin→pod calls follow redirects for the same per-call reason.
-- `_ensure_ok` treats **anything outside 2xx** as failure, 3xx included. A `status < 400` check would let a redirect through to a `.json()` on the redirect body — a parse error far from the actual cause.
-
-Tests install an `httpx.MockTransport`-backed client straight into `http_client._client`.
-- **Proxy:** the standalone `app/proxy.py` (which can't import the app package) keeps its own module-local shared client with keep-alive to loopback marimo (`_upstream_client`, closed in the proxy lifespan after the shutdown sync). Only `text/html` responses are buffered — for the terminal-overlay splice; everything else (static bundles, API JSON, downloads) **streams** through chunk-by-chunk (`StreamingResponse` over `aiter_raw`, `BackgroundTask(resp.aclose)`) with its original headers, so large bodies never sit in proxy memory. The raw query string passes through untouched (duplicate params intact), hop-by-hop headers are stripped, and the request body is streamed only when one exists (no gratuitous chunked framing on GETs).
-- **Concurrency:** the landing route resolves the workspace and snapshot listings with `asyncio.gather`; `_list_workspace_from_pods` probes all known pod endpoints in parallel (2s each, first success wins).
+- **Proxy:** the standalone `app/proxy.py` (which can't import the app package) keeps one module-local shared client with keep-alive to loopback marimo (`_upstream_client`, closed in the proxy lifespan after the shutdown save). Only `text/html` responses are buffered — for the terminal-overlay splice; everything else (static bundles, API JSON, downloads) **streams** through chunk-by-chunk (`StreamingResponse` over `aiter_raw`, `BackgroundTask(resp.aclose)`) with its original headers, so large bodies never sit in proxy memory. The raw query string passes through untouched (duplicate params intact), hop-by-hop, cookie and `X-User-*` headers are stripped, and the request body is streamed only when one exists (no gratuitous chunked framing on GETs).
+- **Concurrency:** the dashboard route resolves the workspace and snapshot listings with `asyncio.gather`, and reads each workspace notebook's header in parallel (best-effort).
 - **Compression:** the admin app runs `GZipMiddleware` (min 1KB) for the dashboard HTML and asset listings. The proxy does **not** — it relays marimo's own encoding untouched.
 
 ## Admin Routes (full table)
 
-All on `app/admin_app.py` (`app_env`). Lifespan runs `init()` at startup. Post-fork GitHub ops go through `app/installation_tokens.py` (installation tokens), not the OAuth token.
+All on `app/admin_app.py` (`app_env`), all behind Union's login and the `CurrentUser` dependency except `/health`. Lifespan runs `init()` at startup.
 
 | Route | Purpose |
 |---|---|
-| `/` | Landing / dashboard |
-| `/auth/login`, `/auth/callback`, `/auth/logout` | GitHub OAuth login flow |
-| `/workspace/enable` | Opt-in: forks upstream, records verified `fork_full_name`, redirects to GitHub App install |
-| `/auth/app-install-callback` | Finishes opt-in (sets `app_installed`), drops the OAuth token |
-| `/workspace/create` | Writes a new notebook to the fork's `main`, returns the rendered tile |
+| `/` | Dashboard (ensures the user's project on first request) |
+| `/workspace/create` | Writes a new notebook to the user's store from a seed, returns the rendered tile (409 on name collision) |
 | `/workspace/settings` | Rewrites a workspace notebook's `[tool.stargazer]` header (resources + description) |
-| `/workspace/delete` | Removes a workspace notebook (idempotent); deactivates any running pod for it |
-| `/workspace/snapshot` | *Moves* a workspace notebook into `notebooks/snapshots/` (frozen); tears down its pods |
-| `/workspace/copy` | *Copies* a Workflows or Snapshots notebook into `notebooks/workspace/` as an editable notebook (409 on name collision); returns the rendered tile |
-| `/launch` | Serves a per-notebook env (workspace/snapshot launches require opt-in) |
+| `/workspace/delete` | Removes a workspace notebook (idempotent); tears down its pods |
+| `/workspace/snapshot` | *Moves* a workspace notebook into the user's snapshots; tears down its pods |
+| `/snapshot/delete` | Removes one of the user's own snapshots (idempotent); tears down its run pod |
+| `/workspace/copy` | *Copies* a Workflows or Snapshots notebook into the workspace as an editable notebook (409 on name collision); returns the rendered tile |
+| `/workspace/download` | A workspace notebook or snapshot (own or published) as a `.py` attachment |
+| `/launch` | Serves a per-notebook env into the user's project, owned by them; returns its URL |
 | `/launch/status` | Reports active per-notebook apps so the dashboard hydrates running tiles to Open/Stop |
 | `/stop` | Deactivates a per-notebook app by name |
-| `/workspace/save` | Syncs one running pod's workspace to the fork |
 | `/workspace/cleanup` | Deletes deactivated per-notebook app records |
-| `/workspace/pod-token` | Mints a fork-scoped git token for a pod that presents its capability |
 | `/health` | Health probe |
+
+Gone with plan 25 (each has a test asserting the 404): `/auth/login`, `/auth/callback`, `/auth/logout`, `/auth/app-install-callback`, `/workspace/enable`, `/workspace/save`, `/workspace/pod-token`.
 
 Asset-manager routes are a separate router (`app/assets.py`, `include_router`ed onto the same app):
 
 | Route | Auth | Purpose |
 |---|---|---|
-| `GET /assets` | none | Render `assets.html` (anonymous → public tab only) |
+| `GET /assets` | none | Render `assets.html` (anonymous, local runs only → public tab only) |
 | `GET /assets/schema` | none | `{asset_key: [{name,type,default}]}` from `ASSET_REGISTRY` (minus `_BASE_FIELDS`) for the dynamic form |
-| `GET /assets/list?<kv>&network=` | public: none / private: session | Public served from a TTL cache (filters in-memory); private forces `_owner == session user` server-side (fail closed) |
-| `POST /assets/sign` | session | `build_asset()` validate → stamp `_owner` → mint Pinata signed upload URL (filename + keyvalues + `MAX_UPLOAD_BYTES` baked in) → `{url, keyvalues}` |
-| `POST /assets/update` | session + **owner** | Fail-closed ownership (record's `_owner` must equal session user, read fresh) → `build_asset()` validate patch → re-stamp `_owner` → `PinataClient.update_metadata()` merge → updated record |
-| `GET /assets/download/{cid}?network=` | public: none / private: session | 302 redirect; split-gateway (anon public → `PUBLIC_FALLBACK_GATEWAY`, session → `PINATA_GATEWAY`); private → signed URL |
+| `GET /assets/list?<kv>&network=` | public: none / private: signed in | Public served from a TTL cache (filters in-memory); private forces `_owner == user's subject` server-side (fail closed) |
+| `POST /assets/sign` | signed in | `build_asset()` validate → stamp `_owner` → mint Pinata signed upload URL (filename + keyvalues + `MAX_UPLOAD_BYTES` baked in) → `{url, keyvalues}` |
+| `POST /assets/update` | signed in + **owner** | Fail-closed ownership (record's `_owner` must equal the user's subject, read fresh) → `build_asset()` validate patch → re-stamp `_owner` → `PinataClient.update_metadata()` merge → updated record |
+| `GET /assets/download/{cid}?network=` | public: none / private: signed in | 302 redirect; split-gateway (anon public → `PUBLIC_FALLBACK_GATEWAY`, signed in → `PINATA_GATEWAY`); private → signed URL |
 
 ## Asset Manager (mechanics)
 
-`PINATA_JWT` rides into the admin pod via `_RUNTIME_SECRETS` (same env-baking as the OAuth secrets — App-pod `secrets=` is dropped by this Flyte build). Without it the routes 503 and the page shows "not configured"; there is no TinyDB fallback for this surface.
+`PINATA_JWT` rides into the admin pod via `_RUNTIME_SECRETS`, baked from the deployer's shell into `env_vars` (App-pod `secrets=` is dropped by the devbox Flyte build; whether Union injects app secrets is unconfirmed). It's the only secret left in the app tier, and anyone who can view the app spec can read it. Without it the routes 503 and the page shows "not configured"; there is no TinyDB fallback for this surface.
 
-- **Owner stamping.** `/assets/sign` stamps `session.github_username` as `_owner` *after* `build_asset()` validation, so it rides the signature-protected signed URL — unforgeable from the browser. Workspace/SDK uploads stamp from `STARGAZER_OWNER` instead: the launcher injects it into per-notebook pods (`env.env_vars["STARGAZER_OWNER"]` next to `FLYTE_PROJECT`), and `config._stargazer_env_vars()` forwards it into task pods at submission so pipeline outputs are owned too. Stamping lives in `PinataClient.upload()` (`_stamp_owner`, env wins over any stale value) and in the sign route; `build_asset()` rejects user-supplied `_*` keys so the namespace stays clean.
-- **Metadata edit (`update_metadata`).** A mis-tagged record is fixed in place rather than delete-and-re-uploaded. `PinataClient.update_metadata(cid, keyvalues, network)` looks up the file's internal UUID by CID, then `PUT /v3/files/{network}/{id}` with the patch — Pinata **merges** (verified empirically: supplied keys added/overwritten, omitted keys preserved, no key removal), and the bytes/CID are untouched so `*_cid` provenance edges survive. `_stamp_owner` runs here too (env wins; no-op in the admin pod, where the route sets `_owner` explicitly). `LocalStorageClient.update_metadata` mirrors the merge into TinyDB when there's no remote. Two surfaces drive it: the MCP `update_file` tool (validate via `build_asset` → delegate, shared-JWT so unenforced by design) and the `POST /assets/update` route (which additionally **fail-closes on ownership** — the record's current `_owner` must match the session user, read fresh from Pinata not the public TTL cache, so a shared-JWT session still can't rewrite another user's or an unowned record from the page). Editing is the headline reason the bare `cid` is *not* treated as a relationship key in the graph — a content-addressed id never changes under a metadata edit.
+- **Owner stamping.** `/assets/sign` stamps the signed-in user's subject as `_owner` *after* `build_asset()` validation, so it rides the signature-protected signed URL — unforgeable from the browser. Workspace/SDK uploads stamp from `STARGAZER_OWNER` instead: the launcher injects it into per-notebook pods (`env.env_vars["STARGAZER_OWNER"]` next to `FLYTE_PROJECT`), and `config._stargazer_env_vars()` forwards it into task pods at submission so pipeline outputs are owned too. Stamping lives in `PinataClient.upload()` (`_stamp_owner`, env wins over any stale value) and in the sign route; `build_asset()` rejects user-supplied `_*` keys so the namespace stays clean.
+- **Metadata edit (`update_metadata`).** A mis-tagged record is fixed in place rather than delete-and-re-uploaded. `PinataClient.update_metadata(cid, keyvalues, network)` looks up the file's internal UUID by CID, then `PUT /v3/files/{network}/{id}` with the patch — Pinata **merges** (verified empirically: supplied keys added/overwritten, omitted keys preserved, no key removal), and the bytes/CID are untouched so `*_cid` provenance edges survive. `_stamp_owner` runs here too (env wins; no-op in the admin pod, where the route sets `_owner` explicitly). `LocalStorageClient.update_metadata` mirrors the merge into TinyDB when there's no remote. Two surfaces drive it: the MCP `update_file` tool (validate via `build_asset` → delegate, shared-JWT so unenforced by design) and the `POST /assets/update` route (which additionally **fail-closes on ownership** — the record's current `_owner` must match the signed-in user, read fresh from Pinata not the public TTL cache, so a shared-JWT user still can't rewrite another user's or an unowned record from the page). Editing is the headline reason the bare `cid` is *not* treated as a relationship key in the graph — a content-addressed id never changes under a metadata edit.
 - **Public TTL cache.** `_public_cache` (module global, `PUBLIC_CACHE_TTL` = 60s) holds one unfiltered public-network listing; the public tab filters it in-memory. So anonymous public browsing costs ≤1 Pinata listing call per TTL regardless of traffic, and the admin acts as a semi-static mirror. Refresh is single-flight (`_public_cache_lock`, double-checked) so concurrent misses share one listing. Swap to a background refresher if the first-request-after-expiry latency ever matters.
 - **Client swap for tests.** `_pinata_client` / `_public_cache` are module attributes resolved at call time, so route tests monkeypatch a fake Pinata client and reset the cache (`tests/unit/test_assets_routes.py`, `TestClient` without lifespan).
-- **Errors** are FastAPI-standard `HTTPException` → `{"detail": ...}` (401 auth, 400 validation, 503 not-configured), via the `_require_session` / `_require_pinata` guards.
+- **Errors** are FastAPI-standard `HTTPException` → `{"detail": ...}` (401 auth, 400 validation, 503 not-configured), via the `require_user` / `_require_pinata` guards.
 
 ### Template (`app/templates/assets.html`)
 
@@ -196,6 +197,8 @@ The admin app and the per-notebook pods share a strict split:
 
 The admin deploy entrypoint (`python -m app.admin_app` / `stargazer-app`) runs `flyte.build` on the recipe (`_build_notebook_image`) and bakes the returned content-hashed URI into the admin pod as `STARGAZER_NOTEBOOK_IMAGE` before calling `flyte.serve(app_env)`. Every per-notebook pod therefore runs exactly the build that shipped with its admin: no mutable tag, no `docker buildx` retag, and no chance of a node serving a stale cached `:latest`. A per-notebook pod picks up new proxy/launch code on its next re-serve after a redeploy (the dashboard's Open re-serves).
 
+**On Union today images are built locally and pushed to GHCR.** Union's remote builder emits Nydus-only images the tenant's nodes can't pull (ticket open), so deploys set `FLYTE_IMAGE_BUILDER=local` and `STARGAZER_REGISTRY=ghcr.io/stargazerbio`, with docker logged in to GHCR. A new GHCR package starts internal and must be made public once before nodes can pull it.
+
 ## Deploy targets (devbox vs union)
 
 `STARGAZER_TARGET` (`devbox` default, or `union`) is the one switch between the local devbox and the hosted Union tenant. `stargazer.config` validates it (a typo is an import error, not a silent devbox), and forwards it, plus any explicit `STARGAZER_REGISTRY`, into every pod via `STARGAZER_ENV_VARS`, so in-pod builds resolve images the same way the deployer does.
@@ -203,12 +206,25 @@ The admin deploy entrypoint (`python -m app.admin_app` / `stargazer-app`) runs `
 | Setting | devbox | union |
 |---|---|---|
 | Deployer's Flyte config (`app.config.FLYTE_CONFIG`) | `.flyte/config.yaml` | `.flyte/union.yaml` (remote builder) |
-| `STARGAZER_REGISTRY` default | `localhost:30000` | unset: the remote builder pushes to Union's registry |
-| `SECURE_COOKIES` default | off (plain HTTP) | on (TLS) |
+| `STARGAZER_REGISTRY` default | `localhost:30000` | unset: the remote builder pushes to Union's registry (set to GHCR while it's broken) |
+| Login | none: the devbox has no Union auth, so the app tier doesn't run there | Union's gate |
 | Storage port-forward at deploy | yes | never (kubectl may point anywhere) |
 
 `FLYTE_DOMAIN` (default `development`) is independent of the target: it's where the admin serves and looks up every per-notebook app, so a prod deploy sets `FLYTE_DOMAIN=production`. Both `.flyte/` files are gitignored; create `union.yaml` with `flyte create config --endpoint dns:///<tenant> --image-builder remote -o .flyte/union.yaml`.
 
+## Deploy Settings
+
+No secret is required to deploy. The deployer's shell supplies:
+
+| Env var | Purpose | If absent |
+|---|---|---|
+| `STARGAZER_TARGET=union` | picks `.flyte/union.yaml` | the devbox is targeted |
+| `STARGAZER_WORKSPACE_ROOT` | where users' notebooks live; baked into the admin and every pod | a Union deploy refuses to start |
+| `FLYTE_IMAGE_BUILDER=local`, `STARGAZER_REGISTRY=ghcr.io/stargazerbio` | the local-build path while the remote builder is broken | images build remotely and fail to pull |
+| `PINATA_JWT` | the asset manager | `/assets` renders "not configured" |
+
+The deployer's org (from its Flyte config) is baked in as `FLYTE_ORG` automatically, and the notebook image URI as `STARGAZER_NOTEBOOK_IMAGE`.
+
 ## Known Gaps
 
-Production-hardening gaps live in the roadmap, not here: **identity-gated production auth** (per-notebook envs currently run `requires_auth=False`) and **async OAuth provisioning**. See [`.opencode/plans/ROADMAP.md`](../../plans/ROADMAP.md).
+Production gaps live in the roadmap, not here: project creation from the admin (refused on Union, see Project Provisioning), the org-wide platform key in every pod, the shared IAM role for the store, Union cookies reaching pods, invite-only onboarding, and no Union auth on the devbox. See [`.opencode/plans/ROADMAP.md`](../../plans/ROADMAP.md).

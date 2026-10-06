@@ -1,638 +1,526 @@
-"""Tests for the admin app: AppEnvironment, session model, and routes.
+"""Tests for the admin app: AppEnvironment, identity, workspace, and launch routes.
 
-Route tests use FastAPI's `TestClient` instantiated WITHOUT the context
-manager so the app's lifespan (`init()` → Flyte client) never runs — the
-routes under test return before any control-plane call. A `SESSION_SECRET`
-is injected per test and signed session cookies are minted with the real
-`app.session` helpers so the auth path exercises production code.
+Route tests use FastAPI's `TestClient` WITHOUT the context manager so the
+app's lifespan (`init()` → Flyte client) never runs. Identity is the
+`X-User-*` headers Union's auth layer sets on every request. Workspace
+routes run through the real `app.workspace_store` against a temp directory;
+only control-plane calls (project ensure, serve, App get/delete/list) are
+stubbed.
 """
 
+import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 
 import flyte.app
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.admin_app import (
-    _SECRET_NAMES,
-    _dashboard_context,
-    _notebook_slug,
-    _partial_app_creds,
-    _workspace_tiles,
-    asgi_app,
-    main,
-)
-from app.github import _ensure_ok
-from app.session import (
-    SESSION_COOKIE,
-    SessionData,
-    create_session_cookie,
-    read_pod_capability,
-    read_session_cookie,
-    sign_pod_capability,
-)
+from app import config, notebooks, provision
+from app import workspace_store as ws
+from app.admin_app import _notebook_slug, _parse_nb_name, app_env, asgi_app, main
+from app.notebook_meta import parse_notebook_name, parse_notebook_resources
 
-SECRET = "test-session-secret"
+ALICE = "387300641116005877"
+BOB = "111111111111111111"
 
-
-@pytest.fixture
-def secret_env(monkeypatch):
-    """Set SESSION_SECRET so routes can read and sign the session cookie."""
-    monkeypatch.setenv("SESSION_SECRET", SECRET)
-    return SECRET
-
-
-@pytest.fixture
-def client():
-    """A TestClient that does not trigger the app lifespan (no Flyte init)."""
-    return TestClient(asgi_app)
-
-
-def _auth(
-    client: TestClient,
-    *,
-    fork_full_name: str = "",
-    access_token: str = "",
-    app_installed: bool | None = None,
-) -> None:
-    """Attach a signed session cookie for `octocat` to the client's jar.
-
-    `app_installed` defaults to True whenever a fork is given, so tests that
-    just want an *enabled* session (`fork_full_name=…`) stay enabled without
-    spelling it out. Pass it explicitly to model a half-finished opt-in.
-    """
-    if app_installed is None:
-        app_installed = bool(fork_full_name)
-    data = SessionData(
-        "octocat",
-        123,
-        fork_full_name=fork_full_name,
-        access_token=access_token,
-        app_installed=app_installed,
-    )
-    client.cookies.set(SESSION_COOKIE, create_session_cookie(data, SECRET))
-
-
-INSTALL_TOKEN = "ghs_installation_token"
-
-
-def _stub_fork_token(monkeypatch, token: str = INSTALL_TOKEN) -> str:
-    """Patch the GitHub-App path so post-fork ops use a minted installation token.
-
-    Post-fork admin-side GitHub reads/writes mint via
-    `installation_tokens.fork_token(session.fork_full_name)`, never
-    `session.access_token`. Stubbing it here keeps the network out of the test
-    and lets callers assert the *minted* token is what reaches the op.
-    """
-
-    async def fake(fork_full_name):
-        return token
-
-    monkeypatch.setattr("app.installation_tokens.fork_token", fake)
-    return token
-
-
-# ---------------------------------------------------------------------------
-# AppEnvironment / entrypoint
-# ---------------------------------------------------------------------------
-
-
-def test_app_env_is_valid_app_environment():
-    """app_env is a properly configured AppEnvironment."""
-    from flyte.app import AppEnvironment
-
-    from app.admin_app import app_env
-
-    assert isinstance(app_env, AppEnvironment)
-    assert app_env.name == "admin-app"
-    assert app_env.get_port().port == 8080
-
-
-def test_main_function_exists():
-    """admin_app exposes a main() entry point."""
-    from app.admin_app import main
-
-    assert callable(main)
-
-
-# ---------------------------------------------------------------------------
-# SessionData.workspace_enabled
-# ---------------------------------------------------------------------------
-
-
-def test_workspace_enabled_false_by_default():
-    """A fresh session (no fork) reports workspace saving as off."""
-    assert SessionData("u", 1).workspace_enabled is False
-
-
-def test_workspace_enabled_requires_fork_and_install():
-    """Opt-in needs both a fork and a confirmed App install — and no token."""
-    # Fork + install, token already dropped → enabled.
-    assert (
-        SessionData(
-            "u", 1, fork_full_name="u/stargazer", app_installed=True
-        ).workspace_enabled
-        is True
-    )
-    # Forked but install abandoned → still off.
-    assert SessionData("u", 1, fork_full_name="u/stargazer").workspace_enabled is False
-    # A token (pre-fork window) without a fork → off.
-    assert SessionData("u", 1, access_token="t").workspace_enabled is False
-
-
-def test_fork_owner_derived_from_full_name():
-    """fork_owner is derived from fork_full_name's owner segment."""
-    assert SessionData("u", 1, fork_full_name="alice/stargazer-1").fork_owner == "alice"
-    assert SessionData("u", 1).fork_owner == ""
-
-
-# ---------------------------------------------------------------------------
-# Pod capability sign / verify
-# ---------------------------------------------------------------------------
-
-
-def test_pod_capability_roundtrips_fork_name():
-    """A signed capability verifies back to its fork name."""
-    cap = sign_pod_capability("octocat/stargazer", SECRET)
-    assert read_pod_capability(cap, SECRET) == "octocat/stargazer"
-
-
-def test_pod_capability_rejects_tamper_and_wrong_secret():
-    """A bad signature / wrong secret yields None, not the fork name."""
-    cap = sign_pod_capability("octocat/stargazer", SECRET)
-    assert read_pod_capability(cap, "different-secret") is None
-    assert read_pod_capability(cap + "x", SECRET) is None
-
-
-def test_pod_capability_not_confused_with_session_cookie():
-    """A session cookie can't be replayed as a pod capability (distinct salt)."""
-    cookie = create_session_cookie(
-        SessionData("octocat", 1, fork_full_name="octocat/stargazer"), SECRET
-    )
-    assert read_pod_capability(cookie, SECRET) is None
-
-
-# ---------------------------------------------------------------------------
-# Workspace tile assembly
-# ---------------------------------------------------------------------------
-
-
-_WS_SRC = (
+NB_SRC = (
     "# /// script\n"
     '# dependencies = ["marimo"]\n'
-    "#\n"
     "# [tool.stargazer]\n"
-    "# cpu = 3\n"
-    '# memory = "5Gi"\n'
-    '# description = "Tile blurb"\n'
+    "# cpu = 4\n"
+    '# memory = "8Gi"\n'
+    '# name = "QC run"\n'
+    '# description = "Quality control."\n'
     "# ///\n"
     "import marimo\n"
 )
 
 
-def _ws_session():
-    """A session with Workspace saving enabled (fork + token + app installed)."""
-    return SessionData(
-        "octocat",
-        123,
-        fork_full_name="octocat/stargazer",
-        access_token="oauth_tok",
-        app_installed=True,
+@pytest.fixture(autouse=True)
+def _store(tmp_path, monkeypatch):
+    """Point the workspace store at a temp dir for every test."""
+    monkeypatch.setattr(config, "WORKSPACE_ROOT", str(tmp_path / "store"))
+
+
+@pytest.fixture(autouse=True)
+def provisioned(monkeypatch):
+    """Record project ensures instead of calling the control plane."""
+    calls: list[str] = []
+
+    async def fake_ensure(project: str, user) -> None:
+        calls.append(project)
+
+    monkeypatch.setattr(provision, "_ensure_project", fake_ensure)
+    monkeypatch.setattr(provision, "_provisioned", set())
+    return calls
+
+
+@pytest.fixture(autouse=True)
+def _no_teardown(monkeypatch):
+    """Pod teardown hits the control plane; make it a quiet no-op."""
+
+    class _Missing:
+        async def aio(self, **_kw):
+            raise RuntimeError("not found")
+
+    monkeypatch.setattr(
+        "app.admin_app.App", SimpleNamespace(get=_Missing(), delete=_Missing())
     )
 
 
-def _stub_ws_fetch(monkeypatch, source: str = _WS_SRC):
-    """Stub the per-notebook source fetch the tile builder parses metadata from."""
-
-    async def fake_fetch(fork_full_name, token, filename):
-        return source
-
-    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
-    _stub_fork_token(monkeypatch)
+@pytest.fixture
+def client():
+    """A TestClient that does not trigger the app lifespan (no Flyte init)."""
+    return TestClient(asgi_app, follow_redirects=False)
 
 
-async def test_workspace_tiles_excludes_template(monkeypatch):
-    """The shipped template is never rendered as a tile."""
-    _stub_ws_fetch(monkeypatch)
-    assert await _workspace_tiles(_ws_session(), ["template.py"]) == []
+def _as(client: TestClient, subject: str = ALICE, name: str = "Alice Ng") -> None:
+    """Sign the client in the way Union forwards identity."""
+    client.headers["X-User-Subject"] = subject
+    client.headers["X-User-Claim-Name"] = f'"{name}"'
+    client.headers["X-User-Claim-Email"] = '"alice@example.org"'
 
 
-async def test_workspace_tiles_lists_user_notebooks_with_meta(monkeypatch):
-    """User notebooks tile (template filtered) and carry parsed resources/blurb."""
-    _stub_ws_fetch(monkeypatch)
-    tiles = await _workspace_tiles(_ws_session(), ["template.py", "my_analysis.py"])
-    assert [t["slug"] for t in tiles] == ["my_analysis"]
-    assert (tiles[0]["cpu"], tiles[0]["memory"]) == (3, 5)
-    assert tiles[0]["description"] == "Tile blurb"
+def _put(subject: str, filename: str, src: str = NB_SRC, snapshot: bool = False):
+    """Seed the store directly."""
+    fn = ws.create_snapshot_notebook if snapshot else ws.create_workspace_notebook
+    asyncio.run(fn(subject, filename, src))
 
 
-async def test_dashboard_context_off_has_no_workspace_tiles():
-    """When opt-in is off, no Workspace tiles are built."""
-    ctx = await _dashboard_context(SessionData("octocat", 123), ["foo.py"])
-    assert ctx["workspace_enabled"] is False
-    assert ctx["workspace"] == []
+def _get(subject: str, filename: str, snapshot: bool = False) -> str | None:
+    """Read the store directly."""
+    fn = ws.get_snapshot_notebook if snapshot else ws.get_workspace_notebook
+    return asyncio.run(fn(subject, filename))
 
 
-async def test_dashboard_context_on_builds_workspace_tiles(monkeypatch):
-    """When opt-in is on, only the user's own notebooks become tiles."""
-    _stub_ws_fetch(monkeypatch)
-    ctx = await _dashboard_context(_ws_session(), ["template.py", "foo.py"])
-    assert ctx["workspace_enabled"] is True
-    assert [t["slug"] for t in ctx["workspace"]] == ["foo"]
+# ---------------------------------------------------------------------------
+# AppEnvironment + deploy entrypoint
+# ---------------------------------------------------------------------------
 
 
-async def test_dashboard_context_no_snapshots_is_empty():
-    """With no snapshot files, the Snapshots section is empty."""
-    ctx = await _dashboard_context(_ws_session(), [])
-    assert ctx["snapshots"] == []
+def test_app_env_requires_union_auth():
+    """The admin is gated by Union's login."""
+    assert isinstance(app_env, flyte.app.AppEnvironment)
+    assert app_env.requires_auth is True
 
 
-async def test_dashboard_context_lists_snapshot_tiles():
-    """Snapshot files become read-only snapshots-section tiles."""
-    ctx = await _dashboard_context(
-        _ws_session(), [], snapshot_files=["my-analysis.py", "old-run.py"]
+def test_app_env_carries_no_github_or_session_secrets():
+    """Only the asset-store credential remains in the baked env."""
+    gone = {
+        "GITHUB_CLIENT_ID",
+        "GITHUB_CLIENT_SECRET",
+        "GITHUB_APP_ID",
+        "GITHUB_APP_PRIVATE_KEY",
+        "GITHUB_APP_SLUG",
+        "SESSION_SECRET",
+        "STARGAZER_SECURE_COOKIES",
+    }
+    assert gone.isdisjoint(app_env.env_vars)
+
+
+def test_main_refuses_union_deploy_without_workspace_root(monkeypatch):
+    """A Union deploy with nowhere to save notebooks fails loudly, before init."""
+    monkeypatch.setattr(config, "TARGET", "union")
+    monkeypatch.setattr(config, "WORKSPACE_ROOT", "")
+
+    def fail(*_a, **_kw):
+        raise AssertionError("deploy step ran without a workspace root")
+
+    monkeypatch.setattr("app.admin_app.init", fail)
+    with pytest.raises(SystemExit, match="STARGAZER_WORKSPACE_ROOT"):
+        main()
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/auth/login", "/auth/callback", "/auth/logout", "/auth/app-install-callback"],
+)
+def test_github_login_routes_are_gone(client, path):
+    """Union owns sign-in; the app's own GitHub login no longer exists."""
+    _as(client)
+    assert client.get(path).status_code == 404
+
+
+@pytest.mark.parametrize(
+    "path", ["/workspace/enable", "/workspace/save", "/workspace/pod-token"]
+)
+def test_fork_routes_are_gone(client, path):
+    """Saving needs no opt-in, pods save themselves, and pods need no git token."""
+    _as(client)
+    assert client.post(path).status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+
+def test_dashboard_requires_identity(client):
+    """Without Union's identity header the dashboard refuses."""
+    assert client.get("/").status_code == 401
+
+
+def test_dashboard_greets_the_user_without_github(client):
+    """The dashboard names the user and shows no GitHub avatar or sign-out."""
+    _as(client)
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "Alice Ng" in resp.text
+    assert ".png?size=" not in resp.text  # no GitHub avatar
+    assert '<span class="avatar-initial">A</span>' in resp.text
+    assert "/auth/logout" not in resp.text
+    assert "Enable workspace saving" not in resp.text
+
+
+def test_dashboard_ensures_the_project_once_per_process(client, provisioned):
+    """The user's project is ensured on first visit, then remembered."""
+    _as(client)
+    client.get("/")
+    client.get("/")
+    assert provisioned == [f"u-{ALICE}"]
+
+
+def test_dashboard_lists_only_the_users_notebooks(client):
+    """Each user sees their own workspace and snapshots, never another's."""
+    _put(ALICE, "qc-run.py")
+    _put(ALICE, "frozen.py", snapshot=True)
+    _put(BOB, "bobs-secret.py")
+    _as(client)
+    html = client.get("/").text
+    assert "qc-run.py" in html
+    assert "QC run" in html
+    assert "frozen.py" in html
+    assert "bobs-secret.py" not in html
+
+
+def test_dashboard_without_store_says_saving_is_unavailable(client, monkeypatch):
+    """A deploy with no store renders a plain notice instead of the create tile."""
+    monkeypatch.setattr(config, "WORKSPACE_ROOT", "")
+    _as(client)
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "Saving notebooks isn't available" in resp.text
+    assert 'id="create-tile"' not in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Create / settings / delete / snapshot / copy / download
+# ---------------------------------------------------------------------------
+
+
+def test_create_requires_identity(client):
+    """Anonymous create is refused."""
+    assert client.post("/workspace/create", data={"name": "x"}).status_code == 401
+
+
+def test_create_writes_a_seeded_notebook_to_the_users_store(client):
+    """Create copies the blank seed under the user's key and returns its tile."""
+    _as(client)
+    resp = client.post("/workspace/create", data={"name": "My QC", "source": "blank"})
+    assert resp.status_code == 200
+    assert resp.json()["slug"] == "my-qc"
+    assert "my-qc.py" in resp.json()["tile_html"]
+    stored = _get(ALICE, "my-qc.py")
+    assert parse_notebook_name(stored) == "My QC"
+    assert "import marimo" in stored
+    assert _get(BOB, "my-qc.py") is None
+
+
+def test_create_from_template_uses_the_template_seed(client):
+    """The template seed is a different notebook from the blank one."""
+    _as(client)
+    client.post("/workspace/create", data={"name": "a", "source": "blank"})
+    client.post("/workspace/create", data={"name": "b", "source": "template"})
+    assert "### Blank workspace notebook." in _get(ALICE, "a.py")
+    assert "### Workspace template" in _get(ALICE, "b.py")
+
+
+def test_create_conflict_is_409(client):
+    """Creating over an existing notebook is refused."""
+    _put(ALICE, "my-qc.py")
+    _as(client)
+    resp = client.post("/workspace/create", data={"name": "My QC"})
+    assert resp.status_code == 409
+    assert _get(ALICE, "my-qc.py") == NB_SRC
+
+
+def test_create_rejects_reserved_name(client):
+    """Seed names can't be used for user notebooks."""
+    _as(client)
+    assert (
+        client.post("/workspace/create", data={"name": "template"}).status_code == 400
     )
-    snaps = ctx["snapshots"]
-    assert [t["slug"] for t in snaps] == ["my-analysis", "old-run"]
-    assert all(t["section"] == "snapshots" for t in snaps)
 
 
-# ---------------------------------------------------------------------------
-# Workspace listing routes through the installation token (post-fork read)
-# ---------------------------------------------------------------------------
+def test_create_without_store_is_503(client, monkeypatch):
+    """With no store configured, writes say so instead of crashing."""
+    monkeypatch.setattr(config, "WORKSPACE_ROOT", "")
+    _as(client)
+    assert client.post("/workspace/create", data={"name": "x"}).status_code == 503
 
 
-async def test_resolve_workspace_files_uses_installation_token(monkeypatch):
-    """The GitHub listing fallback mints a fork-scoped token, not access_token."""
-    from app import admin_app
-
-    used: dict = {}
-
-    async def fake_list(fork_full_name, token):
-        used.update(fork=fork_full_name, token=token)
-        return ["my_analysis.py"]
-
-    monkeypatch.setattr(admin_app, "gh_list_workspace", fake_list)
-    _stub_fork_token(monkeypatch)
-
-    session = SessionData(
-        "octocat",
-        123,
-        fork_full_name="octocat/stargazer",
-        access_token="oauth_tok",
-        app_installed=True,
-    )
-    files = await admin_app._resolve_workspace_files(session)
-
-    assert files == ["my_analysis.py"]
-    assert used == {"fork": "octocat/stargazer", "token": INSTALL_TOKEN}
-
-
-# ---------------------------------------------------------------------------
-# /launch gating
-# ---------------------------------------------------------------------------
-
-
-def test_launch_requires_session(secret_env, client):
-    """Unauthenticated /launch is rejected with 401."""
+def test_settings_rewrites_the_header(client):
+    """Settings updates resources + description in the stored notebook."""
+    _put(ALICE, "qc-run.py")
+    _as(client)
     resp = client.post(
+        "/workspace/settings",
+        data={"slug": "qc-run", "cpu": "2", "memory": "16", "description": "New"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "slug": "qc-run",
+        "cpu": 2,
+        "memory": 16,
+        "description": "New",
+    }
+    stored = _get(ALICE, "qc-run.py")
+    assert parse_notebook_resources(stored).cpu == 2
+    assert parse_notebook_name(stored) == "QC run"
+
+
+def test_settings_missing_notebook_is_404(client):
+    """Settings on a notebook the user doesn't have is a 404."""
+    _put(BOB, "qc-run.py")
+    _as(client)
+    resp = client.post(
+        "/workspace/settings", data={"slug": "qc-run", "cpu": "1", "memory": "2"}
+    )
+    assert resp.status_code == 404
+
+
+def test_delete_removes_only_the_users_notebook(client):
+    """Delete removes the user's copy and leaves another user's alone."""
+    _put(ALICE, "qc-run.py")
+    _put(BOB, "qc-run.py")
+    _as(client)
+    resp = client.post("/workspace/delete", data={"slug": "qc-run"})
+    assert resp.status_code == 200
+    assert _get(ALICE, "qc-run.py") is None
+    assert _get(BOB, "qc-run.py") == NB_SRC
+
+
+def test_snapshot_moves_the_notebook(client):
+    """Freezing moves a notebook from the workspace into snapshots."""
+    _put(ALICE, "qc-run.py")
+    _as(client)
+    resp = client.post("/workspace/snapshot", data={"slug": "qc-run"})
+    assert resp.status_code == 200
+    assert "qc-run.py" in resp.json()["tile_html"]
+    assert _get(ALICE, "qc-run.py") is None
+    assert _get(ALICE, "qc-run.py", snapshot=True) == NB_SRC
+
+
+def test_snapshot_delete_removes_own_snapshot(client):
+    """A user's own snapshot can be deleted."""
+    _put(ALICE, "frozen.py", snapshot=True)
+    _as(client)
+    assert client.post("/snapshot/delete", data={"slug": "frozen"}).status_code == 200
+    assert _get(ALICE, "frozen.py", snapshot=True) is None
+
+
+def test_copy_workflow_reads_the_shipped_notebook(client):
+    """Copying a workflow writes the shipped source as an editable notebook."""
+    _as(client)
+    resp = client.post(
+        "/workspace/copy", data={"slug": "scrna-pipeline", "section": "workflows"}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["slug"] == "scrna-seq"
+    stored = _get(ALICE, "scrna-seq.py")
+    assert parse_notebook_name(stored) == "scRNA-seq"
+    shipped = (
+        Path(notebooks.NOTEBOOKS_PKG_DIR) / "workflows" / "scrna_pipeline.py"
+    ).read_text()
+    assert shipped.splitlines()[-1] in stored
+    # A second copy would clobber the first.
+    again = client.post(
+        "/workspace/copy", data={"slug": "scrna-pipeline", "section": "workflows"}
+    )
+    assert again.status_code == 409
+
+
+def test_copy_own_snapshot(client):
+    """An own snapshot copies back into the workspace."""
+    _put(ALICE, "frozen.py", snapshot=True)
+    _as(client)
+    resp = client.post(
+        "/workspace/copy", data={"slug": "frozen", "section": "snapshots"}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["slug"] == "qc-run"
+    assert parse_notebook_name(_get(ALICE, "qc-run.py")) == "QC run"
+
+
+@pytest.fixture
+def public_snapshot(tmp_path, monkeypatch):
+    """Ship one public snapshot `published_qc.py` in a temp snapshots dir."""
+    d = tmp_path / "public"
+    d.mkdir()
+    (d / "__init__.py").write_text("")
+    (d / "published_qc.py").write_text(NB_SRC)
+    monkeypatch.setattr(notebooks, "PUBLIC_SNAPSHOTS_DIR", d)
+    return d
+
+
+def test_dashboard_lists_public_snapshots(client, public_snapshot):
+    """Shipped snapshots show for everyone, without a delete control."""
+    _as(client)
+    html = client.get("/").text
+    assert "published-qc.py" in html
+    assert 'data-snapshot-delete-slug="published-qc"' not in html
+
+
+def test_copy_public_snapshot(client, public_snapshot):
+    """A shipped snapshot copies into the workspace."""
+    _as(client)
+    resp = client.post(
+        "/workspace/copy", data={"slug": "published-qc", "section": "public-snapshots"}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["slug"] == "qc-run"
+    assert parse_notebook_name(_get(ALICE, "qc-run.py")) == "QC run"
+
+
+def test_download_workspace_notebook(client):
+    """Download returns the source as an attachment."""
+    _put(ALICE, "qc-run.py")
+    _as(client)
+    resp = client.get("/workspace/download?slug=qc-run&section=workspace")
+    assert resp.status_code == 200
+    assert resp.text == NB_SRC
+    assert resp.headers["content-disposition"] == 'attachment; filename="qc-run.py"'
+
+
+def test_download_is_scoped_to_the_user(client):
+    """One user can't download another's notebook."""
+    _put(BOB, "qc-run.py")
+    _as(client)
+    resp = client.get("/workspace/download?slug=qc-run&section=workspace")
+    assert resp.status_code == 404
+
+
+def test_download_own_and_public_snapshots(client, public_snapshot):
+    """Snapshots download from the store (own) or the image (public)."""
+    _put(ALICE, "frozen.py", snapshot=True)
+    _as(client)
+    own = client.get("/workspace/download?slug=frozen&section=snapshots")
+    pub = client.get("/workspace/download?slug=published-qc&section=public-snapshots")
+    assert own.text == NB_SRC
+    assert pub.text == NB_SRC
+    assert (
+        pub.headers["content-disposition"] == 'attachment; filename="published_qc.py"'
+    )
+
+
+# ---------------------------------------------------------------------------
+# /launch
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def served(monkeypatch):
+    """Capture what /launch builds and serves, without a control plane."""
+    sink: dict = {}
+
+    def fake_env(**kwargs):
+        sink["kwargs"] = kwargs
+        sink["env"] = SimpleNamespace(env_vars={})
+        return sink["env"]
+
+    async def fake_aio(env):
+        return SimpleNamespace(endpoint="https://nb.example")
+
+    monkeypatch.setattr("app.admin_app.per_notebook_env", fake_env)
+    ctx = SimpleNamespace(serve=SimpleNamespace(aio=fake_aio))
+    monkeypatch.setattr("flyte.with_servecontext", lambda **_: ctx)
+    return sink
+
+
+def _launch(client, slug, section, mode="edit"):
+    """POST /launch as the dashboard JS does."""
+    return client.post(
         "/launch",
-        data={"slug": "assets", "mode": "edit", "section": "tutorials"},
+        data={"slug": slug, "section": section, "mode": mode},
         headers={"Accept": "application/json"},
     )
+
+
+def test_launch_requires_identity(client):
+    """Anonymous launch is refused."""
+    resp = _launch(client, "assets", "tutorials")
     assert resp.status_code == 401
 
 
-def test_launch_workspace_blocked_without_optin(secret_env, client):
-    """Workspace launches are gated behind opt-in: 403 when saving is off."""
-    _auth(client)  # logged in, but no fork → saving off
-    resp = client.post(
-        "/launch",
-        data={"slug": "template", "mode": "edit", "section": "workspace"},
-        headers={"Accept": "application/json"},
+def test_launch_workspace_serves_the_owners_pod(client, served):
+    """A workspace launch serves the notebook from /workspace, owned by the user."""
+    _put(ALICE, "qc-run.py")
+    _as(client)
+    resp = _launch(client, "qc-run", "workspace")
+    assert resp.status_code == 200
+    assert resp.json() == {"url": "https://nb.example"}
+    kw = served["kwargs"]
+    assert kw["notebook_path"] == "/workspace/qc-run.py"
+    assert kw["owner_subject"] == ALICE
+    assert kw["slug"] == "qc-run"
+    assert kw["mode"] == "edit"
+    assert kw["resources"].cpu == 4
+    assert served["env"].env_vars == {
+        "FLYTE_PROJECT": f"u-{ALICE}",
+        "STARGAZER_OWNER": ALICE,
+    }
+
+
+def test_launch_tutorial_uses_the_image_path(client, served):
+    """Shipped notebooks launch from the image with default resources."""
+    _as(client)
+    assert _launch(client, "assets", "tutorials").status_code == 200
+    assert (
+        served["kwargs"]["notebook_path"] == notebooks.by_slug("assets").path_in_image
     )
-    assert resp.status_code == 403
-    assert "enable workspace saving" in resp.json()["error"].lower()
+    assert served["kwargs"]["resources"] is None
 
 
-def test_launch_invalid_mode_rejected(secret_env, client):
-    """An invalid launch mode is rejected with 400."""
-    _auth(client)
-    resp = client.post(
-        "/launch",
-        data={"slug": "assets", "mode": "bogus", "section": "tutorials"},
-        headers={"Accept": "application/json"},
+def test_launch_own_snapshot_is_run_only(client, served):
+    """Own snapshots launch read-only from /snapshots."""
+    _put(ALICE, "frozen.py", snapshot=True)
+    _as(client)
+    assert _launch(client, "frozen", "snapshots", mode="edit").status_code == 400
+    assert _launch(client, "frozen", "snapshots", mode="run").status_code == 200
+    assert served["kwargs"]["notebook_path"] == "/snapshots/frozen.py"
+
+
+def test_launch_public_snapshot_uses_the_image_path(client, served, public_snapshot):
+    """Shipped snapshots launch from their path in the image."""
+    _as(client)
+    assert (
+        _launch(client, "published-qc", "public-snapshots", mode="run").status_code
+        == 200
     )
-    assert resp.status_code == 400
-
-
-# ---------------------------------------------------------------------------
-# /workspace/enable opt-in
-# ---------------------------------------------------------------------------
-
-
-def test_workspace_enable_requires_session(secret_env, client):
-    """Enabling without a session redirects home and sets no cookie."""
-    resp = client.post("/workspace/enable", follow_redirects=False)
-    assert resp.status_code == 302
-    assert resp.headers["location"] == "/"
-    assert resp.cookies.get(SESSION_COOKIE) is None
-
-
-def test_workspace_enable_forks_and_sets_cookie(secret_env, client, monkeypatch):
-    """A genuine fork is verified and recorded, but saving stays off until install.
-
-    Enable only completes the *first* half of opt-in (the fork). The session
-    records `fork_full_name` but `workspace_enabled` stays False until the user
-    finishes the GitHub App install (the `/auth/app-install-callback`); so a
-    user who abandons the install isn't shown as enabled.
-    """
-
-    async def fake_fork(_token):
-        return {
-            "fork": True,
-            "full_name": "octocat/stargazer",
-            "owner": {"login": "octocat"},
-        }
-
-    monkeypatch.setattr("app.admin_app.fork_upstream", fake_fork)
-    _auth(client, access_token="gho_token")  # logged in, not yet enabled
-
-    resp = client.post("/workspace/enable", follow_redirects=False)
-    assert resp.status_code == 303
-
-    new_cookie = resp.cookies.get(SESSION_COOKIE)
-    assert new_cookie is not None
-    session = read_session_cookie(new_cookie, SECRET)
-    assert session.fork_full_name == "octocat/stargazer"
-    assert session.app_installed is False
-    assert session.workspace_enabled is False  # pending the App install
-
-
-def test_workspace_enable_refuses_collision_fork(secret_env, client, monkeypatch):
-    """A collision fork (`stargazer-1`) is refused — only the canonical name.
-
-    Detection at login only looks at the canonical `{user}/stargazer`, so
-    recording an alias would silently break saving on the next login. We refuse
-    instead and keep the two paths in lockstep.
-    """
-
-    async def fake_fork(_token):
-        return {
-            "fork": True,
-            "full_name": "octocat/stargazer-1",
-            "owner": {"login": "octocat"},
-        }
-
-    monkeypatch.setattr("app.admin_app.fork_upstream", fake_fork)
-    _auth(client, access_token="gho_token")
-
-    resp = client.post("/workspace/enable", follow_redirects=False)
-    assert resp.status_code == 303
-    assert resp.headers["location"] == "/?ws_error=fork"
-    assert resp.cookies.get(SESSION_COOKIE) is None  # saving stays off
-
-
-def test_workspace_enable_refuses_non_fork(secret_env, client, monkeypatch):
-    """If forking returns the upstream source (transfer redirect), refuse."""
-
-    async def fake_fork(_token):
-        # Mimics POST /forks resolving to the source repo, not a fork.
-        return {
-            "fork": False,
-            "full_name": "StargazerBio/stargazer",
-            "owner": {"login": "StargazerBio"},
-        }
-
-    monkeypatch.setattr("app.admin_app.fork_upstream", fake_fork)
-    _auth(client, access_token="gho_token")
-
-    resp = client.post("/workspace/enable", follow_redirects=False)
-    assert resp.status_code == 303
-    assert resp.headers["location"] == "/?ws_error=fork"
-    assert resp.cookies.get(SESSION_COOKIE) is None  # saving stays off
-
-
-def test_workspace_enable_failure_leaves_saving_off(secret_env, client, monkeypatch):
-    """If the fork call errors, the session is untouched (saving stays off)."""
-
-    async def boom(_token):
-        raise RuntimeError("github down")
-
-    monkeypatch.setattr("app.admin_app.fork_upstream", boom)
-    _auth(client, access_token="gho_token")
-
-    resp = client.post("/workspace/enable", follow_redirects=False)
-    assert resp.status_code == 303
-    assert resp.cookies.get(SESSION_COOKIE) is None  # no re-signed cookie
-
-
-def test_workspace_enable_redirects_to_app_install(secret_env, client, monkeypatch):
-    """With an App configured, a successful fork redirects to its install page."""
-
-    async def fake_fork(_token):
-        return {
-            "fork": True,
-            "full_name": "octocat/stargazer",
-            "owner": {"login": "octocat"},
-        }
-
-    monkeypatch.setattr("app.admin_app.fork_upstream", fake_fork)
-    monkeypatch.setattr("app.config.GITHUB_APP_SLUG", "stargazer-workspaces")
-    _auth(client, access_token="gho_token")
-
-    resp = client.post("/workspace/enable", follow_redirects=False)
-    assert resp.status_code == 303
-    assert resp.headers["location"] == (
-        "https://github.com/apps/stargazer-workspaces/installations/new"
-    )
-    # The fork is already recorded before the user leaves to install.
-    session = read_session_cookie(resp.cookies.get(SESSION_COOKIE), SECRET)
-    assert session.fork_full_name == "octocat/stargazer"
-
-
-# ---------------------------------------------------------------------------
-# /auth/app-install-callback — finish opt-in, drop the OAuth token
-# ---------------------------------------------------------------------------
-
-
-def test_app_install_callback_confirms_install_and_drops_token(secret_env, client):
-    """The callback flips on the install (enabling saving) and clears the token."""
-    # Mid-flow: forked, OAuth token kept, install not yet confirmed → off.
-    _auth(
-        client,
-        fork_full_name="octocat/stargazer",
-        access_token="gho_token",
-        app_installed=False,
+    assert served["kwargs"]["notebook_path"] == (
+        f"{notebooks.IMAGE_WORKDIR}/src/stargazer/notebooks/snapshots/published_qc.py"
     )
 
-    resp = client.get("/auth/app-install-callback", follow_redirects=False)
-    assert resp.status_code == 302
-    session = read_session_cookie(resp.cookies.get(SESSION_COOKIE), SECRET)
-    assert session.app_installed is True
-    assert session.workspace_enabled is True  # now both halves of opt-in are done
-    assert session.access_token == ""  # spent OAuth token dropped
-
-
-def test_app_install_callback_without_session_redirects_home(secret_env, client):
-    """No session → just bounce home, set no cookie."""
-    resp = client.get("/auth/app-install-callback", follow_redirects=False)
-    assert resp.status_code == 302
-    assert resp.cookies.get(SESSION_COOKIE) is None
-
 
 # ---------------------------------------------------------------------------
-# /auth/callback — restore Workspace saving for returning users
-# ---------------------------------------------------------------------------
-
-
-def _patch_oauth(monkeypatch):
-    """Stub the OAuth handshake so /auth/callback reaches the fork lookup.
-
-    The callback reads the OAuth App credentials before exchanging the code, so
-    placeholders are set here; otherwise these tests depend on the shell.
-    """
-    monkeypatch.setenv("GITHUB_CLIENT_ID", "test-client-id")
-    monkeypatch.setenv("GITHUB_CLIENT_SECRET", "test-client-secret")
-
-    async def fake_exchange(**_kw):
-        return "gho_token"
-
-    async def fake_user(_token):
-        return {"login": "octocat", "id": 123}
-
-    async def fake_provision(github_username):
-        return None
-
-    monkeypatch.setattr("app.admin_app.exchange_code", fake_exchange)
-    monkeypatch.setattr("app.admin_app.get_github_user", fake_user)
-    monkeypatch.setattr("app.admin_app.provision_user", fake_provision)
-
-
-def _callback(client):
-    """Drive /auth/callback with a matching oauth_state cookie."""
-    client.cookies.set("oauth_state", "xyz")
-    return client.get("/auth/callback?code=abc&state=xyz", follow_redirects=False)
-
-
-def test_callback_restores_saving_for_returning_fork(secret_env, client, monkeypatch):
-    """A returning user whose fork exists AND App is installed gets saving back."""
-    _patch_oauth(monkeypatch)
-
-    async def fake_find(_token, _username):
-        return {"full_name": "octocat/stargazer"}
-
-    async def fake_install_id(_owner):
-        return 42  # App still installed on the fork
-
-    monkeypatch.setattr("app.admin_app.find_existing_fork", fake_find)
-    monkeypatch.setattr("app.installation_tokens.get_installation_id", fake_install_id)
-
-    resp = _callback(client)
-    session = read_session_cookie(resp.cookies.get(SESSION_COOKIE), SECRET)
-    assert session.fork_full_name == "octocat/stargazer"
-    assert session.app_installed is True
-    assert session.workspace_enabled is True
-    # Returning user is already enabled+installed → no OAuth token kept.
-    assert session.access_token == ""
-
-
-def test_callback_fork_but_uninstalled_app_is_not_enabled(
-    secret_env, client, monkeypatch
-):
-    """A fork whose App install is gone → saving off, OAuth token kept to retry."""
-    _patch_oauth(monkeypatch)
-
-    async def fake_find(_token, _username):
-        return {"full_name": "octocat/stargazer"}
-
-    async def boom(_owner):
-        raise RuntimeError("404 not installed")
-
-    monkeypatch.setattr("app.admin_app.find_existing_fork", fake_find)
-    monkeypatch.setattr("app.installation_tokens.get_installation_id", boom)
-
-    resp = _callback(client)
-    session = read_session_cookie(resp.cookies.get(SESSION_COOKIE), SECRET)
-    assert session.fork_full_name == "octocat/stargazer"
-    assert session.app_installed is False
-    assert session.workspace_enabled is False
-    assert session.access_token == "gho_token"  # kept so they can re-enable
-
-
-def test_callback_first_time_keeps_token_for_enable(secret_env, client, monkeypatch):
-    """A first-time user (no fork) keeps the OAuth token to fork at Enable."""
-    _patch_oauth(monkeypatch)
-
-    async def fake_find(_token, _username):
-        return None
-
-    monkeypatch.setattr("app.admin_app.find_existing_fork", fake_find)
-
-    resp = _callback(client)
-    session = read_session_cookie(resp.cookies.get(SESSION_COOKIE), SECRET)
-    assert session.fork_full_name == ""
-    assert session.access_token == "gho_token"
-
-
-def test_callback_saving_off_when_no_fork(secret_env, client, monkeypatch):
-    """A first-time user (no fork yet) starts with saving off."""
-    _patch_oauth(monkeypatch)
-
-    async def fake_find(_token, _username):
-        return None
-
-    monkeypatch.setattr("app.admin_app.find_existing_fork", fake_find)
-
-    resp = _callback(client)
-    session = read_session_cookie(resp.cookies.get(SESSION_COOKIE), SECRET)
-    assert session.fork_full_name == ""
-    assert session.workspace_enabled is False
-
-
-def test_callback_fork_lookup_failure_does_not_block_login(
-    secret_env, client, monkeypatch
-):
-    """A failing fork lookup must not break login — saving just stays off."""
-    _patch_oauth(monkeypatch)
-
-    async def boom(_token, _username):
-        raise RuntimeError("github down")
-
-    monkeypatch.setattr("app.admin_app.find_existing_fork", boom)
-
-    resp = _callback(client)
-    assert resp.status_code == 302
-    session = read_session_cookie(resp.cookies.get(SESSION_COOKIE), SECRET)
-    assert session.workspace_enabled is False
-
-
-# ---------------------------------------------------------------------------
-# /stop
-# ---------------------------------------------------------------------------
-
-
-def test_stop_requires_session(secret_env, client):
-    """Unauthenticated /stop is rejected with 401."""
-    resp = client.post("/stop", data={"slug": "assets", "mode": "edit"})
-    assert resp.status_code == 401
-
-
-# ---------------------------------------------------------------------------
-# /launch/status
+# /launch/status, /stop, /workspace/cleanup
 # ---------------------------------------------------------------------------
 
 
 class _FakeApp:
     """Stand-in for a flyte.remote.App in status tests."""
 
-    def __init__(self, active: bool, endpoint: str):
-        self._active, self._endpoint = active, endpoint
+    def __init__(self, active: bool, endpoint: str, deactivated: bool = False):
+        self._active, self._endpoint, self._deactivated = active, endpoint, deactivated
 
     def is_active(self) -> bool:
         """Whether the app is deployed and active."""
         return self._active
+
+    def is_deactivated(self) -> bool:
+        """Whether the app has been stopped."""
+        return self._deactivated
 
     @property
     def endpoint(self) -> str:
@@ -640,12 +528,8 @@ class _FakeApp:
         return self._endpoint
 
 
-def _stub_app_get(monkeypatch, table: dict, deleted: list | None = None):
-    """Patch admin_app.App so App.get.aio resolves names from `table`.
-
-    App.delete.aio records deleted names into `deleted` when provided, so
-    teardown paths (e.g. /workspace/delete) can be asserted.
-    """
+def _stub_apps(monkeypatch, table: dict, deleted: list | None = None):
+    """Resolve App.get from `table` and list the project as its keys."""
 
     class _Get:
         async def aio(self, name, project, domain):
@@ -658,1248 +542,70 @@ def _stub_app_get(monkeypatch, table: dict, deleted: list | None = None):
             if deleted is not None:
                 deleted.append(name)
 
+    async def fake_list(project, domain="development", limit=500):
+        return [SimpleNamespace(name=n) for n in table]
+
     monkeypatch.setattr(
         "app.admin_app.App", SimpleNamespace(get=_Get(), delete=_Delete())
     )
-
-
-def _stub_project_list(monkeypatch, names: list[str]):
-    """Patch list_project_apps so status discovery sees these deployment names."""
-
-    async def fake_list(project, domain="development", limit=500):
-        return [SimpleNamespace(name=n) for n in names]
-
     monkeypatch.setattr("app.admin_app.list_project_apps", fake_list)
 
 
-def test_launch_status_requires_session(secret_env, client):
-    """Unauthenticated /launch/status is rejected with 401."""
+def test_launch_status_returns_plain_endpoints(client, monkeypatch):
+    """Running notebooks report their endpoint with no handoff token."""
+    _stub_apps(
+        monkeypatch,
+        {
+            "nb-assets-edit": _FakeApp(True, "https://nb.example"),
+            "nb-qc-run-run": _FakeApp(False, "https://stopped.example"),
+            "other-service": _FakeApp(True, "https://other.example"),
+        },
+    )
+    _as(client)
     resp = client.get("/launch/status")
-    assert resp.status_code == 401
+    assert resp.json() == {
+        "running": [{"slug": "assets", "mode": "edit", "url": "https://nb.example"}]
+    }
 
 
-def test_launch_status_reports_only_active_apps(secret_env, client, monkeypatch):
-    """Status returns active per-notebook apps with their endpoints.
-
-    Discovery is the project-wide deployment list; non-notebook deployments
-    are ignored and each `nb-*` name is re-fetched for authoritative status.
-    """
-    _stub_project_list(monkeypatch, ["nb-assets-edit", "other-service"])
-    _stub_app_get(monkeypatch, {"nb-assets-edit": _FakeApp(True, "http://nb.example")})
-
-    _auth(client)
-    resp = client.get("/launch/status", headers={"Accept": "application/json"})
-    assert resp.status_code == 200
-    running = resp.json()["running"]
-    assert len(running) == 1
-    (entry,) = running
-    assert entry["slug"] == "assets"
-    assert entry["mode"] == "edit"
-    # The endpoint carries a one-shot `sg_launch` handoff token (the session
-    # cookie) so the hydrated tile's Open can mint the notebook's host-only
-    # cookie, same as a fresh /launch.
-    assert entry["url"].startswith("http://nb.example?sg_launch=")
-    assert entry["url"].split("sg_launch=", 1)[1]  # non-empty token
+def test_launch_status_requires_identity(client):
+    """Anonymous status is refused."""
+    assert client.get("/launch/status").status_code == 401
 
 
-def test_launch_status_skips_inactive_apps(secret_env, client, monkeypatch):
-    """A deployed-but-inactive app is not reported as running."""
-    _stub_project_list(monkeypatch, ["nb-assets-edit"])
-    _stub_app_get(monkeypatch, {"nb-assets-edit": _FakeApp(False, "http://nb.example")})
+def test_cleanup_deletes_only_stopped_notebook_apps(client, monkeypatch):
+    """Cleanup removes deactivated nb-* deployments and nothing else."""
+    deleted: list = []
+    _stub_apps(
+        monkeypatch,
+        {
+            "nb-old-edit": _FakeApp(False, "", deactivated=True),
+            "nb-live-run": _FakeApp(True, "https://x"),
+            "other-service": _FakeApp(False, "", deactivated=True),
+        },
+        deleted,
+    )
+    _as(client)
+    resp = client.post("/workspace/cleanup")
+    assert resp.json() == {"deleted": ["nb-old-edit"], "count": 1}
+    assert deleted == ["nb-old-edit"]
 
-    _auth(client)
-    resp = client.get("/launch/status", headers={"Accept": "application/json"})
-    assert resp.status_code == 200
-    assert resp.json()["running"] == []
+
+def test_stop_requires_identity(client):
+    """Anonymous stop is refused."""
+    assert client.post("/stop", data={"slug": "a", "mode": "edit"}).status_code == 401
 
 
-def test_launch_status_survives_listing_failure(secret_env, client, monkeypatch):
-    """A control-plane listing failure degrades to 'nothing running', not a 500."""
-
-    async def boom(project, domain="development", limit=500):
-        raise RuntimeError("control plane down")
-
-    monkeypatch.setattr("app.admin_app.list_project_apps", boom)
-
-    _auth(client)
-    resp = client.get("/launch/status", headers={"Accept": "application/json"})
-    assert resp.status_code == 200
-    assert resp.json()["running"] == []
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
 def test_parse_nb_name_roundtrips_dashed_slugs():
-    """`nb-{slug}-{mode}` parses back even when the slug itself has dashes."""
-    from app.admin_app import _parse_nb_name
-
-    assert _parse_nb_name("nb-assets-edit") == ("assets", "edit")
-    assert _parse_nb_name("nb-scrna-pipeline-run") == ("scrna-pipeline", "run")
-    assert _parse_nb_name("nb-frozen-analysis-run") == ("frozen-analysis", "run")
-    # Non-notebook deployments and malformed names are ignored.
-    assert _parse_nb_name("other-service") is None
-    assert _parse_nb_name("nb-edit") is None
-    assert _parse_nb_name("nb-thing-serve") is None
-
-
-# ---------------------------------------------------------------------------
-# /workspace/save and /workspace/cleanup
-# ---------------------------------------------------------------------------
-
-
-def test_save_requires_session(secret_env, client):
-    """Unauthenticated /workspace/save is rejected with 401."""
-    resp = client.post("/workspace/save", data={"slug": "foo", "mode": "edit"})
-    assert resp.status_code == 401
-
-
-def test_save_requires_optin(secret_env, client):
-    """Saving without workspace saving enabled is rejected with 403."""
-    _auth(client)
-    resp = client.post("/workspace/save", data={"slug": "foo", "mode": "edit"})
-    assert resp.status_code == 403
-
-
-def test_save_409_when_not_running(secret_env, client, monkeypatch):
-    """Saving a notebook with no active pod is rejected with 409."""
-    _stub_app_get(monkeypatch, {})  # App.get raises -> not running
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/save",
-        data={"slug": "foo", "mode": "edit"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 409
-
-
-def test_save_posts_to_app_endpoint(secret_env, client, monkeypatch):
-    """Save POSTs the sync request to the notebook app's public endpoint.
-
-    The call rides the shared pooled client, so the test installs an
-    `httpx.MockTransport`-backed client into `app.http_client`.
-    """
-    import httpx
-
-    from app import http_client
-
-    public = "http://nb-foo-edit-octocat-development.devbox.stargazer.bio"
-    _stub_app_get(monkeypatch, {"nb-foo-edit": _FakeApp(True, public)})
-
-    posted: dict = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        posted["url"] = str(request.url)
-        return httpx.Response(200, json={"status": "ok"})
-
-    monkeypatch.setattr(
-        http_client,
-        "_client",
-        httpx.AsyncClient(transport=httpx.MockTransport(handler)),
-    )
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/save",
-        data={"slug": "foo", "mode": "edit"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 200
-    assert posted["url"] == f"{public}/__sg__/workspace/sync"
-
-
-def test_cleanup_requires_session(secret_env, client):
-    """Unauthenticated /workspace/cleanup is rejected with 401."""
-    resp = client.post("/workspace/cleanup")
-    assert resp.status_code == 401
-
-
-def test_cleanup_deletes_deactivated_apps_regardless_of_dashboard(
-    secret_env, client, monkeypatch
-):
-    """Cleanup lists every nb-* app in the project and deletes the deactivated
-    ones — including a deleted notebook's leftover that's on no dashboard list,
-    while skipping active apps and non-notebook deployments."""
-
-    class _App:
-        def __init__(self, name, deactivated):
-            self._name = name
-            self._deactivated = deactivated
-
-        @property
-        def name(self):
-            return self._name
-
-        def is_deactivated(self):
-            return self._deactivated
-
-    # A deleted notebook's stopped app (in no registry/workspace listing), an
-    # active app, and a non-notebook deployment.
-    table = {
-        "nb-deleted-edit": _App("nb-deleted-edit", True),
-        "nb-running-run": _App("nb-running-run", False),
-        "other-service": _App("other-service", True),
-    }
-
-    async def fake_list(project, domain="development", limit=500):
-        return list(table.values())
-
-    monkeypatch.setattr("app.admin_app.list_project_apps", fake_list)
-
-    deleted: list = []
-
-    class _Get:
-        async def aio(self, name, project, domain):
-            return table[name]
-
-    class _Delete:
-        async def aio(self, name, project, domain):
-            deleted.append(name)
-
-    monkeypatch.setattr(
-        "app.admin_app.App", SimpleNamespace(get=_Get(), delete=_Delete())
-    )
-
-    _auth(client)
-    resp = client.post("/workspace/cleanup", headers={"Accept": "application/json"})
-    assert resp.status_code == 200
-    assert resp.json() == {"deleted": ["nb-deleted-edit"], "count": 1}
-    assert deleted == ["nb-deleted-edit"]
-
-
-def test_cleanup_listing_failure_returns_502(secret_env, client, monkeypatch):
-    """If listing the project's apps fails, cleanup reports an error, not a 500."""
-
-    async def boom(project, domain="development", limit=500):
-        raise RuntimeError("control plane down")
-
-    monkeypatch.setattr("app.admin_app.list_project_apps", boom)
-
-    _auth(client)
-    resp = client.post("/workspace/cleanup", headers={"Accept": "application/json"})
-    assert resp.status_code == 502
-    assert "error" in resp.json()
-
-
-# ---------------------------------------------------------------------------
-# /workspace/pod-token — callback-fetch git token for notebook pods
-# ---------------------------------------------------------------------------
-
-
-def test_pod_token_rejects_missing_capability(secret_env, client):
-    """No/!bearer capability is a 401 — the endpoint mints nothing."""
-    resp = client.post("/workspace/pod-token")
-    assert resp.status_code == 401
-
-
-def test_pod_token_rejects_bad_capability(secret_env, client):
-    """A capability that doesn't verify is a 401."""
-    resp = client.post(
-        "/workspace/pod-token",
-        headers={"Authorization": "Bearer not-a-real-capability"},
-    )
-    assert resp.status_code == 401
-
-
-def test_pod_token_mints_fork_scoped_token(secret_env, client, monkeypatch):
-    """A valid capability mints a fork-scoped token, returned as plain text."""
-    minted: dict = {}
-
-    async def fake_fork_token(fork_full_name):
-        minted.update(fork_full_name=fork_full_name)
-        return "ghs_pod_scoped"
-
-    monkeypatch.setattr("app.installation_tokens.fork_token", fake_fork_token)
-    cap = sign_pod_capability("octocat/stargazer", SECRET)
-
-    resp = client.post(
-        "/workspace/pod-token", headers={"Authorization": f"Bearer {cap}"}
-    )
-    assert resp.status_code == 200
-    assert resp.text == "ghs_pod_scoped"
-    # Scoped to exactly the capability's fork, never a session/access token.
-    assert minted == {"fork_full_name": "octocat/stargazer"}
-
-
-def test_pod_token_502_when_app_not_installed(secret_env, client, monkeypatch):
-    """If minting fails (fork has no GitHub App install), report 502."""
-
-    async def boom(fork_full_name):
-        raise RuntimeError("not installed")
-
-    monkeypatch.setattr("app.installation_tokens.fork_token", boom)
-    cap = sign_pod_capability("octocat/stargazer", SECRET)
-
-    resp = client.post(
-        "/workspace/pod-token", headers={"Authorization": f"Bearer {cap}"}
-    )
-    assert resp.status_code == 502
-
-
-# ---------------------------------------------------------------------------
-# /launch — workspace resource propagation
-# ---------------------------------------------------------------------------
-
-
-def _stub_serve(monkeypatch, sink: dict):
-    """Replace flyte.with_servecontext so /launch never hits a control plane.
-
-    The fake captures the served AppEnvironment in `sink['env']` and returns
-    a deployment with a fixed endpoint.
-    """
-
-    async def fake_aio(env):
-        sink["env"] = env
-        return SimpleNamespace(endpoint="http://nb.example")
-
-    ctx = SimpleNamespace(serve=SimpleNamespace(aio=fake_aio))
-    monkeypatch.setattr("flyte.with_servecontext", lambda **_: ctx)
-
-
-def test_launch_workspace_applies_notebook_resources(secret_env, client, monkeypatch):
-    """A workspace launch parses [tool.stargazer] and serves those resources."""
-    source = (
-        "# /// script\n"
-        '# dependencies = ["marimo"]\n'
-        "#\n"
-        "# [tool.stargazer]\n"
-        "# cpu = 2\n"
-        '# memory = "3Gi"\n'
-        "# ///\n"
-        "import marimo\n"
-    )
-
-    async def fake_fetch(_owner, _token, _filename):
-        return source
-
-    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
-    _stub_fork_token(monkeypatch)
-    sink: dict = {}
-    _stub_serve(monkeypatch, sink)
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/launch",
-        data={"slug": "analysis", "mode": "edit", "section": "workspace"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 200
-    assert resp.json()["url"].startswith("http://nb.example")
-
-    served = sink["env"]
-    assert served.resources.cpu == 2
-    assert served.resources.memory == "3Gi"
-
-
-def test_launch_workspace_missing_source_uses_defaults(secret_env, client, monkeypatch):
-    """If the notebook source can't be fetched, default resources are used."""
-
-    async def fake_fetch(_owner, _token, _filename):
-        return None
-
-    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
-    _stub_fork_token(monkeypatch)
-    sink: dict = {}
-    _stub_serve(monkeypatch, sink)
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/launch",
-        data={"slug": "analysis", "mode": "edit", "section": "workspace"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 200
-
-    from app.notebook_meta import DEFAULT_RESOURCES
-
-    served = sink["env"]
-    assert served.resources.cpu == DEFAULT_RESOURCES.cpu
-    assert served.resources.memory == DEFAULT_RESOURCES.memory
-
-
-def test_launch_snapshot_requires_optin(secret_env, client):
-    """Snapshot launches clone the fork, so they require opt-in: 403 when off."""
-    _auth(client)  # logged in, no fork → saving off
-    resp = client.post(
-        "/launch",
-        data={"slug": "frozen", "mode": "run", "section": "snapshots"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 403
-    assert "enable workspace saving" in resp.json()["error"].lower()
-
-
-def test_launch_snapshot_rejects_edit_mode(secret_env, client):
-    """A frozen snapshot opens read-only: edit mode is rejected with 400."""
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/launch",
-        data={"slug": "frozen", "mode": "edit", "section": "snapshots"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 400
-
-
-def test_launch_snapshot_run_serves_from_snapshots_dir(secret_env, client, monkeypatch):
-    """A snapshot run launch serves the frozen file from the snapshots dir.
-
-    The notebook is read from `notebooks/snapshots/`, its `[tool.stargazer]`
-    resources are honored, and the pod is told to `marimo run` that path.
-    """
-    source = (
-        '# /// script\n# dependencies = ["marimo"]\n#\n'
-        '# [tool.stargazer]\n# cpu = 2\n# memory = "3Gi"\n# ///\nimport marimo\n'
-    )
-
-    async def fake_fetch(_owner, _token, _filename):
-        return source
-
-    monkeypatch.setattr("app.admin_app.get_snapshot_notebook", fake_fetch)
-    _stub_fork_token(monkeypatch)
-    sink: dict = {}
-    _stub_serve(monkeypatch, sink)
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/launch",
-        data={"slug": "frozen", "mode": "run", "section": "snapshots"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 200
-
-    served = sink["env"]
-    # args = ["exec", launch-notebook.sh, <mode>, <notebook_path>] — the `exec`
-    # prefix makes uvicorn fserve's direct child so SIGTERM reaches the flush.
-    # run mode, frozen file resolved under the snapshots dir.
-    assert served.args[0] == "exec"
-    assert served.args[1].endswith("launch-notebook.sh")
-    assert served.args[2] == "run"
-    assert served.args[3].endswith("notebooks/snapshots/frozen.py")
-    assert served.resources.cpu == 2
-    assert served.resources.memory == "3Gi"
-
-
-def test_launch_status_covers_snapshot_pods(secret_env, client, monkeypatch):
-    """A running snapshot pod hydrates to Open/Stop like any other launch.
-
-    Discovery comes from the project's deployment list (no GitHub calls), so
-    a snapshot's `nb-{slug}-run` app is reported without any snapshot listing.
-    """
-    _stub_project_list(monkeypatch, ["nb-frozen-run"])
-    _stub_app_get(monkeypatch, {"nb-frozen-run": _FakeApp(True, "http://nb.example")})
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.get("/launch/status", headers={"Accept": "application/json"})
-    assert resp.status_code == 200
-    (entry,) = resp.json()["running"]
-    assert (entry["slug"], entry["mode"]) == ("frozen", "run")
-
-
-# ---------------------------------------------------------------------------
-# /workspace/create
-# ---------------------------------------------------------------------------
-
-
-def _create_form(**overrides):
-    """Default form fields for a create request."""
-    form = {"name": "My Analysis", "source": "blank", "cpu": "2", "memory": "3Gi"}
-    form.update(overrides)
-    return form
-
-
-def test_create_requires_session(secret_env, client):
-    """Unauthenticated create is rejected with 401."""
-    resp = client.post("/workspace/create", data=_create_form())
-    assert resp.status_code == 401
-
-
-def test_create_requires_optin(secret_env, client):
-    """Create without workspace saving enabled is rejected with 403."""
-    _auth(client)  # logged in, not opted in
-    resp = client.post("/workspace/create", data=_create_form())
-    assert resp.status_code == 403
-
-
-def test_create_rejects_reserved_name(secret_env, client):
-    """The reserved 'template' name is rejected with 400."""
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post("/workspace/create", data=_create_form(name="Template"))
-    assert resp.status_code == 400
-
-
-def test_create_conflict_when_notebook_exists(secret_env, client, monkeypatch):
-    """A name that already exists on the fork is rejected with 409."""
-
-    async def fake_fetch(_owner, _token, _filename):
-        return "# existing notebook\n"
-
-    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
-    _stub_fork_token(monkeypatch)
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post("/workspace/create", data=_create_form(name="taken"))
-    assert resp.status_code == 409
-
-
-def test_create_blank_writes_file_and_returns_slug(secret_env, client, monkeypatch):
-    """A blank create copies the blank seed, injects resources, returns slug."""
-    blank_seed = (
-        '# /// script\n# dependencies = ["marimo", "stargazer"]\n# ///\nimport marimo\n'
-    )
-    written: dict = {}
-
-    async def fake_fetch(_owner, _token, filename):
-        # No collision for the new name; return the blank seed for blank.py.
-        return blank_seed if filename == "blank.py" else None
-
-    async def fake_create(owner, token, filename, content, message=None):
-        written.update(filename=filename, content=content, token=token)
-        return {"content": {"name": filename}}
-
-    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
-    monkeypatch.setattr("app.admin_app.create_workspace_notebook", fake_create)
-    token = _stub_fork_token(monkeypatch)
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/create",
-        data=_create_form(name="My Analysis", cpu="2", memory="3Gi"),
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["slug"] == "my-analysis"
-    # The write used the fork-scoped installation token, never session.access_token.
-    assert written["token"] == token
-    # Create returns a ready-to-insert tile that behaves like any other.
-    assert 'name="slug" value="my-analysis"' in body["tile_html"]
-    assert "launch-form" in body["tile_html"]
-
-    assert written["filename"] == "my-analysis.py"
-    # The written file is a runnable marimo notebook carrying the resources.
-    from app.notebook_meta import NotebookResources, parse_notebook_resources
-
-    assert "import marimo" in written["content"]
-    assert parse_notebook_resources(written["content"]) == NotebookResources(
-        cpu=2, memory="3Gi"
-    )
-
-
-def test_create_from_template_injects_resources(secret_env, client, monkeypatch):
-    """A template create fetches template.py and injects chosen resources."""
-    template_src = (
-        '# /// script\n# dependencies = ["marimo", "stargazer"]\n# ///\nimport marimo\n'
-    )
-    written: dict = {}
-
-    async def fake_fetch(_owner, _token, filename):
-        # No collision for the new name; return the template for template.py.
-        return template_src if filename == "template.py" else None
-
-    async def fake_create(_owner, _token, filename, content, message=None):
-        written.update(filename=filename, content=content)
-        return {}
-
-    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
-    monkeypatch.setattr("app.admin_app.create_workspace_notebook", fake_create)
-    _stub_fork_token(monkeypatch)
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/create",
-        data=_create_form(name="from tmpl", source="template", cpu="1", memory="2Gi"),
-    )
-    assert resp.status_code == 200
-
-    from app.notebook_meta import NotebookResources, parse_notebook_resources
-
-    assert written["filename"] == "from-tmpl.py"
-    assert parse_notebook_resources(written["content"]) == NotebookResources(
-        cpu=1, memory="2Gi"
-    )
-
-
-# ---------------------------------------------------------------------------
-# /workspace/settings
-# ---------------------------------------------------------------------------
-
-
-def test_settings_requires_session(secret_env, client):
-    """Unauthenticated settings is rejected with 401."""
-    resp = client.post(
-        "/workspace/settings", data={"slug": "foo", "cpu": "2", "memory": "4"}
-    )
-    assert resp.status_code == 401
-
-
-def test_settings_rejects_reserved_slug(secret_env, client):
-    """The reserved 'template' slug can't be edited (400)."""
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/settings",
-        data={"slug": "template", "cpu": "2", "memory": "4"},
-    )
-    assert resp.status_code == 400
-
-
-def test_settings_writes_header_and_returns_normalized(secret_env, client, monkeypatch):
-    """Settings rewrites the notebook's header and echoes normalized values."""
-    src = (
-        '# /// script\n# dependencies = ["marimo"]\n'
-        '#\n# [tool.stargazer]\n# cpu = 1\n# memory = "2Gi"\n# ///\nimport marimo\n'
-    )
-    written: dict = {}
-
-    async def fake_fetch(_owner, _token, filename):
-        return src if filename == "foo.py" else None
-
-    async def fake_update(_owner, _token, filename, content, message=None):
-        written.update(filename=filename, content=content)
-        return {}
-
-    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
-    monkeypatch.setattr("app.admin_app.update_workspace_notebook", fake_update)
-    _stub_fork_token(monkeypatch)
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/settings",
-        data={"slug": "foo", "cpu": "4", "memory": "8", "description": "  My  blurb "},
-    )
-    assert resp.status_code == 200
-    assert resp.json() == {
-        "slug": "foo",
-        "cpu": 4,
-        "memory": 8,
-        "description": "My blurb",
-    }
-
-    from app.notebook_meta import (
-        NotebookResources,
-        parse_notebook_description,
-        parse_notebook_resources,
-    )
-
-    assert written["filename"] == "foo.py"
-    assert parse_notebook_resources(written["content"]) == NotebookResources(
-        cpu=4, memory="8Gi"
-    )
-    assert parse_notebook_description(written["content"]) == "My blurb"
-
-
-def test_settings_missing_notebook_is_404(secret_env, client, monkeypatch):
-    """Editing a notebook that isn't on the fork returns 404."""
-
-    async def fake_fetch(_owner, _token, _filename):
-        return None
-
-    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
-    _stub_fork_token(monkeypatch)
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/settings",
-        data={"slug": "ghost", "cpu": "2", "memory": "4"},
-    )
-    assert resp.status_code == 404
-
-
-# ---------------------------------------------------------------------------
-# /workspace/delete
-# ---------------------------------------------------------------------------
-
-
-def test_delete_requires_session(secret_env, client):
-    """Unauthenticated delete is rejected with 401."""
-    resp = client.post("/workspace/delete", data={"slug": "foo"})
-    assert resp.status_code == 401
-
-
-def test_delete_requires_optin(secret_env, client):
-    """Delete without workspace saving enabled is rejected with 403."""
-    _auth(client)  # logged in, not opted in
-    resp = client.post("/workspace/delete", data={"slug": "foo"})
-    assert resp.status_code == 403
-
-
-def test_delete_rejects_seed_slug(secret_env, client):
-    """Deleting a shipped seed (blank/template) is rejected with 400."""
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post("/workspace/delete", data={"slug": "template"})
-    assert resp.status_code == 400
-
-
-def test_delete_removes_notebook(secret_env, client, monkeypatch):
-    """Delete removes the file from the fork and reports the slug."""
-    deleted: dict = {}
-
-    async def fake_delete(repo, token, filename, message=None):
-        deleted.update(repo=repo, filename=filename, token=token)
-        return True
-
-    monkeypatch.setattr(
-        "app.admin_app.delete_workspace_notebook", fake_delete, raising=False
-    )
-    token = _stub_fork_token(monkeypatch)
-    _stub_app_get(monkeypatch, {})  # no running pod to deactivate
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/delete",
-        data={"slug": "my-analysis"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 200
-    assert resp.json()["slug"] == "my-analysis"
-    # The delete used the fork-scoped installation token, never session.access_token.
-    assert deleted == {
-        "repo": "octocat/stargazer",
-        "filename": "my-analysis.py",
-        "token": token,
-    }
-
-
-def test_delete_tears_down_pod_deployment(secret_env, client, monkeypatch):
-    """Delete deactivates AND deletes the deployment for each running mode."""
-    deactivated: list = []
-    deleted_apps: list = []
-
-    class _RunningApp:
-        def __init__(self, name):
-            self.name = name
-            self.deactivate = SimpleNamespace(aio=self._deactivate)
-
-        async def _deactivate(self):
-            deactivated.append(self.name)
-
-    table = {
-        "nb-my-analysis-edit": _RunningApp("nb-my-analysis-edit"),
-        "nb-my-analysis-run": _RunningApp("nb-my-analysis-run"),
-    }
-
-    async def fake_delete(repo, token, filename, message=None):
-        return True
-
-    monkeypatch.setattr(
-        "app.admin_app.delete_workspace_notebook", fake_delete, raising=False
-    )
-    _stub_fork_token(monkeypatch)
-    _stub_app_get(monkeypatch, table, deleted=deleted_apps)
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/delete",
-        data={"slug": "my-analysis"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 200
-    assert sorted(deactivated) == ["nb-my-analysis-edit", "nb-my-analysis-run"]
-    assert sorted(deleted_apps) == ["nb-my-analysis-edit", "nb-my-analysis-run"]
-
-
-def test_delete_idempotent_when_missing(secret_env, client, monkeypatch):
-    """Deleting a notebook absent from the fork still succeeds (idempotent)."""
-
-    async def fake_delete(repo, token, filename, message=None):
-        return False  # file not found on the fork
-
-    monkeypatch.setattr(
-        "app.admin_app.delete_workspace_notebook", fake_delete, raising=False
-    )
-    _stub_fork_token(monkeypatch)
-    _stub_app_get(monkeypatch, {})
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/delete",
-        data={"slug": "ghost"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 200
-    assert resp.json()["slug"] == "ghost"
-
-
-# ---------------------------------------------------------------------------
-# /workspace/snapshot — move a workspace notebook into the snapshots dir
-# ---------------------------------------------------------------------------
-
-
-def test_snapshot_requires_session(secret_env, client):
-    """Unauthenticated snapshot is rejected with 401."""
-    resp = client.post("/workspace/snapshot", data={"slug": "foo"})
-    assert resp.status_code == 401
-
-
-def test_snapshot_requires_optin(secret_env, client):
-    """Snapshot without workspace saving enabled is rejected with 403."""
-    _auth(client)  # logged in, not opted in
-    resp = client.post("/workspace/snapshot", data={"slug": "foo"})
-    assert resp.status_code == 403
-
-
-def test_snapshot_rejects_seed_slug(secret_env, client):
-    """Snapshotting a shipped seed (blank/template) is rejected with 400."""
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post("/workspace/snapshot", data={"slug": "template"})
-    assert resp.status_code == 400
-
-
-def test_snapshot_missing_notebook_is_404(secret_env, client, monkeypatch):
-    """Snapshotting a notebook absent from the fork's main returns 404."""
-
-    async def fake_fetch(_owner, _token, _filename):
-        return None
-
-    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
-    _stub_fork_token(monkeypatch)
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/snapshot",
-        data={"slug": "ghost"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 404
-
-
-def test_snapshot_moves_notebook_into_snapshots_dir(secret_env, client, monkeypatch):
-    """Snapshot MOVES the notebook from workspace/ into snapshots/, frozen.
-
-    It writes the source verbatim under the same `<slug>.py` name in the
-    snapshots dir, then deletes the workspace original so the notebook leaves
-    the editable surface entirely — a snapshot is no longer a workspace tile.
-    Both writes use the fork-scoped installation token, never the OAuth token.
-    """
-    src = (
-        '# /// script\n# dependencies = ["marimo"]\n'
-        '#\n# [tool.stargazer]\n# cpu = 2\n# memory = "4Gi"\n# ///\nimport marimo\n'
-    )
-    written: dict = {}
-    deleted: dict = {}
-
-    async def fake_fetch(_owner, _token, filename):
-        return src if filename == "my-analysis.py" else None
-
-    async def fake_snapshot(repo, token, filename, content, message=None):
-        written.update(repo=repo, token=token, filename=filename, content=content)
-        return {}
-
-    async def fake_delete(repo, token, filename, message=None):
-        deleted.update(repo=repo, token=token, filename=filename)
-        return True
-
-    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
-    monkeypatch.setattr(
-        "app.admin_app.create_snapshot_notebook", fake_snapshot, raising=False
-    )
-    monkeypatch.setattr(
-        "app.admin_app.delete_workspace_notebook", fake_delete, raising=False
-    )
-    token = _stub_fork_token(monkeypatch)
-    _stub_app_get(monkeypatch, {})  # no running pod to tear down
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/snapshot",
-        data={"slug": "my-analysis"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 200
-
-    # Frozen verbatim under the same name, in the snapshots dir.
-    assert written["filename"] == "my-analysis.py"
-    assert written["content"] == src
-    assert written["token"] == token
-    # The workspace original is removed — it's a move, not a copy.
-    assert deleted["filename"] == "my-analysis.py"
-    assert deleted["token"] == token
-    # The response reports the snapshotted slug.
-    assert resp.json()["slug"] == "my-analysis"
-
-
-def test_snapshot_returns_rendered_snapshot_tile(secret_env, client, monkeypatch):
-    """Snapshot returns a ready-to-insert, read-only snapshots tile.
-
-    The browser drops `tile_html` straight into the Snapshots grid. A frozen
-    tile is display-only: it shows the file but carries no launch form (a
-    snapshot can't be edited or run from the dashboard).
-    """
-    src = '# /// script\n# dependencies = ["marimo"]\n# ///\nimport marimo\n'
-
-    async def fake_fetch(_owner, _token, filename):
-        return src if filename == "my-analysis.py" else None
-
-    async def fake_snapshot(*_a, **_k):
-        return {}
-
-    async def fake_delete(*_a, **_k):
-        return True
-
-    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
-    monkeypatch.setattr(
-        "app.admin_app.create_snapshot_notebook", fake_snapshot, raising=False
-    )
-    monkeypatch.setattr(
-        "app.admin_app.delete_workspace_notebook", fake_delete, raising=False
-    )
-    _stub_fork_token(monkeypatch)
-    _stub_app_get(monkeypatch, {})
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/snapshot",
-        data={"slug": "my-analysis"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 200
-    html = resp.json()["tile_html"]
-    assert "my-analysis.py" in html
-    # Frozen: a read-only Run launch only — no Edit.
-    assert 'name="mode" value="run"' in html
-    assert 'name="mode" value="edit"' not in html
-    assert 'name="section" value="snapshots"' in html
-
-
-def test_snapshot_tears_down_pod_deployment(secret_env, client, monkeypatch):
-    """Snapshot deactivates AND deletes any running pod for the moved notebook.
-
-    Once moved, there's no workspace tile left to Stop the pod, so — exactly
-    like delete — snapshot tears down both modes to avoid orphaning a pod.
-    """
-    src = '# /// script\n# dependencies = ["marimo"]\n# ///\nimport marimo\n'
-    deactivated: list = []
-    deleted_apps: list = []
-
-    async def fake_fetch(_owner, _token, filename):
-        return src if filename == "my-analysis.py" else None
-
-    async def fake_snapshot(repo, token, filename, content, message=None):
-        return {}
-
-    async def fake_delete(repo, token, filename, message=None):
-        return True
-
-    class _RunningApp:
-        def __init__(self, name):
-            self.name = name
-            self.deactivate = SimpleNamespace(aio=self._deactivate)
-
-        async def _deactivate(self):
-            deactivated.append(self.name)
-
-    table = {
-        "nb-my-analysis-edit": _RunningApp("nb-my-analysis-edit"),
-        "nb-my-analysis-run": _RunningApp("nb-my-analysis-run"),
-    }
-
-    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_fetch)
-    monkeypatch.setattr(
-        "app.admin_app.create_snapshot_notebook", fake_snapshot, raising=False
-    )
-    monkeypatch.setattr(
-        "app.admin_app.delete_workspace_notebook", fake_delete, raising=False
-    )
-    _stub_fork_token(monkeypatch)
-    _stub_app_get(monkeypatch, table, deleted=deleted_apps)
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/snapshot",
-        data={"slug": "my-analysis"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 200
-    assert sorted(deactivated) == ["nb-my-analysis-edit", "nb-my-analysis-run"]
-    assert sorted(deleted_apps) == ["nb-my-analysis-edit", "nb-my-analysis-run"]
-
-
-# ---------------------------------------------------------------------------
-# /workspace/copy — copy a workflow or snapshot into the editable workspace
-# ---------------------------------------------------------------------------
-
-
-def test_copy_requires_session(secret_env, client):
-    """Unauthenticated copy is rejected with 401."""
-    resp = client.post(
-        "/workspace/copy", data={"slug": "scrna-pipeline", "section": "workflows"}
-    )
-    assert resp.status_code == 401
-
-
-def test_copy_requires_optin(secret_env, client):
-    """Copy without workspace saving enabled is rejected with 403."""
-    _auth(client)  # logged in, not opted in
-    resp = client.post(
-        "/workspace/copy", data={"slug": "scrna-pipeline", "section": "workflows"}
-    )
-    assert resp.status_code == 403
-
-
-def test_copy_rejects_uncopyable_section(secret_env, client):
-    """Copy only accepts workflows/snapshots sources — tutorials is rejected."""
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/copy", data={"slug": "assets", "section": "tutorials"}
-    )
-    assert resp.status_code == 400
-
-
-def test_copy_unknown_workflow_is_404(secret_env, client, monkeypatch):
-    """A workflow slug that isn't a registered workflow notebook returns 404."""
-    _stub_fork_token(monkeypatch)
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/copy",
-        data={"slug": "ghost", "section": "workflows"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 404
-
-
-def test_copy_workflow_writes_editable_workspace_notebook(
-    secret_env, client, monkeypatch
-):
-    """Copying a workflow reads it from the fork's source tree and writes it
-    into notebooks/workspace/ as an editable notebook keyed by its title.
-
-    The new notebook carries the workflow's display title in its
-    `[tool.stargazer]` header and gets the source's parsed resources; the write
-    uses the fork-scoped installation token. The returned tile is a normal
-    workspace tile (gear + launch forms).
-    """
-    src = (
-        '# /// script\n# dependencies = ["marimo"]\n'
-        '#\n# [tool.stargazer]\n# cpu = 2\n# memory = "4Gi"\n# ///\nimport marimo\n'
-    )
-    fetched: dict = {}
-    written: dict = {}
-
-    async def fake_repo_file(repo, token, path):
-        fetched.update(repo=repo, token=token, path=path)
-        return src
-
-    async def fake_ws_fetch(_repo, _token, _filename):
-        return None  # no collision on the target name
-
-    async def fake_create(repo, token, filename, content, message=None):
-        written.update(filename=filename, content=content, token=token)
-        return {}
-
-    monkeypatch.setattr("app.admin_app.get_repo_file", fake_repo_file)
-    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_ws_fetch)
-    monkeypatch.setattr("app.admin_app.create_workspace_notebook", fake_create)
-    token = _stub_fork_token(monkeypatch)
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/copy",
-        data={"slug": "scrna-pipeline", "section": "workflows"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-
-    # Read from the fork's repo tree (image-workdir prefix stripped).
-    assert fetched["path"] == "src/stargazer/notebooks/workflows/scrna_pipeline.py"
-    assert fetched["token"] == token
-    # Title "scRNA-seq" drives the new slug; the write uses the install token.
-    assert body["slug"] == "scrna-seq"
-    assert written["filename"] == "scrna-seq.py"
-    assert written["token"] == token
-    # The copy is a real workspace tile (editable), not a frozen one.
-    assert 'name="slug" value="scrna-seq"' in body["tile_html"]
-    assert "tile-settings" in body["tile_html"]
-
-    from app.notebook_meta import (
-        NotebookResources,
-        parse_notebook_name,
-        parse_notebook_resources,
-    )
-
-    assert parse_notebook_resources(written["content"]) == NotebookResources(
-        cpu=2, memory="4Gi"
-    )
-    assert parse_notebook_name(written["content"]) == "scRNA-seq"
-
-
-def test_copy_conflict_when_notebook_exists(secret_env, client, monkeypatch):
-    """Copying onto a name already in the workspace is rejected with 409.
-
-    Copy reuses create's collision rule — the derived slug must be free, else
-    the user renames the existing notebook and copies again.
-    """
-    src = '# /// script\n# dependencies = ["marimo"]\n# ///\nimport marimo\n'
-
-    async def fake_repo_file(_repo, _token, _path):
-        return src
-
-    async def fake_ws_fetch(_repo, _token, _filename):
-        return "# existing notebook\n"  # the derived slug is already taken
-
-    monkeypatch.setattr("app.admin_app.get_repo_file", fake_repo_file)
-    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_ws_fetch)
-    _stub_fork_token(monkeypatch)
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/copy",
-        data={"slug": "scrna-pipeline", "section": "workflows"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 409
-
-
-def test_copy_snapshot_writes_editable_workspace_notebook(
-    secret_env, client, monkeypatch
-):
-    """Copying a snapshot reads it from snapshots/ and writes it editable.
-
-    The snapshot's own `[tool.stargazer]` name/description/resources carry over
-    onto the new workspace notebook.
-    """
-    src = (
-        '# /// script\n# dependencies = ["marimo"]\n'
-        "#\n# [tool.stargazer]\n"
-        '# name = "My Saved Run"\n# cpu = 1\n# memory = "2Gi"\n'
-        '# description = "A frozen analysis"\n# ///\nimport marimo\n'
-    )
-    fetched: dict = {}
-    written: dict = {}
-
-    async def fake_snapshot_fetch(repo, token, filename):
-        fetched.update(repo=repo, token=token, filename=filename)
-        return src
-
-    async def fake_ws_fetch(_repo, _token, _filename):
-        return None  # no collision on the target name
-
-    async def fake_create(_repo, _token, filename, content, message=None):
-        written.update(filename=filename, content=content)
-        return {}
-
-    monkeypatch.setattr("app.admin_app.get_snapshot_notebook", fake_snapshot_fetch)
-    monkeypatch.setattr("app.admin_app.get_workspace_notebook", fake_ws_fetch)
-    monkeypatch.setattr("app.admin_app.create_workspace_notebook", fake_create)
-    _stub_fork_token(monkeypatch)
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/copy",
-        data={"slug": "my-analysis", "section": "snapshots"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-
-    assert fetched["filename"] == "my-analysis.py"
-    # The new slug comes from the snapshot's stored display name.
-    assert body["slug"] == "my-saved-run"
-    assert written["filename"] == "my-saved-run.py"
-
-    from app.notebook_meta import (
-        NotebookResources,
-        parse_notebook_description,
-        parse_notebook_name,
-        parse_notebook_resources,
-    )
-
-    assert parse_notebook_name(written["content"]) == "My Saved Run"
-    assert parse_notebook_description(written["content"]) == "A frozen analysis"
-    assert parse_notebook_resources(written["content"]) == NotebookResources(
-        cpu=1, memory="2Gi"
-    )
-
-
-def test_copy_missing_snapshot_source_is_404(secret_env, client, monkeypatch):
-    """Copying a snapshot absent from the fork returns 404."""
-
-    async def fake_snapshot_fetch(_repo, _token, _filename):
-        return None
-
-    monkeypatch.setattr("app.admin_app.get_snapshot_notebook", fake_snapshot_fetch)
-    _stub_fork_token(monkeypatch)
-
-    _auth(client, fork_full_name="octocat/stargazer", access_token="tok")
-    resp = client.post(
-        "/workspace/copy",
-        data={"slug": "ghost", "section": "snapshots"},
-        headers={"Accept": "application/json"},
-    )
-    assert resp.status_code == 404
-
-
-# ---------------------------------------------------------------------------
-# app.github._ensure_ok — redirects are failures, not successes
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_ensure_ok_treats_redirect_as_failure():
-    """A 3xx must raise, not fall through to a `.json()` on a redirect body.
-
-    The shared client doesn't follow redirects, so GitHub answering a renamed
-    or transferred repo with a 301 has to surface as a descriptive error. A
-    `status < 400` guard would let it through and the caller would parse the
-    redirect body — a confusing KeyError/JSONDecodeError far from the cause.
-    """
-    resp = httpx.Response(
-        301,
-        headers={"location": "https://api.github.com/repositories/123"},
-        request=httpx.Request("GET", "https://api.github.com/repos/o/r/contents/x"),
-    )
-    with pytest.raises(RuntimeError, match="301"):
-        await _ensure_ok(resp, "list x")
-
-
-@pytest.mark.asyncio
-async def test_ensure_ok_passes_success_and_raises_on_error():
-    """2xx returns quietly; 4xx surfaces GitHub's own `message`."""
-    req = httpx.Request("GET", "https://api.github.com/repos/o/r")
-    await _ensure_ok(httpx.Response(200, json={}, request=req), "read")  # no raise
-    with pytest.raises(RuntimeError, match="Resource not accessible"):
-        await _ensure_ok(
-            httpx.Response(
-                403, json={"message": "Resource not accessible"}, request=req
-            ),
-            "write",
-        )
-
-
-# ---------------------------------------------------------------------------
-# GitHub App credential pairing — all-or-nothing
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "env, expected",
-    [
-        ({"GITHUB_APP_ID": "1", "GITHUB_APP_PRIVATE_KEY": "k"}, []),
-        ({}, []),  # pre-App deploy: neither set is valid
-        ({"GITHUB_APP_ID": "1"}, ["GITHUB_APP_PRIVATE_KEY"]),
-        ({"GITHUB_APP_PRIVATE_KEY": "k"}, ["GITHUB_APP_ID"]),
-    ],
-    ids=["both-set", "neither-set", "id-without-key", "key-without-id"],
-)
-def test_partial_app_creds_flags_only_the_broken_middle(monkeypatch, env, expected):
-    """Both-set and neither-set are fine; exactly one set is a deploy mistake."""
-    for name in ("GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY"):
-        monkeypatch.delenv(name, raising=False)
-    for name, value in env.items():
-        monkeypatch.setenv(name, value)
-    assert _partial_app_creds() == expected
-
-
-def test_main_refuses_to_deploy_a_half_configured_app(monkeypatch):
-    """`main()` exits before deploying when only one App credential is set.
-
-    The failure it prevents is silent: a signing key that can't be built makes
-    every install check raise, which the login callback reads as "not
-    installed" — so saving reads off for users who are genuinely set up.
-    """
-    for name in _SECRET_NAMES:
-        monkeypatch.setenv(name, "x")
-    monkeypatch.setenv("GITHUB_APP_ID", "3975643")
-    monkeypatch.delenv("GITHUB_APP_PRIVATE_KEY", raising=False)
-
-    # Deploy side effects must never be reached.
-    def fail(*_a, **_kw):
-        raise AssertionError("deploy step ran despite partial App config")
-
-    monkeypatch.setattr("app.admin_app.init", fail)
-
-    with pytest.raises(SystemExit, match="GITHUB_APP_PRIVATE_KEY"):
-        main()
+    """The mode is the last segment, so dashed slugs survive."""
+    assert _parse_nb_name("nb-scrna-pipeline-edit") == ("scrna-pipeline", "edit")
+    assert _parse_nb_name("nb-x-bogus") is None
+    assert _parse_nb_name("other") is None
 
 
 @pytest.mark.parametrize(
@@ -1907,34 +613,7 @@ def test_main_refuses_to_deploy_a_half_configured_app(monkeypatch):
     [("pr_verify", "pr-verify"), ("QC v1.2", "qc-v1-2"), ("a__b..c", "a-b-c")],
 )
 def test_created_notebook_slug_is_a_launchable_app_name(name, slug):
-    """Create's slug must survive Flyte's app-name rules, or the notebook can't launch.
-
-    The slug becomes the pod name `nb-{slug}-{mode}`, which allows only
-    `[a-z0-9-]`; `_` and `.` used to pass through and 500 every launch.
-    """
+    """A notebook slug must survive Flyte's app-name rules, or it can't launch."""
     assert _notebook_slug(name) == slug
-    # Flyte validates the name on construction, exactly as `/launch` does.
     env = flyte.app.AppEnvironment(name=f"nb-{_notebook_slug(name)}-edit", image="img")
     assert env.name == f"nb-{slug}-edit"
-
-
-def test_launch_status_queries_configured_domain(secret_env, client, monkeypatch):
-    """Status discovery and re-fetch both use the deploy's domain."""
-    seen = []
-
-    async def fake_list(project, domain="development", limit=500):
-        seen.append(("list", domain))
-        return [SimpleNamespace(name="nb-assets-edit")]
-
-    class _Get:
-        async def aio(self, name, project, domain):
-            seen.append(("get", domain))
-            return _FakeApp(True, "http://nb.example")
-
-    monkeypatch.setattr("app.admin_app.config.FLYTE_DOMAIN", "production")
-    monkeypatch.setattr("app.admin_app.list_project_apps", fake_list)
-    monkeypatch.setattr("app.admin_app.App", SimpleNamespace(get=_Get()))
-
-    _auth(client)
-    client.get("/launch/status", headers={"Accept": "application/json"})
-    assert seen == [("list", "production"), ("get", "production")]

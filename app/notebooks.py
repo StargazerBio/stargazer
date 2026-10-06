@@ -2,26 +2,35 @@
 ### Notebook registry consumed by the dashboard app.
 
 Curated, hand-maintained tuple of every notebook that ships in the
-`notebook-app` image. Workspace notebooks are NOT listed here —
-they're discovered at render time from the per-notebook pod's local
-clone of the user's fork (or the GitHub Contents API as a fallback).
+`notebook-app` image, plus the helpers that read shipped notebook sources
+(seeds, workflows, public snapshots) out of the installed `stargazer`
+package. Workspace notebooks and a user's own snapshots are NOT here — they
+live in the workspace store (`app.workspace_store`).
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
+import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
-# Workspace-section paths live under /workspace/<src/...>/workspace at runtime;
-# image-shipped notebooks live at /stargazer/<src/...> after the Docker COPY.
-# Snapshots live in a sibling dir on the fork (same sparse-clone cone), served
-# read-only in run mode.
+import stargazer.notebooks
+
+# Image-shipped notebooks live at /stargazer/<src/...> in the notebook pod.
+# (A user's own notebooks are hydrated elsewhere; see `app.per_notebook`.)
 IMAGE_WORKDIR = "/stargazer"
-WORKSPACE_NOTEBOOK_DIR = "/workspace/src/stargazer/notebooks/workspace"
-SNAPSHOT_NOTEBOOK_DIR = "/workspace/src/stargazer/notebooks/snapshots"
+
+# The installed `stargazer.notebooks` package: the same files the notebook
+# image ships under IMAGE_WORKDIR, readable from the admin process.
+NOTEBOOKS_PKG_DIR = Path(stargazer.notebooks.__file__).parent
+# Public snapshots: frozen notebooks merged upstream, shipped to everyone in
+# the image like tutorials. Module attribute so tests can point it elsewhere.
+PUBLIC_SNAPSHOTS_DIR = NOTEBOOKS_PKG_DIR / "snapshots"
+_IMAGE_NOTEBOOKS_PREFIX = f"{IMAGE_WORKDIR}/src/stargazer/notebooks/"
 
 
-# Seed notebooks shipped in every fork at `notebooks/workspace/{slug}.py`.
+# Seed notebooks shipped at `notebooks/workspace/{slug}.py`.
 # `/workspace/create` copies one of these under the user's chosen name. They
 # are NOT rendered as dashboard tiles (only user-created notebooks are): the
 # template is linked from the Workspace description, and both slugs are
@@ -100,3 +109,71 @@ def by_slug(slug: str) -> Notebook | None:
 def by_section(section: str) -> tuple[Notebook, ...]:
     """Return all notebooks belonging to one dashboard section."""
     return tuple(n for n in NOTEBOOKS if n.section == section)
+
+
+def slugify(name: str) -> str:
+    """A name reduced to `[a-z0-9-]`: the rule Flyte app names and slugs share.
+
+    Lowercases, turns every other character into a dash, collapses runs and
+    trims the ends, so the result is also traversal-free as a filename stem.
+    """
+    clean = re.sub(r"[^a-z0-9-]", "-", name.lower())
+    return re.sub(r"-+", "-", clean).strip("-")
+
+
+def shipped_source(path_in_image: str) -> str | None:
+    """Read a shipped notebook's source by its path in the notebook image.
+
+    The admin has no `/stargazer` checkout, but it installs the same package,
+    so the image path maps onto the installed `stargazer.notebooks`. None if
+    the path is outside it or the file is missing.
+    """
+    if not path_in_image.startswith(_IMAGE_NOTEBOOKS_PREFIX):
+        return None
+    path = NOTEBOOKS_PKG_DIR / path_in_image.removeprefix(_IMAGE_NOTEBOOKS_PREFIX)
+    return path.read_text() if path.is_file() else None
+
+
+def seed_source(seed: str) -> str | None:
+    """The source of a create seed (`blank` or `template`), or None."""
+    if seed not in SEED_SLUGS:
+        return None
+    path = NOTEBOOKS_PKG_DIR / "workspace" / f"{seed}.py"
+    return path.read_text() if path.is_file() else None
+
+
+@dataclass(frozen=True)
+class PublicSnapshot:
+    """A frozen notebook shipped to everyone in the image."""
+
+    slug: str
+    filename: str
+
+    @property
+    def path_in_image(self) -> str:
+        """Where the notebook pod finds it."""
+        return f"{_IMAGE_NOTEBOOKS_PREFIX}snapshots/{self.filename}"
+
+    def source(self) -> str:
+        """The snapshot's source, read from the installed package."""
+        return (PUBLIC_SNAPSHOTS_DIR / self.filename).read_text()
+
+
+def public_snapshots() -> tuple[PublicSnapshot, ...]:
+    """Every shipped public snapshot, sorted by filename.
+
+    Filenames may use underscores (they're modules); the slug is the
+    launchable form.
+    """
+    if not PUBLIC_SNAPSHOTS_DIR.is_dir():
+        return ()
+    return tuple(
+        PublicSnapshot(slug=slugify(p.stem), filename=p.name)
+        for p in sorted(PUBLIC_SNAPSHOTS_DIR.glob("*.py"))
+        if not p.name.startswith("_") and slugify(p.stem)
+    )
+
+
+def public_snapshot(slug: str) -> PublicSnapshot | None:
+    """The shipped public snapshot with this slug, or None."""
+    return next((s for s in public_snapshots() if s.slug == slug), None)

@@ -21,9 +21,7 @@ def _nb_env():
         slug="demo",
         mode="edit",
         notebook_path="/workspace/x.py",
-        fork_full_name="octocat/stargazer",
-        pod_capability="cap",
-        pod_key="key",
+        owner_subject="387300641116005877",
         admin_url="http://admin",
     )
 
@@ -78,19 +76,13 @@ def test_target_is_forwarded_into_pods():
     assert _fresh(code, STARGAZER_TARGET="union") == "union"
 
 
-_APP = "from app import config as c; print(c.TARGET, c.SECURE_COOKIES, c.FLYTE_CONFIG.name)"
+_APP = "from app import config as c; print(c.TARGET, c.FLYTE_CONFIG.name)"
 
 
 def test_app_config_per_target():
-    """Each target picks its Flyte config file and cookie-Secure default."""
-    assert _fresh(_APP) == "devbox False config.yaml"
-    assert _fresh(_APP, STARGAZER_TARGET="union") == "union True union.yaml"
-
-
-def test_secure_cookies_can_be_forced_off_on_union():
-    """An explicit STARGAZER_SECURE_COOKIES overrides the target default."""
-    out = _fresh(_APP, STARGAZER_TARGET="union", STARGAZER_SECURE_COOKIES="0")
-    assert out == "union False union.yaml"
+    """Each target picks its own Flyte config file."""
+    assert _fresh(_APP) == "devbox config.yaml"
+    assert _fresh(_APP, STARGAZER_TARGET="union") == "union union.yaml"
 
 
 def test_notebook_pod_gets_configured_domain(monkeypatch):
