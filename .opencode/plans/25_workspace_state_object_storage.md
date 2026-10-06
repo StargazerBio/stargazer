@@ -129,12 +129,17 @@ Two PRs:
 - [x] Cross-project access: the admin (project `flytesnacks`) can read objects
       written by a pod in another project.
 - [x] Identity forwarded to `requires_auth=True` apps, and unforgeable.
-- [ ] `flyte.storage` is importable by the proxy: it runs at system level in
+- [x] `flyte.storage` is importable by the proxy: it runs at system level in
       the notebook image, outside any sandbox venv. Confirm `flyte` is
-      installed there, or add it.
+      installed there, or add it. *(Measured 2026-10-06: a tenant pod
+      hydrated `/workspace/e2e-plan25.py` from the store, which only the
+      proxy's `flyte.storage` calls can do.)*
 - [ ] Bucket versioning is enabled on `union-us-west-2-stargazerbio`. (Union
       manages the bucket — ask them if the console doesn't show it.)
-- [ ] A per-notebook app with `requires_auth=True` still receives the
+- [ ] *(Still open: the tenant run above proves edits survive scale-to-zero,
+      but the interval save had already stored them, so it doesn't isolate
+      the shutdown save. Needs pod logs showing `[sg] saved` at SIGTERM.)*
+      A per-notebook app with `requires_auth=True` still receives the
       Knative SIGTERM and runs the shutdown flush (auth sits in front of the
       pod and shouldn't affect it; prove it once).
 
@@ -145,108 +150,128 @@ read/write primitives, so no route composes URIs by hand.
 
 ### Tests first
 
-- [ ] Round-trip: write a notebook, read it back byte-identical.
-- [ ] List returns only that user's notebooks, never another user's.
-- [ ] Key derivation rejects a slug or subject that would escape its prefix
+- [x] Round-trip: write a notebook, read it back byte-identical.
+- [x] List returns only that user's notebooks, never another user's.
+- [x] Key derivation rejects a slug or subject that would escape its prefix
       (`../`, `/`, empty).
-- [ ] Reading a missing notebook returns `None` and doesn't raise.
-- [ ] Create refuses to overwrite (the 409 rule `/workspace/create` and
+- [x] Reading a missing notebook returns `None` and doesn't raise.
+- [x] Create refuses to overwrite (the 409 rule `/workspace/create` and
       `/workspace/copy` depend on).
-- [ ] Delete is idempotent.
+- [x] Delete is idempotent.
 
 Tests run against a `file://` root in a temp dir, through the real
 `flyte.storage` calls. No mocks.
 
 ### Implementation
 
-- [ ] Key layout: `<root>/users/<subject>/notebooks/<slug>.py` and
+- [x] Key layout: `<root>/users/<subject>/notebooks/<slug>.py` and
       `<root>/users/<subject>/snapshots/<slug>.py`.
-- [ ] Functions mirroring today's GitHub helpers so call sites change shape as
+- [x] Functions mirroring today's GitHub helpers so call sites change shape as
       little as possible: list, get, create (no-overwrite), update, delete,
       for workspace and snapshots.
-- [ ] `STARGAZER_WORKSPACE_ROOT` in `app/config.py`.
+- [x] `STARGAZER_WORKSPACE_ROOT` in `app/config.py`.
 
 ## Piece 2 — Identity from Union
 
-- [ ] `requires_auth=True` on `app_env` and in `per_notebook_env`.
-- [ ] A FastAPI dependency returning the current user (`subject`, `email`,
+- [x] `requires_auth=True` on `app_env` and in `per_notebook_env`.
+- [x] A FastAPI dependency returning the current user (`subject`, `email`,
       `name`) from `X-User-*`, 401 when absent. Replaces `_require_session`,
       `SessionData` and every `session.github_username` read.
-- [ ] Ensure the user's project on first request per process (an in-memory
+- [x] Ensure the user's project on first request per process (an in-memory
       seen-set in front of the idempotent `_ensure_project`). No login
-      callback is left to do it in.
-- [ ] `/assets` routes: owner from the subject. The private tab, sign and
+      callback is left to do it in. **Built, but refused on Union**
+      (measured 2026-10-06): the in-cluster platform key lacks
+      `action_administer_project`, so the dashboard shows "still being set
+      up" until an org admin creates `u-<subject>`. Plan 26 moves project
+      creation to an admin-run onboarding command.
+- [x] `/assets` routes: owner from the subject. The private tab, sign and
       update keep their fail-closed ownership checks.
-- [ ] Delete `/auth/login`, `/auth/callback`, `/auth/logout`, the login page,
+- [x] Delete `/auth/login`, `/auth/callback`, `/auth/logout`, the login page,
       and the session/OAuth modules.
 
 ## Piece 3 — Pod hydrate, ownership, and self-sync
 
-- [ ] `launch-notebook.sh`: recursive `get` of the user's notebooks prefix
+- [x] `launch-notebook.sh`: recursive `get` of the user's notebooks prefix
       into `/workspace` instead of `git clone`. A brand-new user hydrates an
       empty workspace rather than failing.
-- [ ] Pod env: `SG_OWNER_SUBJECT`, `STARGAZER_WORKSPACE_ROOT`. Drop
+- [x] Pod env: `SG_OWNER_SUBJECT`, `STARGAZER_WORKSPACE_ROOT`. Drop
       `FORK_*`, `SG_POD_TOKEN`, `SG_POD_KEY`, `STARGAZER_SECURE_COOKIES`.
-- [ ] Proxy: 403 unless `X-User-Subject == SG_OWNER_SUBJECT`; strip `Cookie`
+- [x] Proxy: 403 unless `X-User-Subject == SG_OWNER_SUBJECT`; strip `Cookie`
       and `X-User-Token` before forwarding to marimo.
-- [ ] Proxy: sync changed notebooks to the store on a short interval and in
+- [x] Proxy: sync changed notebooks to the store on a short interval and in
       the `lifespan` shutdown hook. **Don't touch the signal chain.**
-- [ ] Proxy: "starting…" page while marimo is cold, replacing the admin's
+- [x] Proxy: "starting…" page while marimo is cold, replacing the admin's
       `/__sg__/ready` polling.
-- [ ] Verify an interrupted upload can't leave a corrupt object (a single PUT
-      is atomic per object).
+- [x] Verify an interrupted upload can't leave a corrupt object (a single PUT
+      is atomic per object). *Inferred from the design (one `put_stream` per
+      notebook, S3 PUTs are atomic), not tested by interrupting one.*
 
 ## Piece 4 — Dashboard on the store
 
-- [ ] Workspace and own-snapshot listings, and the per-notebook
+- [x] Workspace and own-snapshot listings, and the per-notebook
       `[tool.stargazer]` header reads, come from the store.
-- [ ] `/workspace/create`, `/settings`, `/delete`, `/snapshot`, `/copy` move to
+- [x] `/workspace/create`, `/settings`, `/delete`, `/snapshot`, `/copy` move to
       the Piece 1 layer.
-- [ ] `/workspace/copy` reads Workflows notebooks from the image, not a fork
+- [x] `/workspace/copy` reads Workflows notebooks from the image, not a fork
       source tree.
-- [ ] Public snapshots list from the image; own snapshots from the store.
-- [ ] Remove the opt-in gate (`workspace_enabled`) everywhere. Saving needs
+- [x] Public snapshots list from the image; own snapshots from the store.
+- [x] Remove the opt-in gate (`workspace_enabled`) everywhere. Saving needs
       nothing.
-- [ ] Add a per-notebook **Download** action, the path for sharing a notebook
+- [x] Add a per-notebook **Download** action, the path for sharing a notebook
       upstream.
 
 ## Piece 5 — What gets deleted
 
 Track the simplification. If something here survives, the design drifted.
 
-- [ ] `app/oauth.py`, `app/session.py`, `app/github.py`,
+- [x] `app/oauth.py`, `app/session.py`, `app/github.py`,
       `app/installation_tokens.py` and their tests.
-- [ ] `/workspace/enable`, `/auth/app-install-callback`, `/workspace/pod-token`,
+- [x] `/workspace/enable`, `/auth/app-install-callback`, `/workspace/pod-token`,
       `/workspace/save`.
-- [ ] `SG_POD_TOKEN`, `SG_POD_KEY`, `GIT_ASKPASS`, the `sg_launch` handoff, the
+- [x] `SG_POD_TOKEN`, `SG_POD_KEY`, `GIT_ASKPASS`, the `sg_launch` handoff, the
       proxy's cookie check.
-- [ ] Deploy secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`,
+- [x] Deploy secrets `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`,
       `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_SLUG`,
       `SESSION_SECRET`, `_partial_app_creds()`. Only `PINATA_JWT` remains.
-- [ ] `STARGAZER_SECURE_COOKIES` / `config.SECURE_COOKIES` — no cookie left
+- [x] `STARGAZER_SECURE_COOKIES` / `config.SECURE_COOKIES` — no cookie left
       to secure.
 - [ ] The GitHub OAuth App and the GitHub App themselves (manual, after the
-      cut-over is verified on the tenant).
+      cut-over is verified on the tenant). **Yours to do** once this merges.
 
 ## Piece 6 — Verify on the tenant
 
-- [ ] Deploy to Union; sign in once; dashboard renders with no further
-      GitHub step.
-- [ ] Create a notebook, edit it in a pod, let the pod scale to zero, reopen:
-      edits survive.
-- [ ] A second org member gets 403 on the first user's notebook URL.
-- [ ] Snapshot, copy, delete, settings round-trip through the store.
+- [x] Deploy to Union; sign in once; dashboard renders with no further
+      GitHub step. *(2026-10-06, as `pryce@stargazer.bio`: one Union
+      sign-in, dashboard rendered. It first showed "still being set up" —
+      see the Piece 2 provisioning note — and rendered cleanly once the
+      project existed.)*
+- [x] Create a notebook, edit it in a pod, let the pod scale to zero, reopen:
+      edits survive. *(2026-10-06: created `E2E plan25`, added a marker
+      cell in its edit pod; the dashboard's Download returned it from the
+      store seconds later. The pod scaled to zero at 02:39:16 UTC, a fresh
+      replica came up at 02:39:59, and the reopened notebook had the cell.)*
+- [x] A second org member gets 403 on the first user's notebook URL.
+      *(The org admin's bearer token got the proxy's `403 Forbidden` on
+      the test account's `nb-e2e-plan25-edit`, while the same token loaded
+      the shared admin.)*
+- [x] Snapshot, copy, delete, settings round-trip through the store.
+      *(Driven from the deployed dashboard against the tenant bucket:
+      settings rewrote the header, snapshot moved it (workspace 404,
+      snapshot 200), copy from an own snapshot and from a workflow, delete
+      then 404.)*
 
 ## Piece 7 — Docs
 
-- [ ] `.opencode/reference/architecture/app_internals.md`: Workspace Opt-In,
+- [x] `.opencode/reference/architecture/app_internals.md`: Workspace Opt-In,
       Credential Model, Deploy-Time Secret Contract, Working Branch & Sync,
       Snapshots, Copy, and the route table all describe the fork design and
       all change. Largest doc delta in the plan.
-- [ ] `docs/architecture/app.md` and `docs/architecture/notebook.md` (the
+- [x] `docs/architecture/app.md` and `docs/architecture/notebook.md` (the
       section table and Promotion Paths).
-- [ ] `.env` template and `.opencode/reference/devbox_workarounds.md` (the
-      deploy-secret table).
-- [ ] Module docstrings on every module touched.
-- [ ] Plan 24: strike Pieces 1–3 (settled here), keep the console-access grant.
-- [ ] ROADMAP: mark ✅ and move to Complete; add the accepted-risk follow-ups.
+- [x] `.env` template and `.opencode/reference/devbox_workarounds.md` (the
+      deploy-secret table). *No `.env` template is tracked (`.env` is
+      gitignored), so only the workarounds table changed. A local `.env`
+      still holding GitHub keys can drop them.*
+- [x] Module docstrings on every module touched.
+- [x] Plan 24: strike Pieces 1–3 (settled here), keep the console-access grant.
+- [x] ROADMAP: mark ✅ and move to Complete; add the accepted-risk follow-ups.

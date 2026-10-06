@@ -7,7 +7,7 @@ The SDK (`src/stargazer/` — assets, tasks, workflows) is a first-class surface
 - **The SDK exists so notebooks are trustworthy.** A notebook cell that calls `bwa_mem` or the scRNA pipeline is calling tested, resource-specified, container-pinned code — not a copy-pasted shell command.
 - **Notebooks exist so the SDK gets used and grown.** They are where new analyses are prototyped, where new tasks are first written, and where finished work is published. Every promotion path below starts in a notebook and ends in the SDK or the repo.
 
-This doc covers what notebooks *are* — the taxonomy, who uses them, and how work moves between notebooks and the SDK. The hosting machinery (dashboard, per-user forks, pods, credentials) is covered in [App](app.md).
+This doc covers what notebooks *are* — the taxonomy, who uses them, and how work moves between notebooks and the SDK. The hosting machinery (dashboard, workspace store, pods, sign-in) is covered in [App](app.md).
 
 ## Execution Context
 
@@ -21,10 +21,10 @@ The dashboard renders four sections, matching four directories under `src/starga
 |------|-----------|-----------------|------|---------|
 | **Tutorials** | `tutorials/` | Image-baked (upstream repo) | Edit | Learn the building blocks — a reading sequence: Assets → Tasks → Workflows → Execution |
 | **Workflows** | `workflows/` | Image-baked (upstream repo) | Edit or Run | Production pipelines, parameterized — bring your own data (e.g. the scRNA-seq pipeline) |
-| **Workspace** | `workspace/` | User's GitHub fork | Edit or Run | The user's own notebooks — authored from scratch or a template, persisted across sessions |
-| **Snapshots** | `snapshots/` | User's fork (own + merged public) | Run only | Frozen analyses — a saved notebook pinned for reproduction, never edited |
+| **Workspace** | — | User's workspace store | Edit or Run | The user's own notebooks — authored from scratch or a template, persisted across sessions |
+| **Snapshots** | `snapshots/` | Published: image-baked; own: workspace store | Run only | Frozen analyses — a saved notebook pinned for reproduction, never edited |
 
-The first two ship in the image and work for everyone with no setup. The last two live on the user's fork and require the [workspace opt-in](app.md#core-concepts). The tile registry for image-shipped notebooks is `app/notebooks.py`; workspace and snapshot tiles are discovered from the fork at render time.
+Tutorials, Workflows and published Snapshots ship in the image and work for everyone. A user's own Workspace notebooks and Snapshots live in the [workspace store](app.md#core-concepts), keyed by their account, and need no setup. The tile registry for image-shipped notebooks is `app/notebooks.py`; the user's own tiles are listed from the store at render time.
 
 Tutorials and Workflows are both image-baked but differ in intent: a tutorial teaches a concept and is read once; a workflow notebook is an off-the-shelf pipeline meant to be run repeatedly against new data. Snapshots are the deliberate opposite of workflows — a single point-in-time record, frozen against *its* data and *its* image, valued precisely because it does not change.
 
@@ -33,7 +33,7 @@ Tutorials and Workflows are both image-baked but differ in intent: a tutorial te
 Notebook types map onto a progression. Each rung uses everything below it:
 
 1. **Analyst** — runs Workflow notebooks against their own data, with the Tutorials as the reference for the building blocks. The image provides everything; parameters and uploads happen in the notebook UI.
-2. **Author** — opts into workspace saving, writes their own notebooks, and freezes finished analyses as Snapshots. Their work persists on their fork and can be PR'd upstream.
+2. **Author** — writes their own notebooks and freezes finished analyses as Snapshots. Their work persists across sessions, and any notebook can be downloaded and contributed upstream.
 3. **Contributor** — promotes notebook-grown code into the SDK: tasks into `src/stargazer/tasks/`, proven pipelines into `notebooks/workflows/`. Works against the repo natively — see [Contributing](../guides/contributing.md).
 
 Orthogonal to the ladder are **SDK-native users** (authoring workflows in an IDE by importing `stargazer` tasks directly), **agent users** (driving the MCP server from Claude Code, Cursor, etc.), and **maintainers** (curating the SDK, reviewing promotions, publishing images). The same person frequently occupies several rungs in one session — the point of the design is that moving up a rung never requires abandoning the notebook.
@@ -66,7 +66,7 @@ Researchers write a working task; promotion does the mechanical extraction; PR r
 
 ### Snapshot freeze — workspace notebook → frozen record
 
-When an analysis reaches a publication-ready state, the 📸 button *moves* it out of the editable Workspace into `notebooks/snapshots/` — run-only from then on. PR'ing the snapshot upstream publishes it: once merged, it reaches every fork on sync, and anyone can inspect or re-run it knowing the result is the one that was published. Mechanics in [App → Snapshots](app.md#snapshots).
+When an analysis reaches a publication-ready state, the 📸 button *moves* it out of the editable Workspace into the user's Snapshots, run-only from then on. Publishing it is a contribution: download the `.py` and add it to the repository's `notebooks/snapshots/`. Once merged it ships in the next image, appears in everyone's Snapshots section, and anyone can inspect or re-run it knowing the result is the one that was published. Mechanics in [App → Snapshots](app.md#snapshots).
 
 ### Workflow graduation — workspace notebook → Workflows section
 
@@ -104,12 +104,12 @@ Notebook-to-notebook reuse *is* allowed: marimo notebooks can export importable 
 
 ### Packaging boundary
 
-In production, stargazer is installed as a proper package (not editable): each notebook's sandbox resolves the SDK from the image at `/stargazer`, not from the fork checkout. This means:
+In production, stargazer is installed as a proper package (not editable): each notebook's sandbox resolves the SDK from the image at `/stargazer`. This means:
 
 - **Package tasks** in `src/stargazer/tasks/` are available in every production notebook automatically.
 - **Notebook-defined tasks** run in the notebook that defines them, but are not importable elsewhere until promoted into the package.
 
-This is a feature — it prevents untested code from silently ending up in production. The boundary is blurred in local dev (editable install) so contributors can experiment freely. It also means a drifting fork can't change execution: the fork carries notebook *sources*; the SDK they import always comes from the image.
+This is a feature — it prevents untested code from silently ending up in production. The boundary is blurred in local dev (editable install) so contributors can experiment freely. It also means saved notebooks can't change execution: the workspace store carries notebook *sources*; the SDK they import always comes from the image.
 
 ## Notebook Modes
 
@@ -124,9 +124,9 @@ A notebook runs in one mode at a time — see [App → Core Concepts](app.md#cor
 
 ## Adding Notebooks
 
-- **Workspace notebooks** are created from the dashboard (blank or template seed) and live on the user's fork — no repo change involved.
+- **Workspace notebooks** are created from the dashboard (blank or template seed) and live in the user's workspace store — no repo change involved.
 - **Tutorials and Workflow notebooks** ship in the image: add the `.py` file (standard marimo format, importing only `stargazer` public APIs) under `src/stargazer/notebooks/tutorials/` or `notebooks/workflows/`, register a tile in the `NOTEBOOKS` tuple in `app/notebooks.py`, and it lands when the admin deploy entrypoint next builds and publishes the `notebook-app` image.
-- **Snapshots** can be added by hand, but are usually produced by the 📸 freeze and arrive upstream via PR.
+- **Published snapshots** ship in the image from `src/stargazer/notebooks/snapshots/`. They can be added by hand, but usually start as a 📸 freeze that the author downloads and contributes.
 
 ## In-Notebook AI
 
