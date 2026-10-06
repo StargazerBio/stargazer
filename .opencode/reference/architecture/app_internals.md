@@ -207,7 +207,7 @@ The dashboard and the per-notebook pods share a strict split:
 
 Onboarding (`stargazer-users onboard|upgrade`) runs `flyte.build` on the recipe once per run (`onboard.build_notebook_image`) and bakes the returned content-hashed URI into each dashboard it deploys as `STARGAZER_NOTEBOOK_IMAGE`. The dashboard image is built by the serve itself, also content-hashed. An unchanged recipe is a registry hit, so a release builds each image once. Every per-notebook pod therefore runs exactly the build that shipped with its dashboard: no mutable tag, no `docker buildx` retag, and no chance of a node serving a stale cached `:latest`. A per-notebook pod picks up new proxy/launch code on its next re-serve after a redeploy (the dashboard's Open re-serves).
 
-**On Union today images are built locally and pushed to GHCR.** Union's remote builder emits Nydus-only images the tenant's nodes can't pull (ticket open), so deploys set `FLYTE_IMAGE_BUILDER=local` and `STARGAZER_REGISTRY=ghcr.io/stargazerbio`, with docker logged in to GHCR. A new GHCR package starts internal and must be made public once before nodes can pull it.
+**On Union images build on Union's remote builder** (`image.builder: remote` in `.flyte/union.yaml`) and push to Union's registry, so the deployer needs no Docker daemon or registry login. From 2026-10-05 to 2026-10-06 the remote builder produced Nydus-only images the nodes couldn't pull, and deploys went through a local build pushed to GHCR instead; Union fixed it on their side. If remote-built images ever fail to pull with `no processor for media-type application/vnd.oci.image.layer.nydus.blob.v1`, that's the same fault back.
 
 ## Deploy targets (devbox vs union)
 
@@ -216,7 +216,7 @@ Onboarding (`stargazer-users onboard|upgrade`) runs `flyte.build` on the recipe 
 | Setting | devbox | union |
 |---|---|---|
 | Deployer's Flyte config (`app.config.FLYTE_CONFIG`) | `.flyte/config.yaml` | `.flyte/union.yaml` (remote builder) |
-| `STARGAZER_REGISTRY` default | `localhost:30000` | unset: the remote builder pushes to Union's registry (set to GHCR while it's broken) |
+| `STARGAZER_REGISTRY` default | `localhost:30000` | unset: the remote builder pushes to Union's registry |
 | Login | none: the devbox has no Union auth, so the app tier doesn't run there | Union's gate |
 
 `FLYTE_DOMAIN` (default `development`) is independent of the target: it's the domain onboarding grants access on and deploys dashboards into, and where dashboards serve and look up per-notebook apps, so a prod deploy sets `FLYTE_DOMAIN=production`. Both `.flyte/` files are gitignored; create `union.yaml` with `flyte create config --endpoint dns:///<tenant> --image-builder remote -o .flyte/union.yaml`.
@@ -229,7 +229,6 @@ No secret is required to deploy. The org admin's shell, when running `stargazer-
 |---|---|---|
 | `STARGAZER_TARGET=union` | picks `.flyte/union.yaml` | the devbox is targeted |
 | `STARGAZER_WORKSPACE_ROOT` | where users' notebooks live; baked into every dashboard and pod | `onboard`/`upgrade` refuse to start on Union |
-| `FLYTE_IMAGE_BUILDER=local`, `STARGAZER_REGISTRY=ghcr.io/stargazerbio` | the local-build path while the remote builder is broken | images build remotely and fail to pull |
 
 Per dashboard, onboarding bakes in `FLYTE_PROJECT`, `SG_OWNER_SUBJECT`, the deployer's org as `FLYTE_ORG`, and the notebook image URI as `STARGAZER_NOTEBOOK_IMAGE`. The admin's CLI identity must be an org admin (it creates projects, policies and assignments).
 

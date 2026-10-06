@@ -37,6 +37,7 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 import argparse
 import asyncio
 import re
+import time
 from functools import cache
 
 import flyte
@@ -55,6 +56,8 @@ _MANAGED = {"managed-by": "stargazer"}
 _SUBJECT_LABEL = "union-subject"
 # Room for the `u-` prefix and a suffix inside Flyte's id limits.
 _HANDLE_MAX = 30
+# How long a deploy whose watch reported failure gets to come up anyway.
+_ACTIVE_POLLS, _ACTIVE_POLL_SECONDS = 24, 5
 # The dashboard's env as defined, before any user's settings are applied, so
 # deploying several users in one run never carries one user's values over.
 _BASE_ENV_VARS = dict(app_env.env_vars)
@@ -216,16 +219,22 @@ def deploy_dashboard(project: str, owner_subject: str) -> str:
     env.env_vars = env_vars
     env.domain = flyte.app.Domain(subdomain=project)
     ctx = flyte.with_servecontext(project=project, domain=config.FLYTE_DOMAIN)
-    # The serve watch can report failure on a redeploy that actually
-    # succeeded (devbox_workarounds.md). Trust the app's own state over it.
+    # The serve watch can report failure on a redeploy that does succeed: it
+    # trips on an older failed revision while the new one is still starting
+    # (seen on the tenant, and devbox_workarounds.md). Trust the app's own
+    # state over it, giving the new revision a little time.
     try:
         return ctx.serve(env).endpoint
     except RuntimeError as exc:
-        app = App.get(name=env.name, project=project, domain=config.FLYTE_DOMAIN)
-        if not (app.is_active() and app.endpoint):
-            raise
-        logger.warning(f"Serve watch for {project} reported {exc}; the app is active")
-        return app.endpoint
+        for _ in range(_ACTIVE_POLLS):
+            app = App.get(name=env.name, project=project, domain=config.FLYTE_DOMAIN)
+            if app.is_active() and app.endpoint:
+                logger.warning(
+                    f"Serve watch for {project} reported {exc}; the app is up"
+                )
+                return app.endpoint
+            time.sleep(_ACTIVE_POLL_SECONDS)
+        raise
 
 
 def stop_project_apps(project: str) -> list[str]:

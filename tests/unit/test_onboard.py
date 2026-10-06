@@ -384,3 +384,33 @@ def test_dashboard_deploy_keeps_the_env_resolvable(monkeypatch):
         "STARGAZER_NOTEBOOK_IMAGE": "reg/notebook-app:h1",
         "FLYTE_ORG": "stargazerbio",
     }
+
+
+def test_dashboard_deploy_waits_out_a_stale_watch_failure(monkeypatch):
+    """A watch error on a deploy that does come up is not reported as failure.
+
+    Seen on the tenant: the watch tripped on an older failed revision while
+    the new one became ready a few seconds later.
+    """
+
+    def failing_servecontext(**ctx):
+        def serve(env):
+            raise RuntimeError("App deployment for app dashboard has failed!")
+
+        return SimpleNamespace(serve=serve)
+
+    states = iter([False, False, True])
+
+    class FakeApp:
+        @staticmethod
+        def get(name, project, domain):
+            active = next(states)
+            return SimpleNamespace(
+                is_active=lambda: active, endpoint="https://u-jane.apps.example"
+            )
+
+    monkeypatch.setattr(onboard.flyte, "with_servecontext", failing_servecontext)
+    monkeypatch.setattr(onboard, "App", FakeApp)
+    monkeypatch.setattr(onboard, "_notebook_image", lambda: "reg/notebook-app:h1")
+    monkeypatch.setattr(onboard.time, "sleep", lambda s: None)
+    assert onboard.deploy_dashboard("u-jane", ALICE) == "https://u-jane.apps.example"

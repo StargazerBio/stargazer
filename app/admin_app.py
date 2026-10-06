@@ -1,7 +1,7 @@
 """
 ### Stargazer dashboard — one user's notebook home and launcher.
 
-One deployment per user, in that user's own Flyte project (`u-<subject>`),
+One deployment per user, in that user's own Flyte project (`u-<handle>`),
 behind Union's login (`requires_auth=True`). The owner's subject is baked
 into the env at deploy (`SG_OWNER_SUBJECT`) and the project is the one the
 dashboard runs in (`FLYTE_PROJECT`); neither is derived from the request.

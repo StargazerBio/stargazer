@@ -16,23 +16,16 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 - **Union production deploy** (tenant: `stargazerbio.us-west-2.unionai.cloud`).
    Done in PRs: per-pod session keys (#2), the `STARGAZER_TARGET`
    devbox/union switch, a configurable domain, and a fixed per-deploy
-   notebook image (#3). Remaining:
-   - **Remote-builder images can't be pulled.** Union's builder pushes
-     Nydus-only images and the tenant's nodes have no Nydus snapshotter, so
-     every remote-built image fails at pull. Ticket filed with Union. Until
-     it's fixed, deploys build locally and push to GHCR
-     (`FLYTE_IMAGE_BUILDER=local`, `STARGAZER_REGISTRY=ghcr.io/stargazerbio`);
-     each new GHCR package starts internal and must be made public once.
-   - **In-pod image builds.** `STARGAZER_REGISTRY` is forwarded into every
-     pod, but pods have no credentials for GHCR, so a task image built from
-     inside a notebook can't be pushed. Resolves itself when the remote
-     builder works again.
-   - **Union-native app secrets.** Only `PINATA_JWT` is left baked into
-     `env_vars`, where anyone who can view the app spec sees it. Move to
+   notebook image (#3). Union fixed the remote builder's unpullable (Nydus)
+   images on 2026-10-06, so deploys are back on the remote builder and the
+   GHCR workaround is gone. Remaining:
+   - **Union-native app secrets.** Dashboards carry no secret today (the
+     asset manager is off for that reason). When storage returns, its key
+     can't be baked into `env_vars`, where the owner sees it. Move to
      `flyte create secret` plus `secrets=[flyte.Secret(...)]`, after
      confirming Union injects app secrets at all.
    - **`flyte.deploy` with commit-SHA versions** in place of `flyte.serve`
-     for the admin app, run from CI with a `FLYTE_API_KEY`.
+     for `stargazer-users upgrade`, run from CI with an org-admin API key.
    - **Resource ceilings.** Notebook resources are honored as-authored. Cap
      them with `flyte edit settings --domain production` (`task_resource.max.*`),
      after checking that the cap applies to apps and not only tasks.

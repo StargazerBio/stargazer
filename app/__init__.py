@@ -2,7 +2,7 @@
 ### Stargazer deployment infrastructure.
 
 Two kinds of app, both behind Union's login (`requires_auth=True`) and both
-deployed into the owning user's own Flyte project (`u-<subject>`):
+deployed into the owning user's own Flyte project (`u-<handle>`):
 
 - `app.admin_app.app_env` — the user's dashboard, one per user. Admits only
   its owner (`app.identity`), renders the dashboard tile grid, and brokers
@@ -15,6 +15,9 @@ deployed into the owning user's own Flyte project (`u-<subject>`):
   user's notebooks from the workspace store at startup and saves edits back
   to it; the store (`app.workspace_store`, object storage keyed by the
   user's Union subject) is the durable copy, pods are working copies.
+
+Both are deployed by `app.onboard` (`stargazer-users`), which an org admin
+runs to give a user their project, access and dashboard.
 
 Plus supporting modules: `identity`, `workspace_store`,
 `notebooks`, `notebook_meta`, `assets`, `proxy`, `templates`, `init`.
