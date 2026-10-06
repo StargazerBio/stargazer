@@ -42,6 +42,7 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 import asyncio
 import os
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from pathlib import Path
 
 import flyte
@@ -149,6 +150,7 @@ app_env = flyte.app.AppEnvironment(
     # Union's login gates every request and forwards the user's identity.
     requires_auth=True,
     resources=flyte.Resources(memory=("512Mi", "1Gi")),
+    scaling=flyte.app.Scaling(replicas=(0, 1), scaledown_after=timedelta(hours=1)),
     env_vars={
         **STARGAZER_ENV_VARS,
         **_FLYTE_CONTEXT,

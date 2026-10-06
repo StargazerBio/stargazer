@@ -47,6 +47,7 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import os
+from datetime import timedelta
 from typing import Literal
 
 import flyte
@@ -233,6 +234,13 @@ def per_notebook_env(
         port=8080,
         requires_auth=True,
         resources=flyte_resources,
+        scaling=flyte.app.Scaling(
+            replicas=(0, 1), scaledown_after=timedelta(minutes=30)
+        ),
+        # Notebook-named URL (`{slug}-{mode}-{hash}`) instead of the default.
+        domain=flyte.app.Domain(
+            subdomain=flyte.app.Subdomain.from_app_name(f"{slug}-{mode}")
+        ),
         env_vars={
             **STARGAZER_ENV_VARS,
             "FLYTE_DOMAIN": config.FLYTE_DOMAIN,
