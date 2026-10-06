@@ -1,7 +1,8 @@
 """Tests for the asset-manager API routes (plan 20, piece 2).
 
-Route tests use `TestClient` without the context manager so the admin
-lifespan (Flyte init) never runs. Identity comes from the `X-User-Subject`
+Route tests mount the router on a bare FastAPI app: the dashboard's owner
+gate (tested in `test_app.py`) sits in front of these routes there, and is
+not what's under test here. Identity comes from the `X-User-Subject`
 header Union's auth layer sets on every request. The Pinata client is swapped for a fake via the
 `app.assets._pinata_client` module attribute — sign returns a canned URL,
 query returns canned records, and both capture their call args.
@@ -14,9 +15,10 @@ sign minting require a signed-in user.
 """
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.admin_app import asgi_app
+from app.assets import router
 
 JWT = "test-pinata-jwt"
 
@@ -90,7 +92,10 @@ def fake_pinata(monkeypatch):
 
 @pytest.fixture
 def client():
-    return TestClient(asgi_app, follow_redirects=False)
+    """A client for the asset routes alone."""
+    bare = FastAPI()
+    bare.include_router(router)
+    return TestClient(bare, follow_redirects=False)
 
 
 def _auth(client: TestClient, subject: str = "octocat") -> None:
@@ -413,6 +418,7 @@ class TestPage:
         _auth(client)
         resp = client.get("/assets")
         assert resp.status_code == 200
-        assert "Pinata not configured" in resp.text
+        assert "Asset storage isn't available yet" in resp.text
+        assert "PINATA" not in resp.text
         # Controls/upload are suppressed without a backing store.
         assert 'id="upload-panel"' not in resp.text

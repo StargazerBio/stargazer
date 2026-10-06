@@ -6,22 +6,29 @@ This doc is the high-level map of the hosting tier. For what the dashboard's not
 
 Two kinds of Flyte `AppEnvironment` are defined here, and both sit behind the platform's login (`requires_auth=True`):
 
-- **`app_env`** (the admin) — one shared instance. Renders each signed-in user's dashboard, keeps their notebooks in the workspace store, and launches notebook apps.
-- **Per-notebook envs** — built by the `per_notebook_env()` factory (`app/per_notebook.py`), one `nb-{slug}-{mode}` env per launch, deployed into the user's own Flyte project and owned by them.
+- **`app_env`** (the dashboard) — one per user, deployed into that user's own Flyte project. Renders their notebooks, keeps them in the workspace store, and launches notebook apps. It is keyed to its owner, and the platform alone decides who may open it.
+- **Per-notebook envs** — built by the `per_notebook_env()` factory (`app/per_notebook.py`), one `nb-{slug}-{mode}` env per launch, deployed into the same project and owned by the same user.
+
+A third piece runs outside the platform: **onboarding** (`app/onboard.py`, the `stargazer-users` command), which an org admin runs from their own machine to give a user their project, access and dashboard.
 
 ## Topology
 
 ```mermaid
 flowchart LR
-    U([User browser]) -->|platform login| A[admin app<br/>app_env]
-    A -->|read / write notebooks| S[(workspace store<br/>object storage)]
-    A -->|/launch per tile click| FCP[(Flyte control plane)]
-    FCP -->|deploys| N[nb-SLUG-MODE pod<br/>project: u-SUBJECT]
+    ADM([Org admin]) -->|stargazer-users onboard| FCP[(Flyte control plane)]
+    FCP -->|creates| PR[project u-HANDLE<br/>+ access grant]
+    FCP -->|deploys| D[dashboard<br/>app_env]
+    U([User browser]) -->|platform login| D
+    D -->|read / write notebooks| S[(workspace store<br/>object storage)]
+    D -->|/launch per tile click| FCP
+    FCP -->|deploys| N[nb-SLUG-MODE pod]
     U -->|browser tab, platform login| N
     N -->|hydrate at start, save edits| S
+    D -.-> PR
+    N -.-> PR
 ```
 
-One admin, one per-notebook env factory, N notebook pods (one per launched notebook and mode), isolated by per-user Flyte project. Pods are spawned lazily when a tile's Edit/Run button is clicked. The admin never calls a pod: each pod loads and saves its owner's notebooks itself.
+Each user has one project holding their dashboard and their notebook pods, and nothing else. Pods are spawned lazily when a tile's Edit/Run button is clicked. The dashboard never calls a pod: each pod loads and saves its owner's notebooks itself.
 
 ## Request Flow
 
@@ -29,33 +36,36 @@ One admin, one per-notebook env factory, N notebook pods (one per launched noteb
 sequenceDiagram
     participant B as Browser
     participant P as Platform login
-    participant A as admin app
+    participant D as Dashboard
     participant S as Workspace store
     participant F as Flyte CP
     participant N as Notebook pod
 
-    B->>P: GET admin URL
+    B->>P: GET dashboard URL
     P-->>B: sign in (first visit only)
-    P->>A: GET / + signed-in user
-    A->>F: ensure project u-SUBJECT (first request)
-    A->>S: list the user's notebooks
-    A-->>B: dashboard
-    B->>A: POST /launch (tile click)
-    A->>F: serve nb-slug-mode in u-SUBJECT
-    A-->>B: notebook URL (open in tab)
+    P->>D: GET / + signed-in user
+    D->>S: list the owner's notebooks
+    D-->>B: dashboard
+    B->>D: POST /launch (tile click)
+    D->>F: serve nb-slug-mode in the dashboard's project
+    D-->>B: notebook URL (open in tab)
     B->>P: GET notebook URL
     P->>N: request + signed-in user
     N->>S: hydrate the owner's notebooks
     N-->>B: starting page, then marimo
 ```
 
-If the user's project can't be ensured, the dashboard still renders with a notice, and launches answer "please retry".
-
 ## Core Concepts
 
-**The platform owns sign-in.** There is no login page, OAuth flow or session cookie in the app tier. The platform gates every request to both app kinds and forwards the signed-in user's stable id (the *subject*) plus display claims. It overwrites any client-sent copy, so the identity can't be forged. Everything per-user is keyed by the subject: the Flyte project (`u-<subject>`), the workspace store prefix, and the `_owner` stamped on assets.
+**The platform owns sign-in.** There is no login page, OAuth flow or session cookie in the app tier. The platform gates every request to both app kinds and forwards the signed-in user's stable id (the *subject*) plus display claims. It overwrites any client-sent copy, so the identity can't be forged. The subject keys everything per-user: the workspace store prefix, the `_owner` stamped on assets, and the label that ties a user to their project.
 
-**Notebook pods check ownership, not just login.** The platform only proves the visitor belongs to the org. Each pod is baked with its owner's subject, and its proxy refuses everyone else. Platform cookies and identity headers are stripped before a request reaches the notebook, so notebook code never sees a visitor's platform token through a request.
+**One project per user.** The platform admits a signed-in user to an app only if they can view the app's project, and anyone who can view a project sees every app in it. So each user gets their own project, `u-<handle>`, with access to that project and nothing else. Their dashboard and notebooks live there, and in the platform console they see only their own work. The project id is readable (from their email by default) and permanent; the subject on its label is what onboarding looks it up by.
+
+**The platform is the only access control.** The app tier adds no ownership check of its own. Whoever the platform admits to a project (its user, or an org admin) can open that project's dashboard and notebooks. A dashboard knows its owner from its deploy and keys its state by that owner, not by the visitor, so an admin sees the owner's notebooks.
+
+**Onboarding is an admin step.** New users need an invite to the org anyway, so the same command does the rest: invite (or find) the user, create their project, grant them access to it, and deploy their dashboard at a stable, bookmarkable address. Running it again only redeploys. Nothing that runs on the platform needs the right to create projects or grant access, and no privileged credential is deployed anywhere. Releasing a new version redeploys every user's dashboard from the same images; offboarding stops a user's apps, removes their access and archives their project, and leaves their notebooks in the store.
+
+**Notebook pods are gated by the platform too.** Each pod is baked with its owner's subject, which only keys where it loads and saves notebooks. Platform cookies and identity headers are stripped before a request reaches the notebook, so notebook code never sees a visitor's platform token through a request.
 
 **Per-user isolation** is enforced by **Flyte project boundaries**, not by varying the env definition. Every per-notebook env is served into the user's project, and Flyte's per-project storage and cache isolation keeps their runs separate. The factory is parameterized by notebook (slug, mode, path, resources) and owner, so which project the env lands in is what separates users.
 
@@ -65,9 +75,9 @@ If the user's project can't be ensured, the dashboard still renders with a notic
 
 **Resources live in the notebook.** A workspace notebook's `[tool.stargazer]` header (cpu/memory) is parsed textually at launch (no code execution) and honored as-authored, with no ceiling. Image-baked notebooks carry no header and fall back to the env default.
 
-**Tiles are stateful and authoritative.** On load the dashboard asks the control plane which `nb-{slug}-{mode}` apps are live and hydrates those tiles to Open/Stop; a notebook runs in edit *or* run mode, never both. Discovery is a single project-scoped deployment list, re-checked per app for authoritative status. This is read from Flyte rather than in-memory state, so it survives admin restarts.
+**Tiles are stateful and authoritative.** On load the dashboard asks the control plane which `nb-{slug}-{mode}` apps are live and hydrates those tiles to Open/Stop; a notebook runs in edit *or* run mode, never both. Discovery is a single project-scoped deployment list, re-checked per app for authoritative status. This is read from Flyte rather than in-memory state, so it survives dashboard restarts.
 
-**The tier is lightweight by construction.** Responses from the admin are gzip-compressed, and the notebook proxy streams everything except the HTML pages it decorates, so large notebook assets never sit in proxy memory. Details in `.opencode/reference/architecture/app_internals.md`.
+**The tier is lightweight by construction.** Dashboard responses are gzip-compressed, and the notebook proxy streams everything except the HTML pages it decorates, so large notebook assets never sit in proxy memory. Details in `.opencode/reference/architecture/app_internals.md`.
 
 ## Snapshots
 
@@ -77,12 +87,16 @@ This is deliberately the opposite of a **workflow**: workflows are off-the-shelf
 
 ## Asset Manager
 
-The admin app also hosts `/assets` — a browse-and-upload surface over the
-asset/metadata system, backed by Pinata (never the local TinyDB; the page
-renders a "not configured" state without `PINATA_JWT`). Routes live in
-`app/assets.py`; mechanics and the route table are in `.opencode/reference/architecture/app_internals.md`.
+The dashboard also hosts `/assets` — a browse-and-upload surface over the
+asset/metadata system, backed by Pinata (never the local TinyDB). **It is off
+on hosted dashboards for now**: a user can read their own dashboard's
+deployment, so a shared asset-store key can't be baked into it, and the page
+says asset storage isn't available yet. It returns with per-user storage.
+What follows describes the surface as it works when a key is configured
+(locally, for example). Routes live in `app/assets.py`; mechanics and the
+route table are in `.opencode/reference/architecture/app_internals.md`.
 
-**Uploads never transit the admin pod.** The page validates metadata and
+**Uploads never transit the dashboard pod.** The page validates metadata and
 mints a Pinata **signed upload URL** (`POST /assets/sign`); the browser then
 PUTs bytes straight to Pinata. Because Pinata bakes the filename and
 keyvalues into the URL at mint time, the uploader can supply bytes only —
@@ -109,8 +123,7 @@ Private tabs mapping to Pinata's two networks:
   trusted from the query string). Unowned or other-owned private records are
   invisible on the page, reachable only via SDK/MCP.
 - **Public** needs no ownership — public-network bytes are world-readable on
-  IPFS. On the hosted deploy the whole admin sits behind the platform login;
-  a local run serves the public tab anonymously. The listing
+  IPFS. A local run serves the public tab anonymously. The listing
   is served from a short in-process TTL cache (a semi-static mirror, not a
   per-request proxy to the Pinata API), and anonymous downloads redirect to
   a free public gateway so they never spend metered dedicated-gateway
@@ -145,13 +158,15 @@ toggle (Graph is the default):
 
 ## Images
 
-The admin app and the per-notebook pods use **different images by design**:
+The dashboard and the per-notebook pods use **different images by design**:
 
-- `app_env.image` is Flyte-built via `with_uv_project` — the admin is small Python with no heavy deps.
-- Per-notebook envs use the programmatically-defined `notebook-app` image. The deploy entrypoint builds it and hands the admin the exact build, so every notebook pod runs the image that shipped with its admin and the admin pod (no Docker daemon) never rebuilds it.
+- `app_env.image` is Flyte-built via `with_uv_project` — the dashboard is small Python with no heavy deps.
+- Per-notebook envs use the programmatically-defined `notebook-app` image. Onboarding builds it and hands each dashboard the exact build, so every notebook pod runs the image that shipped with its dashboard and the dashboard pod (no Docker daemon) never rebuilds it.
+
+Both images are content-hashed, so a release builds each once however many users it deploys, and every user's dashboard runs the same build.
 
 ## Deploy Targets
 
-One switch, `STARGAZER_TARGET`, picks the backend: `devbox` (the default, a local cluster for lightweight testing) or `union` (the hosted tenant). It selects the deployer's Flyte config and where images are pushed. The Flyte domain is set separately, so the same target can serve a development or a production deployment. The per-target table is in `.opencode/reference/architecture/app_internals.md`.
+One switch, `STARGAZER_TARGET`, picks the backend: `devbox` (the default, a local cluster for lightweight testing of tasks and workflows) or `union` (the hosted tenant, the only place the app tier runs, since it relies on the platform's login). It selects the deployer's Flyte config and where images are pushed. The Flyte domain is set separately, so the same target can serve a development or a production deployment. The per-target table is in `.opencode/reference/architecture/app_internals.md`.
 
 Note the `note` target in the project `Dockerfile` (`stargazer-note`) is a separate, local-`docker run`-only image — **not** the hosted one. Build/publish detail in `.opencode/reference/architecture/app_internals.md`.

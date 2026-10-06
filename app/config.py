@@ -39,7 +39,7 @@ FLYTE_CONFIG = (
 )
 
 # The notebook-app image every per-notebook pod runs, as the exact URI built at
-# deploy time (`admin_app.main` bakes it into the admin pod's env). Unset in a
+# deploy time (`app.onboard` bakes it into each dashboard's env). Unset in a
 # bare local `uvicorn` run, where launching a notebook then errors clearly.
 NOTEBOOK_IMAGE: str | None = os.environ.get("STARGAZER_NOTEBOOK_IMAGE") or None
 
@@ -54,3 +54,8 @@ FLYTE_DOMAIN: str = os.environ.get("FLYTE_DOMAIN", "development")
 # the tenant bucket, e.g. `s3://union-us-west-2-stargazerbio/stargazer`. Unset
 # means workspace saving isn't configured for this deploy.
 WORKSPACE_ROOT: str = os.environ.get("STARGAZER_WORKSPACE_ROOT", "")
+
+# The one user this dashboard serves: their Union subject, baked in when the
+# dashboard is deployed into their project. Unset admits nobody (fail closed).
+# Notebook pods read the same variable for the same check (`app/proxy.py`).
+OWNER_SUBJECT: str = os.environ.get("SG_OWNER_SUBJECT", "")

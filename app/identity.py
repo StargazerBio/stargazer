@@ -1,7 +1,7 @@
 """
 ### Who is signed in — read from Union's auth layer.
 
-Both the admin and every notebook pod run behind Union's login
+Every dashboard and notebook pod runs behind Union's login
 (`requires_auth=True`). Union gates each request and forwards the signed-in
 user as headers it sets itself, overwriting anything a client sends:
 
@@ -11,15 +11,18 @@ user as headers it sets itself, overwriting anything a client sends:
   arrive JSON-encoded (`"\"a@b.c\""`).
 
 There is no session cookie and no sign-in route of our own: Union owns both.
+Each dashboard belongs to one user, but Union alone decides who may open it.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
+
+from app import config
 
 SUBJECT_HEADER = "X-User-Subject"
 EMAIL_HEADER = "X-User-Claim-Email"
@@ -68,17 +71,23 @@ def user_from_request(request: Request) -> User | None:
     )
 
 
-def require_user(request: Request) -> User:
-    """FastAPI dependency: the signed-in user, or a 401.
+def current_user(request: Request) -> User:
+    """FastAPI dependency: the signed-in user, else a 401.
 
-    Behind Union a request without a subject never arrives; the 401 covers a
-    local `uvicorn` run and any misconfigured deploy with auth turned off.
+    Union's login is the only access control: whoever it admits (the owner, or
+    an org admin who can view the project) gets the dashboard. State is keyed
+    by the dashboard's owner (`config.OWNER_SUBJECT`, baked in at deploy), not
+    the visitor, so an admin sees the owner's notebooks. The visitor's name and
+    email are kept for display. With no owner configured (a local run) the
+    visitor's own subject is the key.
     """
     user = user_from_request(request)
     if user is None:
         raise HTTPException(status_code=401, detail="not signed in")
+    if config.OWNER_SUBJECT:
+        user = replace(user, subject=config.OWNER_SUBJECT)
     return user
 
 
-# Route parameter type for "the signed-in user": `user: CurrentUser`.
-CurrentUser = Annotated[User, Depends(require_user)]
+# Route parameter type for "whose dashboard this is": `user: CurrentUser`.
+CurrentUser = Annotated[User, Depends(current_user)]

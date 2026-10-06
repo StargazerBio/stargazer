@@ -16,27 +16,37 @@ Both app kinds run `requires_auth=True`. Union's ingress gates every request on 
 
 No GitHub login, id or token is forwarded. The browser's Union session cookies (`flyte_idt`, `flyte_at_*`, `flyte_user_info`) also reach the pod.
 
-`app/identity.py` parses these: `user_from_request` returns a `User(subject, email, name)` or None, and the `CurrentUser` route dependency 401s without a subject (only possible in a local run or a deploy with auth off). Everything per-user derives from the subject:
+`app/identity.py` parses these: `user_from_request` returns a `User(subject, email, name)` or None. Everything per-user derives from the subject:
 
-- Flyte project: `u-<subject>` (`app.provision.project_id`)
+- the user's project: found by its `union-subject=<subject>` label (the id itself is a readable `u-<handle>`, see Onboarding)
 - workspace store prefix: `<root>/users/<subject>/`
 - `_owner` on assets: the subject (an email would leak into public bylines)
 
-**Union's gate needs view permission on the app's project.** A signed-in org member with no role on the project gets 403; with `viewer` they get in. Org membership alone isn't enough, so the admin's project needs a grant per user, and so does each user's own project for their notebook pods. Gate decisions are cached per browser session for several minutes. (Measured 2026-10-06; this is what plan 26 restructures around.)
+**Union's gate needs view permission on the app's project.** A signed-in org member with no role on the project gets 403; with `viewer` they get in. Org membership alone isn't enough, and anyone with `viewer` sees every app in the project in the console. Gate decisions are cached per browser session for several minutes. (Measured 2026-10-06.) This is why every user has their own project.
 
 **Bearer tokens work too.** A request with `Authorization: Bearer <access token>` passes the gate as that user, which is how a second identity can be exercised from the CLI.
 
-## Project Provisioning
+## Onboarding
 
-There's no login callback, so the admin ensures the user's project on their first request to the process (`provision.provision_user`, remembered in an in-memory set; a failure isn't remembered and retries next request). A failure renders the dashboard with a "still being set up" notice and makes `/launch` answer 503.
+`app/onboard.py` (`stargazer-users`), run by an org admin with their own CLI identity. App and task pods authenticate as the org's platform key (`stargazerbio-EAGER_API_KEY-union-us-west-2`, application subject `393067446845621194`, org-wide `contributor`), which is refused project creation: *"Identity [application_id:{subject:"393067446845621194"}] is not permitted to perform action [action_administer_project]"* (measured from a task pod, 2026-10-06). So provisioning can't happen on the platform, and no privileged credential is deployed to make it.
 
-**On Union this cannot succeed.** App and task pods authenticate as the org's platform key (`stargazerbio-EAGER_API_KEY-union-us-west-2`, application subject `393067446845621194`), which holds org-wide `contributor`. Creating a project needs `action_administer_project`, which only `admin` has. Measured from a task pod on 2026-10-06: `Project.create` is refused with *"Identity [application_id:{subject:"393067446845621194"}] is not permitted to perform action [action_administer_project]"*. Projects therefore have to be created by an org admin outside the app (plan 26's onboarding command).
+`onboard --email --first-name --last-name [--handle]`, each step checking before it writes:
 
-## Ownership Check (notebook pods)
+1. **User.** `User.listall(email=…)`, else `User.create(...)` (Union sends the invite). The invite attaches no role or policy.
+2. **Project.** The active project labeled `managed-by=stargazer`, `union-subject=<subject>` if there is one (so a returning user keeps theirs, whatever it's called). Otherwise `u-<handle>`, with the handle from the email's local part or `--handle` (lowercase `[a-z0-9-]`, ≤30 chars), suffixed `-2`, `-3`… past every taken id. Archived projects count as taken: they can only be archived, never deleted.
+3. **Access.** Policy `stargazer-<project>` binding built-in `contributor` on `<project>/<FLYTE_DOMAIN>`, assigned by `user_subject` if not already. Nothing org-wide.
+4. **Dashboard.** `app_env.clone_with(...)` with `FLYTE_PROJECT`, `SG_OWNER_SUBJECT`, `STARGAZER_NOTEBOOK_IMAGE` and `FLYTE_ORG` set, served into the project at `Domain(subdomain=<project>)`. The subdomain is unique because project ids are: Union does **not** reject a second app asking for a taken subdomain, it leaves it stuck at "App created" with no endpoint (measured 2026-10-06). A serve-watch failure on a redeploy is checked against the app's real state before it's reported.
 
-Union only proves the visitor is an org member who can view the project. The proxy (`app/proxy.py`, `_is_owner`) compares `X-User-Subject` with `SG_OWNER_SUBJECT`, baked into the pod's env at launch, and returns a plain-text `403 Forbidden` to everyone else, on HTTP and websockets alike. An unset owner denies everyone. Before forwarding to marimo it strips `Host`, `Cookie` and every `X-User-*` header (`_forwardable`), so notebook code never sees a visitor's Union token through a request.
+`upgrade` redeploys every active `managed-by=stargazer` project's dashboard; this is the release step (images are content-hashed, so each builds once per run). `offboard --email` deactivates every app in the user's project, unassigns their policy and archives the project. Their store objects stay.
 
-Measured on the tenant (2026-10-06): the org admin, who can view every project, got `403 Forbidden` from the proxy on another user's notebook URL, while the same token loaded the shared admin.
+## Ownership Checks
+
+Union only proves the visitor can view the project, and org admins can view every project. Both app kinds therefore admit only their owner, fail-closed when the owner is unset:
+
+- **Dashboard.** No ownership check; Union's login (`requires_auth=True`) is the only gate, so an org admin who can view the project gets in. Routes take `CurrentUser` (`identity.current_user`): 401 without `X-User-Subject`, otherwise the visitor's name/email with `subject` replaced by `config.OWNER_SUBJECT` (`SG_OWNER_SUBJECT`, baked in by onboarding), so storage and pod ownership follow the dashboard's owner. With no owner configured (local run) the visitor's subject is the key.
+- **Notebook pods.** The proxy (`app/proxy.py`) does no identity check; `SG_OWNER_SUBJECT`, baked in at launch, only keys the hydrate/sync prefix. Before forwarding to marimo it strips `Host`, `Cookie` and every `X-User-*` header (`_forwardable`), so notebook code never sees a visitor's Union token through a request.
+
+Measured on the tenant (2026-10-06): the org admin got the proxy's `403 Forbidden` on another user's notebook URL.
 
 **Residual risk.** Code in a pod can still read anything in the pod, and the cookies do reach the pod's proxy process. A malicious owner could serve code that captures a visiting member's token before the strip. On the ROADMAP.
 
@@ -51,20 +61,20 @@ Measured on the tenant (2026-10-06): the org admin, who can view every project, 
 
 One object per notebook, so the dashboard can list a user's notebooks and read one header without fetching the rest. Subjects must match `[A-Za-z0-9_-]+` and filenames one plain `.py` segment, so a key can't escape its prefix. Create refuses to overwrite (`NotebookExistsError` → the 409 that create and copy rely on); get of a missing notebook returns None; delete is idempotent. Reads and writes go through `flyte.storage`, listing and deletes through the fsspec filesystem it resolves for the root, so the same code runs against `s3://` on the tenant and a local path in tests.
 
-On Union the root is a prefix in the tenant bucket (`s3://union-us-west-2-stargazerbio/stargazer`). Every project runs as one IAM role (`union-us-west-2-stargazerbio-userflyterole`), so cross-project access works (the admin in `flytesnacks` reads what a pod in `u-<subject>` wrote) and, equally, any pod can read every user's objects. The deployer's laptop has no credentials for the bucket; only pods can reach it.
+On Union the root is a prefix in the tenant bucket (`s3://union-us-west-2-stargazerbio/stargazer`). Every project runs as one IAM role (`union-us-west-2-stargazerbio-userflyterole`), so cross-project access works (measured with the old shared admin in `flytesnacks` reading what a pod in another project wrote) and, equally, any pod can read every user's objects. The deployer's laptop has no credentials for the bucket; only pods can reach it.
 
 A Union deploy refuses to start without `STARGAZER_WORKSPACE_ROOT` (`admin_app.main`). Without a root (a local run), store-backed routes return 503 and the Workspace section says saving isn't available.
 
 ## Pod Hydrate & Save
 
-The pod is a working copy; the store is the durable one. The admin never calls a pod (a `requires_auth=True` pod is unreachable server-to-server), so the pod does both ends itself.
+The pod is a working copy; the store is the durable one. The dashboard never calls a pod (a `requires_auth=True` pod is unreachable server-to-server), so the pod does both ends itself.
 
 1. **Hydrate.** `launch-notebook.sh` runs `sg_proxy.hydrate()` before starting marimo: the owner's `notebooks/` prefix lands flat in `/workspace`, their `snapshots/` in `/snapshots`. A brand-new user, or a store failure, starts with empty dirs (logged, never fatal).
 2. **Starting page.** The proxy answers immediately; until marimo is up, a browser request gets a self-refreshing "Starting your notebook…" page. `/__sg__/ready` reports 200/503 for scripts.
 3. **Save on an interval.** A background loop uploads every top-level, non-`_` `.py` in `/workspace` whose content hash changed, every `SYNC_INTERVAL_SECONDS` (5s), each to its own key. The hashes of just-hydrated files are seeded at startup, so the first pass doesn't re-upload them. A failed upload is logged and retried next pass. One PUT per object, so an interrupted upload can't leave a half-written notebook. Snapshots never write back, and deletions don't propagate (deleting is a dashboard action).
 4. **Save at shutdown.** The FastAPI `lifespan` shutdown hook cancels the loop and runs a final pass when Knative scales the pod to zero.
 
-Measured on the tenant (2026-10-06): a cell added in a fresh edit pod was readable through the admin's Download route seconds later; after the pod scaled to zero and was reopened, the cell was still there.
+Measured on the tenant (2026-10-06): a cell added in a fresh edit pod was readable through the dashboard's Download route seconds later; after the pod scaled to zero and was reopened, the cell was still there.
 
 The signal path is load-bearing for step 4. Flyte's `fserve` wrapper is PID 1 and, on the Knative SIGTERM, forwards the signal to its **one direct child only** (`Popen(cmd, shell=True)` + `send_signal`). So uvicorn must be that direct child: the AppEnvironment args prepend `exec` (so the `sh -c` wrapper replaces itself with the launch script rather than lingering; Debian's `/bin/sh` does not reliably exec-collapse a bare `sh -c "script"`), and the launch script then `exec`s uvicorn into that slot. An intermediate shell anywhere in the chain swallows SIGTERM and the final save is silently skipped.
 
@@ -82,11 +92,11 @@ Each Workspace tile carries two corner controls:
 
 Seed slugs are rejected by both. The browser confirms delete, then drops the tile on success.
 
-Resources are honored **as-authored — no ceiling**. At `/launch`, the admin reads a workspace notebook's source from the store and `app.notebook_meta.parse_notebook_resources` reads `[tool.stargazer]` (cpu/memory) and passes it to `per_notebook_env(resources=…)`. Parsing is purely textual — the admin never executes notebook code. Image-baked tutorials/workflows notebooks carry no such block and keep the env's legacy `("2Gi", "6Gi")` default.
+Resources are honored **as-authored — no ceiling**. At `/launch`, the dashboard reads a workspace notebook's source from the store and `app.notebook_meta.parse_notebook_resources` reads `[tool.stargazer]` (cpu/memory) and passes it to `per_notebook_env(resources=…)`. Parsing is purely textual — the dashboard never executes notebook code. Image-baked tutorials/workflows notebooks carry no such block and keep the env's legacy `("2Gi", "6Gi")` default.
 
 ## Running State (stateful tiles)
 
-Tile run-state is unified and authoritative. The dashboard's launch/stop handlers are **event-delegated**, so dynamically added tiles (a freshly created notebook) work with no re-binding. On load the page calls **`GET /launch/status`**, which discovers deployments with **one control-plane list** (`list_project_apps`, the same project-scoped call cleanup uses — `App.listall` can't be scoped to a per-user project), filters to `nb-{slug}-{mode}` names (`_parse_nb_name`; the mode is the last dash segment since slugs may contain dashes), then re-fetches each discovered name with `App.get` in parallel for authoritative status (list payloads may not carry full conditions). The active ones are returned with their plain endpoints; the page flips those tiles straight to **Open + Stop** instead of a fresh Edit/Run. Because it reads the control plane rather than in-memory state, it's correct across admin restarts, and because discovery is name-based it never probes notebooks that were never launched. A listing failure degrades to "nothing running" rather than an error. Org-scoped calls like this list need the org, which in-cluster init can't discover in an app pod, so the deployer bakes `FLYTE_ORG` into the admin and the admin passes it on to notebook pods.
+Tile run-state is unified and authoritative. The dashboard's launch/stop handlers are **event-delegated**, so dynamically added tiles (a freshly created notebook) work with no re-binding. On load the page calls **`GET /launch/status`**, which discovers deployments with **one control-plane list** (`list_project_apps` on the dashboard's own project, the same call cleanup uses), filters to `nb-{slug}-{mode}` names (`_parse_nb_name`; the mode is the last dash segment since slugs may contain dashes), then re-fetches each discovered name with `App.get` in parallel for authoritative status (list payloads may not carry full conditions). The active ones are returned with their plain endpoints; the page flips those tiles straight to **Open + Stop** instead of a fresh Edit/Run. Because it reads the control plane rather than in-memory state, it's correct across dashboard restarts, and because discovery is name-based it never probes notebooks that were never launched. A listing failure degrades to "nothing running" rather than an error. Org-scoped calls like this list need the org, which in-cluster init can't discover in an app pod, so onboarding bakes `FLYTE_ORG` into the dashboard and the dashboard passes it on to notebook pods.
 
 **Hydrated Open re-serves; fresh Open links directly.** A **fresh** launch (Edit/Run click → `/launch`) links straight to the returned URL. A **hydrated** Open (from `/launch/status` on load) instead **re-serves through `/launch` on click** before navigating, because a hydrated pod may have been served before a redeploy with an older image or env. Re-serving reconciles it to the current spec (a no-op for a warm, current pod). The tab is opened synchronously in the click handler and navigated once `/launch` returns, so the await can't cost the user gesture and trip the popup blocker. A scaled-to-zero pod needs no special handling: the platform wakes it on the first request and the proxy shows its starting page.
 
@@ -119,15 +129,15 @@ Publishing one is a contribution: the author downloads it and adds it to the rep
 
 - **Proxy:** the standalone `app/proxy.py` (which can't import the app package) keeps one module-local shared client with keep-alive to loopback marimo (`_upstream_client`, closed in the proxy lifespan after the shutdown save). Only `text/html` responses are buffered — for the terminal-overlay splice; everything else (static bundles, API JSON, downloads) **streams** through chunk-by-chunk (`StreamingResponse` over `aiter_raw`, `BackgroundTask(resp.aclose)`) with its original headers, so large bodies never sit in proxy memory. The raw query string passes through untouched (duplicate params intact), hop-by-hop, cookie and `X-User-*` headers are stripped, and the request body is streamed only when one exists (no gratuitous chunked framing on GETs).
 - **Concurrency:** the dashboard route resolves the workspace and snapshot listings with `asyncio.gather`, and reads each workspace notebook's header in parallel (best-effort).
-- **Compression:** the admin app runs `GZipMiddleware` (min 1KB) for the dashboard HTML and asset listings. The proxy does **not** — it relays marimo's own encoding untouched.
+- **Compression:** the dashboard runs `GZipMiddleware` (min 1KB) for the dashboard HTML and asset listings. The proxy does **not** — it relays marimo's own encoding untouched.
 
-## Admin Routes (full table)
+## Dashboard Routes (full table)
 
-All on `app/admin_app.py` (`app_env`), all behind Union's login and the `CurrentUser` dependency except `/health`. Lifespan runs `init()` at startup.
+All on `app/admin_app.py` (`app_env`), all behind Union's login. Lifespan runs `init()` at startup. Every route acts on the dashboard's own project (`config.FLYTE_PROJECT`) and its owner's store prefix.
 
 | Route | Purpose |
 |---|---|
-| `/` | Dashboard (ensures the user's project on first request) |
+| `/` | Dashboard |
 | `/workspace/create` | Writes a new notebook to the user's store from a seed, returns the rendered tile (409 on name collision) |
 | `/workspace/settings` | Rewrites a workspace notebook's `[tool.stargazer]` header (resources + description) |
 | `/workspace/delete` | Removes a workspace notebook (idempotent); tears down its pods |
@@ -135,7 +145,7 @@ All on `app/admin_app.py` (`app_env`), all behind Union's login and the `Current
 | `/snapshot/delete` | Removes one of the user's own snapshots (idempotent); tears down its run pod |
 | `/workspace/copy` | *Copies* a Workflows or Snapshots notebook into the workspace as an editable notebook (409 on name collision); returns the rendered tile |
 | `/workspace/download` | A workspace notebook or snapshot (own or published) as a `.py` attachment |
-| `/launch` | Serves a per-notebook env into the user's project, owned by them; returns its URL |
+| `/launch` | Serves a per-notebook env into the dashboard's project, owned by its owner; returns its URL |
 | `/launch/status` | Reports active per-notebook apps so the dashboard hydrates running tiles to Open/Stop |
 | `/stop` | Deactivates a per-notebook app by name |
 | `/workspace/cleanup` | Deletes deactivated per-notebook app records |
@@ -156,11 +166,11 @@ Asset-manager routes are a separate router (`app/assets.py`, `include_router`ed 
 
 ## Asset Manager (mechanics)
 
-`PINATA_JWT` rides into the admin pod via `_RUNTIME_SECRETS`, baked from the deployer's shell into `env_vars` (App-pod `secrets=` is dropped by the devbox Flyte build; whether Union injects app secrets is unconfirmed). It's the only secret left in the app tier, and anyone who can view the app spec can read it. Without it the routes 503 and the page shows "not configured"; there is no TinyDB fallback for this surface.
+**Off on hosted dashboards.** No `PINATA_JWT` is baked into a dashboard: its owner can read the app spec, so a shared key there would reach every user. Without a key the routes 503 and the page says asset storage isn't available yet; there is no TinyDB fallback for this surface. The routes still work wherever `PINATA_JWT` is in the process env (a local `uvicorn`), which is what the mechanics below describe. On the dashboard Union's login sits in front of them; `app/assets.py` keeps its own signed-in check so its per-record ownership rules stay testable on a bare router.
 
 - **Owner stamping.** `/assets/sign` stamps the signed-in user's subject as `_owner` *after* `build_asset()` validation, so it rides the signature-protected signed URL — unforgeable from the browser. Workspace/SDK uploads stamp from `STARGAZER_OWNER` instead: the launcher injects it into per-notebook pods (`env.env_vars["STARGAZER_OWNER"]` next to `FLYTE_PROJECT`), and `config._stargazer_env_vars()` forwards it into task pods at submission so pipeline outputs are owned too. Stamping lives in `PinataClient.upload()` (`_stamp_owner`, env wins over any stale value) and in the sign route; `build_asset()` rejects user-supplied `_*` keys so the namespace stays clean.
-- **Metadata edit (`update_metadata`).** A mis-tagged record is fixed in place rather than delete-and-re-uploaded. `PinataClient.update_metadata(cid, keyvalues, network)` looks up the file's internal UUID by CID, then `PUT /v3/files/{network}/{id}` with the patch — Pinata **merges** (verified empirically: supplied keys added/overwritten, omitted keys preserved, no key removal), and the bytes/CID are untouched so `*_cid` provenance edges survive. `_stamp_owner` runs here too (env wins; no-op in the admin pod, where the route sets `_owner` explicitly). `LocalStorageClient.update_metadata` mirrors the merge into TinyDB when there's no remote. Two surfaces drive it: the MCP `update_file` tool (validate via `build_asset` → delegate, shared-JWT so unenforced by design) and the `POST /assets/update` route (which additionally **fail-closes on ownership** — the record's current `_owner` must match the signed-in user, read fresh from Pinata not the public TTL cache, so a shared-JWT user still can't rewrite another user's or an unowned record from the page). Editing is the headline reason the bare `cid` is *not* treated as a relationship key in the graph — a content-addressed id never changes under a metadata edit.
-- **Public TTL cache.** `_public_cache` (module global, `PUBLIC_CACHE_TTL` = 60s) holds one unfiltered public-network listing; the public tab filters it in-memory. So anonymous public browsing costs ≤1 Pinata listing call per TTL regardless of traffic, and the admin acts as a semi-static mirror. Refresh is single-flight (`_public_cache_lock`, double-checked) so concurrent misses share one listing. Swap to a background refresher if the first-request-after-expiry latency ever matters.
+- **Metadata edit (`update_metadata`).** A mis-tagged record is fixed in place rather than delete-and-re-uploaded. `PinataClient.update_metadata(cid, keyvalues, network)` looks up the file's internal UUID by CID, then `PUT /v3/files/{network}/{id}` with the patch — Pinata **merges** (verified empirically: supplied keys added/overwritten, omitted keys preserved, no key removal), and the bytes/CID are untouched so `*_cid` provenance edges survive. `_stamp_owner` runs here too (env wins; no-op in the dashboard pod, where the route sets `_owner` explicitly). `LocalStorageClient.update_metadata` mirrors the merge into TinyDB when there's no remote. Two surfaces drive it: the MCP `update_file` tool (validate via `build_asset` → delegate, shared-JWT so unenforced by design) and the `POST /assets/update` route (which additionally **fail-closes on ownership** — the record's current `_owner` must match the signed-in user, read fresh from Pinata not the public TTL cache, so a shared-JWT user still can't rewrite another user's or an unowned record from the page). Editing is the headline reason the bare `cid` is *not* treated as a relationship key in the graph — a content-addressed id never changes under a metadata edit.
+- **Public TTL cache.** `_public_cache` (module global, `PUBLIC_CACHE_TTL` = 60s) holds one unfiltered public-network listing; the public tab filters it in-memory. So anonymous public browsing costs ≤1 Pinata listing call per TTL regardless of traffic, and the dashboard acts as a semi-static mirror. Refresh is single-flight (`_public_cache_lock`, double-checked) so concurrent misses share one listing. Swap to a background refresher if the first-request-after-expiry latency ever matters.
 - **Client swap for tests.** `_pinata_client` / `_public_cache` are module attributes resolved at call time, so route tests monkeypatch a fake Pinata client and reset the cache (`tests/unit/test_assets_routes.py`, `TestClient` without lifespan).
 - **Errors** are FastAPI-standard `HTTPException` → `{"detail": ...}` (401 auth, 400 validation, 503 not-configured), via the `require_user` / `_require_pinata` guards.
 
@@ -190,14 +200,14 @@ FastAPI's lifespan calls `init()` once at startup so subsequent SDK calls have a
 
 ## Images (build & publish)
 
-The admin app and the per-notebook pods share a strict split:
+The dashboard and the per-notebook pods share a strict split:
 
-- `app_env.image` is Flyte-built via `with_uv_project` — the admin is small Python with no heavy deps, and the Flyte builder is the natural fit.
-- Per-notebook envs use the **`notebook-app`** image, defined programmatically as `notebook_app_img_recipe` in `app/per_notebook.py` (proxy, launch script, bioconda CLIs, Claude Code, SDK source at `/stargazer`). The admin pod references the exact build via `Image.from_base(config.NOTEBOOK_IMAGE)` so it never tries to (re)build the image itself — the admin pod has no Docker daemon or project source layout. (The `note` target in the project `Dockerfile` — `stargazer-note` — is for local `docker run` exploration only and is *not* the hosted image.)
+- `app_env.image` is Flyte-built via `with_uv_project` — the dashboard is small Python with no heavy deps, and the Flyte builder is the natural fit.
+- Per-notebook envs use the **`notebook-app`** image, defined programmatically as `notebook_app_img_recipe` in `app/per_notebook.py` (proxy, launch script, bioconda CLIs, Claude Code, SDK source at `/stargazer`). The dashboard references the exact build via `Image.from_base(config.NOTEBOOK_IMAGE)` so it never tries to (re)build the image itself — a dashboard pod has no Docker daemon or project source layout. (The `note` target in the project `Dockerfile` — `stargazer-note` — is for local `docker run` exploration only and is *not* the hosted image.)
 
-The admin deploy entrypoint (`python -m app.admin_app` / `stargazer-app`) runs `flyte.build` on the recipe (`_build_notebook_image`) and bakes the returned content-hashed URI into the admin pod as `STARGAZER_NOTEBOOK_IMAGE` before calling `flyte.serve(app_env)`. Every per-notebook pod therefore runs exactly the build that shipped with its admin: no mutable tag, no `docker buildx` retag, and no chance of a node serving a stale cached `:latest`. A per-notebook pod picks up new proxy/launch code on its next re-serve after a redeploy (the dashboard's Open re-serves).
+Onboarding (`stargazer-users onboard|upgrade`) runs `flyte.build` on the recipe once per run (`onboard.build_notebook_image`) and bakes the returned content-hashed URI into each dashboard it deploys as `STARGAZER_NOTEBOOK_IMAGE`. The dashboard image is built by the serve itself, also content-hashed. An unchanged recipe is a registry hit, so a release builds each image once. Every per-notebook pod therefore runs exactly the build that shipped with its dashboard: no mutable tag, no `docker buildx` retag, and no chance of a node serving a stale cached `:latest`. A per-notebook pod picks up new proxy/launch code on its next re-serve after a redeploy (the dashboard's Open re-serves).
 
-**On Union today images are built locally and pushed to GHCR.** Union's remote builder emits Nydus-only images the tenant's nodes can't pull (ticket open), so deploys set `FLYTE_IMAGE_BUILDER=local` and `STARGAZER_REGISTRY=ghcr.io/stargazerbio`, with docker logged in to GHCR. A new GHCR package starts internal and must be made public once before nodes can pull it.
+**On Union images build on Union's remote builder** (`image.builder: remote` in `.flyte/union.yaml`) and push to Union's registry, so the deployer needs no Docker daemon or registry login. From 2026-10-05 to 2026-10-06 the remote builder produced Nydus-only images the nodes couldn't pull, and deploys went through a local build pushed to GHCR instead; Union fixed it on their side. If remote-built images ever fail to pull with `no processor for media-type application/vnd.oci.image.layer.nydus.blob.v1`, that's the same fault back.
 
 ## Deploy targets (devbox vs union)
 
@@ -206,25 +216,22 @@ The admin deploy entrypoint (`python -m app.admin_app` / `stargazer-app`) runs `
 | Setting | devbox | union |
 |---|---|---|
 | Deployer's Flyte config (`app.config.FLYTE_CONFIG`) | `.flyte/config.yaml` | `.flyte/union.yaml` (remote builder) |
-| `STARGAZER_REGISTRY` default | `localhost:30000` | unset: the remote builder pushes to Union's registry (set to GHCR while it's broken) |
+| `STARGAZER_REGISTRY` default | `localhost:30000` | unset: the remote builder pushes to Union's registry |
 | Login | none: the devbox has no Union auth, so the app tier doesn't run there | Union's gate |
-| Storage port-forward at deploy | yes | never (kubectl may point anywhere) |
 
-`FLYTE_DOMAIN` (default `development`) is independent of the target: it's where the admin serves and looks up every per-notebook app, so a prod deploy sets `FLYTE_DOMAIN=production`. Both `.flyte/` files are gitignored; create `union.yaml` with `flyte create config --endpoint dns:///<tenant> --image-builder remote -o .flyte/union.yaml`.
+`FLYTE_DOMAIN` (default `development`) is independent of the target: it's the domain onboarding grants access on and deploys dashboards into, and where dashboards serve and look up per-notebook apps, so a prod deploy sets `FLYTE_DOMAIN=production`. Both `.flyte/` files are gitignored; create `union.yaml` with `flyte create config --endpoint dns:///<tenant> --image-builder remote -o .flyte/union.yaml`.
 
 ## Deploy Settings
 
-No secret is required to deploy. The deployer's shell supplies:
+No secret is required to deploy. The org admin's shell, when running `stargazer-users`, supplies:
 
 | Env var | Purpose | If absent |
 |---|---|---|
 | `STARGAZER_TARGET=union` | picks `.flyte/union.yaml` | the devbox is targeted |
-| `STARGAZER_WORKSPACE_ROOT` | where users' notebooks live; baked into the admin and every pod | a Union deploy refuses to start |
-| `FLYTE_IMAGE_BUILDER=local`, `STARGAZER_REGISTRY=ghcr.io/stargazerbio` | the local-build path while the remote builder is broken | images build remotely and fail to pull |
-| `PINATA_JWT` | the asset manager | `/assets` renders "not configured" |
+| `STARGAZER_WORKSPACE_ROOT` | where users' notebooks live; baked into every dashboard and pod | `onboard`/`upgrade` refuse to start on Union |
 
-The deployer's org (from its Flyte config) is baked in as `FLYTE_ORG` automatically, and the notebook image URI as `STARGAZER_NOTEBOOK_IMAGE`.
+Per dashboard, onboarding bakes in `FLYTE_PROJECT`, `SG_OWNER_SUBJECT`, the deployer's org as `FLYTE_ORG`, and the notebook image URI as `STARGAZER_NOTEBOOK_IMAGE`. The admin's CLI identity must be an org admin (it creates projects, policies and assignments).
 
 ## Known Gaps
 
-Production gaps live in the roadmap, not here: project creation from the admin (refused on Union, see Project Provisioning), the org-wide platform key in every pod, the shared IAM role for the store, Union cookies reaching pods, invite-only onboarding, and no Union auth on the devbox. See [`.opencode/plans/ROADMAP.md`](../../plans/ROADMAP.md).
+Production gaps live in the roadmap, not here: the org-wide platform key in every pod, the shared IAM role for the store, Union cookies reaching pods, invite-only onboarding, and no Union auth on the devbox. See [`.opencode/plans/ROADMAP.md`](../../plans/ROADMAP.md).

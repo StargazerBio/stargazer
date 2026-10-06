@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # devbox-setup.sh — apply the known cluster-side Flyte devbox workarounds to a
-# fresh `flyte-devbox` container so `python -m app.admin_app` deploys cleanly.
+# fresh `flyte-devbox` container. (The hosted app tier needs Union's login and
+# no longer deploys to the devbox; tasks and workflows still run here.)
 #
 # These patches live in the k3s addon manifest (and CoreDNS) and are LOST when
 # the devbox container is recreated, so re-run this after every fresh devbox.
@@ -226,4 +227,4 @@ else
     laptop_steps
 fi
 
-ok "Devbox cluster-side workarounds applied. Deploy with: uv run python -m app.admin_app"
+ok "Devbox cluster-side workarounds applied."

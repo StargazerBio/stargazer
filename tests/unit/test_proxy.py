@@ -1,7 +1,7 @@
 """Tests for the per-notebook proxy (`app.proxy`).
 
 The proxy is baked into the notebook image as a standalone module; here we
-import it directly. Covered: the owner gate on the platform-forwarded
+import it directly. Covered: what the proxy forwards from the platform-forwarded
 `X-User-Subject`, what is (not) forwarded to marimo, the starting page while
 marimo is cold, terminal-overlay injection and streaming passthrough, and the
 workspace hydrate/sync against a local store root through the real
@@ -12,7 +12,6 @@ workspace hydrate/sync against a local store root through the real
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 
 from app import proxy
 
@@ -61,7 +60,7 @@ def owner_client():
 
 
 # ---------------------------------------------------------------------------
-# Owner gate
+# Forwarding
 # ---------------------------------------------------------------------------
 
 
@@ -76,36 +75,15 @@ def test_owner_request_reaches_marimo(owner_client, upstream):
     assert recorder["url"] == "http://127.0.0.1:8081/api/status"
 
 
-def test_other_user_gets_403(upstream):
-    """Another signed-in member can't use someone else's notebook."""
-    recorder = upstream(lambda req: httpx.Response(200, text="never"))
+def test_any_signed_in_visitor_reaches_marimo(upstream):
+    """The platform alone gates access: an admin is forwarded like the owner."""
+    upstream(lambda req: httpx.Response(200, text="hello"))
     client = TestClient(proxy.asgi_app, headers={"X-User-Subject": OTHER})
 
-    resp = client.get("/")
+    resp = client.get("/api/status")
 
-    assert resp.status_code == 403
-    assert "url" not in recorder
-
-
-def test_missing_identity_gets_403(upstream):
-    """No forwarded identity at all is denied."""
-    recorder = upstream(lambda req: httpx.Response(200, text="never"))
-
-    resp = TestClient(proxy.asgi_app).get("/")
-
-    assert resp.status_code == 403
-    assert "url" not in recorder
-
-
-def test_unconfigured_owner_fails_closed(monkeypatch, owner_client, upstream):
-    """A pod that doesn't know its owner denies everyone."""
-    monkeypatch.delenv("SG_OWNER_SUBJECT")
-    recorder = upstream(lambda req: httpx.Response(200, text="never"))
-
-    resp = owner_client.get("/")
-
-    assert resp.status_code == 403
-    assert "url" not in recorder
+    assert resp.status_code == 200
+    assert resp.text == "hello"
 
 
 def test_identity_and_cookies_are_not_forwarded(owner_client, upstream):
@@ -126,18 +104,6 @@ def test_identity_and_cookies_are_not_forwarded(owner_client, upstream):
     assert "cookie" not in sent
     assert not [k for k in sent if k.startswith("x-user-")]
     assert sent["accept"] == "text/plain"
-
-
-@pytest.mark.parametrize("path", ["/__sg__/term", "/ws"])
-def test_websockets_deny_other_users(path):
-    """The terminal and marimo websockets apply the same owner gate."""
-    client = TestClient(proxy.asgi_app, headers={"X-User-Subject": OTHER})
-    with (
-        pytest.raises(WebSocketDisconnect) as exc,
-        client.websocket_connect(path) as ws,
-    ):
-        ws.receive_text()
-    assert exc.value.code == 1008
 
 
 # ---------------------------------------------------------------------------

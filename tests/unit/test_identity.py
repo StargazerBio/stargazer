@@ -2,15 +2,18 @@
 
 Union's auth layer gates every request and forwards the signed-in user as
 `X-User-*` headers. Claim values arrive JSON-encoded (`"\"a@b.c\""`); the
-subject arrives bare.
+subject arrives bare. Union alone decides who may open a dashboard; state is
+keyed by the dashboard's owner (`config.OWNER_SUBJECT`), whoever is viewing.
 """
 
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from app.identity import User, require_user, user_from_request
-from app.provision import project_id
+from app import config
+from app.identity import User, current_user, user_from_request
+
+OWNER = "387300641116005877"
 
 
 def _request(headers: dict[str, str]) -> Request:
@@ -46,10 +49,35 @@ def test_no_subject_is_anonymous():
     assert user_from_request(_request({"X-User-Claim-Name": '"x"'})) is None
 
 
-def test_require_user_raises_401_when_anonymous():
-    """The dependency refuses anonymous requests with a 401."""
+def test_current_user_is_the_owner_for_the_owner(monkeypatch):
+    """The owner's request yields the owner, named from the claim headers."""
+    monkeypatch.setattr(config, "OWNER_SUBJECT", OWNER)
+    user = current_user(
+        _request({"X-User-Subject": OWNER, "X-User-Claim-Name": '"Pryce User"'})
+    )
+    assert user == User(OWNER, "", "Pryce User")
+
+
+def test_current_user_keys_an_admin_to_the_owner_but_keeps_their_name(monkeypatch):
+    """A different signed-in visitor acts on the owner's state, shown by name."""
+    monkeypatch.setattr(config, "OWNER_SUBJECT", OWNER)
+    user = current_user(
+        _request({"X-User-Subject": "111111111111111111", "X-User-Claim-Name": '"Adm"'})
+    )
+    assert user == User(OWNER, "", "Adm")
+
+
+def test_current_user_without_a_configured_owner_uses_the_visitor(monkeypatch):
+    """A local run (no owner baked in) keys state by the visitor's subject."""
+    monkeypatch.setattr(config, "OWNER_SUBJECT", "")
+    assert current_user(_request({"X-User-Subject": "42"})) == User("42")
+
+
+def test_current_user_without_identity_is_401(monkeypatch):
+    """No forwarded subject is not signed in."""
+    monkeypatch.setattr(config, "OWNER_SUBJECT", OWNER)
     with pytest.raises(HTTPException) as exc:
-        require_user(_request({}))
+        current_user(_request({}))
     assert exc.value.status_code == 401
 
 
@@ -63,9 +91,3 @@ def test_display_prefers_name_then_email_then_subject():
 def test_initial_is_first_letter_uppercased():
     """The avatar initial comes from the display label."""
     assert User("1", "", "ann lee").initial == "A"
-
-
-def test_project_id_is_prefixed_subject():
-    """Each user's Flyte project is `u-<subject>`."""
-    assert project_id("387300641116005877") == "u-387300641116005877"
-    assert project_id("AbC_9") == "u-abc-9"

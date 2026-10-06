@@ -4,3 +4,7 @@ __marimo__/
 *.egg-info
 .venv/
 .ruff_cache
+# Local-only state: credentials and the Flyte CLI cache (which changes every
+# run and would otherwise change every image hash built from this context).
+.env
+.flyte/

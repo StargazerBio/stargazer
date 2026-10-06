@@ -3,7 +3,7 @@
 
 Defines the shared `notebook-app` programmatic `flyte.Image` used by
 every per-notebook Knative pod, and `per_notebook_env(...)` — the
-AppEnvironment factory the admin app's `/launch` handler invokes.
+AppEnvironment factory the dashboard's `/launch` handler invokes.
 
 The image layers, on top of the Flyte debian base:
 
@@ -15,7 +15,7 @@ The image layers, on top of the Flyte debian base:
 - `claude` (Claude Code CLI) — the AI agent, on PATH for the dropdown
   terminal the proxy injects. Pinned standalone binary (auto-update off);
   auth is interactive (`claude` browser login) and ephemeral.
-- `marimo` plus the owner-gated reverse proxy's web deps (`fastapi`,
+- `marimo` plus the reverse proxy's web deps (`fastapi`,
   `uvicorn`, `httpx`, `websockets`). The proxy's storage calls use the
   `flyte` SDK the base image already carries.
 - `app/proxy.py` baked at `/usr/local/lib/sg_proxy.py` (top-level module,
@@ -39,14 +39,15 @@ into `SNAPSHOT_NOTEBOOK_DIR`, both flat (`<dir>/<slug>.py`). The proxy writes
 edited notebooks back on a short interval and once more when the pod scales
 to zero. No PVC: pod-local disk plus the object store is cheaper and faster.
 
-Auth: pods run `requires_auth=True`, so only signed-in org members reach them,
-and the proxy admits only the owner (`SG_OWNER_SUBJECT`). No credential of any
+Auth: pods run `requires_auth=True`, so access control is the platform's alone;
+`SG_OWNER_SUBJECT` only keys the pod's workspace store. No credential of any
 kind is baked into the pod env.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import os
+from datetime import timedelta
 from typing import Literal
 
 import flyte
@@ -70,14 +71,14 @@ _PROXY_MODULE = "sg_proxy"
 _LAUNCH_BIN = "/usr/local/bin"
 
 # Where a launch hydrates the owner's notebooks, flat as `<dir>/<slug>.py`. The
-# admin builds `notebook_path` from these; the proxy mirrors them.
+# dashboard builds `notebook_path` from these; the proxy mirrors them.
 WORKSPACE_NOTEBOOK_DIR = "/workspace"
 SNAPSHOT_NOTEBOOK_DIR = "/snapshots"
 
 
 # Layered build recipe. Consumed only by the deployer's build step
-# (`admin_app._build_notebook_image`), which bakes the built, content-hashed URI
-# into the admin pod as `STARGAZER_NOTEBOOK_IMAGE`. The admin pod never resolves
+# (`onboard.build_notebook_image`), which bakes the built, content-hashed URI
+# into each dashboard as `STARGAZER_NOTEBOOK_IMAGE`. A dashboard never resolves
 # this recipe itself: it has no Docker daemon or project layout, and the hash
 # its Python state would compute could differ from the deployer's. A unique URI
 # per deploy also means nodes can never serve a stale cached image.
@@ -186,9 +187,9 @@ def per_notebook_env(
     `SNAPSHOT_NOTEBOOK_DIR`, both hydrated by the launch script.
 
     `owner_subject` is the owner's platform user id. The pod sits behind the
-    platform login (`requires_auth=True`) and its proxy admits only requests
-    whose forwarded subject matches `SG_OWNER_SUBJECT`. It also keys where the
-    pod hydrates from and saves to in the workspace store
+    platform login (`requires_auth=True`), which is its only access control.
+    `SG_OWNER_SUBJECT` keys where the pod hydrates from and saves to in the
+    workspace store
     (`STARGAZER_WORKSPACE_ROOT`). `admin_url` is the admin app's public base
     URL, which the proxy's `/__sg__/dashboard` route redirects to. No
     credential is baked into the env: notebook code can read it.
@@ -200,7 +201,7 @@ def per_notebook_env(
     """
     if not config.NOTEBOOK_IMAGE:
         raise RuntimeError(
-            "STARGAZER_NOTEBOOK_IMAGE is unset: deploy with `python -m app.admin_app`, "
+            "STARGAZER_NOTEBOOK_IMAGE is unset: deploy with `stargazer-users`, "
             "which builds the notebook image and bakes its URI in."
         )
     flyte_resources = (
@@ -233,6 +234,13 @@ def per_notebook_env(
         port=8080,
         requires_auth=True,
         resources=flyte_resources,
+        scaling=flyte.app.Scaling(
+            replicas=(0, 1), scaledown_after=timedelta(minutes=30)
+        ),
+        # Notebook-named URL (`{slug}-{mode}-{hash}`) instead of the default.
+        domain=flyte.app.Domain(
+            subdomain=flyte.app.Subdomain.from_app_name(f"{slug}-{mode}")
+        ),
         env_vars={
             **STARGAZER_ENV_VARS,
             "FLYTE_DOMAIN": config.FLYTE_DOMAIN,
@@ -246,10 +254,10 @@ def per_notebook_env(
 async def list_project_apps(project: str, domain: str, limit: int = 500) -> list[App]:
     """List every App deployment in `project`, regardless of name or state.
 
-    `flyte.remote.App.listall` only honors the ambient init-config project (the
-    admin's), but per-notebook apps live in each user's own project, so we issue
-    the project-scoped list against the same client the SDK uses — there's no
-    public list API that takes a project. Callers re-`App.get` by name for
+    `flyte.remote.App.listall` only honors the ambient init-config project, so
+    we issue the project-scoped list against the same client the SDK uses —
+    there's no public list API that takes a project. The dashboard passes its
+    own project; onboarding passes the user's when stopping their apps. Callers re-`App.get` by name for
     authoritative status, since a list payload may not carry full conditions.
 
     Used by `/workspace/cleanup` to find stopped apps for notebooks no longer on

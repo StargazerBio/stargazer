@@ -43,22 +43,9 @@ There is no single host/IP that's reachable from both the laptop and from in-clu
 
 **Cause:** `secrets=[...]` is dropped at the flyte-binary → Knative translation — **not** merely the missing label. Verified by deploying an AppEnvironment with `secrets=[flyte.Secret(...)]` and inspecting the rendered ksvc: `kubectl get ksvc <app> -n flyte -o jsonpath='{.spec.template.metadata.annotations}'` shows only `autoscaling.knative.dev/*` — no secret annotations and no `inject-flyte-secrets` label. The `flyte-binary-webhook` (`failurePolicy: Fail`, `objectSelector matchLabels: inject-flyte-secrets=true`) injects from pod *annotations*, so with neither annotation nor label present **no cluster-side webhook change can rescue it** — there is nothing for the webhook to act on. This is a Flyte App-serving limitation, reproducible on any cluster, not a pure devbox quirk.
 
-**Workaround:** Bake secret values into `env_vars={...}` from the deployer's local shell at deploy time. Example in `app/admin_app.py`:
+**Workaround:** Bake secret values into `env_vars={...}` from the deployer's local shell at deploy time, e.g. `env_vars={"MY_SECRET": os.environ["MY_SECRET"]}`.
 
-```python
-_RUNTIME_SECRETS = {
-    name: os.environ[name] for name in ("PINATA_JWT",) if os.environ.get(name)
-}
-app_env = flyte.app.AppEnvironment(..., env_vars={..., **_RUNTIME_SECRETS})
-```
-
-**The deployer's shell is the only source of these.** Since plan 25 (Union auth, workspace on object storage) the app tier carries a single secret; the GitHub OAuth, GitHub App and session secrets are gone. Keep this table in sync with `app/admin_app.py`; a var that isn't exported is silently omitted:
-
-| Env var | Needed for | If missing |
-| --- | --- | --- |
-| `PINATA_JWT` | `/assets` routes | asset manager renders "not configured" |
-
-Non-secret deploy settings (`STARGAZER_TARGET`, `STARGAZER_WORKSPACE_ROOT`, the image-builder overrides) are listed under Deploy Settings in `.opencode/reference/architecture/app_internals.md`. Note the app tier no longer runs on the devbox at all: it needs Union's login.
+**The app tier bakes no secrets today.** Plan 25 removed the GitHub OAuth, GitHub App and session secrets, and plan 26 stopped baking `PINATA_JWT` into dashboards: a user can read their own dashboard's app spec, so any secret there reaches that user. A secret the app tier needs again has to come from real secret injection, or be one each user may see.
 
 **Trade-off / prod gap:** secret values are stored in the App spec in Flyte's DB. This is the one accepted parity gap in `app/` — revisit when Flyte supports App-pod secret injection (then switch to `secrets=[flyte.Secret(key=…, as_env_var=…)]` and drop the baking).
 
@@ -308,3 +295,13 @@ PY
 ```
 
 `task_cache` and `runs` point at the same wiped object storage, so clear them too. Then delete any failed ksvc (`kubectl delete ksvc admin-app-flytesnacks-development -n flyte`) so the redeploy gets a clean revision.
+
+## `AppEnvironment.clone_with` breaks `include=` (and the pod loader)
+
+Not devbox-specific: any Flyte target, SDK 2.10.7.
+
+**Symptom:** Serving a `clone_with` copy of an AppEnvironment that has `include=("templates/", ...)` fails before deploy with `ValueError: include path '…/lib/python3.13/templates' is not a file, directory, or matching glob pattern.` — the path is inside the Python install, not the project.
+
+**Cause:** An AppEnvironment records the frame it was created in (`_caller_frame`), skipping SDK and synthesized frames. Flyte resolves `include=` paths relative to that frame's file, and `AppEnvResolver` uses it to find the module the pod imports the env from. `clone_with` builds the copy with `dataclasses.replace`, so the copy's frame is the standard library's `dataclasses.py`. Seen 2026-10-06 on the first real `stargazer-users onboard`.
+
+**Workaround:** Don't serve a `clone_with` copy of an env that uses `include=`. `app/onboard.py` sets the per-user `env_vars` and `domain` on `app_env` itself before each serve (it's a plain, non-frozen dataclass), keeping the original frame. `tests/unit/test_onboard.py::test_dashboard_deploy_keeps_the_env_resolvable` pins this.

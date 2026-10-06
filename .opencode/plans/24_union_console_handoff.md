@@ -13,10 +13,10 @@ identity**. Executions run under the admin pod's in-cluster identity into a
 project named for the GitHub user; the user themself has no Union principal
 and no access.
 
-## Status (2026-10-05)
+## Status (2026-10-06)
 
-Pieces 0–3 are settled, mostly by measurement on the tenant. What's left is
-the access grant (Pieces 4–5) and the link (Piece 6).
+Pieces 0–5 are settled, mostly by measurement on the tenant. What's left is
+the console link (Piece 6).
 
 - **Piece 0, identity forwarding:** answered. A `requires_auth=True` app
   receives `X-User-Subject` (numeric Union id), email/name claims and an ID
@@ -27,13 +27,16 @@ the access grant (Pieces 4–5) and the link (Piece 6).
 - **Piece 2, collapse to one OAuth App:** moved into
   [plan 25](./25_workspace_state_object_storage.md), which removes our
   OAuth App and every other GitHub dependency from the app tier.
-- **Piece 3, subject format:** the subject is a stable numeric id. Plan 25
-  names user projects `u-<subject>`.
-- **Piece 5:** with no OAuth callback, the grant runs where plan 25 ensures
-  the project (first dashboard request per process), and is keyed on
-  `X-User-Subject`. Users are already Union principals when they reach the
-  dashboard, so the "assignment creates the user" trick is no longer
-  needed.
+- **Piece 3, subject format:** the subject is a stable numeric id. Plan 26
+  keeps it as the key (a project label) and names projects readably,
+  `u-<handle>`.
+- **Pieces 4–5, the console-access grant: delivered by
+  [plan 26](./26_per_user_dashboard.md)'s onboarding command.** An org admin
+  runs `stargazer-users onboard`, which creates the user's project and binds
+  built-in `contributor` on it, and nothing else, to their subject. The
+  in-cluster identity can't create projects or grant access on Union, so the
+  grant can't run from the dashboard. Verified 2026-10-06: the onboarded
+  test account sees exactly one project in the console, its own.
 
 ## What Union confirmed
 

@@ -1,16 +1,19 @@
 """
 ### Asset manager page and API routes.
 
-APIRouter included by the admin app serving `/assets`: the registry schema
+APIRouter included by the dashboard serving `/assets`: the registry schema
 for the dynamic upload form, Pinata-backed listing, signed-URL minting for
-direct browser→Pinata uploads (bytes never transit the admin pod), and
+direct browser→Pinata uploads (bytes never transit the dashboard pod), and
 download redirects.
 
-Auth model: the whole admin sits behind Union's login, so on the hosted
-deploy every request carries the signed-in user (`app.identity`). The
-routes still degrade for an anonymous request (a local run): public
+Dashboards are deployed without a Pinata key (a per-user app's spec is
+readable by its owner, so a shared key would leak), so on the hosted deploy
+the page shows that asset storage isn't available and the API routes 503.
+
+Auth model: Union's login sits in front of these routes, so on the hosted
+deploy every request is a signed-in user. The routes still degrade for an anonymous request (a local run): public
 browsing works, private routes 401. The public listing is served from an
-in-process TTL cache so the admin acts as a semi-static read-only mirror
+in-process TTL cache so the dashboard acts as a semi-static read-only mirror
 rather than an open proxy to the Pinata API. Private listing fails closed
 (`_owner == the user's subject` only, stamped and filtered server-side), and
 sign minting always requires a signed-in user.
@@ -27,7 +30,7 @@ from typing import get_type_hints
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from app.identity import User, require_user, user_from_request
+from app.identity import User, user_from_request
 from app.templates import templates
 from stargazer.assets import ASSET_REGISTRY, build_asset
 from stargazer.assets.asset import _BASE_FIELDS
@@ -64,6 +67,14 @@ def _pinata() -> PinataClient:
     if _pinata_client is None:
         _pinata_client = PinataClient()
     return _pinata_client
+
+
+def _require_user(request: Request) -> User:
+    """The signed-in user, or a 401. Ownership of a record is checked per route."""
+    user = user_from_request(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="not signed in")
+    return user
 
 
 def _require_pinata() -> None:
@@ -158,7 +169,7 @@ async def assets_list(request: Request):
             if all(r["keyvalues"].get(k) == v for k, v in params.items())
         ]
 
-    user = require_user(request)
+    user = _require_user(request)
     params["_owner"] = user.subject
     return await _pinata().query(params, network="private")
 
@@ -173,7 +184,7 @@ async def assets_sign(request: Request):
     supplies bytes only.
     """
     _require_pinata()
-    user = require_user(request)
+    user = _require_user(request)
 
     body = await request.json()
     filename = body.get("filename", "")
@@ -213,7 +224,7 @@ async def assets_update(request: Request):
     survive). SDK/MCP edits stay unenforced by design (shared JWT).
     """
     _require_pinata()
-    user = require_user(request)
+    user = _require_user(request)
 
     body = await request.json()
     cid = body.get("cid", "")
@@ -260,7 +271,7 @@ async def assets_download(request: Request, cid: str):
             gateway = PUBLIC_FALLBACK_GATEWAY
         return RedirectResponse(f"{gateway}/ipfs/{cid}", status_code=302)
 
-    require_user(request)
+    _require_user(request)
     _require_pinata()
     url = await _pinata()._get_signed_url(cid)
     return RedirectResponse(url, status_code=302)

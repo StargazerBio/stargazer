@@ -7,11 +7,10 @@ modules resolve the environment once at import.
 import os
 import subprocess
 import sys
-from types import SimpleNamespace
 
 import pytest
 
-from app import admin_app, config
+from app import config
 from app.per_notebook import per_notebook_env
 
 
@@ -104,24 +103,3 @@ def test_notebook_launch_without_deployed_image_errors(monkeypatch):
     monkeypatch.setattr(config, "NOTEBOOK_IMAGE", None)
     with pytest.raises(RuntimeError, match="STARGAZER_NOTEBOOK_IMAGE"):
         _nb_env()
-
-
-def test_storage_port_forward_is_devbox_only(monkeypatch):
-    """Off the devbox, deploy never touches kubectl (it may point anywhere)."""
-    calls = []
-    monkeypatch.setattr(config, "TARGET", "union")
-    monkeypatch.setattr(admin_app.subprocess, "Popen", lambda *a, **k: calls.append(a))
-    monkeypatch.setattr(admin_app, "_port_open", lambda *a: False)
-    admin_app._start_storage_port_forward()
-    assert calls == []
-
-
-def test_build_notebook_image_returns_built_uri(monkeypatch):
-    """The deploy uses the built URI directly; no docker retag step."""
-    monkeypatch.setattr(
-        admin_app.flyte, "build", lambda img: SimpleNamespace(uri="reg/notebook-app:h1")
-    )
-    monkeypatch.setattr(
-        admin_app.subprocess, "run", lambda *a, **k: pytest.fail("no docker retag")
-    )
-    assert admin_app._build_notebook_image() == "reg/notebook-app:h1"

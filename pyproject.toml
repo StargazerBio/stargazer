@@ -40,6 +40,9 @@ landing = [
     "jinja2>=3.1",
     "pyjwt[crypto]>=2.8",
     "cryptography>=43",
+    # Union user/RBAC admin for the onboarding command (`app.onboard`). Pre-1.0,
+    # so bounded to the minor: its remote API has no stability promise yet.
+    "flyteplugins-union>=0.15.1,<0.16",
 ]
 docs = ["mkdocstrings[python]>=1.0.3"]
 app = ["stargazer[notebook,landing]"]
@@ -47,7 +50,7 @@ all = ["stargazer[notebook,mcp,landing,docs]"]
 
 [project.scripts]
 stargazer = "stargazer.server:main"
-stargazer-app = "app.admin_app:main"
+stargazer-users = "app.onboard:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
