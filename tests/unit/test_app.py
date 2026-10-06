@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 
 from app import config, notebooks
 from app import workspace_store as ws
-from app.admin_app import _notebook_slug, _parse_nb_name, app_env, asgi_app, main
+from app.admin_app import _notebook_slug, _parse_nb_name, app_env, asgi_app
 from app.notebook_meta import parse_notebook_name, parse_notebook_resources
 
 ALICE = "387300641116005877"
@@ -94,6 +94,13 @@ def _get(subject: str, filename: str, snapshot: bool = False) -> str | None:
 # ---------------------------------------------------------------------------
 
 
+def test_the_shared_admin_deploy_is_gone():
+    """Dashboards are deployed per user by `stargazer-users`, never shared."""
+    from app import admin_app
+
+    assert not hasattr(admin_app, "main")
+
+
 def test_app_env_is_the_union_gated_dashboard():
     """The dashboard is gated by Union's login."""
     assert isinstance(app_env, flyte.app.AppEnvironment)
@@ -113,19 +120,6 @@ def test_app_env_carries_no_github_or_session_secrets():
         "STARGAZER_SECURE_COOKIES",
     }
     assert gone.isdisjoint(app_env.env_vars)
-
-
-def test_main_refuses_union_deploy_without_workspace_root(monkeypatch):
-    """A Union deploy with nowhere to save notebooks fails loudly, before init."""
-    monkeypatch.setattr(config, "TARGET", "union")
-    monkeypatch.setattr(config, "WORKSPACE_ROOT", "")
-
-    def fail(*_a, **_kw):
-        raise AssertionError("deploy step ran without a workspace root")
-
-    monkeypatch.setattr("app.admin_app.init", fail)
-    with pytest.raises(SystemExit, match="STARGAZER_WORKSPACE_ROOT"):
-        main()
 
 
 @pytest.mark.parametrize(

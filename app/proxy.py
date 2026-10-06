@@ -31,7 +31,7 @@ websocket below.
 
 Reserved paths the proxy handles itself instead of forwarding:
 
-- `GET /__sg__/dashboard` — 302 to the admin app (`STARGAZER_ADMIN_URL`), so
+- `GET /__sg__/dashboard` — 302 to the owner's dashboard (`STARGAZER_ADMIN_URL`), so
   notebooks can link back with a stable relative path.
 - `GET /__sg__/ready` — 200 once local marimo answers, 503 while it's still
   cold-starting.
@@ -345,9 +345,9 @@ asgi_app = FastAPI(
 
 @asgi_app.get("/__sg__/dashboard")
 async def dashboard_redirect() -> Response:
-    """Redirect back to the admin dashboard (`STARGAZER_ADMIN_URL`).
+    """Redirect back to the owner's dashboard (`STARGAZER_ADMIN_URL`).
 
-    Admin and per-notebook live on different hosts, so a notebook can't just
+    The dashboard and the notebook live on different hosts, so a notebook can't just
     link to `/`. Not owner-gated: it reveals nothing.
     """
     target = os.environ.get("STARGAZER_ADMIN_URL") or "/"

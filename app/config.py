@@ -39,7 +39,7 @@ FLYTE_CONFIG = (
 )
 
 # The notebook-app image every per-notebook pod runs, as the exact URI built at
-# deploy time (`admin_app.main` bakes it into the admin pod's env). Unset in a
+# deploy time (`app.onboard` bakes it into each dashboard's env). Unset in a
 # bare local `uvicorn` run, where launching a notebook then errors clearly.
 NOTEBOOK_IMAGE: str | None = os.environ.get("STARGAZER_NOTEBOOK_IMAGE") or None
 

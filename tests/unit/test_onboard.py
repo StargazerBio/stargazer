@@ -7,11 +7,12 @@ calls through. Every call is appended to one log so tests can assert order.
 Deploying the dashboard is faked at `app.onboard.deploy_dashboard`.
 """
 
+import sys
 from types import SimpleNamespace
 
 import pytest
 
-from app import onboard
+from app import config, onboard
 
 ALICE = "387300641116005877"
 BOB = "111111111111111111"
@@ -303,3 +304,39 @@ def test_offboard_of_unknown_user_changes_nothing(union):
     with pytest.raises(LookupError, match="nobody@uni.edu"):
         onboard.offboard("nobody@uni.edu")
     assert union.writes() == []
+
+
+# ---------------------------------------------------------------------------
+# Release plumbing
+# ---------------------------------------------------------------------------
+
+
+def test_notebook_image_is_the_built_uri(monkeypatch):
+    """Dashboards bake in the content-hashed URI the build returns, no retag."""
+    monkeypatch.setattr(
+        onboard.flyte, "build", lambda img: SimpleNamespace(uri="reg/notebook-app:h1")
+    )
+    assert onboard.build_notebook_image() == "reg/notebook-app:h1"
+
+
+def test_union_deploy_without_workspace_root_is_refused(monkeypatch):
+    """With nowhere to save notebooks, onboarding stops before touching Union."""
+    monkeypatch.setattr(config, "TARGET", "union")
+    monkeypatch.setattr(config, "WORKSPACE_ROOT", "")
+    monkeypatch.setattr(onboard, "init", lambda *a, **k: pytest.fail("init ran"))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "stargazer-users",
+            "onboard",
+            "--email",
+            "a@b.c",
+            "--first-name",
+            "A",
+            "--last-name",
+            "B",
+        ],
+    )
+    with pytest.raises(SystemExit, match="STARGAZER_WORKSPACE_ROOT"):
+        onboard.main()

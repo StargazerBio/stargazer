@@ -22,7 +22,7 @@ import stargazer.notebooks
 IMAGE_WORKDIR = "/stargazer"
 
 # The installed `stargazer.notebooks` package: the same files the notebook
-# image ships under IMAGE_WORKDIR, readable from the admin process.
+# image ships under IMAGE_WORKDIR, readable from the dashboard process.
 NOTEBOOKS_PKG_DIR = Path(stargazer.notebooks.__file__).parent
 # Public snapshots: frozen notebooks merged upstream, shipped to everyone in
 # the image like tutorials. Module attribute so tests can point it elsewhere.
@@ -124,7 +124,7 @@ def slugify(name: str) -> str:
 def shipped_source(path_in_image: str) -> str | None:
     """Read a shipped notebook's source by its path in the notebook image.
 
-    The admin has no `/stargazer` checkout, but it installs the same package,
+    The dashboard has no `/stargazer` checkout, but it installs the same package,
     so the image path maps onto the installed `stargazer.notebooks`. None if
     the path is outside it or the file is missing.
     """

@@ -26,7 +26,7 @@ access, and archives their project, leaving their notebooks in the store.
 
 The control-plane classes are module attributes so tests can swap in fakes.
 
-Usage (with the deploy settings `app.admin_app.main` needs exported):
+Usage (deploy settings exported; see `app_internals.md` → Deploy Settings):
     stargazer-users onboard --email jane@uni.edu --first-name Jane --last-name Doe
     stargazer-users upgrade
     stargazer-users offboard --email jane@uni.edu
@@ -46,9 +46,9 @@ from flyte.remote import App, Project
 from flyteplugins.union.remote import Assignment, Policy, User
 
 from app import config
-from app.admin_app import _build_notebook_image, app_env
+from app.admin_app import app_env
 from app.init import init
-from app.per_notebook import list_project_apps
+from app.per_notebook import list_project_apps, notebook_app_img_recipe
 from stargazer.config import PROJECT_ROOT, logger
 
 _MANAGED = {"managed-by": "stargazer"}
@@ -166,10 +166,27 @@ def _ensure_access(subject: str, project: str) -> None:
         Assignment.create(user_subject=subject, policy=name)
 
 
+def build_notebook_image() -> str:
+    """Build the per-notebook image recipe and return its content-hashed URI.
+
+    A dashboard pod can't build images (no Docker daemon, no project layout),
+    so the deployer builds here and every dashboard gets the URI as
+    `STARGAZER_NOTEBOOK_IMAGE`; every notebook app then runs exactly this
+    build. Content hashing makes a rebuild of an unchanged recipe a registry
+    hit, so a release builds once however many users it deploys.
+    """
+    logger.info("Building per-notebook flyte.Image (recipe)")
+    result = flyte.build(notebook_app_img_recipe)
+    if result.uri is None:
+        raise RuntimeError("flyte.build did not return an image URI")
+    logger.info(f"Per-notebook image: {result.uri}")
+    return result.uri
+
+
 @cache
 def _notebook_image() -> str:
-    """The notebook image URI, built (or found in the registry) once per run."""
-    return _build_notebook_image()
+    """The notebook image URI, built at most once per run."""
+    return build_notebook_image()
 
 
 def deploy_dashboard(project: str, owner_subject: str) -> str:

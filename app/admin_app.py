@@ -28,24 +28,20 @@ GitHub integration. It has three jobs:
 The asset manager (`app.assets`) is mounted but has no store on a hosted
 dashboard: no Pinata key is baked in, since the owner can read the app spec.
 
-`app_env` (this app's own AppEnvironment) and `main()` (the deploy
-entrypoint) are also defined here.
+`app_env` (this app's own AppEnvironment) is also defined here. It is
+deployed per user by `app.onboard` (`stargazer-users`), never on its own.
 
 Local development (identity comes from the `X-User-*` headers Union would set):
     SG_OWNER_SUBJECT=<subject> uvicorn app.admin_app:asgi_app --reload --port 8080
 
-Deploy hosted to Flyte:
-    python -m app.admin_app           # or: stargazer-app
+Deploy hosted to Flyte, one per user:
+    stargazer-users onboard --email … --first-name … --last-name …
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import asyncio
-import atexit
 import os
-import socket
-import subprocess
-import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -55,7 +51,6 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from flyte._initialize import get_init_config
 from flyte.remote import App
 
 from app import config
@@ -88,7 +83,6 @@ from app.per_notebook import (
     SNAPSHOT_NOTEBOOK_DIR,
     WORKSPACE_NOTEBOOK_DIR,
     list_project_apps,
-    notebook_app_img_recipe,
     per_notebook_env,
 )
 from app.templates import templates
@@ -987,96 +981,3 @@ async def workspace_cleanup(user: CurrentUser):
 async def health():
     """Health check endpoint."""
     return {"status": "ok"}
-
-
-# ---------------------------------------------------------------------------
-# Deploy entrypoint
-# ---------------------------------------------------------------------------
-
-
-def _build_notebook_image() -> str:
-    """Build the per-notebook image recipe and return its content-hashed URI.
-
-    The dashboard pod can't build images (no Docker daemon, no project layout), so
-    the deployer builds here and `main()` bakes the URI into the dashboard pod as
-    `STARGAZER_NOTEBOOK_IMAGE`; every per-notebook app then runs exactly this
-    build. The builder comes from the Flyte config: local docker pushing to the
-    devbox registry, or Union's remote builder pushing to Union's registry.
-    """
-    logger.info("Building per-notebook flyte.Image (recipe)")
-    result = flyte.build(notebook_app_img_recipe)
-    if result.uri is None:
-        raise RuntimeError("flyte.build did not return an image URI")
-    logger.info(f"Per-notebook image: {result.uri}")
-    return result.uri
-
-
-def _start_storage_port_forward() -> None:
-    """Open `localhost:9000 → svc/rustfs-svc:9000` for devbox deploys.
-
-    `flyte-binary` returns signed upload URLs with host `rustfs-svc.flyte:9000`
-    (so admin App pods can reach storage via k8s DNS, matching production
-    behaviour). On the deployer's laptop that hostname only works if it
-    resolves to `127.0.0.1` (NAS DNS or `/etc/hosts`) AND there's a
-    port-forward to the in-cluster service.
-
-    Devbox only: elsewhere kubectl may point at an unrelated cluster. Also
-    skipped if the port is already serving (e.g. user ran their own
-    port-forward) or if `kubectl` is missing.
-    """
-    if config.TARGET != "devbox":
-        return
-    if _port_open("127.0.0.1", 9000):
-        logger.info("Storage port 9000 already open; skipping port-forward")
-        return
-    try:
-        proc = subprocess.Popen(
-            ["kubectl", "port-forward", "-n", "flyte", "svc/rustfs-svc", "9000:9000"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except FileNotFoundError:
-        logger.warning("kubectl not found; skipping storage port-forward")
-        return
-    atexit.register(proc.terminate)
-    for _ in range(20):
-        if _port_open("127.0.0.1", 9000):
-            logger.info("Storage port-forward established on localhost:9000")
-            return
-        time.sleep(0.25)
-    raise RuntimeError("kubectl port-forward did not open localhost:9000 within 5s")
-
-
-def _port_open(host: str, port: int) -> bool:
-    """Return True if a TCP connect to host:port succeeds quickly."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(0.25)
-        try:
-            s.connect((host, port))
-            return True
-        except OSError:
-            return False
-
-
-def main():
-    """Deploy the dashboard to Flyte, for the owner and project in the shell's env."""
-    # A Union deploy with no workspace root looks healthy but can't save a
-    # single notebook — refuse it rather than ship that.
-    if config.TARGET == "union" and not config.WORKSPACE_ROOT:
-        raise SystemExit(
-            "STARGAZER_WORKSPACE_ROOT is not set. Export the object-store prefix "
-            "users' notebooks are saved under (e.g. s3://<bucket>/stargazer) "
-            "before deploying."
-        )
-    init(config.FLYTE_CONFIG, root_dir=PROJECT_ROOT)
-    _start_storage_port_forward()
-    # In-cluster init can't discover the org in an app pod; bake the deployer's.
-    if org := get_init_config().org:
-        app_env.env_vars["FLYTE_ORG"] = org
-    app_env.env_vars["STARGAZER_NOTEBOOK_IMAGE"] = _build_notebook_image()
-    deployment = flyte.serve(app_env)
-    print(f"App URL: {deployment.endpoint}")
-
-
-if __name__ == "__main__":
-    main()

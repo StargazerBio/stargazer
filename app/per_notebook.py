@@ -3,7 +3,7 @@
 
 Defines the shared `notebook-app` programmatic `flyte.Image` used by
 every per-notebook Knative pod, and `per_notebook_env(...)` — the
-AppEnvironment factory the admin app's `/launch` handler invokes.
+AppEnvironment factory the dashboard's `/launch` handler invokes.
 
 The image layers, on top of the Flyte debian base:
 
@@ -70,14 +70,14 @@ _PROXY_MODULE = "sg_proxy"
 _LAUNCH_BIN = "/usr/local/bin"
 
 # Where a launch hydrates the owner's notebooks, flat as `<dir>/<slug>.py`. The
-# admin builds `notebook_path` from these; the proxy mirrors them.
+# dashboard builds `notebook_path` from these; the proxy mirrors them.
 WORKSPACE_NOTEBOOK_DIR = "/workspace"
 SNAPSHOT_NOTEBOOK_DIR = "/snapshots"
 
 
 # Layered build recipe. Consumed only by the deployer's build step
-# (`admin_app._build_notebook_image`), which bakes the built, content-hashed URI
-# into the admin pod as `STARGAZER_NOTEBOOK_IMAGE`. The admin pod never resolves
+# (`onboard.build_notebook_image`), which bakes the built, content-hashed URI
+# into each dashboard as `STARGAZER_NOTEBOOK_IMAGE`. A dashboard never resolves
 # this recipe itself: it has no Docker daemon or project layout, and the hash
 # its Python state would compute could differ from the deployer's. A unique URI
 # per deploy also means nodes can never serve a stale cached image.
@@ -200,7 +200,7 @@ def per_notebook_env(
     """
     if not config.NOTEBOOK_IMAGE:
         raise RuntimeError(
-            "STARGAZER_NOTEBOOK_IMAGE is unset: deploy with `python -m app.admin_app`, "
+            "STARGAZER_NOTEBOOK_IMAGE is unset: deploy with `stargazer-users`, "
             "which builds the notebook image and bakes its URI in."
         )
     flyte_resources = (
@@ -246,10 +246,10 @@ def per_notebook_env(
 async def list_project_apps(project: str, domain: str, limit: int = 500) -> list[App]:
     """List every App deployment in `project`, regardless of name or state.
 
-    `flyte.remote.App.listall` only honors the ambient init-config project (the
-    admin's), but per-notebook apps live in each user's own project, so we issue
-    the project-scoped list against the same client the SDK uses — there's no
-    public list API that takes a project. Callers re-`App.get` by name for
+    `flyte.remote.App.listall` only honors the ambient init-config project, so
+    we issue the project-scoped list against the same client the SDK uses —
+    there's no public list API that takes a project. The dashboard passes its
+    own project; onboarding passes the user's when stopping their apps. Callers re-`App.get` by name for
     authoritative status, since a list payload may not carry full conditions.
 
     Used by `/workspace/cleanup` to find stopped apps for notebooks no longer on

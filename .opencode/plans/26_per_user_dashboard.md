@@ -200,9 +200,13 @@ calls and their order. Small and explicit; no live control plane.
 
 ## Piece 3 — Release flow
 
-- [ ] Replace `python -m app.admin_app`'s deploy with a release command:
+- [x] Replace `python -m app.admin_app`'s deploy with a release command:
       build the dashboard and notebook images, record their URIs, then
-      `upgrade --all`. No shared admin is deployed.
+      `upgrade --all`. No shared admin is deployed. *(Simpler than recording
+      URIs: both images are content-hashed, so `stargazer-users upgrade` is
+      the release. It builds each image once (a registry hit when unchanged)
+      and redeploys every dashboard. `admin_app.main`, the devbox storage
+      port-forward and the `stargazer-app` script are gone.)*
 - [ ] Retire the shared `admin-app` deployment on the tenant once dashboards
       are verified.
 
