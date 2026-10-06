@@ -97,7 +97,10 @@ Recorded, not solved here. Each has (or gets) a ROADMAP entry.
       record which one it attaches so onboarding can remove it).
 - [ ] An app in `u-<subject>` is reachable by that user with only
       `contributor` on `u-<subject>/development`, and refused (403) for a user
-      with no role there.
+      with no role there. *Half measured (2026-10-06, plan 25's tenant
+      run): the test account, whose only grant on `u-387300641116005877` is
+      `contributor` via policy `stargazer-user-387300641116005877`, reached
+      its notebook app there. The no-role 403 is still to check.*
 - [ ] Measure a dashboard cold start after scale-to-zero. If it's bad, decide
       on `min_replicas=1` per user versus accepting it.
 
@@ -189,6 +192,13 @@ Using `pryce@stargazer.bio` as the durable test account.
 
 - [ ] Clean up the front-door probes: role `frontdoor-probe-exec`, policies
       `frontdoor-probe-*`, apps `front-door-probe` and `auth-probe`.
+- Already in place from plan 25's tenant run: project
+  `u-387300641116005877` (labels `managed-by=stargazer`,
+  `union-subject=387300641116005877`) and policy
+  `stargazer-user-387300641116005877` (contributor on its development domain),
+  assigned to the test account. Onboarding's existing-user path should find
+  both and leave them alone. Also leftover: the `project-create-probe` task
+  in `flytesnacks`.
 - [ ] Onboard the test account (existing-user path). Fresh session → its
       dashboard loads at the stable URL; the console shows only
       `u-387300641116005877`.
