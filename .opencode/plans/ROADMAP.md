@@ -12,6 +12,12 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    identity-gated production auth, async OAuth provisioning, and plan 24's
    OAuth App collapse.
    [`25_workspace_state_object_storage.md`](./25_workspace_state_object_storage.md)
+- **Per-user dashboards.** Replace the shared admin with one dashboard app
+   per user in their own `u-<subject>` project, provisioned by an
+   admin-run onboarding command (user, project, project-only access grant,
+   dashboard). Union's app gate requires view permission on the app's
+   project, so a shared admin would expose its whole project to every user.
+   [`26_per_user_dashboard.md`](./26_per_user_dashboard.md)
 - **Union production deploy** (tenant: `stargazerbio.us-west-2.unionai.cloud`).
    Done in PRs: per-pod session keys (#2), the `STARGAZER_TARGET`
    devbox/union switch, a configurable domain, and a fixed per-deploy
@@ -32,15 +38,14 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
      confirming Union injects app secrets at all.
    - **`flyte.deploy` with commit-SHA versions** in place of `flyte.serve`
      for the admin app, run from CI with a `FLYTE_API_KEY`.
-   - **Pin the admin to one replica** (`Scaling(replicas=(1, 1))`).
-     `_launched` is in-memory, and scaling to zero puts a cold start on
-     the first dashboard load.
    - **Resource ceilings.** Notebook resources are honored as-authored. Cap
      them with `flyte edit settings --domain production` (`task_resource.max.*`),
      after checking that the cap applies to apps and not only tasks.
-   - **Custom domain** for the admin (`flyte.app.Domain`).
-   - **Admin identity.** A dedicated API key with project-create (and,
-     for the Union console handoff, policy/assignment) permissions.
+- **Org-wide platform key in every pod.** Every app and task pod
+   authenticates as `stargazerbio-EAGER_API_KEY-union-us-west-2`, which
+   holds org-wide `contributor`, so code in any notebook can act in any
+   project. Ask Union whether an app can run without it or with a key we
+   supply.
 - **Per-user storage isolation.** Every project on the tenant runs as one
    IAM role, so a notebook's own code can read and write every user's
    workspace objects (and all task data). Needs per-project roles scoped to
@@ -57,12 +62,9 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    front of apps, so the admin and notebook pods won't authenticate there.
    A dev-only fixed identity would make the app tier testable locally
    again.
-- **Union console handoff (per-user project access).** Users click through
-   from the dashboard to the Union console to view executions in their own
-   project. Users are already Union principals (they signed in), but
-   `provision_user()` grants no role binding on their project, so the
-   console would show them nothing. Adds role/policy/assignment
-   provisioning via `flyteplugins.union.remote`.
+- **Union console handoff (per-user project access).** Delivered by the
+   per-user dashboards' onboarding (users get `contributor` on their own
+   project); what remains is the dashboard's link out to the console.
    [`24_union_console_handoff.md`](./24_union_console_handoff.md)
 - **In-notebook local-vs-remote toggle UI.** Formalize the dispatch choice as a reusable `mo.ui` element (radio / segmented control) so individual cells don't need to hardcode `flyte.with_runcontext(mode="local").run` vs `flyte.run`.
 - **Marimo AI features investigation.** Determine what marimo's native AI surface offers (`mo.ai.chat` / similar), whether tool-calling is supported, and how to wire the registry catalog in.
