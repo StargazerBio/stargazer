@@ -1,5 +1,5 @@
 """
-### Jinja2 templates for the admin landing app.
+### Jinja2 templates for the dashboard.
 
 Templates live in `app/templates/` and are rendered via
 `fastapi.templating.Jinja2Templates`. Routes hand off to
@@ -23,7 +23,6 @@ Context shape consumed by `dashboard.html`:
 - `user` (`app.identity.User`) — the avatar initial and "Signed in as".
 - `workspace_configured` (bool) — whether this deploy can save notebooks;
   False renders a notice in place of the Workspace grid.
-- `provision_error` (bool) — the user's project isn't ready yet.
 - `workflows`, `snapshots`, `workspace`, `tutorials` (list of tile
   dicts) — each dict has `slug`, `title`, `description`, `section` (plus
   `cpu`/`memory` for workspace tiles). The dashboard loops and includes

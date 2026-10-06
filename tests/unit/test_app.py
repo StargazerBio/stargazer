@@ -1,11 +1,11 @@
-"""Tests for the admin app: AppEnvironment, identity, workspace, and launch routes.
+"""Tests for the dashboard: AppEnvironment, owner gate, workspace, and launch routes.
 
 Route tests use FastAPI's `TestClient` WITHOUT the context manager so the
 app's lifespan (`init()` → Flyte client) never runs. Identity is the
-`X-User-*` headers Union's auth layer sets on every request. Workspace
+`X-User-*` headers Union's auth layer sets on every request; the dashboard
+belongs to ALICE (its baked-in owner) and serves into her project. Workspace
 routes run through the real `app.workspace_store` against a temp directory;
-only control-plane calls (project ensure, serve, App get/delete/list) are
-stubbed.
+only control-plane calls (serve, App get/delete/list) are stubbed.
 """
 
 import asyncio
@@ -16,13 +16,14 @@ import flyte.app
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config, notebooks, provision
+from app import config, notebooks
 from app import workspace_store as ws
 from app.admin_app import _notebook_slug, _parse_nb_name, app_env, asgi_app, main
 from app.notebook_meta import parse_notebook_name, parse_notebook_resources
 
 ALICE = "387300641116005877"
 BOB = "111111111111111111"
+PROJECT = f"u-{ALICE}"
 
 NB_SRC = (
     "# /// script\n"
@@ -44,16 +45,10 @@ def _store(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def provisioned(monkeypatch):
-    """Record project ensures instead of calling the control plane."""
-    calls: list[str] = []
-
-    async def fake_ensure(project: str, user) -> None:
-        calls.append(project)
-
-    monkeypatch.setattr(provision, "_ensure_project", fake_ensure)
-    monkeypatch.setattr(provision, "_provisioned", set())
-    return calls
+def _owned_by_alice(monkeypatch):
+    """Every test's dashboard is ALICE's, deployed into her project."""
+    monkeypatch.setattr(config, "OWNER_SUBJECT", ALICE)
+    monkeypatch.setattr(config, "FLYTE_PROJECT", PROJECT)
 
 
 @pytest.fixture(autouse=True)
@@ -99,9 +94,10 @@ def _get(subject: str, filename: str, snapshot: bool = False) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def test_app_env_requires_union_auth():
-    """The admin is gated by Union's login."""
+def test_app_env_is_the_union_gated_dashboard():
+    """The dashboard is gated by Union's login."""
     assert isinstance(app_env, flyte.app.AppEnvironment)
+    assert app_env.name == "dashboard"
     assert app_env.requires_auth is True
 
 
@@ -158,7 +154,28 @@ def test_fork_routes_are_gone(client, path):
 
 def test_dashboard_requires_identity(client):
     """Without Union's identity header the dashboard refuses."""
-    assert client.get("/").status_code == 401
+    assert client.get("/").status_code == 403
+
+
+def test_dashboard_refuses_anyone_but_its_owner(client):
+    """Another signed-in org member (e.g. an admin) is refused, on every route."""
+    _as(client, BOB, "Bob Admin")
+    assert client.get("/").status_code == 403
+    assert client.get("/assets").status_code == 403
+    assert client.get("/static/cytoscape.min.js").status_code == 403
+    assert client.get("/launch/status").status_code == 403
+
+
+def test_dashboard_without_an_owner_refuses_everyone(client, monkeypatch):
+    """A dashboard deployed without an owner fails closed."""
+    monkeypatch.setattr(config, "OWNER_SUBJECT", "")
+    _as(client)
+    assert client.get("/").status_code == 403
+
+
+def test_health_needs_no_identity(client):
+    """Health checks come from the platform, not a signed-in user."""
+    assert client.get("/health").json() == {"status": "ok"}
 
 
 def test_dashboard_greets_the_user_without_github(client):
@@ -171,14 +188,6 @@ def test_dashboard_greets_the_user_without_github(client):
     assert '<span class="avatar-initial">A</span>' in resp.text
     assert "/auth/logout" not in resp.text
     assert "Enable workspace saving" not in resp.text
-
-
-def test_dashboard_ensures_the_project_once_per_process(client, provisioned):
-    """The user's project is ensured on first visit, then remembered."""
-    _as(client)
-    client.get("/")
-    client.get("/")
-    assert provisioned == [f"u-{ALICE}"]
 
 
 def test_dashboard_lists_only_the_users_notebooks(client):
@@ -211,7 +220,7 @@ def test_dashboard_without_store_says_saving_is_unavailable(client, monkeypatch)
 
 def test_create_requires_identity(client):
     """Anonymous create is refused."""
-    assert client.post("/workspace/create", data={"name": "x"}).status_code == 401
+    assert client.post("/workspace/create", data={"name": "x"}).status_code == 403
 
 
 def test_create_writes_a_seeded_notebook_to_the_users_store(client):
@@ -288,6 +297,17 @@ def test_settings_missing_notebook_is_404(client):
         "/workspace/settings", data={"slug": "qc-run", "cpu": "1", "memory": "2"}
     )
     assert resp.status_code == 404
+
+
+def test_another_user_cannot_act_on_the_owners_notebooks(client):
+    """Requests claiming another subject never reach the owner's store."""
+    _put(ALICE, "qc-run.py")
+    _as(client, BOB)
+    assert client.post("/workspace/delete", data={"slug": "qc-run"}).status_code == 403
+    assert client.get("/workspace/download?slug=qc-run").status_code == 403
+    assert client.post("/workspace/create", data={"name": "x"}).status_code == 403
+    assert _get(ALICE, "qc-run.py") == NB_SRC
+    assert _get(BOB, "x.py") is None
 
 
 def test_delete_removes_only_the_users_notebook(client):
@@ -432,9 +452,12 @@ def served(monkeypatch):
     async def fake_aio(env):
         return SimpleNamespace(endpoint="https://nb.example")
 
+    def fake_servecontext(**kwargs):
+        sink["servecontext"] = kwargs
+        return SimpleNamespace(serve=SimpleNamespace(aio=fake_aio))
+
     monkeypatch.setattr("app.admin_app.per_notebook_env", fake_env)
-    ctx = SimpleNamespace(serve=SimpleNamespace(aio=fake_aio))
-    monkeypatch.setattr("flyte.with_servecontext", lambda **_: ctx)
+    monkeypatch.setattr("flyte.with_servecontext", fake_servecontext)
     return sink
 
 
@@ -450,7 +473,7 @@ def _launch(client, slug, section, mode="edit"):
 def test_launch_requires_identity(client):
     """Anonymous launch is refused."""
     resp = _launch(client, "assets", "tutorials")
-    assert resp.status_code == 401
+    assert resp.status_code == 403
 
 
 def test_launch_workspace_serves_the_owners_pod(client, served):
@@ -467,9 +490,10 @@ def test_launch_workspace_serves_the_owners_pod(client, served):
     assert kw["mode"] == "edit"
     assert kw["resources"].cpu == 4
     assert served["env"].env_vars == {
-        "FLYTE_PROJECT": f"u-{ALICE}",
+        "FLYTE_PROJECT": PROJECT,
         "STARGAZER_OWNER": ALICE,
     }
+    assert served["servecontext"] == {"project": PROJECT, "domain": "development"}
 
 
 def test_launch_tutorial_uses_the_image_path(client, served):
@@ -533,6 +557,7 @@ def _stub_apps(monkeypatch, table: dict, deleted: list | None = None):
 
     class _Get:
         async def aio(self, name, project, domain):
+            assert project == PROJECT
             if name in table:
                 return table[name]
             raise RuntimeError("not found")
@@ -543,6 +568,7 @@ def _stub_apps(monkeypatch, table: dict, deleted: list | None = None):
                 deleted.append(name)
 
     async def fake_list(project, domain="development", limit=500):
+        assert project == PROJECT
         return [SimpleNamespace(name=n) for n in table]
 
     monkeypatch.setattr(
@@ -570,7 +596,7 @@ def test_launch_status_returns_plain_endpoints(client, monkeypatch):
 
 def test_launch_status_requires_identity(client):
     """Anonymous status is refused."""
-    assert client.get("/launch/status").status_code == 401
+    assert client.get("/launch/status").status_code == 403
 
 
 def test_cleanup_deletes_only_stopped_notebook_apps(client, monkeypatch):
@@ -593,7 +619,7 @@ def test_cleanup_deletes_only_stopped_notebook_apps(client, monkeypatch):
 
 def test_stop_requires_identity(client):
     """Anonymous stop is refused."""
-    assert client.post("/stop", data={"slug": "a", "mode": "edit"}).status_code == 401
+    assert client.post("/stop", data={"slug": "a", "mode": "edit"}).status_code == 403
 
 
 # ---------------------------------------------------------------------------

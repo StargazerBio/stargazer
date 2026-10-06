@@ -1,32 +1,38 @@
 """
-### Stargazer admin app — the dashboard and notebook launcher.
+### Stargazer dashboard — one user's notebook home and launcher.
 
-Shared, single deployment behind Union's login (`requires_auth=True`). Union
-owns sign-in and forwards the signed-in user on every request (see
-`app.identity`); there is no OAuth flow, session cookie, or GitHub
-integration here. It has three jobs:
+One deployment per user, in that user's own Flyte project (`u-<subject>`),
+behind Union's login (`requires_auth=True`). The owner's subject is baked
+into the env at deploy (`SG_OWNER_SUBJECT`) and the project is the one the
+dashboard runs in (`FLYTE_PROJECT`); neither is derived from the request.
+Union proves the visitor may view the project, and the owner gate here
+(`app.identity.require_owner`) refuses everyone but the owner, since org
+admins can view every project. There is no OAuth flow, session cookie, or
+GitHub integration. It has three jobs:
 
-1. **Per-user dashboard.** Renders the notebook tile sections: Workflows and
+1. **Dashboard.** Renders the notebook tile sections: Workflows and
    Tutorials (shipped in the per-notebook image), Snapshots (shipped public
-   ones plus the user's own), and Workspace (the user's own notebooks). A
-   user's notebooks live in the workspace store (`app.workspace_store`),
-   keyed by their Union subject, so saving needs no setup. The first request
-   from a user ensures their Flyte project exists (`app.provision`).
+   ones plus the owner's own), and Workspace (the owner's notebooks). The
+   owner's notebooks live in the workspace store (`app.workspace_store`),
+   keyed by their Union subject, so saving needs no setup.
 
 2. **Workspace actions.** Create, settings, delete, snapshot (freeze), copy
    and download, all against the workspace store.
 
 3. **Launch broker.** `POST /launch` builds a per-notebook AppEnvironment via
-   `app.per_notebook.per_notebook_env(...)`, owned by the user, serves it into
-   their project, and returns its URL. The admin never calls a notebook pod:
-   the pod hydrates and saves its own workspace and shows its own starting
-   page while it warms up.
+   `app.per_notebook.per_notebook_env(...)`, owned by the same user, serves
+   it into the dashboard's project, and returns its URL. The dashboard never
+   calls a notebook pod: the pod hydrates and saves its own workspace and
+   shows its own starting page while it warms up.
+
+The asset manager (`app.assets`) is mounted but has no store on a hosted
+dashboard: no Pinata key is baked in, since the owner can read the app spec.
 
 `app_env` (this app's own AppEnvironment) and `main()` (the deploy
 entrypoint) are also defined here.
 
 Local development (identity comes from the `X-User-*` headers Union would set):
-    uvicorn app.admin_app:asgi_app --reload --port 8080
+    SG_OWNER_SUBJECT=<subject> uvicorn app.admin_app:asgi_app --reload --port 8080
 
 Deploy hosted to Flyte:
     python -m app.admin_app           # or: stargazer-app
@@ -45,17 +51,17 @@ from pathlib import Path
 
 import flyte
 import flyte.app
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from flyte._initialize import get_init_config
 from flyte.remote import App
 
-from app import config, provision
+from app import config
 from app import workspace_store as store
 from app.assets import router as assets_router
-from app.identity import CurrentUser, User
+from app.identity import CurrentUser, User, require_owner
 from app.init import init
 from app.notebook_meta import (
     DEFAULT_RESOURCES,
@@ -93,40 +99,40 @@ from stargazer.config import (
 )
 
 # ---------------------------------------------------------------------------
-# Flyte AppEnvironment for the admin app itself.
+# Flyte AppEnvironment for the dashboard itself.
 # ---------------------------------------------------------------------------
 
-# AppEnvironment `secrets=[...]` is silently dropped on App pods in this Flyte
-# build, so the one secret the admin needs is baked from the deployer's shell
-# into `env_vars` (the value then lives in the App spec). Optional: without it
-# the asset manager renders a "not configured" state.
-# See .opencode/reference/devbox_workarounds.md
-_RUNTIME_SECRETS = {
-    name: os.environ[name] for name in ("PINATA_JWT",) if os.environ.get(name)
-}
+# No secrets are baked in: a dashboard's owner can read its app spec, so any
+# shared credential there would leak to every user. That's why the asset
+# manager (Pinata) is off on hosted dashboards.
 
-# Admin pod needs a default Flyte project for code-bundle uploads during
-# per-user `serve.aio(per_notebook_env)` calls. `with_servecontext(project=...)`
-# alone is not enough — the upload uses the client's init-time project.
+# The dashboard's own project: notebooks are served into it, and code-bundle
+# uploads during `serve.aio(per_notebook_env)` use the client's init-time
+# project (`with_servecontext(project=...)` alone is not enough).
 _FLYTE_CONTEXT = {
     "FLYTE_PROJECT": config.FLYTE_PROJECT,
     "FLYTE_DOMAIN": config.FLYTE_DOMAIN,
 }
 
 # Non-secret config request handlers read at runtime, baked into the pod env so
-# the deployed admin sees what the deployer's shell set. The workspace root
+# the deployed dashboard sees what the deployer's shell set. The workspace root
 # must match what notebook pods hydrate from and save to.
-_PUBLIC_CONFIG = (
-    {"STARGAZER_WORKSPACE_ROOT": config.WORKSPACE_ROOT} if config.WORKSPACE_ROOT else {}
-)
+_PUBLIC_CONFIG = {
+    name: value
+    for name, value in (
+        ("STARGAZER_WORKSPACE_ROOT", config.WORKSPACE_ROOT),
+        ("SG_OWNER_SUBJECT", config.OWNER_SUBJECT),
+    )
+    if value
+}
 
 
 app_env = flyte.app.AppEnvironment(
-    name="admin-app",
+    name="dashboard",
     description="Stargazer dashboard and notebook launcher",
     image=(
         flyte.Image.from_debian_base(
-            name="admin-app",
+            name="dashboard",
             registry=os.environ.get("STARGAZER_REGISTRY"),
             platform=("linux/amd64", "linux/arm64"),
         )
@@ -152,7 +158,6 @@ app_env = flyte.app.AppEnvironment(
     resources=flyte.Resources(memory=("512Mi", "1Gi")),
     env_vars={
         **STARGAZER_ENV_VARS,
-        **_RUNTIME_SECRETS,
         **_FLYTE_CONTEXT,
         **_PUBLIC_CONFIG,
     },
@@ -204,6 +209,22 @@ asgi_app.mount(
     name="static",
 )
 asgi_app.include_router(assets_router)
+
+
+@asgi_app.middleware("http")
+async def owner_gate(request: Request, call_next):
+    """Refuse every request but the owner's, before routing.
+
+    Covers static files and the mounted asset routes as well as the
+    dashboard's own routes. Only `/health` is open: the platform's probes
+    carry no identity.
+    """
+    if request.url.path != "/health":
+        try:
+            require_owner(request)
+        except HTTPException as exc:
+            return JSONResponse({"error": exc.detail}, status_code=exc.status_code)
+    return await call_next(request)
 
 
 # ---------------------------------------------------------------------------
@@ -378,7 +399,7 @@ async def _teardown_notebook_pods(user: User, slug: str) -> None:
     `/workspace/cleanup` to reap. Shared by every route that removes a
     notebook from the dashboard. Every step is best-effort and never raises.
     """
-    project = provision.project_id(user.subject)
+    project = config.FLYTE_PROJECT
     for mode in ("edit", "run"):
         name = f"nb-{slug}-{mode}"
         try:
@@ -410,14 +431,7 @@ def _invalid_slug(slug: str) -> JSONResponse | None:
 
 @asgi_app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, user: CurrentUser):
-    """Render the signed-in user's dashboard."""
-    provision_error = False
-    try:
-        await provision.provision_user(user)
-    except Exception as exc:
-        logger.error(f"Provisioning failed for {user.subject!r}: {exc}")
-        provision_error = True
-
+    """Render the owner's dashboard."""
     workspace, snapshots = await asyncio.gather(
         _workspace_tiles(user) if _store_ready() else asyncio.sleep(0, []),
         _snapshot_tiles(user),
@@ -429,7 +443,6 @@ async def dashboard(request: Request, user: CurrentUser):
             "title": "Dashboard",
             "user": user,
             "workspace_configured": _store_ready(),
-            "provision_error": provision_error,
             "tutorials": [
                 _tile_dict(n.slug, n.title, n.description, "tutorials")
                 for n in by_section("tutorials")
@@ -802,9 +815,10 @@ async def launch(
     mode: str = Form(...),
     section: str = Form(...),
 ):
-    """Spawn (or reuse) the user's per-notebook app for slug+mode; return its URL.
+    """Spawn (or reuse) the owner's per-notebook app for slug+mode; return its URL.
 
-    The pod is owned by the user (only they get past its proxy), hydrates and
+    The pod is served into the dashboard's project and owned by the same user
+    (only they get past its proxy), hydrates and
     saves its own workspace, and shows a starting page until the notebook is
     ready, so the URL is returned as soon as the app is admitted.
     """
@@ -827,15 +841,7 @@ async def launch(
         return JSONResponse({"error": f"unknown notebook: {slug}"}, status_code=404)
     notebook_path, resources = target
 
-    try:
-        project = await provision.provision_user(user)
-    except Exception as exc:
-        logger.error(f"Provisioning failed for {user.subject!r}: {exc}")
-        return JSONResponse(
-            {"error": "your workspace isn't ready yet; please retry in a moment"},
-            status_code=503,
-        )
-
+    project = config.FLYTE_PROJECT
     env = per_notebook_env(
         slug=slug,
         mode=mode,
@@ -885,7 +891,7 @@ async def stop(user: CurrentUser, slug: str = Form(...), mode: str = Form(...)):
     """Deactivate the user's per-notebook app for the requested slug+mode."""
     if mode not in ("edit", "run"):
         return JSONResponse({"error": f"invalid mode: {mode}"}, status_code=400)
-    project = provision.project_id(user.subject)
+    project = config.FLYTE_PROJECT
     name = f"nb-{slug}-{mode}"
     try:
         app = await App.get.aio(name=name, project=project, domain=config.FLYTE_DOMAIN)
@@ -905,11 +911,11 @@ async def launch_status(user: CurrentUser):
     filtered to `nb-{slug}-{mode}` names. Each is then re-fetched with
     `App.get` (in parallel) for authoritative status, since a list payload may
     not carry full conditions, and the active ones are returned with their
-    endpoints. Read live from the control plane, so it survives admin
+    endpoints. Read live from the control plane, so it survives dashboard
     restarts. The dashboard calls this on load to render running notebooks
     straight to Open+Stop.
     """
-    project = provision.project_id(user.subject)
+    project = config.FLYTE_PROJECT
     try:
         apps = await list_project_apps(project, domain=config.FLYTE_DOMAIN)
     except Exception as exc:
@@ -946,7 +952,7 @@ async def workspace_cleanup(user: CurrentUser):
     with `App.get` for authoritative status before deletion; active apps are
     left alone. Returns the deleted names.
     """
-    project = provision.project_id(user.subject)
+    project = config.FLYTE_PROJECT
     try:
         apps = await list_project_apps(project, domain=config.FLYTE_DOMAIN)
     except Exception as exc:
@@ -991,8 +997,8 @@ async def health():
 def _build_notebook_image() -> str:
     """Build the per-notebook image recipe and return its content-hashed URI.
 
-    The admin pod can't build images (no Docker daemon, no project layout), so
-    the deployer builds here and `main()` bakes the URI into the admin pod as
+    The dashboard pod can't build images (no Docker daemon, no project layout), so
+    the deployer builds here and `main()` bakes the URI into the dashboard pod as
     `STARGAZER_NOTEBOOK_IMAGE`; every per-notebook app then runs exactly this
     build. The builder comes from the Flyte config: local docker pushing to the
     devbox registry, or Union's remote builder pushing to Union's registry.
@@ -1053,7 +1059,7 @@ def _port_open(host: str, port: int) -> bool:
 
 
 def main():
-    """Deploy the admin app to Flyte."""
+    """Deploy the dashboard to Flyte, for the owner and project in the shell's env."""
     # A Union deploy with no workspace root looks healthy but can't save a
     # single notebook — refuse it rather than ship that.
     if config.TARGET == "union" and not config.WORKSPACE_ROOT:

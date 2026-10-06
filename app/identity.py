@@ -1,7 +1,7 @@
 """
 ### Who is signed in — read from Union's auth layer.
 
-Both the admin and every notebook pod run behind Union's login
+Every dashboard and notebook pod runs behind Union's login
 (`requires_auth=True`). Union gates each request and forwards the signed-in
 user as headers it sets itself, overwriting anything a client sends:
 
@@ -11,6 +11,7 @@ user as headers it sets itself, overwriting anything a client sends:
   arrive JSON-encoded (`"\"a@b.c\""`).
 
 There is no session cookie and no sign-in route of our own: Union owns both.
+Each dashboard belongs to one user; `require_owner` admits only them.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -20,6 +21,8 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
+
+from app import config
 
 SUBJECT_HEADER = "X-User-Subject"
 EMAIL_HEADER = "X-User-Claim-Email"
@@ -68,17 +71,20 @@ def user_from_request(request: Request) -> User | None:
     )
 
 
-def require_user(request: Request) -> User:
-    """FastAPI dependency: the signed-in user, or a 401.
+def require_owner(request: Request) -> User:
+    """FastAPI dependency: the signed-in user if they own this app, else a 403.
 
-    Behind Union a request without a subject never arrives; the 401 covers a
-    local `uvicorn` run and any misconfigured deploy with auth turned off.
+    A dashboard serves exactly one owner (`config.OWNER_SUBJECT`, baked in at
+    deploy). Union already proved the visitor may view the app's project, but
+    org admins can view every project, so the subject must also match. Fails
+    closed: no forwarded subject, or no configured owner, is a 403.
     """
     user = user_from_request(request)
-    if user is None:
-        raise HTTPException(status_code=401, detail="not signed in")
+    owner = config.OWNER_SUBJECT
+    if not owner or user is None or user.subject != owner:
+        raise HTTPException(status_code=403, detail="this dashboard isn't yours")
     return user
 
 
-# Route parameter type for "the signed-in user": `user: CurrentUser`.
-CurrentUser = Annotated[User, Depends(require_user)]
+# Route parameter type for "the dashboard's owner": `user: CurrentUser`.
+CurrentUser = Annotated[User, Depends(require_owner)]

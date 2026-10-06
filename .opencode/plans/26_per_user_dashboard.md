@@ -108,27 +108,33 @@ owner.
 
 ### Tests first
 
-- [ ] Owner's subject in `X-User-Subject` → dashboard renders.
-- [ ] Any other subject → 403. Missing header → 403. Unset owner env → 403
+- [x] Owner's subject in `X-User-Subject` → dashboard renders.
+- [x] Any other subject → 403. Missing header → 403. Unset owner env → 403
       (fail closed).
-- [ ] Workspace routes act on the owner's notebooks only, regardless of what
+- [x] Workspace routes act on the owner's notebooks only, regardless of what
       the request claims.
-- [ ] `/launch` serves into the dashboard's own project and passes the owner
+- [x] `/launch` serves into the dashboard's own project and passes the owner
       to the per-notebook env.
 
 ### Implementation
 
-- [ ] Owner from env (`SG_OWNER_SUBJECT`, the same name the notebook proxy
+- [x] Owner from env (`SG_OWNER_SUBJECT`, the same name the notebook proxy
       uses), project from `FLYTE_PROJECT`. Delete `provision_user`,
       `project_id` derivation from the request, and the provisioning-failed
       notice.
-- [ ] `require_user` becomes an owner check that returns the owner's display
+- [x] `require_user` becomes an owner check that returns the owner's display
       details from the claim headers.
-- [ ] `_launched` becomes a flat per-dashboard map (one owner).
-- [ ] Assets page and routes: disabled with a product-terms notice; no
+- [x] ~~`_launched` becomes a flat per-dashboard map (one owner).~~ Already
+      gone: plan 25 reads running notebooks live from the control plane.
+- [x] Assets page and routes: disabled with a product-terms notice; no
       Pinata key in the env.
-- [ ] Rename the app env from `admin-app` to `dashboard` and update module
-      docstrings.
+- [x] Rename the app env from `admin-app` to `dashboard` and update module
+      docstrings. (The module stays `app/admin_app.py` until Piece 3 replaces
+      its deploy entrypoint.)
+- Done as one app-wide middleware so static files and the asset routes are
+  gated too; only `/health` is open. Measured: a local uvicorn with
+  `SG_OWNER_SUBJECT` set returns 200 for the owner and 403 for another
+  subject or none, on `/`, `/assets` and `/static/*`.
 
 ## Piece 2 — The onboarding command
 

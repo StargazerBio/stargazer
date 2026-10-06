@@ -54,3 +54,8 @@ FLYTE_DOMAIN: str = os.environ.get("FLYTE_DOMAIN", "development")
 # the tenant bucket, e.g. `s3://union-us-west-2-stargazerbio/stargazer`. Unset
 # means workspace saving isn't configured for this deploy.
 WORKSPACE_ROOT: str = os.environ.get("STARGAZER_WORKSPACE_ROOT", "")
+
+# The one user this dashboard serves: their Union subject, baked in when the
+# dashboard is deployed into their project. Unset admits nobody (fail closed).
+# Notebook pods read the same variable for the same check (`app/proxy.py`).
+OWNER_SUBJECT: str = os.environ.get("SG_OWNER_SUBJECT", "")

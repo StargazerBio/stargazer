@@ -311,11 +311,10 @@
 
     {% if not pinata_configured %}
     <div class="notice">
-        <p class="notice-head">⚠ Pinata not configured</p>
+        <p class="notice-head">Asset storage isn't available yet</p>
         <p class="section-desc">
-            This deployment has no <code>PINATA_JWT</code>, so the asset store is
-            unavailable. The asset manager talks only to Pinata — there is no
-            local-storage fallback here.
+            Browsing and uploading assets from the dashboard isn't
+            available on this deployment yet.
         </p>
     </div>
     {% else %}
