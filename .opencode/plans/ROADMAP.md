@@ -4,19 +4,14 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 
 ## Upcoming
 
-- **One login: Union auth + workspace state on object storage.** Union's
-   GitHub SSO becomes the only login; the app tier stops talking to GitHub
-   (no OAuth App, fork, GitHub App or session cookie). Workspace and own
-   snapshot notebooks persist to the tenant bucket, keyed by the user's Union
-   subject; pods hydrate at launch and sync themselves. Absorbs
-   identity-gated production auth, async OAuth provisioning, and plan 24's
-   OAuth App collapse.
-   [`25_workspace_state_object_storage.md`](./25_workspace_state_object_storage.md)
 - **Per-user dashboards.** Replace the shared admin with one dashboard app
    per user in their own `u-<subject>` project, provisioned by an
    admin-run onboarding command (user, project, project-only access grant,
    dashboard). Union's app gate requires view permission on the app's
    project, so a shared admin would expose its whole project to every user.
+   It also fixes project creation: the shared admin's in-cluster identity is
+   refused `action_administer_project` on Union, so it can't create a new
+   user's project.
    [`26_per_user_dashboard.md`](./26_per_user_dashboard.md)
 - **Union production deploy** (tenant: `stargazerbio.us-west-2.unionai.cloud`).
    Done in PRs: per-pod session keys (#2), the `STARGAZER_TARGET`
@@ -121,6 +116,7 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 
 ## Complete
 
+- ✅ One login: Union auth + workspace state on object storage (2026-10-06): Union's GitHub SSO is the only login; the app tier no longer talks to GitHub (no OAuth App, fork, GitHub App or session cookie). Workspace notebooks and own snapshots live on object storage keyed by the Union subject; notebook pods hydrate at launch, save every few seconds and at scale-to-zero, and admit only their owner. Verified on the tenant end to end. One finding is still open: the admin's in-cluster identity is refused project creation on Union, so each user's `u-<subject>` project has to be created by an org admin until project creation moves out of the app. [`25_workspace_state_object_storage.md`](./25_workspace_state_object_storage.md)
 - ✅ scRNA per-sample output filenames (2026-10-05): every scRNA task wrote a fixed filename (`qc_filtered.h5ad`, `reduced.h5ad`, …) into the shared store, so samples fanned out in-process with `asyncio.gather` overwrote each other and downstream stages read the wrong sample's data. Outputs are now prefixed with `sample_id`, matching the GATK tasks. Verified with `verify-stargazer` on the scRNA pipeline notebook (every stage `ok` for both samples), and locked in by `tests/tasks/scrna/test_sample_isolation.py`.
 - ✅ Toolchain pinning + lint/SDK catch-up (2026-08-07): ruff pinned to one version across `.pre-commit-config.yaml` and `pyproject.toml` (they had drifted 0.14→0.16, where ruff's default rule set grew 59→413 and the two gates diverged); 322 findings resolved — auto-fixes applied, deliberate patterns declared in `[tool.ruff.lint]` with rationale, the frozen v1 reference snapshot untracked and gitignored. MCP SDK migrated to 2.x (`FastMCP` → `MCPServer`, `mcp.server.fastmcp` → `mcp.server`) and bounded to `<3`; that import had been broken, taking 3 unit tests and a pre-commit hook with it.
 - ✅ GitHub App deploy-credential gate (2026-08-07): a half-exported App credential pair (`GITHUB_APP_ID` without `GITHUB_APP_PRIVATE_KEY`) made Workspace saving read as disabled for every user, silently, for two months. `main()` now refuses to deploy on a partial pair, module import warns, and the previously-silent "no fork found" login path logs. Deploy-secret contract documented in [`app_internals.md`](../reference/architecture/app_internals.md).
