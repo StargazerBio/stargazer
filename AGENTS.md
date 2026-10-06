@@ -12,6 +12,7 @@
 **Git Workflow**
 - Every change gets its own branch, cut from an up-to-date `main`. Name it after the change in short kebab-case (e.g. `fix/scrna-oom`, `docs/branch-pr-workflow`). Never commit directly to `main`
 - One change per branch. An unrelated fix spotted along the way gets its own branch and PR, or a ROADMAP entry
+- Follow-up work on a branch that is still unmerged (changes to the same feature, fixes, or review feedback) is committed on that branch, not on a new one cut from it. Keep the merge tree flat: a new branch is only for a new, independent change cut from `main`
 - Commit on the branch as the work progresses; no need to ask first. Never force-push `main`
 - When the change is done (tests pass, verified on its real surface), push the branch and open a PR against `main` with `gh pr create`. The description says what changed and why, the verification evidence, and anything deferred
 - The PR is where human review happens. Never merge a PR yourself — the user reviews and merges it. Review feedback is addressed with further commits on the same branch
