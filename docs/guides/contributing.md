@@ -31,7 +31,7 @@ This environment is much closer to production and lets you actually test your ta
 pytest tests/
 ```
 
-Tests run with no `PINATA_JWT`. The harness points `LocalStorageClient` at a temporary directory and never mutates client internals. Tests that need Pinata behavior mock the API or skip.
+Tests run with no `PINATA_JWT`. Every test gets its own empty store, index and cache under its temp directory, so nothing touches `~/.stargazer`; tests that query the fixture files use a store seeded once per session (`tests/fixtures/seed.py`). Tests marked `pinata` call the real Pinata API with the key in `tests/.secrets/pinata_jwt`, and skip without it.
 
 ```bash
 pytest tests/unit/

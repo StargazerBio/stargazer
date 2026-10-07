@@ -53,7 +53,7 @@ Tasks and workflows are not registered as individual MCP tools. The client disco
 | `list_bundles` | List available resource bundles | (none) |
 | `fetch_resource_bundle` | Download a predefined bundle into local storage | `bundle_name: str` |
 
-Bundles are curated sets of files defined as YAML manifests in the codebase. Each file carries a `bundle` keyvalue for queryability. `fetch_resource_bundle` downloads bytes by CID via the standard path. In local mode (no JWT), it also seeds TinyDB with the manifest's keyvalues so `assemble()` can discover them. In remote mode (JWT set), metadata already exists in Pinata. See [Configuration — Resource Bundles](configuration.md#resource-bundles).
+Bundles are curated sets of files defined as YAML manifests in the codebase. Each file carries a `bundle` keyvalue for queryability. `fetch_resource_bundle` downloads each file by CID from the IPFS gateway into the local cache and registers it in the user's index, so `assemble()` can discover it with or without a Pinata key. See [Configuration — Resource Bundles](configuration.md#resource-bundles).
 
 ## Resources
 

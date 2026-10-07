@@ -48,9 +48,9 @@ Pass environment variables with `-e` to control storage behavior:
 
 | Setup | What to set |
 |-------|-------------|
-| **Default** — local cache + public IPFS gateway | Nothing |
-| **Pinata (public)** — uploads to public network | `PINATA_JWT`, `PINATA_VISIBILITY=public` |
-| **Pinata (private)** — uploads to private network | `PINATA_JWT` |
+| **Default** — your files stored in the container, public datasets fetched by CID | Nothing |
+| **Shared public data** — search public datasets by metadata | `PINATA_JWT` |
+| **Your own storage location** — keep files outside the container | `STARGAZER_STORE_ROOT`, `STARGAZER_INDEX_URL` |
 
 ```bash
 docker run -p 8080:8080 -e PINATA_JWT=your_jwt ghcr.io/stargazerbio/stargazer-note:latest

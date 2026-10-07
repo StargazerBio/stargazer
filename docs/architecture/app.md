@@ -88,7 +88,7 @@ This is deliberately the opposite of a **workflow**: workflows are off-the-shelf
 ## Asset Manager
 
 The dashboard also hosts `/assets` — a browse-and-upload surface over the
-asset/metadata system, backed by Pinata (never the local TinyDB). **It is off
+asset/metadata system, backed by Pinata directly (not the storage index). **It is off
 on hosted dashboards for now**: a user can read their own dashboard's
 deployment, so a shared asset-store key can't be baked into it, and the page
 says asset storage isn't available yet. It returns with per-user storage.

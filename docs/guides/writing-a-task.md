@@ -31,7 +31,7 @@ tool_env = flyte.TaskEnvironment(name="my_tool")
 @tool_env.task
 async def run_my_tool(ref: Reference, aln: Alignment) -> MyOutput:
     """One-line description of what this task does."""
-    await asyncio.gather(ref.fetch(), aln.fetch())
+    ref_path, aln_path = await asyncio.gather(ref.fetch(), aln.fetch())
 
     output_path = Path("/tmp/output.ext")
     # ... run tool subprocess ...
@@ -44,7 +44,7 @@ async def run_my_tool(ref: Reference, aln: Alignment) -> MyOutput:
 ## 3. Key Rules
 
 - **One task, one operation** — don't combine multiple tool calls unless there's a good reason, e.g. piping between tools where the intermediate would have little long-term value for re-analysis
-- **Always `fetch()` inputs** before accessing their paths
+- **Always `fetch()` inputs** — it returns the local path, with companions (indexes, dictionaries) in the same directory
 - **Always `update()` outputs** to register them in storage
 - **Use `asyncio.gather`** to fetch multiple inputs in parallel
 - **Specify resources** via `TaskEnvironment` for CPU/memory/GPU-intensive tools

@@ -157,7 +157,7 @@ The project follows this structure:
     - `scrna/` - Single-cell RNA-seq tasks (cluster, normalize, qc_filter, etc.)
   - `workflows/` - Flyte workflow definitions (one module per pipeline)
   - `types/` - Asset dataclasses (all inherit from `Asset` base class)
-  - `utils/` - Utility functions (subprocess, pinata, local_storage, query)
+  - `utils/` - Utility functions (subprocess, pinata, storage, index, cid, query)
   - `bundles/` - Predefined workflow input bundles (YAML configs)
 - `tests/` - Test directory
   - `conftest.py` - Pytest configuration (Flyte init, Pinata JWT injection, fixture paths)

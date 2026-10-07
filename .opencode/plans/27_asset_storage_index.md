@@ -88,24 +88,32 @@ Recorded so they aren't relitigated mid-build.
   `cid` field keeps its name and means what it says: a published file's CID
   equals its working identity, and bundle CIDs match locally computed ones.
 - **Private files are stored per user** (Q8):
-  `<STORE_ROOT>/users/<subject>/assets/<cid>`. The subject is
+  `<STORE_ROOT>/users/<subject>/assets/<cid>/<name>`. Keeping the filename in
+  the key means a plain `File.download()` lands with the real extension. The
+  subject is
   `STARGAZER_OWNER` (the Union subject, already forwarded into pods), or
   `local` on a laptop that doesn't set it. An upload whose file already exists
   skips the transfer.
-- **`Asset.path` becomes a `flyte.io.File`** (Q10). Tasks work with it through
-  the File API. `update()` computes the CID, uploads with
-  `File.from_local(path, remote_destination=…/assets/<cid>, hash_method=cid)`
-  so Flyte's cache key is the CID, then writes the index row. A row rebuilds
-  the handle with `File.from_existing_remote(uri, file_cache_key=cid)`.
-- **Local cache layout**: `<STARGAZER_LOCAL>/<cid>/<name>`, so a downloaded
-  file keeps its real filename (GATK refuses inputs without it). How the cache
-  sits behind `File.download()` is Q17.
+- **`Asset.path` becomes a `flyte.io.File`** (Q10) at the stored location, so
+  an asset passed between tasks points somewhere every pod can read.
+  `update()` computes the CID, puts the bytes with `flyte.storage.put`, writes
+  the index row, then sets `path = File(path=uri, name=name, hash=cid)`, which
+  makes the CID Flyte's cache key too. Assigning a local `Path` to `path`
+  wraps it in a File: an asset built from a file that was never uploaded.
+- **`fetch()` returns the local path** (Q17). It downloads the asset to
+  `<STARGAZER_LOCAL>/<cid>/<name>` and hardlinks every companion into the same
+  directory, where GATK looks for `.fai`, `.dict` and `.bai`. Tasks read
+  inputs as `bam = await alignment.fetch()`. An unstored local file comes back
+  in place; an asset with only a CID is located through the index, then the
+  public gateway.
 - **Two tiers** (Q9). Private assets live in the user's store and index.
   Shared data is public data on Pinata's public network: anyone can read it,
   with no per-user restriction, and `_owner` records who uploaded it. Bundles
   and reference data live there. `assemble()` queries both and merges by CID;
-  on a collision the user's own row wins. Promoting a private asset to public
-  is a follow-up (`publish()`).
+  on a collision the user's own row wins. `fetch_bundle()` also registers each
+  bundle file in the user's index (pointing at the gateway), so a fetched
+  bundle is findable with or without a Pinata key. Promoting a private asset
+  to public is a follow-up (`publish()`).
 - **Same CID, new metadata is allowed and warned** (Q7). One row per CID: a
   re-upload whose keyvalues differ replaces them and logs a WARNING naming the
   CID and the keys that changed.
@@ -133,8 +141,10 @@ Recorded so they aren't relitigated mid-build.
   product of queries. The companion lookup (`<asset_key>_cid = X`) is an
   ordinary query.
 - **One writer, first come first served.** The process that owns the file
-  holds one write connection behind an `asyncio.Lock`, so requests wait their
-  turn in arrival order. WAL mode lets reads run alongside writes without the
+  holds one write connection behind a lock, so requests wait their turn. The
+  lock is a `threading.Lock` taken inside the worker thread, not an
+  `asyncio.Lock`: an asyncio lock belongs to one event loop, and a shared
+  client is used from several (pytest-asyncio, notebooks). WAL mode lets reads run alongside writes without the
   lock. `update_metadata` reads, merges and writes under the lock, so
   concurrent merges can't drop each other's keys.
 - **A write returns only after it commits**, so a downstream task always finds
@@ -151,12 +161,15 @@ Recorded so they aren't relitigated mid-build.
   `FLYTE_INTERNAL_PROJECT` and `FLYTE_INTERNAL_DOMAIN`, which every task pod
   has.) Internal requests carry no identity headers, so the index routes don't
   read `X-User-*`. A laptop uses the public URL with the CLI's bearer token.
-- **One setting picks the index backend.** `STARGAZER_INDEX_URL=sqlite:///…`
-  opens the file directly (laptop local mode, and the dashboard itself);
-  `http(s)://…` calls a dashboard (task pods, notebook pods, a laptop working
-  against Union). The HTTP API wraps the same SQLite module, so queries are
-  written once. `STARGAZER_STORE_ROOT` picks the byte store the same way. Both
-  ride into task pods through `_stargazer_env_vars()`, like `STARGAZER_OWNER`.
+- **One setting picks the index backend.** `STARGAZER_INDEX_URL` is a SQLite
+  file path (a `sqlite://` prefix is accepted; default `~/.stargazer/index.db`)
+  opened directly by a laptop and by the dashboard itself, or an `http(s)://`
+  dashboard URL (task pods, notebook pods, a laptop working against Union).
+  The HTTP API wraps the same SQLite module, so queries are written once.
+  `STARGAZER_STORE_ROOT` picks the byte store the same way (default
+  `~/.stargazer/store`). Both ride into task pods through
+  `_stargazer_env_vars()`, but only when set explicitly: a pod can't use a
+  laptop's defaults.
 - **The dashboard's database is durable through the bucket**: restored at
   startup and replicated continuously by Litestream to
   `<STORE_ROOT>/users/<subject>/index/`.
@@ -246,12 +259,11 @@ Q7–Q12 decided 2026-10-07; the settled decisions above carry them.
       loudly, and the run is re-run.
 - [x] **Q12. Does `_owner` survive?** Yes: Pinata parity, cheap promotion to
       public, and a trail for attribution errors and leaks.
-- [ ] **Q19. The upgrade window.** Failing loudly covers writes that don't
-      land. It doesn't cover Q4's window, where the old dashboard replica
-      accepts a write after the new one has already restored, so the write is
-      acknowledged and then lost without any error. The cheapest guard is for
-      `stargazer-users upgrade` to refuse while the user has runs going. The
-      alternative is to accept the risk.
+- [x] **Q19. The upgrade window.** Failing loudly covers writes that don't
+      land, not Q4's window, where the old dashboard replica acknowledges a
+      write after the new one has restored. Decided 2026-10-07:
+      `stargazer-users upgrade` refuses while the user has runs going, for
+      now; something better later.
 
 ### Details to confirm while building
 
@@ -260,8 +272,9 @@ Q7–Q12 decided 2026-10-07; the settled decisions above carry them.
       Pinata or kubo (`ipfs add --only-hash --cid-version=1 --raw-leaves`)
       before relying on it for WGS-sized BAMs. Also confirm the empty file
       maps to the zero-byte raw leaf.
-- [ ] **Q14. `File.from_local` to a `file://` destination** in local mode,
-      outside a Flyte task context.
+- [x] **Q14. `File.from_local` to a `file://` destination.** Moot: uploads use
+      `flyte.storage.put` and then build the `File` directly, which works on
+      a local root outside any task context (measured).
 - [ ] **Q15. Laptop → Union ingest.** The laptop can't write to the bucket. The
       options are Union's data proxy (`create_upload_location`: scoped to a
       project, the control plane picks the key, so the row stores whatever
@@ -271,18 +284,31 @@ Q7–Q12 decided 2026-10-07; the settled decisions above carry them.
 - [ ] **Q16. The devbox.** Its app tier doesn't run (no Union auth), so
       remote runs there have no dashboard to index into. Union first, devbox
       later; see the ROADMAP's devbox app-tier item.
-- [ ] **Q17. The cache behind `File.download()`.** Flyte's `download()` has no
-      cache: with no argument it downloads to a fresh temp path every call,
-      and with a path it downloads there again (SDK source). On a laptop that
-      means copying out of the `file://` store on every read. Decide in
-      Piece 2 how `<STARGAZER_LOCAL>/<cid>/<name>` sits in front of it, without
-      ever leaving `asset.path` pointing at a pod-local file that another
-      task can't read.
-- [ ] **Q18. Public assets as `File`s.** A public asset's `path` would point at
-      an IPFS gateway URL. Confirm `File.download()` reads that through
-      `flyte.storage` (fsspec HTTP). Also, a laptop without a Pinata JWT can't
-      query the public index, so bundles wouldn't show up in `assemble()`
-      there. The bundle manifests could stand in.
+- [x] **Q17. The cache behind `File.download()`.** Flyte's `download()` has no
+      cache (SDK source). Decided: `asset.path` always stays the stored File,
+      and `fetch()` is the cached download, returning the local path with
+      companions beside it (settled decisions above). On a laptop the cache
+      hardlinks from the local store instead of copying.
+- [x] **Q18. Public assets as `File`s.** `File.download()` can't read a
+      gateway URL: flyte 2.10.7's HTTP filesystem fails with "Timeout context
+      manager should be used inside a task" (measured). The storage client
+      downloads `https://` paths with aiohttp instead. For laptops without a
+      Pinata key, `fetch_bundle()` registers bundle files in the local index.
+- [ ] **Q20. `VQSRModel.tranches_path` is a pod-local path.** It predates this
+      plan: `variant_recalibrator` writes the tranches file's local path into
+      metadata, so `apply_vqsr` in another pod can't read it. The tranches
+      file should be its own companion asset. Not fixed here.
+- [ ] **Q21. Remote runs submitted from a laptop.** A pod can't read a
+      laptop's store or index, so the Execution tutorial's remote section
+      (`flyte.run(audit_cohorts, …)`) can't work from a laptop until Q15 and
+      Q16 are settled. It needed a Pinata key before too. From a hosted
+      notebook pod it works once Piece 4 is in.
+- [ ] **Q22. `GRCh38_TP53.fa` is on Pinata's private network.** In
+      `variant_calling_demo`, the reads and the scRNA files are public, but
+      the reference is private (measured by CID lookup). Under Q9 it needs
+      pinning to the public network so `assemble()` finds it through the
+      public tier; until then it's found only after `fetch_bundle()`, and its
+      gateway download may fail. Publishing is the user's call.
 
 ## Delivery
 
@@ -291,7 +317,8 @@ Two PRs, both from this branch:
 1. **SDK** (Pieces 1–3): the CID module, the SQLite index, `Asset.path` as a
    `File`, and the rewired storage client. Local mode works end to end. It
    doesn't depend on Piece 0. Union runs have no index until PR 2 lands, so
-   the two should land close together.
+   the two should land close together. The Execution tutorial's remote
+   section needs a hosted notebook pod (Q21).
 2. **Union** (Pieces 4–7): the dashboard index API, the HTTP client,
    Litestream, the tenant run and the docs. Q1–Q6 are answered (Piece 0).
 
@@ -347,64 +374,78 @@ internal path skips the front door. Tracked on the ROADMAP.
 
 ### Tests first
 
-- [ ] `GRCh38_TP53.fa`, `NA12829_TP53_R1.fq.gz` and `NA12829_TP53_R2.fq.gz`
+- [x] `GRCh38_TP53.fa`, `NA12829_TP53_R1.fq.gz` and `NA12829_TP53_R2.fq.gz`
       (already in `tests/fixtures/general/`) compute to their CIDs in
       `variant_calling_demo.yaml`. Covers one block and a multi-chunk tree.
-- [ ] The empty file computes to
+- [x] The empty file computes to
       `bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku` (the
       zero-byte raw leaf; Q13).
-- [ ] Round trip: upsert a row, then query it back by its keyvalues.
-- [ ] Exact match: a row missing one filter key, or holding a different
+- [x] Round trip: upsert a row, then query it back by its keyvalues.
+- [x] Exact match: a row missing one filter key, or holding a different
       value, doesn't match.
-- [ ] A list-valued filter matches any of its values in one call.
-- [ ] A companion lookup by `<asset_key>_cid` returns only that parent's
+- [x] A list-valued filter matches any of its values in one call.
+- [x] A companion lookup by `<asset_key>_cid` returns only that parent's
       companions.
-- [ ] Upserting the same row twice leaves one row, with no warning.
-- [ ] Upserting a CID with different keyvalues replaces them and logs a
+- [x] Upserting the same row twice leaves one row, with no warning.
+- [x] Upserting a CID with different keyvalues replaces them and logs a
       WARNING naming the CID and the changed keys.
-- [ ] Concurrent merges on one row keep every key.
-- [ ] A read during a held write returns the last committed state without
+- [x] Concurrent merges on one row keep every key.
+- [x] A read during a held write returns the last committed state without
       waiting.
 
 Tests run against a SQLite file in a temp dir. No mocks.
 
 ### Implementation
 
-- [ ] `src/stargazer/utils/cid.py`: streamed UnixFS CID with Pinata's
-      parameters.
-- [ ] `src/stargazer/utils/index.py`: the table, WAL mode, one write
-      connection behind an `asyncio.Lock`, blocking calls kept off the event
-      loop, and upsert / query / merge / delete.
+- [x] `src/stargazer/utils/cid.py`: streamed UnixFS CID with Pinata's
+      parameters. *(Also matches Pinata on a TUS upload — the pinata-marked
+      test now compares CIDs — and on the 116 MB scRNA bundle files.)*
+- [x] `src/stargazer/utils/index.py`: the table, WAL mode, one write
+      connection behind a lock, blocking calls kept off the event loop, and
+      upsert / query / get / merge / delete.
 
 ## Piece 2 — Assets carry a `flyte.io.File`
 
-- [ ] `Asset.path: Path | None` → `File | None`. Tasks get local copies
-      through the File API, with the cache placed per Q17.
-- [ ] `update(path)`: compute the CID, upload to
-      `users/<subject>/assets/<cid>` (skipped when it exists), and upsert the
-      row with `_owner` stamped. Raise if the row hasn't committed after
-      retries.
-- [ ] `fetch()`: downloads companions as today, through the cache.
-- [ ] `specialize()` and `from_dict()` rebuild `path` from a row, or from a
-      Pinata public record (Q18).
-- [ ] Tasks, notebooks and the MCP marshaller follow the new type.
+- [x] `Asset.path: Path | None` → `File | None`; a local `Path` assigned to
+      it is wrapped in a File.
+- [x] `update(path)`: compute the CID, upload to
+      `users/<subject>/assets/<cid>/<name>` (skipped when it exists), and
+      upsert the row with `_owner` stamped. Raises if either fails.
+- [x] `fetch()`: returns the local path, companions beside it (Q17).
+- [x] `specialize()` and `from_dict()` rebuild `path` from a row, or from a
+      Pinata public record.
+- [x] Tasks, notebooks and the MCP server follow the new type. Every task
+      reads inputs as `path = await asset.fetch()`.
 
 ## Piece 3 — The storage client, rewired
 
-- [ ] `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` in `config.py`, with
-      laptop defaults (`file://~/.stargazer/store`,
-      `sqlite:///~/.stargazer/index.db`), forwarded by
-      `_stargazer_env_vars()`.
-- [ ] `LocalStorageClient` sends private bytes through the store and metadata
-      through the index backend. TinyDB and the two modes go. Pinata becomes
-      the public tier only, so `PINATA_VISIBILITY` and private signed-URL
-      downloads go and `PINATA_JWT` stays.
-- [ ] `query()` merges the user's index with Pinata's public index,
+- [x] `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` in `config.py`, with
+      laptop defaults (`~/.stargazer/store`, `~/.stargazer/index.db`),
+      forwarded by `_stargazer_env_vars()` only when set explicitly.
+- [x] `stargazer.utils.storage.StorageClient` replaces `LocalStorageClient`:
+      private bytes through the store, metadata through the index. TinyDB
+      (and the `tinydb` dependency) and the two modes go. The SDK no longer
+      reads Pinata's private network; `PINATA_VISIBILITY` stops riding into
+      pods and is read only by the asset-manager page. `PINATA_JWT` stays.
+- [x] `query()` merges the user's index with Pinata's public index,
       deduplicated by CID, with the user's own row winning.
-- [ ] Bundles stay on Pinata's public network. `fetch_bundle` downloads them
-      by CID into the cache, and `_upsert_local` goes (laptops without a JWT:
-      Q18).
-- [ ] `verify-stargazer` on the scRNA pipeline and GATK notebooks, locally.
+- [x] Bundles: `fetch_bundle` downloads by CID into the cache and registers
+      each file in the index; `_upsert_local` goes.
+- [x] Tests run against a per-test store and index; the fixture store is
+      seeded once per session through the real client
+      (`tests/fixtures/seed.py` replaces the TinyDB fixture DB). 405 passed,
+      13 skipped — the same `gatk`/`bwa`/`samtools` skips as before: those
+      tools aren't on this laptop's PATH, so the GATK and alignment task
+      tests have never run here.
+- [x] `verify-stargazer` (2026-10-07, run `20261007-013105`): the scRNA
+      pipeline notebook exports with exit 0 and `check_anndata.py` reads `ok`
+      for both samples at every stage, raw through annotated. The assets,
+      tasks and workflows tutorials export with exit 0. The Execution
+      tutorial's local step (`audit_cohorts` in local mode) stores three
+      linked `CohortSummary` assets that fetch back correctly; its remote
+      section isn't driven (Q21). GATK notebooks unverified: tools absent.
+      The skill now isolates the store and index too, and its anndata check
+      reads the SQLite index.
 
 ## Piece 4 — The dashboard serves the index (Union)
 
