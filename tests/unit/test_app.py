@@ -677,3 +677,13 @@ def test_index_routes_are_mounted(client, tmp_path, monkeypatch):
     resp = client.post("/index/query", json={"filters": {}})
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+def test_dashboard_launcher_ships_in_the_code_bundle():
+    """The startup module must be bundled: nothing the deployer imports pulls it in.
+
+    The bundle's `app/` lands in the pod's working directory and shadows the
+    installed package, so a module missing from it can't be imported at all.
+    """
+    assert app_env.args == ["exec", "python", "-m", "app.dashboard_launch"]
+    assert "dashboard_launch.py" in app_env.include

@@ -172,9 +172,11 @@ app_env = flyte.app.AppEnvironment(
         **_FLYTE_CONTEXT,
         **_PUBLIC_CONFIG,
     },
-    # Flyte's loaded_modules bundler ships only .py files; HTML and the
-    # landing-page logo must be enumerated.
-    include=("templates/", "static/"),
+    # Flyte's loaded_modules bundler ships only the .py files the deployer
+    # imported; HTML and the landing-page logo must be enumerated, and so must
+    # the startup module, which nothing imports. The bundle's `app/` shadows
+    # the installed package in the pod, so a missing module can't be found.
+    include=("templates/", "static/", "dashboard_launch.py"),
 )
 
 
