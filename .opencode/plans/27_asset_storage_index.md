@@ -271,9 +271,11 @@ Two PRs, both from this branch:
 
 Run 2026-10-06 (local time) in `flytesnacks/development`: a throwaway FastAPI
 app `sg-probe-index` (`requires_auth=True`, `replicas=(0, 1)`, 60s
-scale-down) and tasks on the same image, driven from the CLI. The probe code
-lived in the session scratchpad and was not committed. The app was
-deactivated afterwards.
+scale-down) and tasks on the same image, driven from the CLI. The app was
+deactivated afterwards. The harness itself isn't kept; the results and run
+links below are the record. The parts it prototyped that ship are built in
+their real modules: the Litestream image layer and launcher in the dashboard
+(Piece 5), and the CID code in `src/stargazer/utils/cid.py` (Piece 1).
 
 - [x] From a task: print the environment, call the internal URL, call the
       public URL without a token. Answers Q1–Q2.
