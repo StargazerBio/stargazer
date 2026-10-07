@@ -267,11 +267,16 @@ Q7–Q12 decided 2026-10-07; the settled decisions above carry them.
 
 ### Details to confirm while building
 
-- [ ] **Q13. Three-level CIDs.** Files over about 7.4 GiB
-      (174 × 174 × 256 KiB) build a third tree level. Check one against
-      Pinata or kubo (`ipfs add --only-hash --cid-version=1 --raw-leaves`)
-      before relying on it for WGS-sized BAMs. Also confirm the empty file
-      maps to the zero-byte raw leaf.
+- [x] **Q13. Three-level CIDs.** Resolved 2026-10-07 against kubo 0.43.1
+      with Pinata's parameters (`ipfs add -n --cid-version=1 --raw-leaves
+      --max-file-links=174`): `compute_cid` matched at one, two, three and
+      four levels (the deeper ones with 1 KiB and 64 B chunks, which build
+      the same tree shape as a 7.4 GiB+ file at 256 KiB without writing
+      one). `tests/utils/test_cid.py` now pins a two-level and a three-level
+      case to kubo's CIDs; both fail if the node width is off by one. The
+      empty file is the zero-byte raw leaf (tested). Pinata matching kubo
+      past two levels is inferred: Pinata itself was checked up to the
+      116 MB two-level `s1d1.h5ad`.
 - [x] **Q14. `File.from_local` to a `file://` destination.** Moot: uploads use
       `flyte.storage.put` and then build the `File` directly, which works on
       a local root outside any task context (measured).
