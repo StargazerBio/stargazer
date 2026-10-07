@@ -132,8 +132,10 @@ def log_execution() -> str:
 
 
 # scRNA-seq task environment for scanpy-based single-cell analysis.
-# Lean image: scanpy on top of the Flyte debian base. Memory-hungry at
-# runtime because scanpy loads full AnnData objects into RAM.
+# Lean image: the project's `bio` extra on top of the Flyte debian base —
+# scanpy plus what its steps import lazily (scikit-image for scrublet's
+# automatic threshold, igraph for Leiden). Memory-hungry at runtime because
+# scanpy loads full AnnData objects into RAM.
 scrna_env = flyte.TaskEnvironment(
     name="scrna",
     description="scanpy-based single-cell RNA analysis; memory-intensive AnnData workloads",
@@ -143,8 +145,7 @@ scrna_env = flyte.TaskEnvironment(
             registry=os.environ.get("STARGAZER_REGISTRY"),
         )
         .with_apt_packages("ca-certificates")
-        .with_pip_packages("scanpy>=1.12")
-        .with_uv_project(PROJECT_ROOT / "pyproject.toml")
+        .with_uv_project(PROJECT_ROOT / "pyproject.toml", extra_args="--extra bio")
     ),
     resources=flyte.Resources(memory=("2Gi", "6Gi")),
     env_vars=STARGAZER_ENV_VARS,
