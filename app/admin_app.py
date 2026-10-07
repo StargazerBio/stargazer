@@ -24,6 +24,10 @@ GitHub integration. It has three jobs:
    calls a notebook pod: the pod hydrates and saves its own workspace and
    shows its own starting page while it warms up.
 
+The dashboard also owns the user's asset index (`app.index_api`): a SQLite
+file on its own disk, served to the user's task and notebook pods at the
+dashboard's in-cluster address, and kept durable in the bucket by Litestream.
+
 The asset manager (`app.assets`) is mounted but has no store on a hosted
 dashboard: no Pinata key is baked in, since the owner can read the app spec.
 
@@ -57,6 +61,7 @@ from app import config
 from app import workspace_store as store
 from app.assets import router as assets_router
 from app.identity import CurrentUser, User
+from app.index_api import router as index_router
 from app.init import init
 from app.notebook_meta import (
     DEFAULT_RESOURCES,
@@ -121,6 +126,9 @@ _PUBLIC_CONFIG = {
 }
 
 
+# Litestream release baked into the dashboard image.
+_LITESTREAM = "0.5.17"
+
 app_env = flyte.app.AppEnvironment(
     name="dashboard",
     description="Stargazer dashboard and notebook launcher",
@@ -130,7 +138,19 @@ app_env = flyte.app.AppEnvironment(
             registry=os.environ.get("STARGAZER_REGISTRY"),
             platform=("linux/amd64", "linux/arm64"),
         )
-        .with_apt_packages("ca-certificates")
+        .with_apt_packages("ca-certificates", "curl")
+        .with_commands(
+            [
+                # Litestream keeps the asset index durable in the bucket
+                # (app.dashboard_launch). The .deb matches the build arch.
+                'arch=$(uname -m); case "$arch" in x86_64) a=x86_64;; '
+                "aarch64|arm64) a=arm64;; esac; "
+                "curl -fsSL -o /tmp/litestream.deb "
+                f"https://github.com/benbjohnson/litestream/releases/download/v{_LITESTREAM}/litestream-{_LITESTREAM}-linux-$a.deb "
+                "&& dpkg -i /tmp/litestream.deb && rm /tmp/litestream.deb "
+                "&& litestream version",
+            ]
+        )
         .with_uv_project(
             PROJECT_ROOT / "pyproject.toml",
             project_install_mode="install_project",
@@ -138,14 +158,10 @@ app_env = flyte.app.AppEnvironment(
         )
         .with_commands(["flyte create config --local-persistence"])
     ),
-    args=[
-        "uvicorn",
-        "app.admin_app:asgi_app",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8080",
-    ],
+    # `exec` so the shell `fserve` starts becomes Python, which execs
+    # Litestream, which runs uvicorn: Litestream is then the process `fserve`
+    # signals at scale-to-zero, and it syncs the index after uvicorn exits.
+    args=["exec", "python", "-m", "app.dashboard_launch"],
     port=8080,
     # Union's login gates every request and forwards the user's identity.
     requires_auth=True,
@@ -204,6 +220,7 @@ asgi_app.mount(
     name="static",
 )
 asgi_app.include_router(assets_router)
+asgi_app.include_router(index_router)
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +228,20 @@ asgi_app.include_router(assets_router)
 # ---------------------------------------------------------------------------
 
 _STORE_OFF = "saving notebooks isn't available on this deployment"
+
+
+def _index_url() -> str:
+    """This dashboard's in-cluster address, where pods send index calls.
+
+    App pods get `INTERNAL_APP_ENDPOINT_PATTERN` from the platform; outside
+    one, the address is built from the dashboard's project and domain the
+    same way (`<app>.<project>-<domain>.svc.cluster.local`).
+    """
+    pattern = os.environ.get("INTERNAL_APP_ENDPOINT_PATTERN") or (
+        f"http://{{app_fqdn}}.{config.FLYTE_PROJECT}-{config.FLYTE_DOMAIN}"
+        ".svc.cluster.local"
+    )
+    return pattern.format(app_fqdn=app_env.name)
 
 
 def _store_ready() -> bool:
@@ -827,6 +858,7 @@ async def launch(
         notebook_path=notebook_path,
         owner_subject=user.subject,
         admin_url=str(request.base_url).rstrip("/"),
+        index_url=_index_url(),
         resources=resources,
     )
     env.env_vars["FLYTE_PROJECT"] = project

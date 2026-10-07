@@ -42,7 +42,7 @@ from flyte.io import File
 import stargazer.config  # ensure env var defaults are set  # noqa: F401
 from stargazer.assets.asset import Asset
 from stargazer.utils.cid import compute_cid
-from stargazer.utils.index import SqliteIndex
+from stargazer.utils.index import HttpIndex, SqliteIndex
 from stargazer.utils.pinata import PinataClient, _stamp_owner
 from stargazer.utils.query import generate_query_combinations
 
@@ -102,7 +102,7 @@ class StorageClient:
         self,
         local_dir: Path,
         store_root: str,
-        index: SqliteIndex,
+        index: SqliteIndex | HttpIndex,
         public: PinataClient | None = None,
         gateway: str | None = None,
     ):
@@ -267,11 +267,14 @@ class StorageClient:
         return await self.index.merge(cid, _stamp_owner(dict(keyvalues)))
 
 
-def make_index(url: str) -> SqliteIndex:
-    """The index named by `STARGAZER_INDEX_URL`: a SQLite file path.
+def make_index(url: str) -> SqliteIndex | HttpIndex:
+    """The index named by `STARGAZER_INDEX_URL`.
 
-    A `sqlite://` prefix is accepted and stripped; `~` is expanded.
+    An `http(s)://` URL is a user's dashboard; anything else is a SQLite file
+    path (a `sqlite://` prefix is accepted and stripped, `~` is expanded).
     """
+    if url.startswith(("http://", "https://")):
+        return HttpIndex(url)
     return SqliteIndex(Path(url.removeprefix("sqlite://")).expanduser())
 
 

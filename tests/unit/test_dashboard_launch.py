@@ -1,0 +1,35 @@
+"""Tests for the dashboard launcher: when Litestream runs, and what it replicates."""
+
+from pathlib import Path
+
+from app.dashboard_launch import SERVER, litestream_config, replica_url
+
+
+def test_replica_lives_under_the_owner_in_the_store():
+    """The index replicates to <store root>/users/<owner>/index."""
+    env = {"STARGAZER_STORE_ROOT": "s3://bucket/stargazer/", "SG_OWNER_SUBJECT": "u1"}
+    assert replica_url(env) == "s3://bucket/stargazer/users/u1/index"
+
+
+def test_no_durable_store_means_no_litestream():
+    """Without a bucket root or an owner, the dashboard just serves."""
+    assert replica_url({"SG_OWNER_SUBJECT": "u1"}) is None
+    assert (
+        replica_url({"STARGAZER_STORE_ROOT": "/tmp/store", "SG_OWNER_SUBJECT": "u1"})
+        is None
+    )
+    assert replica_url({"STARGAZER_STORE_ROOT": "s3://bucket/stargazer"}) is None
+
+
+def test_config_replicates_the_index_file():
+    """The Litestream config names the index file and the replica."""
+    text = litestream_config(
+        Path("/home/flyte/.stargazer/index.db"), "s3://bucket/stargazer/users/u1/index"
+    )
+    assert "path: /home/flyte/.stargazer/index.db" in text
+    assert "url: s3://bucket/stargazer/users/u1/index" in text
+
+
+def test_server_is_the_dashboard():
+    """The process Litestream wraps is the dashboard's uvicorn."""
+    assert SERVER[:2] == ["uvicorn", "app.admin_app:asgi_app"]

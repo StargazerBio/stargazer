@@ -23,6 +23,9 @@ Re-running is safe: every step checks before it writes, so onboarding an
 onboarded user only redeploys their dashboard. `upgrade` redeploys every
 active Stargazer dashboard; `offboard` stops a user's apps, removes their
 access, and archives their project, leaving their notebooks in the store.
+A redeploy waits for the user's runs to finish (`refuse_while_running`): the
+dashboard holds their asset index, and a write that lands on the outgoing
+version is lost.
 
 The control-plane classes are module attributes so tests can swap in fakes.
 
@@ -43,7 +46,8 @@ from functools import cache
 import flyte
 import flyte.app
 from flyte._initialize import get_init_config
-from flyte.remote import App, Project
+from flyte.models import ActionPhase
+from flyte.remote import App, Project, Run
 from flyteplugins.union.remote import Assignment, Policy, User
 
 from app import config
@@ -61,6 +65,16 @@ _ACTIVE_POLLS, _ACTIVE_POLL_SECONDS = 24, 5
 # The dashboard's env as defined, before any user's settings are applied, so
 # deploying several users in one run never carries one user's values over.
 _BASE_ENV_VARS = dict(app_env.env_vars)
+# Where the dashboard keeps its SQLite index, on its own disk (Litestream
+# makes it durable). `~` expands in the pod.
+_DASHBOARD_INDEX = "~/.stargazer/index.db"
+# Phases of a run that hasn't finished.
+_UNFINISHED = (
+    ActionPhase.QUEUED,
+    ActionPhase.WAITING_FOR_RESOURCES,
+    ActionPhase.INITIALIZING,
+    ActionPhase.RUNNING,
+)
 
 
 def handle_from_email(email: str) -> str:
@@ -206,8 +220,14 @@ def deploy_dashboard(project: str, owner_subject: str) -> str:
         **_BASE_ENV_VARS,
         "FLYTE_PROJECT": project,
         "SG_OWNER_SUBJECT": owner_subject,
+        "STARGAZER_OWNER": owner_subject,
         "STARGAZER_NOTEBOOK_IMAGE": _notebook_image(),
+        "STARGAZER_INDEX_URL": _DASHBOARD_INDEX,
     }
+    # Assets live under the same root as the workspace notebooks.
+    env_vars.pop("STARGAZER_STORE_ROOT", None)
+    if config.WORKSPACE_ROOT:
+        env_vars["STARGAZER_STORE_ROOT"] = config.WORKSPACE_ROOT
     # In-cluster init can't discover the org in an app pod; bake the deployer's.
     if org := get_init_config().org:
         env_vars["FLYTE_ORG"] = org
@@ -237,6 +257,35 @@ def deploy_dashboard(project: str, owner_subject: str) -> str:
         raise
 
 
+def active_runs(project: str) -> list[str]:
+    """Names of the project's runs that haven't finished."""
+    return [
+        run.name
+        for run in Run.listall(
+            in_phase=_UNFINISHED,
+            project=project,
+            domain=config.FLYTE_DOMAIN,
+            limit=50,
+        )
+    ]
+
+
+def refuse_while_running(projects: list[str]) -> None:
+    """Raise if any of these projects has a run that hasn't finished.
+
+    A dashboard redeploy briefly runs the old and new versions side by side;
+    an index write the old one accepts after the new one has restored its
+    database is lost. Until that's handled properly, redeploys wait for runs
+    to finish.
+    """
+    busy = {p: runs for p in projects if (runs := active_runs(p))}
+    if busy:
+        detail = "; ".join(f"{p}: {', '.join(runs)}" for p, runs in busy.items())
+        raise RuntimeError(
+            f"runs still going, so their dashboards can't be redeployed yet ({detail})"
+        )
+
+
 def stop_project_apps(project: str) -> list[str]:
     """Deactivate every active app in the project; return their names."""
 
@@ -262,19 +311,24 @@ def onboard(
     subject = _ensure_user(email, first_name, last_name)
     project = _ensure_project(subject, email, handle)
     _ensure_access(subject, project)
+    refuse_while_running([project])
     return deploy_dashboard(project, subject)
 
 
 def upgrade() -> list[str]:
-    """Redeploy every active Stargazer dashboard; return their URLs."""
+    """Redeploy every active Stargazer dashboard; return their URLs.
+
+    Refuses, deploying nothing, while any user has runs going.
+    """
     active, _ = _all_projects()
-    urls = []
-    for project in active:
-        labels = _labels(project)
-        if labels.get("managed-by") != "stargazer" or not labels.get(_SUBJECT_LABEL):
-            continue
-        urls.append(deploy_dashboard(project.pb2.id, labels[_SUBJECT_LABEL]))
-    return urls
+    users = [
+        (project.pb2.id, labels[_SUBJECT_LABEL])
+        for project in active
+        if (labels := _labels(project)).get("managed-by") == "stargazer"
+        and labels.get(_SUBJECT_LABEL)
+    ]
+    refuse_while_running([pid for pid, _ in users])
+    return [deploy_dashboard(pid, subject) for pid, subject in users]
 
 
 def offboard(email: str) -> None:
@@ -326,15 +380,20 @@ def main() -> None:
             "STARGAZER_WORKSPACE_ROOT is not set; export it before deploying."
         )
     init(config.FLYTE_CONFIG, root_dir=PROJECT_ROOT)
-    if args.command == "onboard":
-        url = onboard(args.email, args.first_name, args.last_name, handle=args.handle)
-        print(f"Dashboard: {url}")
-    elif args.command == "upgrade":
-        for url in upgrade():
+    try:
+        if args.command == "onboard":
+            url = onboard(
+                args.email, args.first_name, args.last_name, handle=args.handle
+            )
             print(f"Dashboard: {url}")
-    else:
-        offboard(args.email)
-        print(f"Offboarded {args.email}")
+        elif args.command == "upgrade":
+            for url in upgrade():
+                print(f"Dashboard: {url}")
+        else:
+            offboard(args.email)
+            print(f"Offboarded {args.email}")
+    except RuntimeError as exc:
+        raise SystemExit(f"stargazer-users {args.command}: {exc}") from exc
 
 
 if __name__ == "__main__":

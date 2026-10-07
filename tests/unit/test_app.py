@@ -18,7 +18,13 @@ from fastapi.testclient import TestClient
 
 from app import config, notebooks
 from app import workspace_store as ws
-from app.admin_app import _notebook_slug, _parse_nb_name, app_env, asgi_app
+from app.admin_app import (
+    _index_url,
+    _notebook_slug,
+    _parse_nb_name,
+    app_env,
+    asgi_app,
+)
 from app.notebook_meta import parse_notebook_name, parse_notebook_resources
 
 ALICE = "387300641116005877"
@@ -643,3 +649,31 @@ def test_created_notebook_slug_is_a_launchable_app_name(name, slug):
     assert _notebook_slug(name) == slug
     env = flyte.app.AppEnvironment(name=f"nb-{_notebook_slug(name)}-edit", image="img")
     assert env.name == f"nb-{slug}-edit"
+
+
+def test_index_url_uses_the_platform_pattern(monkeypatch):
+    """Inside an app pod the in-cluster pattern names the dashboard."""
+    monkeypatch.setenv(
+        "INTERNAL_APP_ENDPOINT_PATTERN",
+        "http://{app_fqdn}.u-jane-development.svc.cluster.local",
+    )
+    assert _index_url() == "http://dashboard.u-jane-development.svc.cluster.local"
+
+
+def test_index_url_without_the_pattern(monkeypatch):
+    """Elsewhere it's built from the dashboard's project and domain."""
+    monkeypatch.delenv("INTERNAL_APP_ENDPOINT_PATTERN", raising=False)
+    monkeypatch.setattr(config, "FLYTE_PROJECT", "u-jane")
+    monkeypatch.setattr(config, "FLYTE_DOMAIN", "production")
+    assert _index_url() == "http://dashboard.u-jane-production.svc.cluster.local"
+
+
+def test_index_routes_are_mounted(client, tmp_path, monkeypatch):
+    """The dashboard serves its index without needing a signed-in user."""
+    from app import index_api
+    from stargazer.utils.index import SqliteIndex
+
+    monkeypatch.setattr(index_api, "_index", SqliteIndex(tmp_path / "i.db"))
+    resp = client.post("/index/query", json={"filters": {}})
+    assert resp.status_code == 200
+    assert resp.json() == []

@@ -27,6 +27,7 @@ class FakeUnion:
         self.projects: dict[str, dict] = {}  # id -> {"labels", "archived", "name"}
         self.policies: dict[str, list[dict]] = {}
         self.assignments: dict[str, list[str]] = {}  # subject -> policy names
+        self.runs: dict[str, list[str]] = {}  # project -> unfinished run names
         self.next_subject = 900000000000000000
 
     # -- installation --------------------------------------------------------
@@ -129,6 +130,9 @@ class FakeUnion:
         monkeypatch.setattr(onboard, "Assignment", Assignment)
         monkeypatch.setattr(onboard, "deploy_dashboard", deploy_dashboard)
         monkeypatch.setattr(onboard, "stop_project_apps", stop_project_apps)
+        monkeypatch.setattr(
+            onboard, "active_runs", lambda project: list(fake.runs.get(project, []))
+        )
 
     # -- helpers -------------------------------------------------------------
 
@@ -286,6 +290,26 @@ def test_upgrade_redeploys_every_active_stargazer_dashboard(union):
     assert sorted(urls) == ["https://u-bob.apps.example", "https://u-jane.apps.example"]
 
 
+def test_upgrade_refuses_while_any_user_has_runs_going(union):
+    """A redeploy can lose index writes, so nothing deploys while runs are going."""
+    union.add_project("u-jane", ALICE)
+    union.add_project("u-bob", BOB)
+    union.runs["u-bob"] = ["a1b2c3"]
+    with pytest.raises(RuntimeError, match=r"u-bob.*a1b2c3"):
+        onboard.upgrade()
+    assert union.writes() == []
+
+
+def test_onboard_rerun_refuses_while_the_user_has_runs_going(union):
+    """Re-onboarding redeploys the dashboard, so it waits for runs to finish too."""
+    onboard.onboard("jane@uni.edu", "Jane", "Doe")
+    union.log.clear()
+    union.runs["u-jane"] = ["r9"]
+    with pytest.raises(RuntimeError, match="u-jane"):
+        onboard.onboard("jane@uni.edu", "Jane", "Doe")
+    assert union.writes() == []
+
+
 def test_offboard_stops_apps_removes_access_and_archives(union):
     """Offboarding leaves the user's notebooks in the store, and nothing running."""
     onboard.onboard("jane@uni.edu", "Jane", "Doe")
@@ -384,6 +408,27 @@ def test_dashboard_deploy_keeps_the_env_resolvable(monkeypatch):
         "STARGAZER_NOTEBOOK_IMAGE": "reg/notebook-app:h1",
         "FLYTE_ORG": "stargazerbio",
     }
+
+
+def test_dashboard_deploy_carries_the_asset_store_and_index(monkeypatch):
+    """The dashboard owns a local index, stores under the workspace root, and stamps its owner."""
+    served = {}
+
+    def fake_servecontext(**ctx):
+        def serve(env):
+            served.update(env_vars=dict(env.env_vars))
+            return SimpleNamespace(endpoint="https://u-jane.apps.example")
+
+        return SimpleNamespace(serve=serve)
+
+    monkeypatch.setattr(config, "WORKSPACE_ROOT", "s3://bucket/stargazer")
+    monkeypatch.setattr(onboard.flyte, "with_servecontext", fake_servecontext)
+    monkeypatch.setattr(onboard, "_notebook_image", lambda: "reg/notebook-app:h1")
+    monkeypatch.setattr(onboard, "get_init_config", lambda: SimpleNamespace(org=None))
+    onboard.deploy_dashboard("u-jane", ALICE)
+    assert served["env_vars"]["STARGAZER_STORE_ROOT"] == "s3://bucket/stargazer"
+    assert served["env_vars"]["STARGAZER_INDEX_URL"] == "~/.stargazer/index.db"
+    assert served["env_vars"]["STARGAZER_OWNER"] == ALICE
 
 
 def test_dashboard_deploy_waits_out_a_stale_watch_failure(monkeypatch):

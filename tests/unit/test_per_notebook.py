@@ -19,6 +19,7 @@ def _env(**overrides):
         "notebook_path": f"{WORKSPACE_NOTEBOOK_DIR}/demo.py",
         "owner_subject": SUBJECT,
         "admin_url": "http://admin",
+        "index_url": "http://dashboard.u-x-development.svc.cluster.local",
     }
     kwargs.update(overrides)
     return per_notebook_env(**kwargs)
@@ -50,6 +51,17 @@ def test_pod_env_carries_owner_and_store_root(monkeypatch):
     assert env.env_vars["SG_OWNER_SUBJECT"] == SUBJECT
     assert env.env_vars["STARGAZER_WORKSPACE_ROOT"] == "s3://bucket/stargazer"
     assert env.env_vars["STARGAZER_ADMIN_URL"] == "http://admin"
+
+
+def test_pod_env_carries_the_asset_store_and_index(monkeypatch):
+    """Assets go under the workspace root and are indexed through the dashboard."""
+    monkeypatch.setattr(config, "WORKSPACE_ROOT", "s3://bucket/stargazer")
+    env = _env()
+    assert env.env_vars["STARGAZER_STORE_ROOT"] == "s3://bucket/stargazer"
+    assert (
+        env.env_vars["STARGAZER_INDEX_URL"]
+        == "http://dashboard.u-x-development.svc.cluster.local"
+    )
 
 
 def test_pod_env_has_no_git_or_session_credentials():

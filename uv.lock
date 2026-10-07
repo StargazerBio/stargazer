@@ -3835,6 +3835,7 @@ dependencies = [
     { name = "aiofiles" },
     { name = "aiohttp" },
     { name = "flyte", extra = ["tui"] },
+    { name = "httpx" },
     { name = "loguru" },
     { name = "pyyaml" },
 ]
@@ -3932,6 +3933,7 @@ requires-dist = [
     { name = "fastapi", marker = "extra == 'landing'", specifier = ">=0.115" },
     { name = "flyte", extras = ["tui"], specifier = ">=2.0.3" },
     { name = "flyteplugins-union", marker = "extra == 'landing'", specifier = ">=0.15.1,<0.16" },
+    { name = "httpx", specifier = ">=0.27,<1" },
     { name = "httpx", marker = "extra == 'landing'", specifier = ">=0.27" },
     { name = "igraph", marker = "extra == 'bio'", specifier = ">=1.0.0" },
     { name = "itsdangerous", marker = "extra == 'landing'", specifier = ">=2.1" },

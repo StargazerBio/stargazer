@@ -20,7 +20,10 @@ Both are deployed by `app.onboard` (`stargazer-users`), which an org admin
 runs to give a user their project, access and dashboard.
 
 Plus supporting modules: `identity`, `workspace_store`,
-`notebooks`, `notebook_meta`, `assets`, `proxy`, `templates`, `init`.
+`notebooks`, `notebook_meta`, `assets`, `index_api` (the user's asset index,
+served by their dashboard), `dashboard_launch` (the dashboard's startup:
+restore the index, then serve under Litestream), `proxy`, `templates`,
+`init`.
 Lives outside `src/stargazer` because it is deployment glue, not part of
 the bioinformatics SDK.
 
