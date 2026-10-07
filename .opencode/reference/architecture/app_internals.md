@@ -241,6 +241,7 @@ No secret is required to deploy. The org admin's shell, when running `stargazer-
 | `STARGAZER_TARGET=union` | picks `.flyte/union.yaml` | the devbox is targeted |
 | `STARGAZER_WORKSPACE_ROOT` | where users' notebooks and assets live; baked into every dashboard and pod | `onboard`/`upgrade` refuse to start on Union |
 | `STARGAZER_STORE_REGION` | the bucket's region, for Litestream, when the pod has no `AWS_REGION` | Litestream looks it up, which the tenant's role refuses |
+| `PINATA_GATEWAY` | the account's dedicated gateway (`https://<name>.mypinata.cloud`) for public downloads; rides into every dashboard, notebook pod and run | public gateways (`dweb.link`), which answer 429 under repeated large downloads |
 
 Per dashboard, onboarding bakes in `FLYTE_PROJECT`, `SG_OWNER_SUBJECT` and `STARGAZER_OWNER`, the deployer's org as `FLYTE_ORG`, the notebook image URI as `STARGAZER_NOTEBOOK_IMAGE`, `STARGAZER_STORE_ROOT` (the workspace root) and the dashboard's own index path as `STARGAZER_INDEX_URL`. The admin's CLI identity must be an org admin (it creates projects, policies and assignments).
 

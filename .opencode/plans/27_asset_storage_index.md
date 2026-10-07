@@ -508,9 +508,23 @@ real SDK — `Asset.update()`, `Asset.fetch()`, `assemble()` — with
 URL) and `STARGAZER_OWNER` forwarded the way a notebook pod forwards them.
 The harness isn't kept.
 
-- [ ] The scRNA pipeline run from a notebook pod. **Blocked by Q23**: no
-      Stargazer task starts on the tenant until the `PINATA_JWT` secret
-      exists. The notebook pod's environment plumbing is unit-tested only.
+- [x] The real scRNA pipeline (`scrna_clustering_pipeline`) for both demo
+      samples at once, after Q23 was resolved
+      ([s1d1](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/u-pryce/runs/u9plg258jvg5pdsnl8x7),
+      [s1d3](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/u-pryce/runs/urm6nhrwrpfp5f856l2l)).
+      Each run found its raw input through Pinata's public tier, downloaded
+      it, and wrote all six stages to the bucket and the dashboard: 12 rows,
+      each stamped `_owner`, stored under the owner's prefix, with a constant
+      `n_obs` per sample across stages (8,506 and 8,322). Caveats: submitted
+      from the laptop with the environment a notebook pod forwards, not from
+      a notebook pod; and run with the scRNA image fix from
+      `fix/scrna-image-bio-extra` applied to the working tree (the image
+      lacked `scikit-image` and `igraph`; that fix is its own branch).
+- [x] Public gateways rate-limit. Repeated 116 MB downloads drew HTTP 429
+      from both `dweb.link` and `gateway.pinata.cloud`. The account's
+      dedicated gateway (`<name>.mypinata.cloud`) served them. Production
+      should set `PINATA_GATEWAY` to it when deploying, so dashboards,
+      notebook pods and the runs they start all use it.
 - [x] A downstream task finds its upstream tasks' rows: a census pod's
       `assemble(asset="verify_note", run_tag=…)` found all 20, and every
       fetched file's contents matched. A reader pod fetched one by CID
