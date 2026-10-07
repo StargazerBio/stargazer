@@ -191,11 +191,18 @@ can own the index; the Postgres fallback isn't needed.
       load waits; it doesn't fail.
 - [ ] **Q6. Litestream under scale-to-zero:** restore-if-missing at startup,
       and a final sync at SIGTERM inside the `fserve` → launch script →
-      uvicorn chain that plan 25 calls load-bearing. *Not tested in Piece 0:
-      it needs bucket permissions set up, so it's assumed to work as
-      documented. The v0.5.17 source does forward SIGTERM to the `-exec`
-      child, wait for it, then close with a shutdown sync. Piece 5 proves it
-      on the dashboard.*
+      uvicorn chain that plan 25 calls load-bearing. *Not tested in Piece 0;
+      assumed to work as documented. The v0.5.17 source forwards SIGTERM to
+      the `-exec` child, waits for it, then closes with a shutdown sync.
+      Piece 5 proves it on the dashboard.*
+      *Permissions are self-serve: S3 access is a policy attached to the
+      shared `union-us-west-2-stargazerbio-userflyterole` in our own AWS
+      account, with no Union step
+      ([Union BYOC: enabling S3](https://www.union.ai/docs/v2/union/deployment/byoc/enabling-aws-resources/enabling-aws-s3.md)).
+      For the tenant bucket a new policy is probably unnecessary. The role
+      already lists, reads, writes and deletes there (plan 25's store does
+      all four), and Litestream's AWS SDK default chain includes the
+      web-identity credentials pods run with (inferred from the source).*
 
 ### Decisions for the user
 
@@ -274,8 +281,8 @@ deactivated afterwards.
       ([200](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/flytesnacks/runs/udkjvt5mmmrpcg2cs42c),
       [1,000](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/flytesnacks/runs/urxq89c68lbkt77r5wq5),
       [1,000 instant](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/flytesnacks/runs/uvx97lkd6hf4ksr5qkpv))
-- [ ] Litestream in the throwaway image. Skipped: it needs bucket permissions
-      set up first, so Q6 is assumed and proved in Piece 5.
+- [ ] Litestream in the throwaway image. Skipped: Q6 is assumed and proved in
+      Piece 5.
 - [x] Decision: the dashboard owns the index. The Postgres fallback isn't
       needed.
 
