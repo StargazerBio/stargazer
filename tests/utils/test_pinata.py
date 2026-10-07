@@ -53,7 +53,10 @@ async def test_upload_and_delete_file():
             print(f"  Note: Add to CIDS: 'upload_delete.txt': '{comp.cid}'")
 
     finally:
-        pass  # Pinata API issue with delay after upload
+        try:
+            await client.delete(Asset(cid=comp.cid))
+        except Exception as exc:
+            print(f"Cleanup skipped (Pinata post-upload delay?): {exc}")
 
 
 def test_tus_metadata_encoding():
@@ -85,7 +88,7 @@ async def test_tus_upload_multichunk_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setattr(pinata_mod, "TUS_THRESHOLD_BYTES", 0)
     monkeypatch.setattr(pinata_mod, "TUS_CHUNK_BYTES", 4096)
 
-    remote = PinataClient(visibility="private")
+    remote = PinataClient()
     content = b"".join(f"stargazer tus line {i}\n".encode() for i in range(2000))
     src = tmp_path / "tus_roundtrip.txt"
     src.write_bytes(content)
@@ -124,7 +127,7 @@ async def test_create_signed_upload_url_end_to_end(tmp_path):
             "purpose": "signed-url-test",
             "_owner": "integration-test",
         },
-        network="private",
+        network="public",
         expires=120,
         max_file_size=1024,
     )
@@ -171,7 +174,7 @@ async def test_create_signed_upload_url_end_to_end(tmp_path):
 @pytest.mark.pinata
 @pytest.mark.asyncio
 async def test_update_metadata_merges(tmp_path):
-    """Update metadata on an existing private file and verify Pinata MERGES.
+    """Update metadata on an existing public file and verify Pinata MERGES.
 
     Uploads a probe with two keyvalues, PUTs a patch that changes one and
     adds a new key, then re-queries: the untouched key must survive (merge,
@@ -180,12 +183,12 @@ async def test_update_metadata_merges(tmp_path):
     """
     import aiohttp
 
-    client = PinataClient(visibility="private")
+    client = PinataClient()
 
     url = await client.create_signed_upload_url(
         filename="update_meta_test.txt",
         keyvalues={"asset": "never_registered_key", "stage": "before", "keep": "me"},
-        network="private",
+        network="public",
         expires=120,
         max_file_size=1024,
     )
@@ -201,11 +204,10 @@ async def test_update_metadata_merges(tmp_path):
         result = await client.update_metadata(
             cid,
             {"asset": "never_registered_key", "stage": "after", "added": "yes"},
-            network="private",
         )
         assert result["cid"] == cid, "metadata edit must not change the CID"
 
-        found = await client.query({"asset": "never_registered_key"}, network="private")
+        found = await client.query({"asset": "never_registered_key"})
         rec = next((r for r in found if r["cid"] == cid), None)
         assert rec is not None, "updated record should still be queryable"
         kv = rec["keyvalues"]

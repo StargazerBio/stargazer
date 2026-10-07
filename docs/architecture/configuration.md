@@ -29,7 +29,6 @@ All env var defaults are set in `config.py`. If set (even to empty string), the 
 | `STARGAZER_OWNER` | Owner of new assets: their folder in the store, and `_owner` | None (unset → `local`) | No |
 | `PINATA_JWT` | Turns on the public tier | None (unset) | Only for public data |
 | `PINATA_GATEWAY` | IPFS gateway for public downloads | `https://dweb.link` | No |
-| `PINATA_VISIBILITY` | Default network for the asset-manager page's direct Pinata calls | `private` | No |
 | `STARGAZER_TARGET` | Flyte backend for images and deploys: `devbox` or `union` | `devbox` | No |
 | `STARGAZER_REGISTRY` | Image push registry | `localhost:30000` on `devbox`; unset on `union` (the builder's own registry) | No |
 

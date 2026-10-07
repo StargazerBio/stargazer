@@ -430,8 +430,10 @@ Tests run against a SQLite file in a temp dir. No mocks.
 - [x] `stargazer.utils.storage.StorageClient` replaces `LocalStorageClient`:
       private bytes through the store, metadata through the index. TinyDB
       (and the `tinydb` dependency) and the two modes go. The SDK no longer
-      reads Pinata's private network; `PINATA_VISIBILITY` stops riding into
-      pods and is read only by the asset-manager page. `PINATA_JWT` stays.
+      reads Pinata's private network. `PINATA_VISIBILITY` is gone (review,
+      2026-10-07): `PinataClient` defaults every call to the public network,
+      and only the asset-manager page's Private tab still passes "private".
+      `PINATA_JWT` stays.
 - [x] `query()` merges the user's index with Pinata's public index,
       deduplicated by CID, with the user's own row winning.
 - [x] Bundles: `fetch_bundle` downloads by CID into the cache and registers

@@ -11,8 +11,6 @@ Also the source of truth for the lean per-task Flyte environments
 Rules:
 - PINATA_JWT: No default — absence means no public tier (Pinata) at all.
 - PINATA_GATEWAY: IPFS gateway for public downloads. Defaults to dweb.link.
-- PINATA_VISIBILITY: Defaults to "private". Read only by the asset-manager
-  page's direct Pinata calls; the SDK's storage uses Pinata's public network.
 - STARGAZER_LOCAL: Scratch space for task outputs and the download cache.
   Defaults to ~/.stargazer/local.
 - STARGAZER_STORE_ROOT: Where asset bytes are stored — a local directory or a
@@ -45,7 +43,6 @@ from loguru import logger as logger  # noqa: PLC0414
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 os.environ.setdefault("PINATA_GATEWAY", "https://dweb.link")
-os.environ.setdefault("PINATA_VISIBILITY", "private")
 os.environ.setdefault("STARGAZER_LOCAL", str(Path.home() / ".stargazer" / "local"))
 
 # Storage locations set explicitly (a deploy, a pod's env) are forwarded into

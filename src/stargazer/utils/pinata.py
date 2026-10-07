@@ -7,10 +7,10 @@ Provides async interface for authenticated Pinata operations:
 - Updating metadata and deleting files
 - Minting signed upload and download URLs
 
-The SDK's storage client uses it for the public tier only: shared data lives
-on Pinata's public network, readable by everyone and attributed by `_owner`.
-The asset-manager page (`app/assets.py`) still calls it directly on both
-networks.
+Stargazer uses Pinata's public network only: shared data lives there,
+readable by everyone and attributed by `_owner`. Every call defaults to it.
+The asset-manager page (`app/assets.py`) still passes `network="private"`
+for its Private tab until the page moves onto the asset index.
 
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
@@ -72,8 +72,8 @@ class PinataClient:
     A pure remote transport: caching and gateway downloads are the storage
     client's job (`stargazer.utils.storage`).
 
-    PINATA_VISIBILITY sets the default network for uploads and deletes;
-    `query()` and `update_metadata()` take a `network` argument.
+    Every call works on Pinata's public network unless given another
+    `network`. Only the asset-manager page still asks for "private".
 
     Usage:
         client = PinataClient()
@@ -86,19 +86,13 @@ class PinataClient:
     API_BASE = "https://api.pinata.cloud/v3"
     UPLOAD_BASE = "https://uploads.pinata.cloud/v3"
 
-    def __init__(
-        self,
-        jwt: str | None = None,
-        visibility: str | None = None,
-    ):
+    def __init__(self, jwt: str | None = None):
         """Initialize Pinata client.
 
         Args:
             jwt: Pinata JWT token (defaults to PINATA_JWT from config)
-            visibility: "public" or "private" (defaults to PINATA_VISIBILITY from config)
         """
         self._jwt = jwt or os.environ.get("PINATA_JWT") or None
-        self.visibility = visibility or os.environ["PINATA_VISIBILITY"]
 
     @property
     def jwt(self) -> str:
@@ -203,7 +197,9 @@ class PinataClient:
             data = await response.json()
             return data["data"]
 
-    async def upload(self, component: Asset, path: Path) -> None:
+    async def upload(
+        self, component: Asset, path: Path, network: str = "public"
+    ) -> None:
         """Upload a local file to IPFS via Pinata as `component`. Sets component.cid.
 
         Files up to ``TUS_THRESHOLD_BYTES`` go via the plain multipart POST;
@@ -212,16 +208,17 @@ class PinataClient:
         Args:
             component: Asset whose keyvalues describe the file
             path: The local file to upload
+            network: "public" or "private"
         """
         path = Path(path)
         kv = _stamp_owner(component.to_keyvalues())
         if path.stat().st_size > TUS_THRESHOLD_BYTES:
-            await self._upload_tus(component, path, kv)
+            await self._upload_tus(component, path, kv, network)
         else:
-            await self._upload_plain(component, path, kv)
+            await self._upload_plain(component, path, kv, network)
 
     async def _upload_plain(
-        self, component: Asset, path: Path, kv: dict[str, str]
+        self, component: Asset, path: Path, kv: dict[str, str], network: str
     ) -> None:
         """Plain multipart POST upload (≤ TUS_THRESHOLD_BYTES)."""
         url = f"{self.UPLOAD_BASE}/files"
@@ -230,7 +227,7 @@ class PinataClient:
             data = aiohttp.FormData()
             data.add_field("file", open(path, "rb"), filename=path.name)
             data.add_field("name", path.name)
-            data.add_field("network", self.visibility)
+            data.add_field("network", network)
             if kv:
                 data.add_field("keyvalues", json.dumps(kv))
 
@@ -243,7 +240,7 @@ class PinataClient:
                 component.cid = data_obj["cid"]
 
     async def _upload_tus(
-        self, component: Asset, path: Path, kv: dict[str, str]
+        self, component: Asset, path: Path, kv: dict[str, str], network: str
     ) -> None:
         """Resumable TUS upload for large files (chunked, no resume yet).
 
@@ -251,7 +248,7 @@ class PinataClient:
         ``PATCH``, and reads the resulting CID from the ``Upload-Cid`` header
         on the completing response.
         """
-        metadata = _tus_metadata(path.name, self.visibility, kv)
+        metadata = _tus_metadata(path.name, network, kv)
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -293,63 +290,58 @@ class PinataClient:
         component.cid = cid
 
     async def query(
-        self, keyvalues: dict[str, str], network: str | None = None
+        self, keyvalues: dict[str, str], network: str = "public"
     ) -> list[dict]:
-        """Query files by keyvalue metadata from Pinata API.
-
-        By default checks both private and public Pinata endpoints and
-        merges results by CID so files are found regardless of which
-        network they were uploaded to; pass ``network`` to query a single
-        endpoint (the asset-manager page lists per-tab).
+        """Query one Pinata network's files by keyvalue metadata.
 
         Args:
             keyvalues: Metadata key-value pairs to filter by
-            network: "private" or "public" to query one endpoint only
+            network: "public" or "private"
 
         Returns:
             List of matching file records with cid, name, keyvalues, and
-            the network each record was found on
+            the network they were found on
         """
         seen: dict[str, dict] = {}
-        networks = (network,) if network else ("private", "public")
-        for visibility in networks:
-            url = f"{self.API_BASE}/files/{visibility}"
-            params: dict = {"pageLimit": 1000, "order": "DESC"}
-            if keyvalues:
-                for key, value in keyvalues.items():
-                    params[f"keyvalues[{key}]"] = value
+        url = f"{self.API_BASE}/files/{network}"
+        params: dict = {"pageLimit": 1000, "order": "DESC"}
+        for key, value in keyvalues.items():
+            params[f"keyvalues[{key}]"] = value
 
-            async with aiohttp.ClientSession() as session:
-                while True:
-                    async with session.get(
-                        url, headers=self._headers(), params=params
-                    ) as response:
-                        response.raise_for_status()
-                        data = json.loads(await response.text())
+        async with aiohttp.ClientSession() as session:
+            while True:
+                async with session.get(
+                    url, headers=self._headers(), params=params
+                ) as response:
+                    response.raise_for_status()
+                    data = json.loads(await response.text())
 
-                        for f in data.get("data", {}).get("files", []):
-                            if f["cid"] not in seen:
-                                seen[f["cid"]] = {
-                                    "cid": f["cid"],
-                                    "name": f.get("name", ""),
-                                    "keyvalues": f.get("keyvalues", {}),
-                                    "network": visibility,
-                                }
+                for f in data.get("data", {}).get("files", []):
+                    seen.setdefault(
+                        f["cid"],
+                        {
+                            "cid": f["cid"],
+                            "name": f.get("name", ""),
+                            "keyvalues": f.get("keyvalues", {}),
+                            "network": network,
+                        },
+                    )
 
-                        next_token = data.get("data", {}).get("next_page_token")
-                        if not next_token:
-                            break
-                        params["pageToken"] = next_token
+                next_token = data.get("data", {}).get("next_page_token")
+                if not next_token:
+                    break
+                params["pageToken"] = next_token
 
         return list(seen.values())
 
-    async def delete(self, component: Asset) -> None:
+    async def delete(self, component: Asset, network: str = "public") -> None:
         """Delete a file from Pinata by querying for its internal ID first.
 
         Args:
             component: Asset with cid set
+            network: "public" or "private"
         """
-        url = f"{self.API_BASE}/files/{self.visibility}"
+        url = f"{self.API_BASE}/files/{network}"
         params = {"cid": component.cid}
 
         async with aiohttp.ClientSession() as session:
@@ -364,7 +356,7 @@ class PinataClient:
                 file_id = files[0]["id"]
 
             async with session.delete(
-                f"{self.API_BASE}/files/{self.visibility}/{file_id}",
+                f"{self.API_BASE}/files/{network}/{file_id}",
                 headers=self._headers(),
             ) as response:
                 response.raise_for_status()
@@ -373,7 +365,7 @@ class PinataClient:
         self,
         cid: str,
         keyvalues: dict[str, str],
-        network: str | None = None,
+        network: str = "public",
     ) -> dict:
         """Merge keyvalues onto an existing file's metadata (Pinata PUT).
 
@@ -392,7 +384,7 @@ class PinataClient:
             keyvalues: Metadata patch to merge (partial — only these keys
                 change). Reserved ``_*`` keys should be left out; ``_owner``
                 is stamped here.
-            network: "private" or "public"; defaults to the client visibility
+            network: "public" or "private"
 
         Returns:
             The updated record: ``{cid, name, keyvalues, network}``
@@ -400,7 +392,6 @@ class PinataClient:
         Raises:
             ValueError: when no file exists on ``network`` for ``cid``
         """
-        network = network or self.visibility
         kv = _stamp_owner(dict(keyvalues))
         async with aiohttp.ClientSession() as session:
             async with session.get(
