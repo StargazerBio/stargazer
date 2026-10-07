@@ -65,6 +65,17 @@ On Union the root is a prefix in the tenant bucket (`s3://union-us-west-2-starga
 
 A Union deploy refuses to start without `STARGAZER_WORKSPACE_ROOT` (`admin_app.main`). Without a root (a local run), store-backed routes return 503 and the Workspace section says saving isn't available.
 
+## The Asset Index
+
+The dashboard owns the user's asset index (plan 27). Pieces:
+
+- **`app/index_api.py`** — `/index/assets` (upsert), `/index/query`, `/index/assets/{cid}` (get, `PATCH` merge, `DELETE`), running `SqliteIndex` on the dashboard's own file (`STARGAZER_INDEX_URL=~/.stargazer/index.db`, baked by onboarding). Rows are checked for shape only: they carry `_owner` and bundle keys that `build_asset()` rejects from users. No identity headers are read; the in-cluster address skips the login (ROADMAP: "App internal addresses skip Union's login").
+- **Clients** — `stargazer.utils.index.HttpIndex`, selected when `STARGAZER_INDEX_URL` is an `http(s)://` URL. Retries connection errors and 5xx with backoff (a dashboard waking from zero answers once it's up; ~23 s measured for the first request to a cold dashboard), then raises: a task whose write never lands fails.
+- **Plumbing** — `/launch` gives each notebook pod `STARGAZER_INDEX_URL` (the dashboard's in-cluster URL from `INTERNAL_APP_ENDPOINT_PATTERN`, or built from project and domain), `STARGAZER_STORE_ROOT` (the workspace root) and `STARGAZER_OWNER`. Runs a notebook starts inherit them through `stargazer.config._stargazer_env_vars()`, which forwards storage settings only when set explicitly. Onboarding bakes `STARGAZER_STORE_ROOT`, `STARGAZER_OWNER`, the dashboard's own index path, and `STARGAZER_STORE_REGION` when the deployer sets it.
+- **Durability** — the dashboard image carries Litestream (`.deb`, pinned in `admin_app._LITESTREAM`). Its args are `exec python -m app.dashboard_launch`: write `litestream.yml` beside the index, `litestream restore -if-db-not-exists -if-replica-exists` (a failed restore stops the pod, so the old revision keeps serving), then `exec litestream replicate -exec "uvicorn …"`, leaving Litestream as the process `fserve` signals. The replica is `<root>/users/<subject>/index`.
+- **Two traps, both measured on the tenant.** The launcher must be listed in the dashboard's `include=`: the code bundle carries only modules the deployer imported, and its `app/` shadows the installed package in the pod (`No module named app.dashboard_launch`). And Litestream must be told the region: looking it up needs `s3:GetBucketLocation`, which the pod role doesn't have. The launcher passes `AWS_REGION`, `AWS_DEFAULT_REGION` or `STARGAZER_STORE_REGION` and logs which.
+- **Redeploys** — `onboard.refuse_while_running()` lists unfinished runs (`Run.listall` in queued/waiting/initializing/running) in the user's project; `upgrade` checks every user first and deploys nothing if any is busy, and an onboarding re-run checks before its deploy.
+
 ## Pod Hydrate & Save
 
 The pod is a working copy; the store is the durable one. The dashboard never calls a pod (a `requires_auth=True` pod is unreachable server-to-server), so the pod does both ends itself.
@@ -228,9 +239,10 @@ No secret is required to deploy. The org admin's shell, when running `stargazer-
 | Env var | Purpose | If absent |
 |---|---|---|
 | `STARGAZER_TARGET=union` | picks `.flyte/union.yaml` | the devbox is targeted |
-| `STARGAZER_WORKSPACE_ROOT` | where users' notebooks live; baked into every dashboard and pod | `onboard`/`upgrade` refuse to start on Union |
+| `STARGAZER_WORKSPACE_ROOT` | where users' notebooks and assets live; baked into every dashboard and pod | `onboard`/`upgrade` refuse to start on Union |
+| `STARGAZER_STORE_REGION` | the bucket's region, for Litestream, when the pod has no `AWS_REGION` | Litestream looks it up, which the tenant's role refuses |
 
-Per dashboard, onboarding bakes in `FLYTE_PROJECT`, `SG_OWNER_SUBJECT`, the deployer's org as `FLYTE_ORG`, and the notebook image URI as `STARGAZER_NOTEBOOK_IMAGE`. The admin's CLI identity must be an org admin (it creates projects, policies and assignments).
+Per dashboard, onboarding bakes in `FLYTE_PROJECT`, `SG_OWNER_SUBJECT` and `STARGAZER_OWNER`, the deployer's org as `FLYTE_ORG`, the notebook image URI as `STARGAZER_NOTEBOOK_IMAGE`, `STARGAZER_STORE_ROOT` (the workspace root) and the dashboard's own index path as `STARGAZER_INDEX_URL`. The admin's CLI identity must be an org admin (it creates projects, policies and assignments).
 
 ## Known Gaps
 

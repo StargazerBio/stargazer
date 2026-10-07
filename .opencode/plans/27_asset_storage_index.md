@@ -303,6 +303,13 @@ Q7–Q12 decided 2026-10-07; the settled decisions above carry them.
       (`flyte.run(audit_cohorts, …)`) can't work from a laptop until Q15 and
       Q16 are settled. It needed a Pinata key before too. From a hosted
       notebook pod it works once Piece 4 is in.
+- [ ] **Q23. No Stargazer task can start on the tenant.** The `PINATA_JWT`
+      secret doesn't exist there, and a task declaring a missing secret fails
+      in ~120 ms with no attempt (measured: the same trivial task succeeds
+      without the declaration). This predates the plan and blocks driving
+      real Stargazer tasks in Piece 6; its tenant check uses throwaway tasks
+      that declare no secret but call the real SDK. Creating the secret is
+      the user's call (it puts their Pinata key on Union). On the ROADMAP.
 - [ ] **Q22. `GRCh38_TP53.fa` is on Pinata's private network.** In
       `variant_calling_demo`, the reads and the scRNA files are public, but
       the reference is private (measured by CID lookup). Under Q9 it needs
@@ -449,21 +456,43 @@ Tests run against a SQLite file in a temp dir. No mocks.
 
 ## Piece 4 — The dashboard serves the index (Union)
 
-- [ ] A router on the dashboard over the Piece 1 module: upsert, query, merge,
-      delete. Rows validated through `build_asset()`.
-- [ ] `HttpIndex` in the SDK: the same four calls, with retry and backoff.
-- [ ] The dashboard passes its index URL to the notebook pods it launches, and
-      the runs they start inherit it.
+- [x] `app/index_api.py` on the dashboard over the Piece 1 module: upsert,
+      query, get, merge, delete. Rows are checked for shape only, not through
+      `build_asset()`: they carry `_owner` and bundle keys that
+      `build_asset()` rejects from users. Schema validation stays where assets
+      are created.
+- [x] `HttpIndex` in the SDK: the same calls over `httpx` (now a bounded core
+      dependency), retrying connection errors and 5xx with backoff, raising
+      once attempts run out. Tested end to end against the real router
+      in-process, including a full upload-then-`assemble()`.
+- [x] `/launch` gives notebook pods `STARGAZER_INDEX_URL` (the dashboard's
+      in-cluster URL), `STARGAZER_STORE_ROOT` (the workspace root) and
+      `STARGAZER_OWNER`; runs inherit them. Onboarding bakes the dashboard's
+      own index path, store root and owner.
+- [x] Q19: `stargazer-users upgrade` (and an onboarding re-run) refuse while
+      the user has unfinished runs.
 
 ## Piece 5 — The dashboard's database survives scale-to-zero
 
-- [ ] Litestream in the dashboard image, installed the way Piece 0 did it (the
+- [x] Litestream in the dashboard image, installed the way Piece 0 did it (the
       v0.5.17 `.deb` for the build arch, via `with_commands`).
-- [ ] The dashboard's args change from bare `uvicorn …` to
-      `exec python <launcher>`. The launcher writes the Litestream config,
-      restores if missing, then execs
-      `litestream replicate -exec "uvicorn …"`. This is the chain Piece 0
-      proved, and it keeps Litestream as the process `fserve` signals.
+- [x] The dashboard's args are `exec python -m app.dashboard_launch`. The
+      launcher writes the Litestream config, restores if missing, then execs
+      `litestream replicate -exec "uvicorn …"`.
+- [x] Two fixes found on the tenant (2026-10-07), both measured from the pod
+      logs:
+      - The first deploy crash-looped with `No module named
+        app.dashboard_launch`. The code bundle carries only modules the
+        deployer imported, and its `app/` shadows the installed package. The
+        launcher is now in the dashboard's `include=`.
+      - The second failed the restore with AccessDenied on
+        `s3:GetBucketLocation`: Litestream looks up the region when none is
+        given, and the pod role can't. The launcher now passes `AWS_REGION`,
+        `AWS_DEFAULT_REGION` or `STARGAZER_STORE_REGION` (bakeable at
+        deploy).
+      The third deploy came up: `/index/query` answers `200 []` in 0.3 s
+      through the front door, and the pod logs show Litestream compacting
+      and snapshotting `index.db`.
 - [ ] Rows written before a scale-to-zero are there after the cold start, on
       the real dashboard image.
 
