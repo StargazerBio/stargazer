@@ -303,19 +303,17 @@ Q7–Q12 decided 2026-10-07; the settled decisions above carry them.
       (`flyte.run(audit_cohorts, …)`) can't work from a laptop until Q15 and
       Q16 are settled. It needed a Pinata key before too. From a hosted
       notebook pod it works once Piece 4 is in.
-- [ ] **Q23. No Stargazer task can start on the tenant.** The `PINATA_JWT`
-      secret doesn't exist there, and a task declaring a missing secret fails
+- [x] **Q23. No Stargazer task could start on the tenant.** The `PINATA_JWT`
+      secret didn't exist there, and a task declaring a missing secret fails
       in ~120 ms with no attempt (measured: the same trivial task succeeds
-      without the declaration). This predates the plan and blocks driving
-      real Stargazer tasks in Piece 6; its tenant check uses throwaway tasks
-      that declare no secret but call the real SDK. Creating the secret is
-      the user's call (it puts their Pinata key on Union). On the ROADMAP.
-- [ ] **Q22. `GRCh38_TP53.fa` is on Pinata's private network.** In
-      `variant_calling_demo`, the reads and the scRNA files are public, but
-      the reference is private (measured by CID lookup). Under Q9 it needs
-      pinning to the public network so `assemble()` finds it through the
-      public tier; until then it's found only after `fetch_bundle()`, and its
-      gateway download may fail. Publishing is the user's call.
+      without the declaration). Resolved 2026-10-07: the user added
+      `PINATA_JWT` as an org-wide secret.
+- [x] **Q22. `GRCh38_TP53.fa` was on Pinata's private network.** Resolved
+      2026-10-07: the user deleted every private Pinata file, and the
+      reference was re-uploaded to the public network from
+      `tests/fixtures/general/` with its manifest keyvalues. Its CID matches
+      the manifest, and all five bundle files are public (measured by CID
+      lookup).
 
 ## Delivery
 

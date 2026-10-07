@@ -12,15 +12,6 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    modes and Pinata as the working store go. Pinata stays as the public tier
    for shared data, attributed by `_owner`. The tenant checks are done.
    [`27_asset_storage_index.md`](./27_asset_storage_index.md)
-- **No Stargazer task can start on Union: the `PINATA_JWT` secret doesn't
-   exist there.** Every `TaskEnvironment` declares it (`STARGAZER_SECRETS`),
-   and a task declaring a secret the tenant doesn't have fails within ~120 ms
-   with no attempt and no logs. Measured 2026-10-07: the same trivial task
-   succeeded without the declaration and failed with it, and no secret is
-   listed in `flytesnacks` or `u-pryce`. Fix: `flyte create secret
-   PINATA_JWT` (org-scoped) with the Pinata key; it's also what the public
-   tier needs in pods. Or stop declaring it where the public tier isn't
-   needed. Found during plan 27's tenant check.
 - **Union production deploy** (tenant: `stargazerbio.us-west-2.unionai.cloud`).
    Done in PRs: per-pod session keys (#2), the `STARGAZER_TARGET`
    devbox/union switch, a configurable domain, and a fixed per-deploy
