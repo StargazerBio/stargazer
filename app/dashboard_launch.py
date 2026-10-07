@@ -54,13 +54,32 @@ def replica_url(env: dict) -> str | None:
     return f"{root.rstrip('/')}/users/{owner}/index"
 
 
-def litestream_config(db: Path, replica: str) -> str:
-    """Litestream config replicating `db` to `replica`.
+_REGION_KEYS = ("AWS_REGION", "AWS_DEFAULT_REGION", "STARGAZER_STORE_REGION")
 
-    No region: Litestream looks up an S3 bucket's region itself, and the pod's
-    IAM role supplies credentials through the AWS SDK's default chain.
+
+def store_region(env: dict) -> str | None:
+    """The bucket's region: `AWS_REGION`, `AWS_DEFAULT_REGION`, or `STARGAZER_STORE_REGION`.
+
+    It has to be given. Without one Litestream looks the region up, which needs
+    `s3:GetBucketLocation`, and the tenant's pod role doesn't grant it
+    (measured: the restore failed with AccessDenied).
     """
-    return f"dbs:\n  - path: {db}\n    replica:\n      url: {replica}\n"
+    for key in _REGION_KEYS:
+        if env.get(key):
+            return env[key]
+    return None
+
+
+def litestream_config(db: Path, replica: str, region: str | None) -> str:
+    """Litestream config replicating `db` to `replica` in `region`.
+
+    Credentials come from the pod's IAM role through the AWS SDK's default
+    chain.
+    """
+    text = f"dbs:\n  - path: {db}\n    replica:\n      url: {replica}\n"
+    if region:
+        text += f"      region: {region}\n"
+    return text
 
 
 def main() -> None:
@@ -71,7 +90,10 @@ def main() -> None:
     db = Path(os.environ["STARGAZER_INDEX_URL"].removeprefix("sqlite://")).expanduser()
     db.parent.mkdir(parents=True, exist_ok=True)
     config = db.parent / "litestream.yml"
-    config.write_text(litestream_config(db, replica))
+    region = store_region(os.environ)
+    source = next((k for k in _REGION_KEYS if os.environ.get(k)), "lookup")
+    print(f"[sg] index {db} -> {replica} (region {region} from {source})", flush=True)
+    config.write_text(litestream_config(db, replica, region))
     subprocess.run(
         [
             "litestream",

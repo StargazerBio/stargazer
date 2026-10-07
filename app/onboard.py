@@ -39,6 +39,7 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 
 import argparse
 import asyncio
+import os
 import re
 import time
 from functools import cache
@@ -228,6 +229,10 @@ def deploy_dashboard(project: str, owner_subject: str) -> str:
     env_vars.pop("STARGAZER_STORE_ROOT", None)
     if config.WORKSPACE_ROOT:
         env_vars["STARGAZER_STORE_ROOT"] = config.WORKSPACE_ROOT
+    # The bucket's region, for Litestream (app.dashboard_launch), when the
+    # deployer gives one; the pod's AWS_REGION wins if it has one.
+    if region := os.environ.get("STARGAZER_STORE_REGION"):
+        env_vars["STARGAZER_STORE_REGION"] = region
     # In-cluster init can't discover the org in an app pod; bake the deployer's.
     if org := get_init_config().org:
         env_vars["FLYTE_ORG"] = org
