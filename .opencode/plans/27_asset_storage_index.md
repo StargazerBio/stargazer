@@ -159,8 +159,8 @@ Recorded so they aren't relitigated mid-build.
 
 ### Tenant behavior — gates Pieces 4–6
 
-Answered on the tenant in Piece 0 (details there), except Q6. The dashboard
-can own the index; the Postgres fallback isn't needed.
+All six answered on the tenant in Piece 0 (details there). The dashboard can
+own the index; the Postgres fallback isn't needed.
 
 - [x] **Q1. Can a task pod reach the dashboard?** Yes, at the internal URL,
       `http://<app>.<project>-<domain>.svc.cluster.local`: 200 in 0.01s. Task
@@ -189,20 +189,26 @@ can own the index; the Postgres fallback isn't needed.
       from one client got in at about 45 per second (cause not isolated).
       1,000 instant requests finished in 2.75s, about 360 per second. Excess
       load waits; it doesn't fail.
-- [ ] **Q6. Litestream under scale-to-zero:** restore-if-missing at startup,
-      and a final sync at SIGTERM inside the `fserve` → launch script →
-      uvicorn chain that plan 25 calls load-bearing. *Not tested in Piece 0;
-      assumed to work as documented. The v0.5.17 source forwards SIGTERM to
-      the `-exec` child, waits for it, then closes with a shutdown sync.
-      Piece 5 proves it on the dashboard.*
-      *Permissions are self-serve: S3 access is a policy attached to the
-      shared `union-us-west-2-stargazerbio-userflyterole` in our own AWS
-      account, with no Union step
-      ([Union BYOC: enabling S3](https://www.union.ai/docs/v2/union/deployment/byoc/enabling-aws-resources/enabling-aws-s3.md)).
-      For the tenant bucket a new policy is probably unnecessary. The role
-      already lists, reads, writes and deletes there (plan 25's store does
-      all four), and Litestream's AWS SDK default chain includes the
-      web-identity credentials pods run with (inferred from the source).*
+- [x] **Q6. Does Litestream restore at startup and sync at SIGTERM inside
+      the `fserve` chain?** Yes, with no new IAM policy.
+      - **Chain:** app args `exec python launch_probe.py`. The launcher
+        writes the config, runs `litestream restore -if-db-not-exists
+        -if-replica-exists`, then execs
+        `litestream replicate -exec "uvicorn …"`.
+      - **Setup:** `sync-interval: 1h`, so rows could only reach the bucket
+        through the shutdown sync.
+      - **Before shutdown:** 50 rows written, and the replica held only
+        transaction 1.
+      - **After scale-to-zero:** following 4 idle minutes, a fresh replica
+        restored in 0.56s and had all 50 rows, every one written by the old
+        replica. Transactions 2–3 were now in the bucket, and the wake took
+        3.93s end to end.
+      - **Startup with no replica:** exit 0 in 0.46s.
+      - **Credentials:** Litestream used the pod's existing role. Extra S3
+        access, if ever needed, is a policy on the shared
+        `union-us-west-2-stargazerbio-userflyterole` in our own AWS account,
+        with no Union step
+        ([Union BYOC: enabling S3](https://www.union.ai/docs/v2/union/deployment/byoc/enabling-aws-resources/enabling-aws-s3.md)).
 
 ### Decisions for the user
 
@@ -257,8 +263,7 @@ Two PRs, both from this branch:
    on Piece 0. Union runs have no index until PR 2 lands, so the two should
    land close together.
 2. **Union** (Pieces 4–7): the dashboard index API, the HTTP client,
-   Litestream, the tenant run and the docs. Q1–Q5 are answered (Piece 0);
-   Q6 is proved in Piece 5.
+   Litestream, the tenant run and the docs. Q1–Q6 are answered (Piece 0).
 
 ---
 
@@ -281,8 +286,9 @@ deactivated afterwards.
       ([200](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/flytesnacks/runs/udkjvt5mmmrpcg2cs42c),
       [1,000](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/flytesnacks/runs/urxq89c68lbkt77r5wq5),
       [1,000 instant](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/flytesnacks/runs/uvx97lkd6hf4ksr5qkpv))
-- [ ] Litestream in the throwaway image. Skipped: Q6 is assumed and proved in
-      Piece 5.
+- [x] Litestream v0.5.17 in the throwaway image, `sync-interval: 1h`: write,
+      let it scale to zero, wake it, read back. Answers Q6. The replica prefix
+      (`stargazer/_probe/plan27/`) was deleted afterwards.
 - [x] Decision: the dashboard owns the index. The Postgres fallback isn't
       needed.
 
@@ -297,6 +303,8 @@ deactivated afterwards.
 | 1,000 × 2s concurrent | All 200 OK, up to 853 in flight, 22.6s wall |
 | 1,000 instant | All 200 OK, 2.75s wall |
 | Redeploy under polling | 863/863 OK, one clean v1→v2 switch, v1 answered 0.12s past v2's start |
+| Litestream restore, no replica | Exit 0 in 0.46s |
+| Litestream across scale-to-zero (1h interval) | 50/50 rows restored in 0.56s; only the SIGTERM sync could have uploaded them |
 
 Not tested, and outside this plan: whether a pod in another project can reach
 an app's internal URL, and whether a forged `X-User-Subject` sent there
@@ -367,9 +375,15 @@ Tests run against a SQLite file in a temp dir. No mocks.
 
 ## Piece 5 — The dashboard's database survives scale-to-zero
 
-- [ ] Litestream in the dashboard image: restore if missing at startup,
-      replicate while running, final sync at SIGTERM, exec chain intact.
-- [ ] Rows written before a scale-to-zero are there after the cold start.
+- [ ] Litestream in the dashboard image, installed the way Piece 0 did it (the
+      v0.5.17 `.deb` for the build arch, via `with_commands`).
+- [ ] The dashboard's args change from bare `uvicorn …` to
+      `exec python <launcher>`. The launcher writes the Litestream config,
+      restores if missing, then execs
+      `litestream replicate -exec "uvicorn …"`. This is the chain Piece 0
+      proved, and it keeps Litestream as the process `fserve` signals.
+- [ ] Rows written before a scale-to-zero are there after the cold start, on
+      the real dashboard image.
 
 ## Piece 6 — Verify on the tenant
 
