@@ -5,7 +5,8 @@ index into a SQLite database. On Union, each user's dashboard owns that
 database: tasks and notebook pods upload files straight to the bucket and send
 the dashboard one small row per asset. On a laptop the same database is a
 local file, so local mode and the hosted deploy share one code path.
-`assemble()` becomes a real query.
+`assemble()` becomes a real query. Shared data stays public on Pinata, readable
+by everyone and attributed to whoever uploaded it.
 
 **Why.** Pinata does three jobs today: it stores the bytes, holds the keyvalue
 index, and publishes public data. That makes it hard to move off. On Union it
@@ -15,7 +16,7 @@ filesystem) is a second, separate mode, and it doesn't survive an ephemeral
 pod. Union Artifacts would give a hosted index, but the open-source backend has
 no artifact service. Splitting the three jobs lets each go to the right place:
 bytes to whatever object store `flyte.storage` reaches, the index to SQLite we
-own, and IPFS kept for publishing.
+own, and Pinata kept for public, shared data.
 
 Isolation and security are out of scope: assumed solvable, and tracked on the
 ROADMAP (**Per-user storage isolation**, **Org-wide platform key in every
@@ -26,9 +27,10 @@ pod**).
 | | Today | After |
 |---|---|---|
 | Where task outputs go | Pinata, or local disk without a JWT | The object store: `file://` on a laptop, the tenant bucket on Union |
-| How `assemble()` finds them | Pinata's keyvalue filter, or a TinyDB scan | A SQL query against the user's index |
+| How `assemble()` finds them | Pinata's keyvalue filter, or a TinyDB scan | A SQL query against the user's index, merged with Pinata's public index |
+| Shared data (bundles, references) | Pinata, public or private | Pinata's public network, attributed by `_owner` |
 | Asset identity | IPFS CID from Pinata, or `local_<md5>` | IPFS CID computed locally, everywhere |
-| An asset's file handle | `path: Path` | `file: flyte.io.File` |
+| An asset's file handle | `path: Path` | `path: flyte.io.File` |
 | The dashboard's view of your assets | Pinata listing (off on Union) | Its own database |
 | Publishing to IPFS | Implicit in every upload | An explicit step (follow-up) |
 
@@ -85,19 +87,35 @@ Recorded so they aren't relitigated mid-build.
 - **Identity is the IPFS CID, computed locally** with Pinata's parameters. The
   `cid` field keeps its name and means what it says: a published file's CID
   equals its working identity, and bundle CIDs match locally computed ones.
-- **Blobs are content-addressed**: `<STORE_ROOT>/blobs/<cid>`. An upload whose
-  blob already exists skips the transfer.
-- **`Asset.path: Path` becomes `Asset.file: flyte.io.File`.** `update()`
-  computes the CID, uploads with
-  `File.from_local(path, remote_destination=…/blobs/<cid>, hash_method=cid)` so
-  Flyte's cache key is the CID, then writes the index row. A row rebuilds the
-  handle with `File.from_existing_remote(uri, file_cache_key=cid)`.
+- **Private files are stored per user** (Q8):
+  `<STORE_ROOT>/users/<subject>/assets/<cid>`. The subject is
+  `STARGAZER_OWNER` (the Union subject, already forwarded into pods), or
+  `local` on a laptop that doesn't set it. An upload whose file already exists
+  skips the transfer.
+- **`Asset.path` becomes a `flyte.io.File`** (Q10). Tasks work with it through
+  the File API. `update()` computes the CID, uploads with
+  `File.from_local(path, remote_destination=…/assets/<cid>, hash_method=cid)`
+  so Flyte's cache key is the CID, then writes the index row. A row rebuilds
+  the handle with `File.from_existing_remote(uri, file_cache_key=cid)`.
 - **Local cache layout**: `<STARGAZER_LOCAL>/<cid>/<name>`, so a downloaded
-  file keeps its real filename (GATK refuses inputs without it).
-- **Every indexed asset's bytes are in the store.** Importing a bundle fetches
-  it from the IPFS gateway once, checks its CID locally, and puts it in the
-  store. IPFS is a source for imports and a destination for publishing, never a
-  location a row points at.
+  file keeps its real filename (GATK refuses inputs without it). How the cache
+  sits behind `File.download()` is Q17.
+- **Two tiers** (Q9). Private assets live in the user's store and index.
+  Shared data is public data on Pinata's public network: anyone can read it,
+  with no per-user restriction, and `_owner` records who uploaded it. Bundles
+  and reference data live there. `assemble()` queries both and merges by CID;
+  on a collision the user's own row wins. Promoting a private asset to public
+  is a follow-up (`publish()`).
+- **Same CID, new metadata is allowed and warned** (Q7). One row per CID: a
+  re-upload whose keyvalues differ replaces them and logs a WARNING naming the
+  CID and the keys that changed.
+- **`_owner` is stamped everywhere** (Q12): on every private index row and on
+  every public upload, from `STARGAZER_OWNER`. It matches Pinata, makes
+  promotion to public a plain copy, and helps trace attribution errors and
+  leaks.
+- **A write that doesn't land fails the task** (Q11). If the index row hasn't
+  committed after retries, `update()` raises, and the run is re-run. There are
+  no backup records.
 - **The index is one SQLite table**, filtered with `json_extract`:
 
   ```sql
@@ -142,9 +160,10 @@ Recorded so they aren't relitigated mid-build.
 - **The dashboard's database is durable through the bucket**: restored at
   startup and replicated continuously by Litestream to
   `<STORE_ROOT>/users/<subject>/index/`.
-- **TinyDB, the two storage modes and the Pinata remote go.** Pinata stays only
-  where the asset-manager page uses it, until that page moves to the index
-  (follow-up).
+- **TinyDB and the two storage modes go, and so does Pinata's private
+  network**, since private data lives in the store. Pinata stays as the public
+  tier, so `PINATA_JWT` stays in the task environments: Pinata needs it even
+  to query public files.
 - **Not chosen:**
   - Union Artifacts as the index: Union-only. It could become a read-only
     projection for console lineage later.
@@ -212,28 +231,27 @@ own the index; the Postgres fallback isn't needed.
 
 ### Decisions for the user
 
-- [ ] **Q7. Byte-identical files with different metadata.** One row per CID
-      means they collapse into one asset, and the second upload's metadata
-      wins. TinyDB local mode already behaves this way. It's rare in genomics,
-      where sample IDs end up inside the files, but possible for generic
-      uploads. The alternative is a random row ID with the CID as a column.
-- [ ] **Q8. Blob scope.** One shared `blobs/` (dedup across users) or
-      `users/<subject>/blobs/` (ready for prefix-scoped permissions later,
-      with shared data stored once per user).
-- [ ] **Q9. Where shared data lives.** Bundles and references imported into
-      each user's index on first use, or one shared catalog that every
-      dashboard reads alongside its own.
-- [ ] **Q10. The local path after `fetch()`.** Tasks read `asset.path` today.
-      Either `fetch()` returns the path, or it sets an attribute that isn't
-      serialized. The second keeps the 21 task files close to unchanged.
-- [ ] **Q11. Backup records from day one?** Tasks could also write each row as
-      a small JSON object next to its blob, so the index can always be rebuilt
-      from the bucket and an outage or an upgrade overlap loses nothing. It
-      costs one extra write per asset. Q4 measured the redeploy window at
-      under a second, plus restore time, so the choice is between this and
-      upgrading only when the user has no runs going.
-- [ ] **Q12. Does `_owner` survive?** A per-user index already records whose
-      an asset is.
+Q7–Q12 decided 2026-10-07; the settled decisions above carry them.
+
+- [x] **Q7. Byte-identical files with different metadata.** A legitimate
+      outcome: one row per CID, the new keyvalues replace the old, and a
+      WARNING is logged.
+- [x] **Q8. File scope.** Per user, at `users/<subject>/assets/` for now.
+- [x] **Q9. Where shared data lives.** On Pinata's public network, with no
+      per-user restriction and only uploader attribution (`_owner`).
+- [x] **Q10. The local path after `fetch()`.** `asset.path` is a
+      `flyte.io.File`, which tasks handle through the File API. Where the
+      cache sits is Q17.
+- [x] **Q11. Backup records?** No. A task whose index write doesn't land fails
+      loudly, and the run is re-run.
+- [x] **Q12. Does `_owner` survive?** Yes: Pinata parity, cheap promotion to
+      public, and a trail for attribution errors and leaks.
+- [ ] **Q19. The upgrade window.** Failing loudly covers writes that don't
+      land. It doesn't cover Q4's window, where the old dashboard replica
+      accepts a write after the new one has already restored, so the write is
+      acknowledged and then lost without any error. The cheapest guard is for
+      `stargazer-users upgrade` to refuse while the user has runs going. The
+      alternative is to accept the risk.
 
 ### Details to confirm while building
 
@@ -253,15 +271,27 @@ own the index; the Postgres fallback isn't needed.
 - [ ] **Q16. The devbox.** Its app tier doesn't run (no Union auth), so
       remote runs there have no dashboard to index into. Union first, devbox
       later; see the ROADMAP's devbox app-tier item.
+- [ ] **Q17. The cache behind `File.download()`.** Flyte's `download()` has no
+      cache: with no argument it downloads to a fresh temp path every call,
+      and with a path it downloads there again (SDK source). On a laptop that
+      means copying out of the `file://` store on every read. Decide in
+      Piece 2 how `<STARGAZER_LOCAL>/<cid>/<name>` sits in front of it, without
+      ever leaving `asset.path` pointing at a pod-local file that another
+      task can't read.
+- [ ] **Q18. Public assets as `File`s.** A public asset's `path` would point at
+      an IPFS gateway URL. Confirm `File.download()` reads that through
+      `flyte.storage` (fsspec HTTP). Also, a laptop without a Pinata JWT can't
+      query the public index, so bundles wouldn't show up in `assemble()`
+      there. The bundle manifests could stand in.
 
 ## Delivery
 
 Two PRs, both from this branch:
 
-1. **SDK** (Pieces 1–3): the CID module, the SQLite index, `Asset.file`, and
-   the rewired storage client. Local mode works end to end. It doesn't depend
-   on Piece 0. Union runs have no index until PR 2 lands, so the two should
-   land close together.
+1. **SDK** (Pieces 1–3): the CID module, the SQLite index, `Asset.path` as a
+   `File`, and the rewired storage client. Local mode works end to end. It
+   doesn't depend on Piece 0. Union runs have no index until PR 2 lands, so
+   the two should land close together.
 2. **Union** (Pieces 4–7): the dashboard index API, the HTTP client,
    Litestream, the tenant run and the docs. Q1–Q6 are answered (Piece 0).
 
@@ -329,7 +359,9 @@ internal path skips the front door. Tracked on the ROADMAP.
 - [ ] A list-valued filter matches any of its values in one call.
 - [ ] A companion lookup by `<asset_key>_cid` returns only that parent's
       companions.
-- [ ] Upserting the same row twice leaves one row.
+- [ ] Upserting the same row twice leaves one row, with no warning.
+- [ ] Upserting a CID with different keyvalues replaces them and logs a
+      WARNING naming the CID and the changed keys.
 - [ ] Concurrent merges on one row keep every key.
 - [ ] A read during a held write returns the last committed state without
       waiting.
@@ -346,13 +378,16 @@ Tests run against a SQLite file in a temp dir. No mocks.
 
 ## Piece 2 — Assets carry a `flyte.io.File`
 
-- [ ] `Asset.path` → `Asset.file: File | None`, plus the local path per Q10.
-- [ ] `update(path)`: compute the CID, upload the blob (skipped when it
-      exists), upsert the row.
-- [ ] `fetch()`: return the cached `<STARGAZER_LOCAL>/<cid>/<name>` if present,
-      else download from `file`. Companions work as today.
-- [ ] `specialize()` and `from_dict()` rebuild `file` from a row.
-- [ ] Tasks, notebooks and the MCP marshaller follow the new field.
+- [ ] `Asset.path: Path | None` → `File | None`. Tasks get local copies
+      through the File API, with the cache placed per Q17.
+- [ ] `update(path)`: compute the CID, upload to
+      `users/<subject>/assets/<cid>` (skipped when it exists), and upsert the
+      row with `_owner` stamped. Raise if the row hasn't committed after
+      retries.
+- [ ] `fetch()`: downloads companions as today, through the cache.
+- [ ] `specialize()` and `from_dict()` rebuild `path` from a row, or from a
+      Pinata public record (Q18).
+- [ ] Tasks, notebooks and the MCP marshaller follow the new type.
 
 ## Piece 3 — The storage client, rewired
 
@@ -360,11 +395,15 @@ Tests run against a SQLite file in a temp dir. No mocks.
       laptop defaults (`file://~/.stargazer/store`,
       `sqlite:///~/.stargazer/index.db`), forwarded by
       `_stargazer_env_vars()`.
-- [ ] `LocalStorageClient` sends bytes through the store and metadata through
-      the index backend. The Pinata remote, TinyDB and the two modes go, and
-      `PINATA_JWT` leaves the task environments.
-- [ ] Bundles: fetch from the gateway, verify the CID, put the file in the
-      store, upsert the row. `_upsert_local` goes.
+- [ ] `LocalStorageClient` sends private bytes through the store and metadata
+      through the index backend. TinyDB and the two modes go. Pinata becomes
+      the public tier only, so `PINATA_VISIBILITY` and private signed-URL
+      downloads go and `PINATA_JWT` stays.
+- [ ] `query()` merges the user's index with Pinata's public index,
+      deduplicated by CID, with the user's own row winning.
+- [ ] Bundles stay on Pinata's public network. `fetch_bundle` downloads them
+      by CID into the cache, and `_upsert_local` goes (laptops without a JWT:
+      Q18).
 - [ ] `verify-stargazer` on the scRNA pipeline and GATK notebooks, locally.
 
 ## Piece 4 — The dashboard serves the index (Union)
@@ -409,8 +448,9 @@ Tests run against a SQLite file in a temp dir. No mocks.
 
 ## Follow-ups (not in this plan)
 
-- `publish(asset)`: pin to IPFS on demand. The CID is already the asset's
-  identity, so nothing about the asset changes.
+- `publish(asset)`: promote a private asset to the public tier by uploading
+  it to Pinata's public network with its keyvalues and `_owner`. The CID is
+  already the asset's identity, so nothing about the asset changes.
 - The asset-manager page on the index instead of Pinata. That also retires the
   TUS browser-upload item for uploads that go to the store.
 - A read-only Artifacts projection of selected outputs, for console lineage
