@@ -7,13 +7,15 @@ is made durable in the bucket by Litestream, at
 `<STARGAZER_STORE_ROOT>/users/<owner>/index`. This module is the dashboard's
 startup command (`exec python -m app.dashboard_launch`):
 
-1. Write the Litestream config next to the index file.
-2. Restore the index from the bucket if the file is missing and a replica
+1. Restore the index from the bucket if the file is missing and a replica
    exists. A failed restore stops the dashboard rather than starting it on
    an empty index.
-3. `exec` into `litestream replicate -exec "uvicorn …"`, so Litestream is the
+2. `exec` into `litestream replicate -exec "uvicorn …"`, so Litestream is the
    process Flyte's `fserve` signals at scale-to-zero: it forwards SIGTERM to
    uvicorn, waits for it to exit, then syncs one last time.
+
+Both commands take the index file and the replica URL as arguments, so there
+is no Litestream config file.
 
 Without a bucket root or an owner (local development, a deploy with no
 store) there is nowhere durable to replicate to, and the launcher execs
@@ -42,44 +44,26 @@ SERVER = [
 ]
 
 
+_REGION_KEYS = ("AWS_REGION", "AWS_DEFAULT_REGION", "STARGAZER_STORE_REGION")
+
+
 def replica_url(env: dict) -> str | None:
     """The bucket location the index replicates to, or None without one.
 
-    Needs a bucket store root (`s3://…`) and the dashboard's owner.
+    Needs a bucket store root (`s3://…`) and the dashboard's owner. The
+    bucket's region rides on the URL (`?region=`), taken from `AWS_REGION`,
+    `AWS_DEFAULT_REGION` or `STARGAZER_STORE_REGION`. It has to be given:
+    without it Litestream looks the region up, which needs
+    `s3:GetBucketLocation`, and the tenant's pod role doesn't grant it
+    (measured: the restore failed with AccessDenied).
     """
     root = env.get("STARGAZER_STORE_ROOT", "")
     owner = env.get("SG_OWNER_SUBJECT", "")
     if not root.startswith("s3://") or not owner:
         return None
-    return f"{root.rstrip('/')}/users/{owner}/index"
-
-
-_REGION_KEYS = ("AWS_REGION", "AWS_DEFAULT_REGION", "STARGAZER_STORE_REGION")
-
-
-def store_region(env: dict) -> str | None:
-    """The bucket's region: `AWS_REGION`, `AWS_DEFAULT_REGION`, or `STARGAZER_STORE_REGION`.
-
-    It has to be given. Without one Litestream looks the region up, which needs
-    `s3:GetBucketLocation`, and the tenant's pod role doesn't grant it
-    (measured: the restore failed with AccessDenied).
-    """
-    for key in _REGION_KEYS:
-        if env.get(key):
-            return env[key]
-    return None
-
-
-def litestream_config(db: Path, replica: str, region: str | None) -> str:
-    """Litestream config replicating `db` to `replica` in `region`.
-
-    Credentials come from the pod's IAM role through the AWS SDK's default
-    chain.
-    """
-    text = f"dbs:\n  - path: {db}\n    replica:\n      url: {replica}\n"
-    if region:
-        text += f"      region: {region}\n"
-    return text
+    url = f"{root.rstrip('/')}/users/{owner}/index"
+    region = next((env[k] for k in _REGION_KEYS if env.get(k)), None)
+    return f"{url}?region={region}" if region else url
 
 
 def main() -> None:
@@ -89,26 +73,22 @@ def main() -> None:
         os.execvp(SERVER[0], SERVER)
     db = Path(os.environ["STARGAZER_INDEX_URL"].removeprefix("sqlite://")).expanduser()
     db.parent.mkdir(parents=True, exist_ok=True)
-    config = db.parent / "litestream.yml"
-    region = store_region(os.environ)
-    source = next((k for k in _REGION_KEYS if os.environ.get(k)), "lookup")
-    print(f"[sg] index {db} -> {replica} (region {region} from {source})", flush=True)
-    config.write_text(litestream_config(db, replica, region))
+    print(f"[sg] index {db} -> {replica}", flush=True)
     subprocess.run(
         [
             "litestream",
             "restore",
-            "-config",
-            str(config),
             "-if-db-not-exists",
             "-if-replica-exists",
+            "-o",
             str(db),
+            replica,
         ],
         check=True,
     )
     os.execvp(
         "litestream",
-        ["litestream", "replicate", "-config", str(config), "-exec", " ".join(SERVER)],
+        ["litestream", "replicate", "-exec", " ".join(SERVER), str(db), replica],
     )
 
 

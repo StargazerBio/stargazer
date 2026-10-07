@@ -477,8 +477,13 @@ Tests run against a SQLite file in a temp dir. No mocks.
 - [x] Litestream in the dashboard image, installed the way Piece 0 did it (the
       v0.5.17 `.deb` for the build arch, via `with_commands`).
 - [x] The dashboard's args are `exec python -m app.dashboard_launch`. The
-      launcher writes the Litestream config, restores if missing, then execs
-      `litestream replicate -exec "uvicorn …"`.
+      launcher restores if missing, then execs
+      `litestream replicate -exec "uvicorn …"`. Since review (2026-10-07) both
+      commands take the index path and replica URL as arguments, with the
+      region as `?region=` on the URL, instead of a generated config file.
+      Measured locally with Litestream 0.5.17 and a `file://` replica: rows
+      written under the launcher came back after the file was deleted, and a
+      present file skipped the restore. Not yet redeployed to the tenant.
 - [x] Two fixes found on the tenant (2026-10-07), both measured from the pod
       logs:
       - The first deploy crash-looped with `No module named

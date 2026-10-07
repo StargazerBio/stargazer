@@ -1,8 +1,6 @@
 """Tests for the dashboard launcher: when Litestream runs, and what it replicates."""
 
-from pathlib import Path
-
-from app.dashboard_launch import SERVER, litestream_config, replica_url, store_region
+from app.dashboard_launch import SERVER, replica_url
 
 
 def test_replica_lives_under_the_owner_in_the_store():
@@ -21,31 +19,27 @@ def test_no_durable_store_means_no_litestream():
     assert replica_url({"STARGAZER_STORE_ROOT": "s3://bucket/stargazer"}) is None
 
 
-def test_config_replicates_the_index_file():
-    """The Litestream config names the index file, the replica and its region."""
-    text = litestream_config(
-        Path("/home/flyte/.stargazer/index.db"),
-        "s3://bucket/stargazer/users/u1/index",
-        "us-west-2",
-    )
-    assert "path: /home/flyte/.stargazer/index.db" in text
-    assert "url: s3://bucket/stargazer/users/u1/index" in text
-    assert "region: us-west-2" in text
+def test_replica_url_carries_the_region():
+    """The bucket's region rides on the replica URL: AWS_REGION, then
+    AWS_DEFAULT_REGION, then the deploy's own setting.
 
-
-def test_region_comes_from_the_pod_first():
-    """AWS_REGION, then AWS_DEFAULT_REGION, then the deploy's own setting.
-
-    The region has to be given: Litestream's lookup needs s3:GetBucketLocation,
-    which the tenant's role doesn't grant (measured on the tenant).
+    It has to be given: Litestream's lookup needs s3:GetBucketLocation, which
+    the tenant's role doesn't grant (measured on the tenant).
     """
+    env = {"STARGAZER_STORE_ROOT": "s3://bucket/stargazer", "SG_OWNER_SUBJECT": "u1"}
+    base = "s3://bucket/stargazer/users/u1/index"
     assert (
-        store_region({"AWS_REGION": "us-west-2", "AWS_DEFAULT_REGION": "x"})
-        == "us-west-2"
+        replica_url({**env, "AWS_REGION": "us-west-2", "AWS_DEFAULT_REGION": "x"})
+        == f"{base}?region=us-west-2"
     )
-    assert store_region({"AWS_DEFAULT_REGION": "eu-west-1"}) == "eu-west-1"
-    assert store_region({"STARGAZER_STORE_REGION": "us-east-2"}) == "us-east-2"
-    assert store_region({}) is None
+    assert (
+        replica_url({**env, "AWS_DEFAULT_REGION": "eu-west-1"})
+        == f"{base}?region=eu-west-1"
+    )
+    assert (
+        replica_url({**env, "STARGAZER_STORE_REGION": "us-east-2"})
+        == f"{base}?region=us-east-2"
+    )
 
 
 def test_server_is_the_dashboard():
