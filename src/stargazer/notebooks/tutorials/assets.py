@@ -124,7 +124,7 @@ def _():
 
         A CID is a hash of the bytes. Same bytes anywhere → same CID;
         different bytes → different CID. Always. Stargazer computes the
-        real **IPFS** hash (`bafy…`) for every file, on your laptop or a
+        real **IPFS** hash (`bafy…`) for every file, locally or on a
         hosted deploy alike — so an asset uploaded by you and by a
         colleague resolves to the same identity, and a file published
         publicly is fetchable from any IPFS node that holds the bytes.
@@ -141,7 +141,7 @@ def _():
           run once, and you can replay the pipeline on the *exact*
           same bytes months later regardless of where they're hosted.
         - **Location-independence** — a `Reference(cid="bafy…")`
-          handle doesn't care whether the bytes live on your laptop,
+          handle doesn't care whether the bytes live on local disk,
           in a cloud bucket, or on a stranger's IPFS node. `fetch()`
           resolves it the same way every time.
 
@@ -496,7 +496,7 @@ def _():
         """
         ## 7. "Isn't this overkill for a local filesystem?"
 
-        Honest question. On a single laptop with a fixed directory, you
+        Honest question. Locally, with a fixed directory, you
         could glob the right folder and read the file. The machinery
         earns its keep the moment compute stops being local and
         persistent — which is exactly what Flyte does to every task.
@@ -511,10 +511,10 @@ def _():
         and the only way the BAI lands next to the BAM everywhere is the
         companion convention.
 
-        On your laptop, storage is a folder and an index file on this
-        machine; on a hosted deploy it's a cloud bucket and your
-        dashboard. Same API either way. It looks like ceremony when
-        you're alone on your laptop, but the **Execution** tutorial
+        Locally, storage is a folder and an index file on this machine;
+        on a hosted deploy it's a cloud bucket and your dashboard. Same
+        API either way. It looks like ceremony when you're working
+        alone and locally, but the **Execution** tutorial
         shows it pay off:
         the identical code running on a remote cluster, inputs resolved
         by CID with no path coordination at all.

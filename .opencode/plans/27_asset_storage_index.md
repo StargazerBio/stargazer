@@ -3,8 +3,8 @@
 Move asset bytes off Pinata and into object storage, and move the metadata
 index into a SQLite database. On Union, each user's dashboard owns that
 database: tasks and notebook pods upload files straight to the bucket and send
-the dashboard one small row per asset. On a laptop the same database is a
-local file, so local mode and the hosted deploy share one code path.
+the dashboard one small row per asset. Locally the same database is a
+file on disk, so local mode and the hosted deploy share one code path.
 `assemble()` becomes a real query. Shared data stays public on Pinata, readable
 by everyone and attributed to whoever uploaded it.
 
@@ -26,7 +26,7 @@ pod**).
 
 | | Today | After |
 |---|---|---|
-| Where task outputs go | Pinata, or local disk without a JWT | The object store: `file://` on a laptop, the tenant bucket on Union |
+| Where task outputs go | Pinata, or local disk without a JWT | The object store: `file://` locally, the tenant bucket on Union |
 | How `assemble()` finds them | Pinata's keyvalue filter, or a TinyDB scan | A SQL query against the user's index, merged with Pinata's public index |
 | Shared data (bundles, references) | Pinata, public or private | Pinata's public network, attributed by `_owner` |
 | Asset identity | IPFS CID from Pinata, or `local_<md5>` | IPFS CID computed locally, everywhere |
@@ -73,8 +73,8 @@ Measured while designing this plan unless marked otherwise.
   pods in the same project, it wakes the app from zero, and it carried a burst
   of 1,000 concurrent requests without a failure.
 - **Bearer tokens pass the app gate** *(measured in an earlier session)*, so a
-  laptop can call the dashboard's public URL with the CLI's token.
-- **A laptop can't reach the tenant bucket directly.** A read-only listing fell
+  local machine can call the dashboard's public URL with the CLI's token.
+- **A local machine can't reach the tenant bucket directly.** A read-only listing fell
   back to the EC2 metadata endpoint and failed: there are no AWS credentials
   locally.
 
@@ -92,7 +92,7 @@ Recorded so they aren't relitigated mid-build.
   the key means a plain `File.download()` lands with the real extension. The
   subject is
   `STARGAZER_OWNER` (the Union subject, already forwarded into pods), or
-  `local` on a laptop that doesn't set it. An upload whose file already exists
+  `local` when run locally without it. An upload whose file already exists
   skips the transfer.
 - **`Asset.path` becomes a `flyte.io.File`** (Q10) at the stored location, so
   an asset passed between tasks points somewhere every pod can read.
@@ -160,16 +160,16 @@ Recorded so they aren't relitigated mid-build.
   `STARGAZER_INDEX_URL`. (A task could also build it from
   `FLYTE_INTERNAL_PROJECT` and `FLYTE_INTERNAL_DOMAIN`, which every task pod
   has.) Internal requests carry no identity headers, so the index routes don't
-  read `X-User-*`. A laptop uses the public URL with the CLI's bearer token.
+  read `X-User-*`. A local machine uses the public URL with the CLI's bearer token.
 - **One setting picks the index backend.** `STARGAZER_INDEX_URL` is a SQLite
   file path (a `sqlite://` prefix is accepted; default `~/.stargazer/index.db`)
-  opened directly by a laptop and by the dashboard itself, or an `http(s)://`
-  dashboard URL (task pods, notebook pods, a laptop working against Union).
+  opened directly by a local run and by the dashboard itself, or an `http(s)://`
+  dashboard URL (task pods, notebook pods, a local run working against Union).
   The HTTP API wraps the same SQLite module, so queries are written once.
   `STARGAZER_STORE_ROOT` picks the byte store the same way (default
   `~/.stargazer/store`). Both ride into task pods through
   `_stargazer_env_vars()`, but only when set explicitly: a pod can't use a
-  laptop's defaults.
+  local run's defaults.
 - **The dashboard's database is durable through the bucket**: restored at
   startup and replicated continuously by Litestream to
   `<STORE_ROOT>/users/<subject>/index/`.
@@ -275,7 +275,7 @@ Q7–Q12 decided 2026-10-07; the settled decisions above carry them.
 - [x] **Q14. `File.from_local` to a `file://` destination.** Moot: uploads use
       `flyte.storage.put` and then build the `File` directly, which works on
       a local root outside any task context (measured).
-- [ ] **Q15. Laptop → Union ingest.** The laptop can't write to the bucket. The
+- [ ] **Q15. Local → Union ingest.** A local machine can't write to the bucket. The
       options are Union's data proxy (`create_upload_location`: scoped to a
       project, the control plane picks the key, so the row stores whatever
       URI comes back) or a signed URL minted by the dashboard. Unknown
@@ -287,20 +287,20 @@ Q7–Q12 decided 2026-10-07; the settled decisions above carry them.
 - [x] **Q17. The cache behind `File.download()`.** Flyte's `download()` has no
       cache (SDK source). Decided: `asset.path` always stays the stored File,
       and `fetch()` is the cached download, returning the local path with
-      companions beside it (settled decisions above). On a laptop the cache
+      companions beside it (settled decisions above). Locally the cache
       hardlinks from the local store instead of copying.
 - [x] **Q18. Public assets as `File`s.** `File.download()` can't read a
       gateway URL: flyte 2.10.7's HTTP filesystem fails with "Timeout context
       manager should be used inside a task" (measured). The storage client
-      downloads `https://` paths with aiohttp instead. For laptops without a
+      downloads `https://` paths with aiohttp instead. For local runs without a
       Pinata key, `fetch_bundle()` registers bundle files in the local index.
 - [ ] **Q20. `VQSRModel.tranches_path` is a pod-local path.** It predates this
       plan: `variant_recalibrator` writes the tranches file's local path into
       metadata, so `apply_vqsr` in another pod can't read it. The tranches
       file should be its own companion asset. Not fixed here.
-- [ ] **Q21. Remote runs submitted from a laptop.** A pod can't read a
-      laptop's store or index, so the Execution tutorial's remote section
-      (`flyte.run(audit_cohorts, …)`) can't work from a laptop until Q15 and
+- [ ] **Q21. Remote runs submitted locally.** A pod can't read a
+      local store or index, so the Execution tutorial's remote section
+      (`flyte.run(audit_cohorts, …)`) can't work from a local session until Q15 and
       Q16 are settled. It needed a Pinata key before too. From a hosted
       notebook pod it works once Piece 4 is in.
 - [x] **Q23. No Stargazer task could start on the tenant.** The `PINATA_JWT`
@@ -425,7 +425,7 @@ Tests run against a SQLite file in a temp dir. No mocks.
 ## Piece 3 — The storage client, rewired
 
 - [x] `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` in `config.py`, with
-      laptop defaults (`~/.stargazer/store`, `~/.stargazer/index.db`),
+      local defaults (`~/.stargazer/store`, `~/.stargazer/index.db`),
       forwarded by `_stargazer_env_vars()` only when set explicitly.
 - [x] `stargazer.utils.storage.StorageClient` replaces `LocalStorageClient`:
       private bytes through the store, metadata through the index. TinyDB
@@ -440,7 +440,7 @@ Tests run against a SQLite file in a temp dir. No mocks.
       seeded once per session through the real client
       (`tests/fixtures/seed.py` replaces the TinyDB fixture DB). 405 passed,
       13 skipped — the same `gatk`/`bwa`/`samtools` skips as before: those
-      tools aren't on this laptop's PATH, so the GATK and alignment task
+      tools aren't on the local PATH, so the GATK and alignment task
       tests have never run here.
 - [x] `verify-stargazer` (2026-10-07, run `20261007-013105`): the scRNA
       pipeline notebook exports with exit 0 and `check_anndata.py` reads `ok`
@@ -516,7 +516,7 @@ The harness isn't kept.
       it, and wrote all six stages to the bucket and the dashboard: 12 rows,
       each stamped `_owner`, stored under the owner's prefix, with a constant
       `n_obs` per sample across stages (8,506 and 8,322). Caveats: submitted
-      from the laptop with the environment a notebook pod forwards, not from
+      locally with the environment a notebook pod forwards, not from
       a notebook pod; and run with the scRNA image fix from
       `fix/scrna-image-bio-extra` applied to the working tree (the image
       lacked `scikit-image` and `igraph`; that fix is its own branch).
@@ -533,7 +533,7 @@ The harness isn't kept.
       Every file landed at
       `s3://union-us-west-2-stargazerbio/stargazer/users/387300641116005877/assets/<cid>/<name>`.
 - [~] From outside: the dashboard's front door (admin bearer token) returns
-      the same 20 rows, each stamped `_owner=387300641116005877`. A laptop's
+      the same 20 rows, each stamped `_owner=387300641116005877`. A local
       `assemble()` can't use the public URL yet: `HttpIndex` sends no token
       (Q21).
 

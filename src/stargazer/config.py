@@ -21,7 +21,7 @@ Rules:
 - STARGAZER_INDEX_URL: The asset index — a SQLite file path, or a user's
   dashboard URL on Union. Defaults to ~/.stargazer/index.db.
 - STARGAZER_OWNER: The Union subject that owns new assets (their folder in
-  the store, and `_owner`). Unset on a laptop.
+  the store, and `_owner`). Unset locally.
 - STARGAZER_TARGET: Which Flyte backend images and deploys aim at — `devbox`
   (default, the local cluster) or `union` (the hosted tenant). Anything else
   is an error. Forwarded into every pod so in-pod builds resolve the same way.
@@ -49,7 +49,7 @@ os.environ.setdefault("PINATA_VISIBILITY", "private")
 os.environ.setdefault("STARGAZER_LOCAL", str(Path.home() / ".stargazer" / "local"))
 
 # Storage locations set explicitly (a deploy, a pod's env) are forwarded into
-# task pods; the laptop defaults below are not, since a pod can't use them.
+# task pods; the local defaults below are not, since a pod can't use them.
 _STORAGE_KEYS = ("STARGAZER_STORE_ROOT", "STARGAZER_INDEX_URL")
 _EXPLICIT_STORAGE = {k: os.environ[k] for k in _STORAGE_KEYS if os.environ.get(k)}
 os.environ.setdefault("STARGAZER_STORE_ROOT", str(Path.home() / ".stargazer" / "store"))
@@ -83,7 +83,7 @@ def _stargazer_env_vars() -> dict[str, str]:
     STARGAZER_REGISTRY) ride along so a pod that builds or submits images —
     the admin app, a notebook, a parent task — resolves them like the deployer.
     STARGAZER_STORE_ROOT and STARGAZER_INDEX_URL ride along only when set
-    explicitly: a pod can't use a laptop's local store or index.
+    explicitly: a pod can't use the local store or index.
     """
     env = {
         "PINATA_GATEWAY": os.environ.get("PINATA_GATEWAY", "https://dweb.link"),

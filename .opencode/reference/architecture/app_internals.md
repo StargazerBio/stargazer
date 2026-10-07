@@ -61,7 +61,7 @@ Measured on the tenant (2026-10-06): the org admin got the proxy's `403 Forbidde
 
 One object per notebook, so the dashboard can list a user's notebooks and read one header without fetching the rest. Subjects must match `[A-Za-z0-9_-]+` and filenames one plain `.py` segment, so a key can't escape its prefix. Create refuses to overwrite (`NotebookExistsError` → the 409 that create and copy rely on); get of a missing notebook returns None; delete is idempotent. Reads and writes go through `flyte.storage`, listing and deletes through the fsspec filesystem it resolves for the root, so the same code runs against `s3://` on the tenant and a local path in tests.
 
-On Union the root is a prefix in the tenant bucket (`s3://union-us-west-2-stargazerbio/stargazer`). Every project runs as one IAM role (`union-us-west-2-stargazerbio-userflyterole`), so cross-project access works (measured with the old shared admin in `flytesnacks` reading what a pod in another project wrote) and, equally, any pod can read every user's objects. The deployer's laptop has no credentials for the bucket; only pods can reach it.
+On Union the root is a prefix in the tenant bucket (`s3://union-us-west-2-stargazerbio/stargazer`). Every project runs as one IAM role (`union-us-west-2-stargazerbio-userflyterole`), so cross-project access works (measured with the old shared admin in `flytesnacks` reading what a pod in another project wrote) and, equally, any pod can read every user's objects. A local machine has no credentials for the bucket; only pods can reach it.
 
 A Union deploy refuses to start without `STARGAZER_WORKSPACE_ROOT` (`admin_app.main`). Without a root (a local run), store-backed routes return 503 and the Workspace section says saving isn't available.
 

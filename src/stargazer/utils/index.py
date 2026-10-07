@@ -16,7 +16,7 @@ loops. WAL mode lets reads run alongside a write without waiting for it.
 Re-upserting a CID with different keyvalues replaces them and logs a WARNING:
 the same bytes recorded with new metadata is allowed, but should be visible.
 
-On a laptop `SqliteIndex` is the index itself. On Union the user's dashboard
+Locally, `SqliteIndex` is the index itself. On Union the user's dashboard
 owns the file and serves it over HTTP; pods reach it through `HttpIndex`,
 which makes the same calls.
 

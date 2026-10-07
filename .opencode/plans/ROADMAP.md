@@ -7,7 +7,7 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 - **Asset storage on the object store, indexed per user.** Asset bytes move
    off Pinata into object storage as `flyte.io.File`s, identified by an IPFS
    CID computed locally (it matches Pinata's). The keyvalue index moves into
-   SQLite: a local file on a laptop, owned by each user's dashboard on Union
+   SQLite: a file on disk when run locally, owned by each user's dashboard on Union
    and served to task and notebook pods over HTTP. TinyDB, the two storage
    modes and Pinata as the working store go. Pinata stays as the public tier
    for shared data, attributed by `_owner`. The tenant checks are done.

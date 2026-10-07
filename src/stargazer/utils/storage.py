@@ -4,7 +4,7 @@
 Where asset bytes and metadata live, and the local cache in front of them.
 
 - **Bytes** go to an object store through `flyte.storage`: a local directory
-  on a laptop, the tenant bucket on Union. Each file is stored once per user
+  when run locally, the tenant bucket on Union. Each file is stored once per user
   at `<STARGAZER_STORE_ROOT>/users/<owner>/assets/<cid>/<name>`, where the
   owner is `STARGAZER_OWNER` (the Union subject) or `local`.
 - **Metadata** goes to the asset index (`stargazer.utils.index`), one row

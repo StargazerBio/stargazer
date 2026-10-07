@@ -1,9 +1,9 @@
 # Configuration
 
-Asset storage has three parts: an **object store** for the bytes, an **index** for the metadata, and a **local cache** in front of both. A fourth, the **public tier**, holds shared data on Pinata's public network. The same code runs on a laptop and on a hosted deploy; only the locations differ.
+Asset storage has three parts: an **object store** for the bytes, an **index** for the metadata, and a **local cache** in front of both. A fourth, the **public tier**, holds shared data on Pinata's public network. The same code runs locally and on a hosted deploy; only the locations differ.
 
-| Part | On a laptop | On Union | Set by |
-|------|-------------|----------|--------|
+| Part | Locally | On Union | Set by |
+|------|---------|----------|--------|
 | Object store | `~/.stargazer/store` | The tenant bucket, under the deploy's root | `STARGAZER_STORE_ROOT` |
 | Index | `~/.stargazer/index.db` (SQLite) | The user's dashboard, over HTTP | `STARGAZER_INDEX_URL` |
 | Local cache | `~/.stargazer/local` | The pod's disk | `STARGAZER_LOCAL` |
@@ -15,7 +15,7 @@ An asset's identity is its **IPFS CID**, computed locally from the bytes with th
 
 The index holds one row per CID: where the bytes live, the original filename, and the asset's keyvalues. Re-recording a CID with different keyvalues replaces them and logs a warning. Rows are written after the bytes, so a row never points at a missing file, and a write that doesn't land fails the task rather than being retried behind its back.
 
-The cache keeps each downloaded file at `<STARGAZER_LOCAL>/<cid>/<name>`. Uploads seed it, so a task's outputs are already cached in the same pod or laptop.
+The cache keeps each downloaded file at `<STARGAZER_LOCAL>/<cid>/<name>`. Uploads seed it, so a task's outputs are already cached in the same pod or local run.
 
 ## Environment Variables
 
@@ -33,7 +33,7 @@ All env var defaults are set in `config.py`. If set (even to empty string), the 
 | `STARGAZER_TARGET` | Flyte backend for images and deploys: `devbox` or `union` | `devbox` | No |
 | `STARGAZER_REGISTRY` | Image push registry | `localhost:30000` on `devbox`; unset on `union` (the builder's own registry) | No |
 
-`STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` are forwarded into task pods only when set explicitly. A pod can't use a laptop's default store or index, so a run submitted from a laptop with the defaults has nowhere shared to write. Laptop-to-cluster storage is tracked on the roadmap.
+`STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` are forwarded into task pods only when set explicitly. A pod can't use the local default store or index, so a remote run submitted locally with the defaults has nowhere shared to write. Local-to-cluster storage is tracked on the roadmap.
 
 ## Writing and reading
 

@@ -23,7 +23,7 @@ Preconditions:
 
 Steps:
 
-- **Run every cell with the default picks.** Run `uv run marimo export html src/stargazer/notebooks/workflows/scrna_pipeline.py -o "$RUN_DIR/evidence/scrna-pipeline.html" > "$RUN_DIR/evidence/scrna-pipeline.log" 2>&1`. This takes about 2 minutes on a laptop. Exit code `0`.
+- **Run every cell with the default picks.** Run `uv run marimo export html src/stargazer/notebooks/workflows/scrna_pipeline.py -o "$RUN_DIR/evidence/scrna-pipeline.html" > "$RUN_DIR/evidence/scrna-pipeline.log" 2>&1`. This takes about 2 minutes locally. Exit code `0`.
 - **Check every stage's outputs.** Run `uv run python .claude/skills/verify-stargazer/scripts/check_anndata.py | tee "$RUN_DIR/evidence/scrna-pipeline.check.txt"`. Every line reads `ok`, and both samples appear at every stage from `raw` through `annotated`.
 - **Proof.** Keep the HTML, the log, and the check output. The check output is the load-bearing artifact.
 
