@@ -4,6 +4,14 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 
 ## Upcoming
 
+- **Asset storage on the object store, indexed per user.** Asset bytes move
+   off Pinata into object storage as `flyte.io.File`s, identified by an IPFS
+   CID computed locally (it matches Pinata's). The keyvalue index moves into
+   SQLite: a local file on a laptop, owned by each user's dashboard on Union
+   and served to task and notebook pods over HTTP. TinyDB, the two storage
+   modes and Pinata as the working store go; IPFS stays for publishing.
+   Tenant reachability questions gate the Union half.
+   [`27_asset_storage_index.md`](./27_asset_storage_index.md)
 - **Union production deploy** (tenant: `stargazerbio.us-west-2.unionai.cloud`).
    Done in PRs: per-pod session keys (#2), the `STARGAZER_TARGET`
    devbox/union switch, a configurable domain, and a fixed per-deploy
