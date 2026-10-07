@@ -493,27 +493,51 @@ Tests run against a SQLite file in a temp dir. No mocks.
       The third deploy came up: `/index/query` answers `200 []` in 0.3 s
       through the front door, and the pod logs show Litestream compacting
       and snapshotting `index.db`.
-- [ ] Rows written before a scale-to-zero are there after the cold start, on
-      the real dashboard image.
+- [x] Rows written before a stop are there after a cold start, on the real
+      dashboard image: after the Piece 6 run, deactivating and reactivating
+      the dashboard (51 s down, 24 s up) gave a fresh pod (`dashboard-00001-…`,
+      empty disk), which served all 20 rows (measured 2026-10-07).
 
 ## Piece 6 — Verify on the tenant
 
-- [ ] The scRNA pipeline run from a notebook pod: files land in the bucket,
-      rows land in the dashboard.
-- [ ] A downstream task finds its upstream task's rows.
-- [ ] A 20-way fan-out writes concurrently with no errors and no missing rows.
-- [ ] `assemble()` from the notebook pod and from a laptop (public URL plus
-      bearer token) returns the same rows.
+Run 2026-10-07 in `u-pryce` (the test account's project), against its
+redeployed dashboard
+([run](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/u-pryce/runs/ugmd6kdxjpc684557t47)).
+Real Stargazer tasks can't start on the tenant (Q23), so the run used
+throwaway tasks on the dashboard image that declare no secret but call the
+real SDK — `Asset.update()`, `Asset.fetch()`, `assemble()` — with
+`STARGAZER_STORE_ROOT`, `STARGAZER_INDEX_URL` (the dashboard's in-cluster
+URL) and `STARGAZER_OWNER` forwarded the way a notebook pod forwards them.
+The harness isn't kept.
+
+- [ ] The scRNA pipeline run from a notebook pod. **Blocked by Q23**: no
+      Stargazer task starts on the tenant until the `PINATA_JWT` secret
+      exists. The notebook pod's environment plumbing is unit-tested only.
+- [x] A downstream task finds its upstream tasks' rows: a census pod's
+      `assemble(asset="verify_note", run_tag=…)` found all 20, and every
+      fetched file's contents matched. A reader pod fetched one by CID
+      alone (index lookup, then the bucket).
+- [x] A 20-way fan-out wrote concurrently with no errors and no missing rows.
+      Every file landed at
+      `s3://union-us-west-2-stargazerbio/stargazer/users/387300641116005877/assets/<cid>/<name>`.
+- [~] From outside: the dashboard's front door (admin bearer token) returns
+      the same 20 rows, each stamped `_owner=387300641116005877`. A laptop's
+      `assemble()` can't use the public URL yet: `HttpIndex` sends no token
+      (Q21).
+
+The 20 `verify_note` assets (`run_tag=p27-100126`) are still in the test
+account's index and bucket. The test account's dashboard now runs this
+branch.
 
 ## Piece 7 — Docs
 
-- [ ] `docs/architecture/configuration.md`: the storage sections (modes,
+- [x] `docs/architecture/configuration.md`: the storage sections (modes,
       download flow, bundles) rewritten.
-- [ ] `docs/architecture/types.md`: identity and the storage layer.
-- [ ] `docs/architecture/app.md` and
+- [x] `docs/architecture/types.md`: identity and the storage layer.
+- [x] `docs/architecture/app.md` and
       `.opencode/reference/architecture/app_internals.md`: the index API and
       Litestream.
-- [ ] Module docstrings on every module touched.
+- [x] Module docstrings on every module touched.
 - [ ] ROADMAP: mark ✅, move to Complete, and add the follow-ups below.
 
 ## Follow-ups (not in this plan)
