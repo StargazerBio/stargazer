@@ -42,6 +42,15 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    marimo, but code in a pod could still capture a visiting org member's
    token. Look for a way to have Union drop them for an app, or isolate the
    proxy from notebook code.
+- **App internal addresses skip Union's login.** Every app answers at
+   `http://<app>.<project>-<domain>.svc.cluster.local` with no login and no
+   identity headers; a task pod in the same project reached a
+   `requires_auth=True` app that way (measured, plan 27 Piece 0). Untested:
+   whether pods in other projects can reach it, and whether a forged
+   `X-User-Subject` sent there gets through the dashboard's owner check. If
+   both hold, code in any pod can act as any user on their dashboard. One fix
+   is to verify the signed `X-User-Token` ID token instead of trusting
+   `X-User-Subject`; another is per-namespace network policy.
 - **Self-serve onboarding.** New users are onboarded by an org admin
    (`stargazer-users onboard`, which sends Union's invite), since Union
    doesn't auto-provision users on first sign-in. Unverified: that the

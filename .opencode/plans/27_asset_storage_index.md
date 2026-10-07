@@ -64,11 +64,12 @@ Measured while designing this plan unless marked otherwise.
   require external state stores; local disk/memory are not preserved during
   scale-down". `Resources(disk=)` is ephemeral storage, and apps take no
   volumes.
-- **Apps have an internal address.** `env.endpoint` and
-  `AppEndpoint(public=False)` resolve through `INTERNAL_APP_ENDPOINT_PATTERN`
-  when the pod has it set, and fall back to the public URL otherwise *(SDK
-  source)*. Union's serving-graph example calls one `requires_auth=True` app
-  from another over that address with no auth headers *(docs; not tested)*.
+- **Task pods reach apps at their internal address, without the login gate.**
+  Measured with a throwaway app and tasks (Piece 0, results below): an app's
+  internal URL is
+  `http://<app-name>.<project>-<domain>.svc.cluster.local`, it answers task
+  pods in the same project, it wakes the app from zero, and it carried a burst
+  of 1,000 concurrent requests without a failure.
 - **Bearer tokens pass the app gate** *(measured in an earlier session)*, so a
   laptop can call the dashboard's public URL with the CLI's token.
 - **A laptop can't reach the tenant bucket directly.** A read-only listing fell
@@ -124,6 +125,14 @@ Recorded so they aren't relitigated mid-build.
   (with backoff on connection errors and 5xx).
 - **On Union, each user's dashboard owns their index** and serves it over a
   small HTTP API: upsert, query, merge, delete. Files never pass through it.
+- **Pods call the dashboard at its internal address**,
+  `http://<dashboard-app>.<project>-<domain>.svc.cluster.local`. Task pods
+  don't get `INTERNAL_APP_ENDPOINT_PATTERN`, and `app_env.endpoint` in a task
+  resolves to the public URL, so the address arrives through
+  `STARGAZER_INDEX_URL`. (A task could also build it from
+  `FLYTE_INTERNAL_PROJECT` and `FLYTE_INTERNAL_DOMAIN`, which every task pod
+  has.) Internal requests carry no identity headers, so the index routes don't
+  read `X-User-*`. A laptop uses the public URL with the CLI's bearer token.
 - **One setting picks the index backend.** `STARGAZER_INDEX_URL=sqlite:///…`
   opens the file directly (laptop local mode, and the dashboard itself);
   `http(s)://…` calls a dashboard (task pods, notebook pods, a laptop working
@@ -143,35 +152,50 @@ Recorded so they aren't relitigated mid-build.
     record.
   - A SQLite file in the bucket that tasks write directly: concurrent writers
     race on one object.
-  - Managed Postgres: the fallback if the dashboard can't own the index (Q1).
+  - Managed Postgres: kept as the fallback in case the dashboard couldn't own
+    the index. Piece 0 showed it can (Q1–Q3, Q5).
 
 ## Open questions
 
 ### Tenant behavior — gates Pieces 4–6
 
-Each needs a throwaway app and task on the tenant (Piece 0). If Q1 fails, the
-Union half switches to managed Postgres behind the same index interface.
-Pieces 1–3 stand either way.
+Answered on the tenant in Piece 0 (details there), except Q6. The dashboard
+can own the index; the Postgres fallback isn't needed.
 
-- [ ] **Q1. Can a task pod reach the dashboard?** Is
-      `INTERNAL_APP_ENDPOINT_PATTERN` set in task pods (the SDK expects it in
-      app pods), and does an app's internal URL answer from a task pod in the
-      same project? Union's task-calls-app example uses
-      `requires_auth=False`, a hint that it went through the public URL.
-- [ ] **Q2. Do internal calls skip the login gate?** If not, task pods call the
-      public URL with a bearer token minted from the platform key they already
-      carry.
-- [ ] **Q3. Does an internal request wake a scaled-to-zero app**, holding the
-      request until the app is ready?
-- [ ] **Q4. How long do the old and new dashboard versions overlap during
-      `stargazer-users upgrade`?** Two live replicas means two copies of the
-      database accepting writes, and the old copy's writes would be lost.
-- [ ] **Q5. Is there a per-replica request cap** in front of apps, and do
-      requests over it wait or fail? It matters when a large fan-out finishes
-      at once.
+- [x] **Q1. Can a task pod reach the dashboard?** Yes, at the internal URL,
+      `http://<app>.<project>-<domain>.svc.cluster.local`: 200 in 0.01s. Task
+      pods don't get `INTERNAL_APP_ENDPOINT_PATTERN` (app pods do), and
+      `app_env.endpoint` in a task resolves to the public URL, so the address
+      has to be passed in or built from `FLYTE_INTERNAL_PROJECT`/`_DOMAIN`.
+- [x] **Q2. Do internal calls skip the login gate?** Yes. The internal call
+      reached the `requires_auth=True` app with no `X-User-*` or
+      `Authorization` header. The public URL without a token got a 302 to the
+      login page.
+- [x] **Q3. Does an internal request wake a scaled-to-zero app?** Yes. After
+      4 minutes idle (scale-down set to 60s) the request was held while a
+      fresh replica started, then answered 3.05s after it was sent. That's
+      for a light image; the dashboard image is heavier.
+- [x] **Q4. How long do old and new versions overlap during a redeploy?**
+      Barely. Polling every 250ms through the redeploy: 863 of 863 requests
+      succeeded, traffic switched from v1 to v2 exactly once with no
+      interleaving, and the last v1 answer came 0.12s after v2's process
+      started (about 0.5s before v2's first answer). The real dashboard
+      would restore its database before its process starts, so writes that
+      reach the old replica between that restore and the switch would be
+      lost. Small window, real risk; see Q11.
+- [x] **Q5. Is there a per-replica request cap?** None hit. 200 concurrent
+      2-second requests all ran at once (`max_inflight` 200, 2.86s wall).
+      1,000 all succeeded, with up to 853 in flight, but took 22.6s: requests
+      from one client got in at about 45 per second (cause not isolated).
+      1,000 instant requests finished in 2.75s, about 360 per second. Excess
+      load waits; it doesn't fail.
 - [ ] **Q6. Litestream under scale-to-zero:** restore-if-missing at startup,
       and a final sync at SIGTERM inside the `fserve` → launch script →
-      uvicorn chain that plan 25 calls load-bearing.
+      uvicorn chain that plan 25 calls load-bearing. *Not tested in Piece 0:
+      it needs bucket permissions set up, so it's assumed to work as
+      documented. The v0.5.17 source does forward SIGTERM to the `-exec`
+      child, wait for it, then close with a shutdown sync. Piece 5 proves it
+      on the dashboard.*
 
 ### Decisions for the user
 
@@ -191,9 +215,10 @@ Pieces 1–3 stand either way.
       serialized. The second keeps the 21 task files close to unchanged.
 - [ ] **Q11. Backup records from day one?** Tasks could also write each row as
       a small JSON object next to its blob, so the index can always be rebuilt
-      from the bucket and an outage or an upgrade overlap (Q4) loses nothing.
-      It costs one extra write per asset. Defer unless Q4 or Q6 says
-      otherwise.
+      from the bucket and an outage or an upgrade overlap loses nothing. It
+      costs one extra write per asset. Q4 measured the redeploy window at
+      under a second, plus restore time, so the choice is between this and
+      upgrading only when the user has no runs going.
 - [ ] **Q12. Does `_owner` survive?** A per-user index already records whose
       an asset is.
 
@@ -224,24 +249,52 @@ Two PRs, both from this branch:
    the rewired storage client. Local mode works end to end. It doesn't depend
    on Piece 0. Union runs have no index until PR 2 lands, so the two should
    land close together.
-2. **Union** (Pieces 0, 4–7): the dashboard index API, the HTTP client,
-   Litestream, the tenant run and the docs. Shaped by Q1–Q6.
+2. **Union** (Pieces 4–7): the dashboard index API, the HTTP client,
+   Litestream, the tenant run and the docs. Q1–Q5 are answered (Piece 0);
+   Q6 is proved in Piece 5.
 
 ---
 
 ## Piece 0 — Tenant checks
 
-- [ ] A throwaway app (`requires_auth=True`, `replicas=(0, 1)`) and task in
-      one project. From the task: print `INTERNAL_APP_ENDPOINT_PATTERN`, call
-      the internal URL, call the public URL with and without a bearer token,
-      and call while the app is scaled to zero. Answers Q1–Q3.
-- [ ] Redeploy the app while it's taking requests and record how long the old
-      and new versions overlap. Answers Q4.
-- [ ] Send 200 concurrent requests. Answers Q5.
-- [ ] Litestream in the throwaway image: write, scale to zero, cold start, read
-      back, and check the logs for the final sync at SIGTERM. Answers Q6.
-- [ ] Record the results here and decide: dashboard index, or the Postgres
-      fallback.
+Run 2026-10-06 (local time) in `flytesnacks/development`: a throwaway FastAPI
+app `sg-probe-index` (`requires_auth=True`, `replicas=(0, 1)`, 60s
+scale-down) and tasks on the same image, driven from the CLI. The probe code
+lived in the session scratchpad and was not committed. The app was
+deactivated afterwards.
+
+- [x] From a task: print the environment, call the internal URL, call the
+      public URL without a token. Answers Q1–Q2.
+      ([run](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/flytesnacks/runs/uh9mlcxmzjglrzs5skk6))
+- [x] From a task: call, sleep 240s, call again. Answers Q3.
+      ([run](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/flytesnacks/runs/uttvm5wpqr6p5krwr6hg))
+- [x] Redeploy the app (v1 → v2) while polling it every 250ms. Answers Q4.
+- [x] From a task: 200 and 1,000 concurrent 2s requests, and 1,000 instant
+      ones. Answers Q5.
+      ([200](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/flytesnacks/runs/udkjvt5mmmrpcg2cs42c),
+      [1,000](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/flytesnacks/runs/urxq89c68lbkt77r5wq5),
+      [1,000 instant](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/flytesnacks/runs/uvx97lkd6hf4ksr5qkpv))
+- [ ] Litestream in the throwaway image. Skipped: it needs bucket permissions
+      set up first, so Q6 is assumed and proved in Piece 5.
+- [x] Decision: the dashboard owns the index. The Postgres fallback isn't
+      needed.
+
+| Check | Result |
+|---|---|
+| Internal pattern (app pod) | `http://{app_fqdn}.flytesnacks-development.svc.cluster.local` |
+| Same in task pod | Not set. `app_env.endpoint` resolves to the public URL |
+| Task → internal URL | 200 in 0.01s, no `X-User-*` or `Authorization` headers |
+| Task → public URL, no token | 302 to the tenant login page |
+| Internal call to an app idle 4 min | Fresh replica; answered 3.05s after the request |
+| 200 × 2s concurrent | All 200 OK, all in flight at once, 2.86s wall |
+| 1,000 × 2s concurrent | All 200 OK, up to 853 in flight, 22.6s wall |
+| 1,000 instant | All 200 OK, 2.75s wall |
+| Redeploy under polling | 863/863 OK, one clean v1→v2 switch, v1 answered 0.12s past v2's start |
+
+Not tested, and outside this plan: whether a pod in another project can reach
+an app's internal URL, and whether a forged `X-User-Subject` sent there
+reaches the app unchanged. The front door overwrites those headers, and the
+internal path skips the front door. Tracked on the ROADMAP.
 
 ## Piece 1 — CID and the SQLite index (SDK)
 
