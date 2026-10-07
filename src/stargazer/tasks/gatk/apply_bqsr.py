@@ -6,7 +6,7 @@ Applies BQSR recalibration to BAM files using GATK ApplyBQSR.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.local_storage as _storage
+import stargazer.utils.storage as _storage
 from stargazer.assets import Alignment, BQSRReport, Reference
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
@@ -36,13 +36,9 @@ async def apply_bqsr(
     logger.info(ref.to_dict())
     logger.info(bqsr_report.to_dict())
     # fetch() auto-downloads companions (.fai, .dict, .bai, etc.)
-    await alignment.fetch()
-    await ref.fetch()
-    await bqsr_report.fetch()
-
-    ref_path = ref.path
-    bam_path = alignment.path
-    recal_path = bqsr_report.path
+    bam_path = await alignment.fetch()
+    ref_path = await ref.fetch()
+    recal_path = await bqsr_report.fetch()
 
     if not recal_path or not recal_path.exists():
         raise FileNotFoundError("BQSR recalibration report not found in cache.")

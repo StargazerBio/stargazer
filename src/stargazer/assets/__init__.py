@@ -5,7 +5,8 @@ spec: [docs/architecture/types.md](../architecture/types.md)
 """
 
 import dataclasses
-from pathlib import Path
+
+from flyte.io import File
 
 from stargazer.assets.alignment import (
     Alignment,
@@ -45,18 +46,15 @@ def specialize(record: dict) -> Asset:
     registered class (strict at upload, graceful at query — one malformed
     legacy record must not crash a whole ``assemble()``).
 
-    Pinata query records carry the file's original ``name`` but no local
-    ``path``; we resolve that name against the storage client's local_dir so
-    the eventual download lands on disk with the correct extension (tools
-    like GATK refuse CID-named inputs).
+    The record's ``uri`` and original ``name`` become the asset's ``path``
+    (a `flyte.io.File`), so a later download lands on disk with the real
+    extension (tools like GATK refuse CID-named inputs).
     """
-    from stargazer.utils.local_storage import get_client
-
     kv = record.get("keyvalues", {})
     cid = record.get("cid", "")
-    path = record.get("path")
-    if path is None and record.get("name"):
-        path = get_client().local_dir / record["name"]
+    path = None
+    if record.get("uri"):
+        path = File(path=record["uri"], name=record.get("name") or cid, hash=cid)
     cls = ASSET_REGISTRY.get(kv.get("asset", ""))
     if cls is None:
         return Asset(cid=cid, path=path, keyvalues=dict(kv))
@@ -70,7 +68,7 @@ def specialize(record: dict) -> Asset:
         return Asset(cid=cid, path=path, keyvalues=dict(kv))
 
 
-def build_asset(keyvalues: dict[str, str], path: Path | None = None) -> Asset:
+def build_asset(keyvalues: dict[str, str]) -> Asset:
     """Construct an Asset from keyvalues, typed when the key is registered.
 
     The single validation choke point shared by the MCP server and the
@@ -103,14 +101,14 @@ def build_asset(keyvalues: dict[str, str], path: Path | None = None) -> Asset:
         )
     cls = ASSET_REGISTRY.get(asset_key)
     if cls is None:
-        return Asset(path=path, keyvalues=dict(keyvalues))
+        return Asset(keyvalues=dict(keyvalues))
     declared = {f.name for f in dataclasses.fields(cls)} - _BASE_FIELDS
     unknown = sorted(set(keyvalues) - declared - {"asset"})
     if unknown:
         raise ValueError(
             f"Unknown keys for {asset_key!r}: {unknown}. Allowed: {sorted(declared)}"
         )
-    return cls.from_keyvalues(keyvalues, path=path)
+    return cls.from_keyvalues(keyvalues)
 
 
 __all__ = [

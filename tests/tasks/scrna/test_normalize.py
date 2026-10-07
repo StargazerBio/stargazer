@@ -27,9 +27,9 @@ async def test_normalize_layers(fixtures_db):
     result = await normalize(adata=adata)
 
     assert result.stage == "normalized"
-    assert result.path is not None and result.path.exists()
+    assert result.path is not None and (await result.fetch()).exists()
 
-    ad = sc.read_h5ad(result.path)
+    ad = sc.read_h5ad(await result.fetch())
     assert "counts" in ad.layers
     # log1p values should be >= 0
     assert float(ad.X.min()) >= 0.0

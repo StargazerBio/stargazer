@@ -27,7 +27,7 @@ async def test_find_markers_ranked_genes(fixtures_db):
     result = await find_markers(adata=adata)
 
     assert result.stage == "annotated"
-    ad = sc.read_h5ad(result.path)
+    ad = sc.read_h5ad(await result.fetch())
     assert "rank_genes_groups" in ad.uns
 
 

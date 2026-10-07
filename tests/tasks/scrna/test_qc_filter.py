@@ -34,7 +34,7 @@ async def test_qc_filter_output_shape(fixtures_db):
     assert result.n_obs > 0
     assert result.n_vars > 0
     assert result.path is not None
-    assert result.path.exists()
+    assert (await result.fetch()).exists()
     assert result.sample_id == "test_sample"
     assert result.organism == "human"
 

@@ -7,7 +7,7 @@ GATK HaplotypeCaller in GVCF mode.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.local_storage as _storage
+import stargazer.utils.storage as _storage
 from stargazer.assets import Alignment, Reference, Variants, VariantsIndex
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
@@ -34,11 +34,9 @@ async def haplotype_caller(
     logger.info(alignment.to_dict())
     logger.info(ref.to_dict())
     # fetch() auto-downloads companions (.fai, .dict, .bai)
-    await alignment.fetch()
-    await ref.fetch()
+    bam_path = await alignment.fetch()
+    ref_path = await ref.fetch()
 
-    ref_path = ref.path
-    bam_path = alignment.path
     output_dir = _storage.default_client.local_dir
     output_gvcf = output_dir / f"{alignment.sample_id}.g.vcf"
 

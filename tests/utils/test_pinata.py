@@ -8,10 +8,10 @@ To populate expected CIDs for test files, run:
 """
 
 import pytest
-from conftest import FIXTURES_DIR, GENERAL_FIXTURES_DIR
+from conftest import FIXTURES_DIR
 
 from stargazer.assets.asset import Asset
-from stargazer.utils.local_storage import LocalStorageClient
+from stargazer.utils.cid import compute_cid
 from stargazer.utils.pinata import PinataClient
 
 CIDS = {
@@ -36,8 +36,8 @@ async def test_upload_and_delete_file():
     assert test_file_path.exists(), f"Test file not found: {test_file_path}"
 
     print(f"\nUploading test file: {test_file_path.name}")
-    comp = Asset(path=test_file_path)
-    await client.upload(comp)
+    comp = Asset()
+    await client.upload(comp, test_file_path)
 
     try:
         assert comp.cid, "Upload should return a CID"
@@ -75,11 +75,11 @@ def test_tus_metadata_encoding():
 @pytest.mark.asyncio
 async def test_tus_upload_multichunk_roundtrip(tmp_path, monkeypatch):
     """Force the TUS path on a small file with a tiny chunk size so the
-    offset loop runs several PATCHes, then verify the reassembled file
-    downloads back byte-identical (a broken offset loop corrupts the cid).
+    offset loop runs several PATCHes, then check Pinata's CID matches the
+    one computed locally — a broken offset loop corrupts the bytes and so
+    the CID.
     """
     import stargazer.utils.pinata as pinata_mod
-    from stargazer.utils.local_storage import LocalStorageClient
 
     # Force TUS regardless of size, and chunk small enough to loop.
     monkeypatch.setattr(pinata_mod, "TUS_THRESHOLD_BYTES", 0)
@@ -90,15 +90,12 @@ async def test_tus_upload_multichunk_roundtrip(tmp_path, monkeypatch):
     src = tmp_path / "tus_roundtrip.txt"
     src.write_bytes(content)
 
-    comp = Asset(path=src, keyvalues={"asset": "never_registered_key"})
-    await remote.upload(comp)
+    comp = Asset(keyvalues={"asset": "never_registered_key"})
+    await remote.upload(comp, src)
     assert comp.cid, "TUS upload should set the cid (from Upload-Cid header)"
 
     try:
-        client = LocalStorageClient(local_dir=tmp_path / "cache", remote=remote)
-        fetched = Asset(cid=comp.cid)
-        await client.download(fetched)
-        assert fetched.path.read_bytes() == content, "TUS reassembly corrupted bytes"
+        assert comp.cid == compute_cid(src), "TUS reassembly corrupted bytes"
     finally:
         try:
             await remote.delete(Asset(cid=comp.cid))
@@ -244,45 +241,3 @@ async def test_query():
     assert found[0]["cid"] == expected_cid, (
         f"CID mismatch: expected {expected_cid}, got {found[0]['cid']}"
     )
-
-
-@pytest.mark.pinata
-@pytest.mark.asyncio
-async def test_download_file(tmp_path):
-    """Test downloading a file via LocalStorageClient with PinataClient remote."""
-    remote = PinataClient()
-    client = LocalStorageClient(local_dir=tmp_path / "cache", remote=remote)
-
-    test_file = "GRCh38_TP53.fa.fai"
-    test_cid = CIDS.get(test_file)
-    assert test_cid, f"CID for {test_file} not found in config"
-
-    expected_content = GENERAL_FIXTURES_DIR.joinpath(test_file).read_text()
-
-    comp = Asset(cid=test_cid)
-
-    print(f"\nDownloading file with CID: {test_cid}")
-    await client.download(comp)
-
-    assert comp.path is not None, "Downloaded file should have a path"
-    assert comp.path.exists(), f"Downloaded file not found at: {comp.path}"
-    print(f"File downloaded successfully to: {comp.path}")
-
-    assert comp.cid == test_cid, "CID should match"
-
-    content = comp.path.read_text()
-    assert content == expected_content, (
-        f"Content mismatch: expected '{expected_content}', got '{content}'"
-    )
-    print("File content verified")
-
-    dest_path = tmp_path / "downloaded_test.txt"
-    comp.path = None
-
-    print(f"Downloading to specific destination: {dest_path}")
-    await client.download(comp, dest=dest_path)
-
-    assert comp.path == dest_path, "Destination path should match"
-    assert dest_path.exists(), "File should exist at destination"
-    assert dest_path.read_text() == expected_content, "Content should match original"
-    print("Download to specific destination successful")

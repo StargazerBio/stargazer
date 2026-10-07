@@ -1,6 +1,13 @@
 """
 ### Asset base dataclass for Stargazer.
 
+An Asset is a file plus typed metadata. `cid` is the file's IPFS CID,
+computed locally; `path` is a `flyte.io.File` naming where the stored bytes
+live (the object store, or an IPFS gateway for public data), so an asset
+passed between tasks always points somewhere every pod can read.
+`fetch()` makes a local copy, with its companions beside it, and returns
+its path.
+
 spec: [docs/architecture/types.md](../architecture/types.md)
 """
 
@@ -10,7 +17,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Self, get_type_hints
 
+from flyte.io import File
+
 _BASE_FIELDS = frozenset(("cid", "path", "keyvalues"))
+
+
+def _as_file(value: Any) -> File | None:
+    """Coerce a local path or URI to a File named after its last segment."""
+    if value is None or isinstance(value, File):
+        return value
+    location = str(value)
+    return File(path=location, name=location.rstrip("/").rsplit("/", 1)[-1])
 
 
 @dataclass
@@ -18,8 +35,11 @@ class Asset:
     """Base class for all typed file assets in Stargazer.
 
     Attributes:
-        cid: Content identifier (CID) for the stored file
-        path: Local filesystem path (set after download or upload)
+        cid: IPFS CID of the stored file
+        path: The stored file as a `flyte.io.File`. Assigning a local `Path`
+            or a URI string wraps it in a File, so an asset can be built from
+            a local file that was never uploaded; `fetch()` then uses that
+            file in place.
         keyvalues: Free-form metadata for *bare* Asset instances — the
             catchall for records whose asset key has no registered class
             in this process. Serialized verbatim (the ``asset`` key lives
@@ -44,7 +64,7 @@ class Asset:
     _asset_key: ClassVar[str] = ""
 
     cid: str = ""
-    path: Path | None = None
+    path: File | None = None
     keyvalues: dict[str, str] = field(default_factory=dict)
 
     def __init_subclass__(cls, **kwargs):
@@ -55,8 +75,10 @@ class Asset:
             Asset._registry[ak] = cls
 
     def __setattr__(self, name: str, value: Any) -> None:
-        """Enforce declared fields on typed subclasses; pass through on base Asset."""
-        if self._asset_key and not name.startswith("_") and name not in _BASE_FIELDS:
+        """Enforce declared fields on typed subclasses and coerce `path` to a File."""
+        if name == "path":
+            value = _as_file(value)
+        elif self._asset_key and not name.startswith("_") and name not in _BASE_FIELDS:
             allowed = {f.name for f in dataclasses.fields(type(self))} - _BASE_FIELDS
             if name not in allowed:
                 raise AttributeError(
@@ -86,7 +108,7 @@ class Asset:
 
     @classmethod
     def from_keyvalues(
-        cls, kv: dict[str, str], cid: str = "", path: Path | None = None
+        cls, kv: dict[str, str], cid: str = "", path: File | Path | str | None = None
     ) -> "Asset":
         """Reconstruct from a storage keyvalues dict.
 
@@ -109,58 +131,66 @@ class Asset:
         return cls(cid=cid, path=path, **kwargs)
 
     def to_dict(self) -> dict:
-        """Serialize to a JSON-friendly dict."""
+        """Serialize to a JSON-friendly dict: the file's location and name."""
         return {
             "cid": self.cid,
-            "path": str(self.path) if self.path else None,
+            "path": self.path.path if self.path else None,
+            "name": self.path.name if self.path else None,
             "keyvalues": self.to_keyvalues(),
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> Self:
         """Reconstruct from a serialized dict."""
+        path = None
+        if data.get("path"):
+            path = _as_file(data["path"])
+            if data.get("name"):
+                path = File(path=path.path, name=data["name"])
         return cls.from_keyvalues(
-            data.get("keyvalues", {}),
-            cid=data.get("cid", ""),
-            path=Path(data["path"]) if data.get("path") else None,
+            data.get("keyvalues", {}), cid=data.get("cid", ""), path=path
         )
 
-    async def fetch(self) -> None:
-        """Download this asset and all its companions from storage.
+    async def fetch(self) -> Path:
+        """Make a local copy of this asset and its companions; return its path.
 
-        Downloads the asset itself, then queries storage for any assets linked
-        via ``{_asset_key}_cid`` to auto-download companions (e.g. indices,
-        mate reads).
+        The asset lands at `<STARGAZER_LOCAL>/<cid>/<name>`, and every asset
+        that names it via ``{_asset_key}_cid`` (indices, dictionaries, mate
+        reads) lands in the same directory, where tools look for them. An
+        asset built from a local file that was never uploaded is returned in
+        place. Copies already on disk are reused.
         """
-        import stargazer.utils.local_storage as _storage
+        import stargazer.utils.storage as _storage
 
-        await _storage.default_client.download(self)
-
+        local = await _storage.default_client.download(self)
         if self._asset_key and self.cid:
-            companions = await assemble(**{f"{self._asset_key}_cid": self.cid})
-            for a in companions:
-                await _storage.default_client.download(a)
+            for companion in await assemble(**{f"{self._asset_key}_cid": self.cid}):
+                await _storage.default_client.download(companion, local.parent)
+        return local
 
     async def update(self, path: Path, **kwargs) -> None:
-        """Upload file and set cid. Shared by all asset types."""
-        from stargazer.utils.local_storage import default_client
+        """Store a local file as this asset, setting fields from kwargs first.
+
+        Sets `cid` and `path` (the stored File) once the file is uploaded and
+        its index row has committed. Raises if either fails.
+        """
+        import stargazer.utils.storage as _storage
 
         for key, value in kwargs.items():
             if value is not None:
                 setattr(self, key, value)
-        self.path = path
-        await default_client.upload(self)
+        await _storage.default_client.upload(self, Path(path))
 
 
 async def assemble(**filters: Any) -> list["Asset"]:
     """Query storage by keyvalue filters and return specialized assets.
 
-    The ``asset`` filter key accepts a string or list of strings to narrow
-    by asset type. Other filters are passed through as keyvalue matchers.
+    Every filter must match exactly. A list value matches any of its entries
+    (`asset=["r1", "r2"]`). Searches the user's index and, when a Pinata key
+    is configured, the public tier; one asset per CID.
 
     Args:
-        **filters: Keyvalue filters. Values may be scalars or lists
-                   (cartesian product).
+        **filters: Keyvalue filters; values are strings or lists of strings
 
     Returns:
         Flat list of specialized Asset subclass instances.
@@ -172,15 +202,8 @@ async def assemble(**filters: Any) -> list["Asset"]:
         assets = await assemble(sample_id="NA12878", asset=["r1", "r2"])
         r1 = next(a for a in assets if isinstance(a, R1))
     """
-    import stargazer.utils.local_storage as _storage
+    import stargazer.utils.storage as _storage
     from stargazer.assets import specialize
-    from stargazer.utils.query import generate_query_combinations
 
-    query_combinations = generate_query_combinations(base_query={}, filters=filters)
-
-    seen: dict[str, dict] = {}
-    for query in query_combinations:
-        for record in await _storage.default_client.query(query):
-            seen[record["cid"]] = record
-
-    return [specialize(r) for r in seen.values()]
+    records = await _storage.default_client.query(filters)
+    return [specialize(r) for r in records]

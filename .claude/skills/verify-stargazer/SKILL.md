@@ -17,11 +17,15 @@ Every run gets its own asset store and evidence directory. All commands run from
 export RUN_ID=$(date +%Y%m%d-%H%M%S)
 export RUN_DIR=$HOME/.stargazer/verify-runs/$RUN_ID
 export STARGAZER_LOCAL=$RUN_DIR/local
+export STARGAZER_STORE_ROOT=$RUN_DIR/store
+export STARGAZER_INDEX_URL=$RUN_DIR/index.db
 export PINATA_JWT=
 mkdir -p "$RUN_DIR/evidence"
 ```
 
-`PINATA_JWT=` must be explicitly empty, not unset. marimo loads `.env`, which holds a real JWT, and an empty value already in the environment wins over it. With it empty, every output stays in `$STARGAZER_LOCAL` and nothing is uploaded to Pinata.
+The three `STARGAZER_*` paths are the run's whole asset store: the local cache, the stored files, and the index. Without all three, a run shares the user's defaults under `~/.stargazer/`.
+
+`PINATA_JWT=` must be explicitly empty, not unset. marimo loads `.env`, which holds a real JWT, and an empty value already in the environment wins over it. With it empty, storage has no public tier: every output stays in the run directory and nothing reaches Pinata.
 
 There is no server to keep alive. Each drive is one headless `marimo export html`, which runs every cell and exits.
 
@@ -58,7 +62,7 @@ Exit `0` is not proof. A notebook can run every cell and still show wrong data. 
 Proof standards:
 
 - Drive the notebook a user opens, not a script that calls the same tasks.
-- Check the stored outputs, not only the rendered page. `check_anndata.py` compares every AnnData asset's `n_obs` keyvalue with the file it points at, and flags two samples sharing one file.
+- Check the stored outputs, not only the rendered page. `check_anndata.py` compares every AnnData asset's `n_obs` keyvalue with the file it points at, and flags a sample missing from a stage.
 - Record the export exit code, the check output, and the feature ID.
 
 Evidence lives in `$RUN_DIR/evidence/` and survives cleanup.
@@ -66,15 +70,15 @@ Evidence lives in `$RUN_DIR/evidence/` and survives cleanup.
 ## Cleanup
 
 ```bash
-rm -rf "$RUN_DIR/local"
+rm -rf "$RUN_DIR/local" "$RUN_DIR/store" "$RUN_DIR"/index.db*
 ```
 
-This removes the run's asset store, which holds hundreds of MB per scRNA run. It never touches `$RUN_DIR/evidence/`, `~/.stargazer/verify-cache/`, or the user's `~/.stargazer/local`. Confirm the evidence still exists after cleanup.
+This removes the run's asset store, which holds hundreds of MB per scRNA run. It never touches `$RUN_DIR/evidence/`, `~/.stargazer/verify-cache/`, or the user's own store under `~/.stargazer/`. Confirm the evidence still exists after cleanup.
 
 ## Helpers
 
 | Script | Does |
 |---|---|
 | `scripts/doctor.sh` | Read-only health check. Exit 1 on a blocking failure |
-| `scripts/seed_scrna.py` | Seeds `$STARGAZER_LOCAL` with the `scrna_demo` raw samples |
-| `scripts/check_anndata.py [stage ...]` | Checks AnnData assets against their files. Exit 1 on mismatch or shared files |
+| `scripts/seed_scrna.py` | Seeds the run's store and index with the `scrna_demo` raw samples |
+| `scripts/check_anndata.py [stage ...]` | Checks AnnData assets against their files. Exit 1 on a mismatch or a sample missing from a stage |

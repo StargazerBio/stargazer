@@ -28,7 +28,7 @@ async def test_samtools_faidx(fixtures_db):
     assert result.tool == "samtools_faidx"
     assert result.build == "GRCh38"
     assert result.path is not None
-    assert result.path.exists()
+    assert (await result.fetch()).exists()
     assert result.path.name.endswith(".fai")
 
 

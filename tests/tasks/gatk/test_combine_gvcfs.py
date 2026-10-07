@@ -57,7 +57,7 @@ async def test_combine_gvcfs_merges_samples(fixtures_db):
     assert result.sample_count == 3
     assert set(result.source_samples) == set(sample_ids)
     assert result.path is not None
-    assert result.path.exists()
+    assert (await result.fetch()).exists()
 
 
 @pytest.mark.asyncio

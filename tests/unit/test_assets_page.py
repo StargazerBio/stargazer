@@ -6,13 +6,12 @@ bare-Asset pass-through for unregistered keys, reserved system keys
 (underscore-prefixed) rejected everywhere.
 """
 
-from pathlib import Path
-
 import pytest
 
 from stargazer.assets import Asset, build_asset
 from stargazer.assets.alignment import Alignment
 from stargazer.config import _stargazer_env_vars
+from stargazer.utils.cid import compute_cid
 from stargazer.utils.pinata import _stamp_owner
 
 
@@ -23,13 +22,11 @@ class TestBuildAsset:
 
     def test_registered_key_builds_typed(self):
         asset = build_asset(
-            {"asset": "alignment", "sample_id": "S1", "duplicates_marked": "true"},
-            path=Path("/tmp/x.bam"),
+            {"asset": "alignment", "sample_id": "S1", "duplicates_marked": "true"}
         )
         assert type(asset) is Alignment
         assert asset.sample_id == "S1"
         assert asset.duplicates_marked is True
-        assert asset.path == Path("/tmp/x.bam")
 
     def test_registered_key_unknown_field_raises(self):
         with pytest.raises(ValueError, match="Unknown keys"):
@@ -43,10 +40,9 @@ class TestBuildAsset:
 
     def test_unregistered_key_builds_bare(self):
         kv = {"asset": "never_registered_key", "sequencer": "novaseq"}
-        asset = build_asset(kv, path=Path("/tmp/sheet.tsv"))
+        asset = build_asset(kv)
         assert type(asset) is Asset
         assert asset.keyvalues == kv
-        assert asset.path == Path("/tmp/sheet.tsv")
 
     def test_underscore_key_rejected_for_unregistered(self):
         with pytest.raises(ValueError, match="stamped automatically"):
@@ -89,30 +85,11 @@ class TestEnvPropagation:
         assert "STARGAZER_OWNER" not in _stargazer_env_vars()
 
 
-class _FakeClient:
-    """Records the uploaded Asset and assigns a fake cid."""
-
-    def __init__(self):
-        self.uploaded = None
-
-    async def upload(self, comp):
-        self.uploaded = comp
-        comp.cid = "fake_cid"
-
-
 class TestUploadFileTool:
-    """server.py::upload_file delegates validation to build_asset()."""
-
-    @pytest.fixture
-    def fake_client(self, monkeypatch):
-        from stargazer import server
-
-        fake = _FakeClient()
-        monkeypatch.setattr(server, "default_client", fake)
-        return fake
+    """server.py::upload_file validates through build_asset() and stores the file."""
 
     async def test_unregistered_key_uploads_as_generic_with_note(
-        self, fake_client, tmp_path
+        self, isolated_storage, tmp_path
     ):
         from stargazer.server import upload_file
 
@@ -122,12 +99,15 @@ class TestUploadFileTool:
             str(f), {"asset": "never_registered_key", "sequencer": "novaseq"}
         )
         assert "not registered" in result["note"]
-        assert result["cid"] == "fake_cid"
-        assert type(fake_client.uploaded) is Asset
-        assert fake_client.uploaded.keyvalues["asset"] == "never_registered_key"
+        assert result["cid"] == compute_cid(f)
+        row = await isolated_storage.index.get(result["cid"])
+        assert row["keyvalues"] == {
+            "asset": "never_registered_key",
+            "sequencer": "novaseq",
+        }
 
     async def test_registered_key_uploads_typed_without_note(
-        self, fake_client, tmp_path
+        self, isolated_storage, tmp_path
     ):
         from stargazer.server import upload_file
 
@@ -135,13 +115,15 @@ class TestUploadFileTool:
         f.write_bytes(b"BAM")
         result = await upload_file(str(f), {"asset": "alignment", "sample_id": "S1"})
         assert "note" not in result
-        assert type(fake_client.uploaded) is Alignment
+        row = await isolated_storage.index.get(result["cid"])
+        assert row["keyvalues"]["asset"] == "alignment"
+        assert row["keyvalues"]["sample_id"] == "S1"
 
-    async def test_underscore_key_rejected(self, fake_client, tmp_path):
+    async def test_underscore_key_rejected(self, isolated_storage, tmp_path):
         from stargazer.server import upload_file
 
         f = tmp_path / "x.bam"
         f.write_bytes(b"BAM")
         with pytest.raises(ValueError, match="stamped automatically"):
             await upload_file(str(f), {"asset": "alignment", "_owner": "me"})
-        assert fake_client.uploaded is None
+        assert await isolated_storage.index.query({}) == []

@@ -4,7 +4,7 @@
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.local_storage as _storage
+import stargazer.utils.storage as _storage
 from stargazer.assets import Reference, ReferenceIndex
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
@@ -22,8 +22,7 @@ async def samtools_faidx(ref: Reference) -> ReferenceIndex:
         ReferenceIndex asset containing the .fai file
     """
     logger.info(ref.to_dict())
-    await ref.fetch()
-    ref_path = ref.path
+    ref_path = await ref.fetch()
 
     if not ref_path or not ref_path.exists():
         raise FileNotFoundError(f"Reference file not found at {ref_path}")

@@ -19,20 +19,26 @@ for bin in flyte marimo; do
   if uv run which "$bin" >/dev/null 2>&1; then ok "$bin in uv env"; else bad "$bin missing from uv env"; fi
 done
 
-if [[ -z "${STARGAZER_LOCAL:-}" ]]; then
-  bad "STARGAZER_LOCAL unset: export it to this run's directory"
-elif [[ "$STARGAZER_LOCAL" == "$HOME/.stargazer/local" ]]; then
-  bad "STARGAZER_LOCAL is the user's default store: use a run directory"
-else
-  ok "STARGAZER_LOCAL=$STARGAZER_LOCAL"
-fi
+check_path() {  # name, the user's default it must not equal
+  local name="$1" default="$2" value="${!1:-}"
+  if [[ -z "$value" ]]; then
+    bad "$name unset: export it to this run's directory"
+  elif [[ "$value" == "$default" ]]; then
+    bad "$name is the user's default: use a run directory"
+  else
+    ok "$name=$value"
+  fi
+}
+check_path STARGAZER_LOCAL "$HOME/.stargazer/local"
+check_path STARGAZER_STORE_ROOT "$HOME/.stargazer/store"
+check_path STARGAZER_INDEX_URL "$HOME/.stargazer/index.db"
 
 # marimo loads .env, which holds a PINATA_JWT. An explicitly empty value wins
 # over the .env entry and keeps outputs local.
 if [[ "${PINATA_JWT+set}" == "set" && -z "$PINATA_JWT" ]]; then
-  ok "PINATA_JWT explicitly empty (outputs stay local)"
+  ok "PINATA_JWT explicitly empty (no public tier; outputs stay in the run)"
 else
-  bad "PINATA_JWT not explicitly empty: export PINATA_JWT= so drives don't upload to Pinata"
+  bad "PINATA_JWT not explicitly empty: export PINATA_JWT= so drives stay inside the run"
 fi
 
 for cid in $(grep -o 'bafy[a-z0-9]*' src/stargazer/bundles/scrna_demo.yaml); do

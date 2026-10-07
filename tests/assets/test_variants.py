@@ -2,17 +2,19 @@
 Tests for Variants asset types.
 """
 
+from pathlib import Path
+
 import pytest
 from conftest import GATK_FIXTURES_DIR
 
-import stargazer.utils.local_storage as _storage_mod
+import stargazer.utils.storage as _storage_mod
 from stargazer.assets import specialize
 from stargazer.assets.variants import KnownSites, Variants, VariantsIndex
 
 
 @pytest.mark.asyncio
 async def test_variants_fetch(fixtures_db):
-    """Test query + specialize resolves VCF and index paths from TinyDB."""
+    """Test query + specialize resolves VCF and index local copies from the store."""
     [vcf_r] = await _storage_mod.default_client.query(
         {"asset": "variants", "sample_id": "NA12829"}
     )
@@ -24,9 +26,9 @@ async def test_variants_fetch(fixtures_db):
     idx = specialize(idx_r)
 
     assert vcf.path is not None
-    assert vcf.path.exists()
+    assert (await vcf.fetch()).exists()
     assert idx.path is not None
-    assert idx.path.exists()
+    assert (await idx.fetch()).exists()
 
 
 @pytest.mark.asyncio
@@ -37,8 +39,8 @@ async def test_variants_get_vcf_path():
 
     vcf = Variants(cid="test", path=vcf_path, sample_id="NA12829")
 
-    assert vcf.path == vcf_path
-    assert vcf.path.exists()
+    assert vcf.path.path == str(vcf_path)
+    assert Path(vcf.path.path).exists()
 
 
 @pytest.mark.asyncio

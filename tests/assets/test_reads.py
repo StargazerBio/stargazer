@@ -2,17 +2,19 @@
 Tests for R1 and R2 read asset types.
 """
 
+from pathlib import Path
+
 import pytest
 from conftest import GENERAL_FIXTURES_DIR
 
-import stargazer.utils.local_storage as _storage_mod
+import stargazer.utils.storage as _storage_mod
 from stargazer.assets import specialize
 from stargazer.assets.reads import R1, R2
 
 
 @pytest.mark.asyncio
 async def test_reads_fetch(fixtures_db):
-    """Test query + specialize resolves R1 and R2 paths from TinyDB."""
+    """Test query + specialize resolves R1 and R2 local copies from the store."""
     [r1_r] = await _storage_mod.default_client.query(
         {"asset": "r1", "sample_id": "NA12829"}
     )
@@ -24,9 +26,9 @@ async def test_reads_fetch(fixtures_db):
     r2 = specialize(r2_r)
 
     assert r1.path is not None
-    assert r1.path.exists()
+    assert (await r1.fetch()).exists()
     assert r2.path is not None
-    assert r2.path.exists()
+    assert (await r2.fetch()).exists()
 
 
 @pytest.mark.asyncio
@@ -40,10 +42,10 @@ async def test_reads_get_paths():
     r1 = R1(cid="test", path=r1_path, sample_id="NA12829")
     r2 = R2(cid="test", path=r2_path, sample_id="NA12829")
 
-    assert r1.path == r1_path
-    assert r1.path.exists()
-    assert r2.path == r2_path
-    assert r2.path.exists()
+    assert r1.path.path == str(r1_path)
+    assert Path(r1.path.path).exists()
+    assert r2.path.path == str(r2_path)
+    assert Path(r2.path.path).exists()
 
 
 @pytest.mark.asyncio

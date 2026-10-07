@@ -3,11 +3,14 @@
 
 Provides async interface for authenticated Pinata operations:
 - Uploading files with keyvalue metadata
-- Downloading private files via signed gateway URLs
 - Querying files by keyvalue pairs
-- Deleting files
+- Updating metadata and deleting files
+- Minting signed upload and download URLs
 
-Used as a remote backend by LocalStorageClient when PINATA_JWT is available.
+The SDK's storage client uses it for the public tier only: shared data lives
+on Pinata's public network, readable by everyone and attributed by `_owner`.
+The asset-manager page (`app/assets.py`) still calls it directly on both
+networks.
 
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
@@ -66,15 +69,11 @@ class PinataClient:
     Handles authenticated operations against the Pinata API: uploads,
     private downloads via signed URLs, metadata queries, and deletions.
 
-    This is a pure remote transport — caching is handled by LocalStorageClient.
+    A pure remote transport: caching and gateway downloads are the storage
+    client's job (`stargazer.utils.storage`).
 
-    PINATA_VISIBILITY controls upload network and query/download behavior:
-    - "private": uploads as private, downloads via signed URLs, queries /files/private
-    - "public": uploads as public, downloads via public gateway (handled by
-      LocalStorageClient), queries /files/public
-
-    If JWT is unset, only public downloads are possible (via LocalStorageClient's
-    public gateway fallback).
+    PINATA_VISIBILITY sets the default network for uploads and deletes;
+    `query()` and `update_metadata()` take a `network` argument.
 
     Usage:
         client = PinataClient()
@@ -204,28 +203,27 @@ class PinataClient:
             data = await response.json()
             return data["data"]
 
-    async def upload(self, component: Asset) -> None:
-        """Upload a file to IPFS via Pinata. Sets component.cid.
+    async def upload(self, component: Asset, path: Path) -> None:
+        """Upload a local file to IPFS via Pinata as `component`. Sets component.cid.
 
         Files up to ``TUS_THRESHOLD_BYTES`` go via the plain multipart POST;
         larger files use the resumable TUS endpoint (chunked, no resume yet).
 
         Args:
-            component: Asset with path and keyvalues set
+            component: Asset whose keyvalues describe the file
+            path: The local file to upload
         """
-        path = component.path
-        if path is None:
-            raise ValueError("component.path must be set before uploading")
-
+        path = Path(path)
         kv = _stamp_owner(component.to_keyvalues())
         if path.stat().st_size > TUS_THRESHOLD_BYTES:
-            await self._upload_tus(component, kv)
+            await self._upload_tus(component, path, kv)
         else:
-            await self._upload_plain(component, kv)
+            await self._upload_plain(component, path, kv)
 
-    async def _upload_plain(self, component: Asset, kv: dict[str, str]) -> None:
+    async def _upload_plain(
+        self, component: Asset, path: Path, kv: dict[str, str]
+    ) -> None:
         """Plain multipart POST upload (≤ TUS_THRESHOLD_BYTES)."""
-        path = component.path
         url = f"{self.UPLOAD_BASE}/files"
 
         async with aiohttp.ClientSession() as session:
@@ -244,14 +242,15 @@ class PinataClient:
                 data_obj = result.get("data", result)
                 component.cid = data_obj["cid"]
 
-    async def _upload_tus(self, component: Asset, kv: dict[str, str]) -> None:
+    async def _upload_tus(
+        self, component: Asset, path: Path, kv: dict[str, str]
+    ) -> None:
         """Resumable TUS upload for large files (chunked, no resume yet).
 
         Creates an upload, streams the file in ``TUS_CHUNK_BYTES`` chunks via
         ``PATCH``, and reads the resulting CID from the ``Upload-Cid`` header
         on the completing response.
         """
-        path = component.path
         metadata = _tus_metadata(path.name, self.visibility, kv)
 
         async with aiohttp.ClientSession() as session:
@@ -292,36 +291,6 @@ class PinataClient:
         if not cid:
             raise ValueError("TUS upload completed but returned no Upload-Cid")
         component.cid = cid
-
-    async def download_to(self, cid: str, dest: Path) -> None:
-        """Download a file to dest. Uses signed URL for private, raises for public.
-
-        Public downloads are handled by LocalStorageClient's public gateway
-        fallback, so this method is only called for private visibility.
-
-        Args:
-            cid: Content identifier
-            dest: Destination path to write to
-        """
-        if self.visibility == "public":
-            raise ValueError(
-                "Public downloads should use the public IPFS gateway, "
-                "not signed URLs. This is a bug — LocalStorageClient "
-                "should have handled this download."
-            )
-
-        download_url = await self._get_signed_url(cid)
-
-        async with (
-            aiohttp.ClientSession() as session,
-            session.get(download_url) as response,
-        ):
-            response.raise_for_status()
-
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            async with aiofiles.open(dest, "wb") as f:
-                async for chunk in response.content.iter_chunked(8192):
-                    await f.write(chunk)
 
     async def query(
         self, keyvalues: dict[str, str], network: str | None = None

@@ -6,7 +6,7 @@ Marks duplicate reads in BAM files using GATK MarkDuplicates.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.local_storage as _storage
+import stargazer.utils.storage as _storage
 from stargazer.assets import Alignment, AlignmentIndex, DuplicateMetrics
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
@@ -31,8 +31,7 @@ async def mark_duplicates(alignment: Alignment) -> Alignment:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037052812-MarkDuplicates-Picard
     """
     logger.info(alignment.to_dict())
-    await alignment.fetch()
-    bam_path = alignment.path
+    bam_path = await alignment.fetch()
     output_dir = _storage.default_client.local_dir
 
     output_bam = output_dir / f"{alignment.sample_id}_marked_duplicates.bam"

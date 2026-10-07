@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-import stargazer.utils.local_storage as _storage_mod
+import stargazer.utils.storage as _storage_mod
 from stargazer.assets import specialize
 from stargazer.assets.reference import (
     AlignerIndex,
@@ -15,11 +15,12 @@ from stargazer.assets.reference import (
     ReferenceIndex,
     SequenceDict,
 )
+from stargazer.utils.cid import compute_cid
 
 
 @pytest.mark.asyncio
 async def test_update_components_local_only():
-    """Test asset update() methods in local-only mode."""
+    """update() gives each file its IPFS CID and seeds the local cache under it."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
 
@@ -40,9 +41,9 @@ async def test_update_components_local_only():
         bwt = AlignerIndex()
         await bwt.update(test_bwt, build="GRCh38", aligner="bwa")
 
-        assert fasta.cid.startswith("local_")
-        assert faidx.cid.startswith("local_")
-        assert bwt.cid.startswith("local_")
+        assert fasta.cid == compute_cid(test_fasta)
+        assert faidx.cid == compute_cid(test_faidx)
+        assert bwt.cid == compute_cid(test_bwt)
 
         assert fasta.build == "GRCh38"
         assert faidx.build == "GRCh38"
@@ -50,18 +51,16 @@ async def test_update_components_local_only():
         assert bwt.aligner == "bwa"
 
         cache_dir = _storage_mod.default_client.local_dir
-        assert (cache_dir / test_fasta.name).exists()
-        assert (cache_dir / test_faidx.name).exists()
-        assert (cache_dir / test_bwt.name).exists()
-
-        assert (cache_dir / test_fasta.name).read_text() == ">chr1\nATCGATCG\n"
-        assert (cache_dir / test_faidx.name).read_text() == "chr1\t8\t0\t9\t10\n"
-        assert (cache_dir / test_bwt.name).read_bytes() == b"BWT_INDEX"
+        assert (cache_dir / fasta.cid / "GRCh38.fa").read_text() == ">chr1\nATCGATCG\n"
+        assert (
+            cache_dir / faidx.cid / "GRCh38.fa.fai"
+        ).read_text() == "chr1\t8\t0\t9\t10\n"
+        assert (cache_dir / bwt.cid / "GRCh38.fa.bwt").read_bytes() == b"BWT_INDEX"
 
 
 @pytest.mark.asyncio
 async def test_reference_fetch(fixtures_db):
-    """Test query + specialize resolves paths from TinyDB."""
+    """Test query + specialize resolves local copies from the store."""
     [fasta_r] = await _storage_mod.default_client.query(
         {"asset": "reference", "build": "GRCh38"}
     )
@@ -73,9 +72,9 @@ async def test_reference_fetch(fixtures_db):
     faidx = specialize(faidx_r)
 
     assert fasta.path is not None
-    assert fasta.path.exists()
+    assert (await fasta.fetch()).exists()
     assert faidx.path is not None
-    assert faidx.path.exists()
+    assert (await faidx.fetch()).exists()
 
 
 @pytest.mark.asyncio

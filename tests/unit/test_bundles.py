@@ -1,14 +1,12 @@
 """Tests for the resource bundle system."""
 
 import textwrap
-from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
-import stargazer.utils.local_storage as _storage_mod
+from stargazer.assets.asset import assemble
 from stargazer.bundles import _load_manifest, fetch_bundle, list_bundles
-from stargazer.utils.local_storage import LocalStorageClient
 
 
 @pytest.fixture
@@ -20,14 +18,16 @@ def bundle_dir(tmp_path):
         name: test_demo
         description: Test bundle for unit tests
         files:
-          - cid: QmTestCID1
+          - cid: bafyTestCID1
+            name: s1d1.h5ad
             keyvalues:
               asset: anndata
               bundle: test_demo
               sample_id: s1d1
               stage: raw
               organism: mouse
-          - cid: QmTestCID2
+          - cid: bafyTestCID2
+            name: s1d3.h5ad
             keyvalues:
               asset: anndata
               bundle: test_demo
@@ -41,13 +41,13 @@ def bundle_dir(tmp_path):
 
 
 @pytest.fixture
-def local_client(tmp_path):
-    """Create a LocalStorageClient pointed at a temp dir (no remote)."""
-    client = LocalStorageClient(local_dir=tmp_path / "storage")
-    orig = _storage_mod.default_client
-    _storage_mod.default_client = client
-    yield client
-    _storage_mod.default_client = orig
+def cached_bundle(isolated_storage):
+    """Put the bundle's files in the local cache, so fetching needs no network."""
+    for cid, name in (("bafyTestCID1", "s1d1.h5ad"), ("bafyTestCID2", "s1d3.h5ad")):
+        path = isolated_storage.local_dir / cid / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(name.encode())
+    return isolated_storage
 
 
 class TestListBundles:
@@ -83,69 +83,38 @@ class TestLoadManifest:
 
 
 class TestFetchBundle:
-    """Tests for bundle hydration."""
+    """Tests for fetching a bundle into the cache and the index."""
 
     @pytest.mark.asyncio
-    async def test_local_mode_seeds_tinydb(self, bundle_dir, local_client):
-        """Without remote, manifest keyvalues are seeded into TinyDB."""
-        with patch.object(local_client, "download", new_callable=AsyncMock) as mock_dl:
-            mock_dl.side_effect = lambda comp, **kw: setattr(
-                comp, "path", Path("/fake/path")
-            )
-            results = await fetch_bundle("test_demo")
+    async def test_registers_files_in_the_index(self, bundle_dir, cached_bundle):
+        """Each file's manifest keyvalues land in the index, findable by assemble()."""
+        await fetch_bundle("test_demo")
 
-        assert len(results) == 2
-        assert results[0]["cid"] == "QmTestCID1"
-        assert results[0]["keyvalues"]["sample_id"] == "s1d1"
+        found = await assemble(asset="anndata", sample_id="s1d1", stage="raw")
+
+        assert [a.cid for a in found] == ["bafyTestCID1"]
+        row = await cached_bundle.index.get("bafyTestCID1")
+        assert row["uri"] == f"{cached_bundle.gateway}/ipfs/bafyTestCID1"
+        assert row["name"] == "s1d1.h5ad"
+
+    @pytest.mark.asyncio
+    async def test_reports_local_copies(self, bundle_dir, cached_bundle):
+        """Results carry each file's local path and whether it was already cached."""
+        results = await fetch_bundle("test_demo")
+
+        assert [r["cid"] for r in results] == ["bafyTestCID1", "bafyTestCID2"]
+        assert results[0]["path"] == str(
+            cached_bundle.local_dir / "bafyTestCID1" / "s1d1.h5ad"
+        )
         assert results[0]["keyvalues"]["bundle"] == "test_demo"
-
-        # Verify TinyDB was populated
-        from tinydb import Query
-
-        File = Query()
-        record = local_client.db.get(File.cid == "QmTestCID1")
-        assert record is not None
-        assert record["keyvalues"]["asset"] == "anndata"
-        assert record["keyvalues"]["sample_id"] == "s1d1"
+        assert all(r["cached"] for r in results)
 
     @pytest.mark.asyncio
-    async def test_remote_mode_skips_tinydb(self, bundle_dir, local_client):
-        """With remote, no TinyDB writes occur — only bytes are downloaded."""
-        mock_remote = AsyncMock()
-        local_client.remote = mock_remote
+    async def test_fetching_twice_keeps_one_row_per_file(
+        self, bundle_dir, cached_bundle
+    ):
+        """Re-fetching a bundle doesn't duplicate its rows."""
+        await fetch_bundle("test_demo")
+        await fetch_bundle("test_demo")
 
-        with patch.object(local_client, "download", new_callable=AsyncMock) as mock_dl:
-            mock_dl.side_effect = lambda comp, **kw: setattr(
-                comp, "path", Path("/fake/path")
-            )
-            results = await fetch_bundle("test_demo")
-
-        assert len(results) == 2
-        # TinyDB should be empty — no metadata writes in remote mode
-        assert len(local_client.db.all()) == 0
-
-    @pytest.mark.asyncio
-    async def test_idempotent_upsert(self, bundle_dir, local_client):
-        """Fetching the same bundle twice doesn't create duplicate records."""
-        with patch.object(local_client, "download", new_callable=AsyncMock) as mock_dl:
-            mock_dl.side_effect = lambda comp, **kw: setattr(
-                comp, "path", Path("/fake/path")
-            )
-            await fetch_bundle("test_demo")
-            await fetch_bundle("test_demo")
-
-        # Should have exactly 2 records, not 4
-        assert len(local_client.db.all()) == 2
-
-    @pytest.mark.asyncio
-    async def test_download_called_for_each_cid(self, bundle_dir, local_client):
-        """Download is called for every CID regardless of mode."""
-        with patch.object(local_client, "download", new_callable=AsyncMock) as mock_dl:
-            mock_dl.side_effect = lambda comp, **kw: setattr(
-                comp, "path", Path("/fake/path")
-            )
-            await fetch_bundle("test_demo")
-
-        assert mock_dl.call_count == 2
-        cids = [call.args[0].cid for call in mock_dl.call_args_list]
-        assert cids == ["QmTestCID1", "QmTestCID2"]
+        assert len(await cached_bundle.index.query({"bundle": "test_demo"})) == 2

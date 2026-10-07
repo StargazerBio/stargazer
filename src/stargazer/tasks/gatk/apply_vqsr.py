@@ -8,7 +8,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 from pathlib import Path
 
-import stargazer.utils.local_storage as _storage
+import stargazer.utils.storage as _storage
 from stargazer.assets import Reference, Variants, VariantsIndex, VQSRModel
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
@@ -55,9 +55,9 @@ async def apply_vqsr(
 
     filter_level = truth_sensitivity_filter_level or _DEFAULT_FILTER_LEVEL[mode]
 
-    await vcf.fetch()
-    await ref.fetch()
-    await vqsr_model.fetch()
+    vcf_path = await vcf.fetch()
+    ref_path = await ref.fetch()
+    model_path = await vqsr_model.fetch()
 
     output_dir = _storage.default_client.local_dir
     sample_id = vcf.sample_id or "cohort"
@@ -67,11 +67,11 @@ async def apply_vqsr(
         "gatk",
         "ApplyVQSR",
         "-R",
-        str(ref.path),
+        str(ref_path),
         "-V",
-        str(vcf.path),
+        str(vcf_path),
         "--recal-file",
-        str(vqsr_model.path),
+        str(model_path),
         "--tranches-file",
         str(tranches_path),
         "--truth-sensitivity-filter-level",

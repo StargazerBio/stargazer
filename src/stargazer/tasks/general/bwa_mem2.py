@@ -7,7 +7,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 import asyncio
 import shlex
 
-import stargazer.utils.local_storage as _storage
+import stargazer.utils.storage as _storage
 from stargazer.assets import R1, R2, AlignerIndex, Alignment, Reference
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
@@ -31,8 +31,7 @@ async def bwa_mem2_index(ref: Reference) -> list[AlignerIndex]:
         https://github.com/bwa-mem2/bwa-mem2
     """
     logger.info(ref.to_dict())
-    await ref.fetch()
-    ref_path = ref.path
+    ref_path = await ref.fetch()
 
     if not ref_path or not ref_path.exists():
         raise FileNotFoundError(f"Reference file not found at {ref_path}")
@@ -96,14 +95,9 @@ async def bwa_mem2_mem(
     if r2:
         logger.info(r2.to_dict())
 
-    await ref.fetch()
-    await r1.fetch()
-    if r2:
-        await r2.fetch()
-
-    ref_path = ref.path
-    r1_path = r1.path
-    r2_path = r2.path if r2 else None
+    ref_path = await ref.fetch()
+    r1_path = await r1.fetch()
+    r2_path = await r2.fetch() if r2 else None
     sample_id = r1.sample_id
 
     if read_group:

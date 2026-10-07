@@ -4,7 +4,7 @@
 spec: [docs/workflows/scrna.md](../workflows/scrna.md)
 """
 
-import stargazer.utils.local_storage as _storage
+import stargazer.utils.storage as _storage
 from stargazer.assets.scrna import AnnData
 from stargazer.config import logger, scrna_env
 
@@ -31,8 +31,7 @@ async def select_features(
     import scanpy as sc
 
     logger.info(adata.to_dict())
-    await adata.fetch()
-    ad = sc.read_h5ad(adata.path)
+    ad = sc.read_h5ad(await adata.fetch())
 
     hvg_kwargs = {"n_top_genes": n_top_genes}
     if batch_key:
