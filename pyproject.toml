@@ -42,7 +42,10 @@ landing = [
     "cryptography>=43",
     # Union user/RBAC admin for the onboarding command (`app.onboard`). Pre-1.0,
     # so bounded to the minor: its remote API has no stability promise yet.
-    "flyteplugins-union>=0.15.1,<0.16",
+    # 0.15.5 shipped a Linux x86_64 wheel only (no sdist), so it can't install
+    # on macOS; the lockfile accepts it anyway because uv locks for every
+    # platform at once.
+    "flyteplugins-union>=0.15.1,<0.16,!=0.15.5",
 ]
 docs = ["mkdocstrings[python]>=1.0.3"]
 app = ["stargazer[notebook,landing]"]

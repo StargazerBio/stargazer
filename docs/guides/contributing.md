@@ -8,13 +8,13 @@ Stargazer has multiple contributor shapes — researchers writing notebooks, age
 git clone https://github.com/StargazerBio/stargazer.git
 cd stargazer
 mamba install -y -c bioconda -c conda-forge bwa bwa-mem2 samtools gatk4
-uv sync --group dev
+uv sync --all-extras
 ```
 
 You now have:
 
 - The stargazer package installed in editable mode in a project venv
-- All Python deps from the lockfile, plus the `dev` group (pytest, ruff, pre-commit)
+- All Python deps from the lockfile, including every optional extra (scRNA, notebook, MCP, app tier, docs), plus the `dev` group (pytest, ruff, pre-commit)
 - Bioconda CLIs on PATH (only needed if you'll run `gatk_env` / `general` tasks locally)
 
 If you don't have mamba/conda on your host, install [miniforge](https://github.com/conda-forge/miniforge) first. The bioconda step is skippable if you only intend to work on `scrna` tasks (pure Python) or the MCP server.
