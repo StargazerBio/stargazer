@@ -75,10 +75,9 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    visitor's subject. Those scripts run on the dashboard and likely on
    notebook pages too, where they can read whatever the page shows. Ask
    Union whether apps can opt out.
-- **Devbox app tier without Union auth.** The devbox has no Union login in
-   front of apps, so the admin and notebook pods won't authenticate there.
-   A dev-only fixed identity would make the app tier testable locally
-   again.
+- **Notebooks on the devbox.** The devbox dashboard and asset storage work
+   (`cli/devbox_dashboard.py`, a stand-in user), but launching a notebook
+   from that dashboard hasn't been driven yet.
 - **Union console handoff (per-user project access).** Delivered by the
    per-user dashboards' onboarding (users get `contributor` on their own
    project); what remains is the dashboard's link out to the console.
@@ -138,6 +137,7 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 
 ## Complete
 
+- ✅ Devbox dashboard and asset storage (2026-10-08): `cli/devbox_dashboard.py` deploys one dashboard on the devbox for a stand-in user (`SG_STAND_IN_SUBJECT`, never honored on Union), storing under `s3://flyte-data/stargazer`, and holds the storage port-forward open while it uploads. The Litestream launcher now takes an S3-compatible store's endpoint and keys from Flyte's `FLYTE_AWS_*`. Verified with the `verify-stargazer` devbox recipe: one pod stored three files, a second found and read them all back, and the index came back whole after two dashboard restarts.
 - ✅ Per-user dashboards (2026-10-06): the shared admin is replaced by one dashboard per user, in their own readable project (`u-<handle>`), serving only its owner. An org admin runs `stargazer-users onboard` to invite or find the user, create the project, grant `contributor` on it alone, and deploy the dashboard at a stable subdomain; `upgrade` is the release, `offboard` stops apps, removes access and archives. Union's app gate needs project view, so this keeps every user's console to their own project, and no privileged credential is deployed. Verified on the tenant end to end. Still open: whether an invited user's first sign-in arrives with the subject `User.create` returned (needs a real second address). [`26_per_user_dashboard.md`](./26_per_user_dashboard.md)
 - ✅ One login: Union auth + workspace state on object storage (2026-10-06): Union's GitHub SSO is the only login; the app tier no longer talks to GitHub (no OAuth App, fork, GitHub App or session cookie). Workspace notebooks and own snapshots live on object storage keyed by the Union subject; notebook pods hydrate at launch, save every few seconds and at scale-to-zero, and admit only their owner. Verified on the tenant end to end. One finding is still open: the admin's in-cluster identity is refused project creation on Union, so each user's `u-<subject>` project has to be created by an org admin until project creation moves out of the app. [`25_workspace_state_object_storage.md`](./25_workspace_state_object_storage.md)
 - ✅ scRNA per-sample output filenames (2026-10-05): every scRNA task wrote a fixed filename (`qc_filtered.h5ad`, `reduced.h5ad`, …) into the shared store, so samples fanned out in-process with `asyncio.gather` overwrote each other and downstream stages read the wrong sample's data. Outputs are now prefixed with `sample_id`, matching the GATK tasks. Verified with `verify-stargazer` on the scRNA pipeline notebook (every stage `ok` for both samples), and locked in by `tests/tasks/scrna/test_sample_isolation.py`.

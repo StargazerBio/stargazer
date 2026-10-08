@@ -228,7 +228,9 @@ Onboarding (`stargazer-users onboard|upgrade`) runs `flyte.build` on the recipe 
 |---|---|---|
 | Deployer's Flyte config (`app.config.FLYTE_CONFIG`) | `.flyte/config.yaml` | `.flyte/union.yaml` (remote builder) |
 | `STARGAZER_REGISTRY` default | `localhost:30000` | unset: the remote builder pushes to Union's registry |
-| Login | none: the devbox has no Union auth, so the app tier doesn't run there | Union's gate |
+| Login | none: a stand-in user (`SG_STAND_IN_SUBJECT`) for requests with no subject, never honored on Union | Union's gate |
+| Dashboard deploy | `cli/devbox_dashboard.py`: one dashboard for the stand-in user (details in `.opencode/reference/devbox_workarounds.md` → Devbox dashboard) | `stargazer-users onboard`, one per user in their project |
+| Object store | rustfs inside the devbox, reached through `FLYTE_AWS_*` | the tenant bucket, through the pod's role |
 
 `FLYTE_DOMAIN` (default `development`) is independent of the target: it's the domain onboarding grants access on and deploys dashboards into, and where dashboards serve and look up per-notebook apps, so a prod deploy sets `FLYTE_DOMAIN=production`. Both `.flyte/` files are gitignored; create `union.yaml` with `flyte create config --endpoint dns:///<tenant> --image-builder remote -o .flyte/union.yaml`.
 
@@ -247,4 +249,4 @@ Per dashboard, onboarding bakes in `FLYTE_PROJECT`, `SG_OWNER_SUBJECT` and `STAR
 
 ## Known Gaps
 
-Production gaps live in the roadmap, not here: the org-wide platform key in every pod, the shared IAM role for the store, Union cookies reaching pods, invite-only onboarding, and no Union auth on the devbox. See [`.opencode/plans/ROADMAP.md`](../../plans/ROADMAP.md).
+Production gaps live in the roadmap, not here: the org-wide platform key in every pod, the shared IAM role for the store, Union cookies reaching pods, and invite-only onboarding. See [`.opencode/plans/ROADMAP.md`](../../plans/ROADMAP.md).

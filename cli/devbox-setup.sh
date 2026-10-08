@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
 # devbox-setup.sh — apply the known cluster-side Flyte devbox workarounds to a
-# fresh `flyte-devbox` container. (The hosted app tier needs Union's login and
-# no longer deploys to the devbox; tasks and workflows still run here.)
+# fresh `flyte-devbox` container. Tasks and workflows run here, and
+# `cli/devbox_dashboard.py` deploys a dashboard for a stand-in user (the devbox
+# has no Union login).
 #
 # These patches live in the k3s addon manifest (and CoreDNS) and are LOST when
 # the devbox container is recreated, so re-run this after every fresh devbox.
@@ -196,7 +197,7 @@ fi
 # ---------------------------------------------------------------------------
 laptop_steps() {
     cat <<EOF
-  # 1) Resolve the storage host to the auto port-forward (app/admin_app.py opens :9000):
+  # 1) Resolve the storage host to a port-forward on :9000 (cli/devbox_dashboard.py opens one while it deploys; run 'kubectl port-forward -n flyte svc/rustfs-svc 9000:9000' when submitting runs yourself):
   echo '127.0.0.1 rustfs-svc.flyte' | sudo tee -a /etc/hosts
 
   # 2) Wildcard-resolve *.$DOMAIN → 127.0.0.1 (the published :30081 port is unchanged):

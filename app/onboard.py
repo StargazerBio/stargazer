@@ -210,12 +210,15 @@ def _notebook_image() -> str:
     return build_notebook_image()
 
 
-def deploy_dashboard(project: str, owner_subject: str) -> str:
+def deploy_dashboard(
+    project: str, owner_subject: str, extra_env: dict[str, str] | None = None
+) -> str:
     """Deploy the dashboard into `project` for its owner; return its URL.
 
     Same app definition for every user: only the project, the owner and the
     subdomain differ. Images are content-hashed, so a release builds each
-    once and every user's dashboard runs the same build.
+    once and every user's dashboard runs the same build. `extra_env` is
+    applied last.
     """
     env_vars = {
         **_BASE_ENV_VARS,
@@ -236,6 +239,7 @@ def deploy_dashboard(project: str, owner_subject: str) -> str:
     # In-cluster init can't discover the org in an app pod; bake the deployer's.
     if org := get_init_config().org:
         env_vars["FLYTE_ORG"] = org
+    env_vars.update(extra_env or {})
     # Serve `app_env` itself, set up for this user, rather than a
     # `clone_with` copy: the copy records `dataclasses.py` as the frame it was
     # created in, and Flyte resolves `include=` and the pod's loader from that

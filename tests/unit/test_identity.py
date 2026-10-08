@@ -91,3 +91,33 @@ def test_display_prefers_name_then_email_then_subject():
 def test_initial_is_first_letter_uppercased():
     """The avatar initial comes from the display label."""
     assert User("1", "", "ann lee").initial == "A"
+
+
+def test_a_deploy_without_a_login_can_name_a_stand_in(monkeypatch):
+    """With no login in front, a request without a subject is the stand-in."""
+    monkeypatch.setattr(config, "STAND_IN_SUBJECT", "devbox-user")
+    assert user_from_request(_request({})) == User("devbox-user")
+
+
+def test_a_forwarded_identity_beats_the_stand_in(monkeypatch):
+    """A subject header, when there is one, is still who's signed in."""
+    monkeypatch.setattr(config, "STAND_IN_SUBJECT", "devbox-user")
+    user = user_from_request(_request({"X-User-Subject": OWNER}))
+    assert user is not None and user.subject == OWNER
+
+
+def test_the_stand_in_is_never_honored_on_union():
+    """Union's login always forwards a subject; set there, the variable does nothing."""
+    assert (
+        config.stand_in_subject(
+            {"STARGAZER_TARGET": "devbox", "SG_STAND_IN_SUBJECT": "devbox-user"}
+        )
+        == "devbox-user"
+    )
+    assert (
+        config.stand_in_subject(
+            {"STARGAZER_TARGET": "union", "SG_STAND_IN_SUBJECT": "devbox-user"}
+        )
+        == ""
+    )
+    assert config.stand_in_subject({"STARGAZER_TARGET": "devbox"}) == ""

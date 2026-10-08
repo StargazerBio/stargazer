@@ -55,6 +55,18 @@ FLYTE_DOMAIN: str = os.environ.get("FLYTE_DOMAIN", "development")
 # means workspace saving isn't configured for this deploy.
 WORKSPACE_ROOT: str = os.environ.get("STARGAZER_WORKSPACE_ROOT", "")
 
+
+def stand_in_subject(env) -> str:
+    """`SG_STAND_IN_SUBJECT`, except on Union, where it's never honored."""
+    if env.get("STARGAZER_TARGET") == "union":
+        return ""
+    return env.get("SG_STAND_IN_SUBJECT", "")
+
+
+# A subject for requests that arrive with no identity, for a deploy with no
+# login in front of it (`app.identity`). Union's login always forwards one.
+STAND_IN_SUBJECT: str = stand_in_subject(os.environ)
+
 # The one user this dashboard serves: their Union subject, baked in when the
 # dashboard is deployed into their project. Unset admits nobody (fail closed).
 # Notebook pods read the same variable for the same check (`app/proxy.py`).

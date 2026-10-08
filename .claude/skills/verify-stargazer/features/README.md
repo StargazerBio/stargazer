@@ -22,11 +22,12 @@ The maintained source for verifying Stargazer's user-facing behavior. Read this 
 
 ## Feature entry contract
 
-Each feature file starts with an H1 title and one paragraph describing the user-visible behavior, then four H2 sections in this order: `Sub-features`, `How to get to it (user POV)`, `Driving it with marimo export`, `Gotchas`.
+Each feature file starts with an H1 title and one paragraph describing the user-visible behavior, then four H2 sections in this order: `Sub-features`, `How to get to it (user POV)`, `Driving it with marimo export` (or `Driving it`, for a feature driven by a script rather than a notebook), `Gotchas`.
 
 ## Features
 
 - [scRNA-seq pipeline notebook](./scrna-pipeline.md) covers loading the demo samples, the fan-out of preprocessing and clustering, and the per-sample summary.
+- [Asset storage on the devbox](./devbox-asset-storage.md) covers the devbox dashboard, storing and finding assets across task pods, and the index surviving a dashboard restart. It needs the devbox, not the Launch block.
 
 ## Not yet mapped
 
@@ -35,4 +36,4 @@ Add a file here once a feature has been driven end to end.
 - **Tutorial notebooks** (`notebooks/tutorials/`). Reachable locally.
 - **MCP server tools** (`list_tasks`, `run_task`, `query_files`). Reachable locally.
 - **Germline variant calling** (`workflows/`). Needs `bwa`, `samtools`, and `gatk` on PATH, or the devbox.
-- **Hosted app** (`app/`: sign-in, notebook launch, asset manager). Needs the devbox, set up per `cli/devbox-setup.sh`.
+- **Hosted app** (`app/`: notebook launch, asset manager). Needs the devbox dashboard (`cli/devbox_dashboard.py`, see [Asset storage on the devbox](./devbox-asset-storage.md)).

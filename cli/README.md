@@ -94,3 +94,20 @@ cli/devbox-setup.sh [--dry-run] [--laptop] [--verify-pod] [--domain D]
 the script prints the commands. `--help` prints the full description. Each
 step's rationale is in
 [`.opencode/reference/devbox_workarounds.md`](../.opencode/reference/devbox_workarounds.md).
+
+## devbox_dashboard.py
+
+Deploys a dashboard on the devbox, after `devbox-setup.sh`. The devbox has no
+Union users or login, so it's one dashboard in the default project for a
+stand-in user, `devbox-user`, storing under the devbox's bucket. It holds a
+port-forward to the devbox's object store open while it uploads, and refuses
+to run unless `STARGAZER_TARGET=devbox` (the default).
+
+```bash
+uv run --all-extras python cli/devbox_dashboard.py
+```
+
+It prints the dashboard's URL. What each setting is for, and how to send runs'
+assets to it:
+[`.opencode/reference/devbox_workarounds.md`](../.opencode/reference/devbox_workarounds.md)
+→ Devbox dashboard.

@@ -290,9 +290,11 @@ Q7–Q12 decided 2026-10-07; the settled decisions above carry them.
       URI comes back) or a signed URL minted by the dashboard. Unknown
       whether either does multipart uploads above 5 GB, which raw FASTQs
       will exceed.
-- [ ] **Q16. The devbox.** Its app tier doesn't run (no Union auth), so
-      remote runs there have no dashboard to index into. Union first, devbox
-      later; see the ROADMAP's devbox app-tier item.
+- [x] **Q16. The devbox.** Its app tier doesn't run (no Union auth), so
+      remote runs there have no dashboard to index into. Resolved
+      2026-10-08: `cli/devbox_dashboard.py` deploys a dashboard for a stand-in
+      user, and the launcher handles the devbox's S3-compatible store.
+      Verified with the `verify-stargazer` devbox recipe.
 - [x] **Q17. The cache behind `File.download()`.** Flyte's `download()` has no
       cache (SDK source). Decided: `asset.path` always stays the stored File,
       and `fetch()` is the cached download, returning the local path with
