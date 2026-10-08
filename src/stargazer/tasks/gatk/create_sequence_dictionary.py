@@ -4,7 +4,7 @@
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.local_storage as _storage
+import stargazer.utils.storage as _storage
 from stargazer.assets import Reference, SequenceDict
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
@@ -22,8 +22,7 @@ async def create_sequence_dictionary(ref: Reference) -> SequenceDict:
         SequenceDict asset containing the .dict file
     """
     logger.info(ref.to_dict())
-    await ref.fetch()
-    ref_path = ref.path
+    ref_path = await ref.fetch()
 
     if not ref_path or not ref_path.exists():
         raise FileNotFoundError(f"Reference file not found at {ref_path}")

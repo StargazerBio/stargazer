@@ -6,7 +6,7 @@ Merges aligned BAM with unmapped BAM using GATK MergeBamAlignment.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.local_storage as _storage
+import stargazer.utils.storage as _storage
 from stargazer.assets import Alignment, AlignmentIndex, Reference
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
@@ -36,13 +36,10 @@ async def merge_bam_alignment(
     logger.info(unmapped_bam.to_dict())
     logger.info(ref.to_dict())
     # fetch() auto-downloads companions (.fai, .dict for ref)
-    await aligned_bam.fetch()
-    await unmapped_bam.fetch()
-    await ref.fetch()
+    aligned_path = await aligned_bam.fetch()
+    unmapped_path = await unmapped_bam.fetch()
+    ref_path = await ref.fetch()
 
-    ref_path = ref.path
-    aligned_path = aligned_bam.path
-    unmapped_path = unmapped_bam.path
     output_dir = _storage.default_client.local_dir
     output_bam = output_dir / f"{aligned_bam.sample_id}_merged.bam"
 

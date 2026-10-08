@@ -78,7 +78,7 @@ def _require_user(request: Request) -> User:
 
 
 def _require_pinata() -> None:
-    """Raise 503 when no PINATA_JWT is present — the page has no TinyDB mode."""
+    """Raise 503 when no PINATA_JWT is present — the page reads Pinata only."""
     if not os.environ.get("PINATA_JWT"):
         raise HTTPException(status_code=503, detail="Pinata not configured")
 

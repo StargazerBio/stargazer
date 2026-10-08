@@ -54,4 +54,4 @@ Both include the MCP server over stdio. Any MCP client connects to `stargazer se
 
 ## Configuration
 
-Storage backend is controlled by `PINATA_JWT` and `PINATA_VISIBILITY`. See [Configuration](configuration.md).
+Storage locations are set by `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL`; `PINATA_JWT` turns on the public tier. See [Configuration](configuration.md).

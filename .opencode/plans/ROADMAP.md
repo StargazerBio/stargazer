@@ -4,6 +4,20 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 
 ## Upcoming
 
+- **Asset storage on the object store, indexed per user.** Asset bytes move
+   off Pinata into object storage as `flyte.io.File`s, identified by an IPFS
+   CID computed locally (it matches Pinata's). The keyvalue index moves into
+   SQLite: a file on disk when run locally, owned by each user's dashboard on Union
+   and served to task and notebook pods over HTTP. TinyDB, the two storage
+   modes and Pinata as the working store go. Pinata stays as the public tier
+   for shared data, attributed by `_owner`. The tenant checks are done.
+   [`27_asset_storage_index.md`](./27_asset_storage_index.md)
+- **Make `Asset.fetch()` cheaper.** Even when the file is already in the
+   cache, `fetch()` looks up the asset's companions every time: one index
+   query (an HTTP call to the dashboard on Union) and, with `PINATA_JWT` set,
+   one Pinata API call (measured 2026-10-07). A task that fetches many assets
+   pays that many round-trips. Options: memoize companion lookups per
+   process, or ask Pinata only about assets that came from the public tier.
 - **Union production deploy** (tenant: `stargazerbio.us-west-2.unionai.cloud`).
    Done in PRs: per-pod session keys (#2), the `STARGAZER_TARGET`
    devbox/union switch, a configurable domain, and a fixed per-deploy
@@ -28,12 +42,26 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 - **Per-user storage isolation.** Every project on the tenant runs as one
    IAM role, so a notebook's own code can read and write every user's
    workspace objects (and all task data). Needs per-project roles scoped to
-   each user's prefix, from Union.
+   each user's prefix. The roles and policies are ours to create in our AWS
+   account (attaching policies to the shared `userflyterole` needs no Union
+   step), but per Union's BYOC docs, Union binds a custom role to a
+   project-domain namespace. So each new user's project would need a Union
+   request unless that binding can be automated.
+   ([Union BYOC: enabling AWS resources](https://www.union.ai/docs/v2/union/deployment/byoc/enabling-aws-resources.md))
 - **Union session cookies reach notebook pods.** Union forwards the
    visitor's session cookies to the app. The proxy strips them before
    marimo, but code in a pod could still capture a visiting org member's
    token. Look for a way to have Union drop them for an app, or isolate the
    proxy from notebook code.
+- **App internal addresses skip Union's login.** Every app answers at
+   `http://<app>.<project>-<domain>.svc.cluster.local` with no login and no
+   identity headers; a task pod in the same project reached a
+   `requires_auth=True` app that way (measured, plan 27 Piece 0). Untested:
+   whether pods in other projects can reach it, and whether a forged
+   `X-User-Subject` sent there gets through the dashboard's owner check. If
+   both hold, code in any pod can act as any user on their dashboard. One fix
+   is to verify the signed `X-User-Token` ID token instead of trusting
+   `X-User-Subject`; another is per-namespace network policy.
 - **Self-serve onboarding.** New users are onboarded by an org admin
    (`stargazer-users onboard`, which sends Union's invite), since Union
    doesn't auto-provision users on first sign-in. Unverified: that the

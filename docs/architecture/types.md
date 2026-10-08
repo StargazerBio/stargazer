@@ -15,7 +15,7 @@ Every file in Stargazer carries structured keyvalue metadata that describes its 
 flowchart TD
     SC("Asset Subclasses\nschema — real typed dataclass fields")
     KV("dict[str, str]\ntransport — flat storage keyvalues")
-    ST[("StorageClient\npersistence — local TinyDB or Pinata")]
+    ST[("StorageClient\npersistence — object store + index")]
 
     SC <-->|"to_keyvalues() / from_keyvalues()"| KV
     KV <-->|"upload() / query()"| ST
@@ -29,8 +29,8 @@ There is no separate "storage primitive" layer. `Asset` is both the typed schema
 
 | Field | Type | Purpose |
 |-------|------|---------|
-| `cid` | `str` | Content identifier (IPFS or local hash) |
-| `path` | `Path \| None` | Local filesystem path (set after download/upload) |
+| `cid` | `str` | IPFS CID of the file, computed locally from its bytes |
+| `path` | `flyte.io.File \| None` | Where the stored file lives (set by `update()`); assigning a local `Path` wraps it in a File |
 | `keyvalues` | `dict[str, str]` | Free-form metadata — **bare `Asset` only** (see Catchall below) |
 
 ### Subclass Declaration
@@ -62,8 +62,8 @@ A bare `Asset` (no `_asset_key`) carries a free-form `keyvalues` dict, serialize
 
 ### Core Methods
 
-- `fetch()` — downloads self, then queries for companions via `{_asset_key}_cid = self.cid` and downloads those too
-- `update(path, **kwargs)` — sets the given attributes, sets path, uploads to storage
+- `fetch()` — downloads self, then queries for companions via `{_asset_key}_cid = self.cid` and downloads those into the same directory; returns the local path
+- `update(path, **kwargs)` — sets the given attributes, stores the file, and sets `cid` and `path`
 - `to_dict()` / `from_dict()` — JSON serialization
 
 ## Asset Subclass Catalog
@@ -76,7 +76,8 @@ Assets link to related files via `{asset_key}_cid` keyvalues. When `fetch()` is 
 
 1. Downloads the asset itself
 2. Queries for assets where `{_asset_key}_cid` equals this asset's CID
-3. Downloads all matching companions
+3. Downloads all matching companions into the same directory, so tools find an index next to its file
+4. Returns the asset's local path
 
 Example: `Reference(cid="Qmref").fetch()` also finds and downloads any `ReferenceIndex` with `reference_cid="Qmref"`.
 
@@ -84,7 +85,7 @@ Example: `Reference(cid="Qmref").fetch()` also finds and downloads any `Referenc
 
 `assemble(**filters)` is a module-level async function in `types/asset.py`. It queries storage with keyvalue filters, deduplicates by CID, and returns a flat `list[Asset]` of specialized subclass instances.
 
-The `asset` filter key accepts a string or list of strings. List-valued filters produce cartesian product queries via `utils/query.py`.
+Every filter must match exactly. A list value matches any of its entries, in a single query (the `asset` key accepts a list too).
 
 Workflows filter the returned list with `isinstance` to pick out the types they need — see [Writing a Workflow](../guides/writing-a-workflow.md).
 
@@ -94,11 +95,13 @@ Workflows filter the returned list with `isinstance` to pick out the types they 
 
 ## Storage Layer
 
-`utils/local_storage.py` defines `LocalStorageClient` with four methods: `upload()`, `download()`, `query()`, `delete()`. The module-level `default_client` is resolved at import time based on environment:
+`utils/storage.py` defines `StorageClient`, the one storage interface: `upload()`, `download()`, `query()`, `get()`, `delete()` and `update_metadata()`. The module-level `default_client` is built lazily from the environment, so it sees credentials Flyte injects just before a task runs.
 
-- No JWT: `LocalStorageClient` with TinyDB for metadata, public IPFS gateway for cache misses
-- `PINATA_JWT` set: `LocalStorageClient` + `PinataClient` remote for authenticated operations
+- **Bytes** go to the object store at `<store root>/users/<owner>/assets/<cid>/<name>`.
+- **Metadata** goes to the index (`utils/index.py`), one row per CID; on Union the user's dashboard owns it.
+- **Public data** joins queries from Pinata's public network when `PINATA_JWT` is set.
+- **The cache** at `<STARGAZER_LOCAL>/<cid>/<name>` sits in front of downloads.
 
-The two modes are explicit: with a JWT, Pinata owns metadata and TinyDB is not involved. Without a JWT, TinyDB is the source of truth. Upload, query, and delete each go to one backend, never both.
+The CID comes from `utils/cid.py`, which builds the same UnixFS DAG Pinata does, so identity never depends on where a file is stored. Locations and settings are in [Configuration](configuration.md).
 
-Tasks never call storage directly. All storage interaction flows through `Asset.fetch()` and `Asset.update()`.
+Tasks never call storage directly. All storage interaction flows through `Asset.fetch()`, `Asset.update()` and `assemble()`.

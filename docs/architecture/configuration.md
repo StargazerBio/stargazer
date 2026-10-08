@@ -1,85 +1,66 @@
 # Configuration
 
-Stargazer uses `LocalStorageClient` as the single storage client. It always handles caching and local metadata. When `PINATA_JWT` is available, a `PinataClient` remote is attached for authenticated operations. Public IPFS gateway access is always available — downloading a public CID works out of the box with no configuration, the same way `docker run ubuntu` pulls from Docker Hub by default.
+Asset storage has three parts: an **object store** for the bytes, an **index** for the metadata, and a **local cache** in front of both. A fourth, the **public tier**, holds shared data on Pinata's public network. The same code runs locally and on a hosted deploy; only the locations differ.
 
-## Summary
+| Part | Locally | On Union | Set by |
+|------|---------|----------|--------|
+| Object store | `~/.stargazer/store` | The tenant bucket, under the deploy's root | `STARGAZER_STORE_ROOT` |
+| Index | `~/.stargazer/index.db` (SQLite) | The user's dashboard, over HTTP | `STARGAZER_INDEX_URL` |
+| Local cache | `~/.stargazer/local` | The pod's disk | `STARGAZER_LOCAL` |
+| Public tier | Off without a key | Pinata's public network | `PINATA_JWT` |
 
-| Setup | Download | Upload / Query / Delete | Env Requirements |
-|-------|----------|------------------------|------------------|
-| **Default** | Cache + public IPFS gateway | Local only (TinyDB) | None |
-| **JWT + public** | Cache + public IPFS gateway | Pinata API (public network) | `PINATA_JWT`, `PINATA_VISIBILITY=public` |
-| **JWT + private** | Cache + signed URLs | Pinata API (private network) | `PINATA_JWT` |
+## Identity and layout
 
-### Default (no JWT)
+An asset's identity is its **IPFS CID**, computed locally from the bytes with the same parameters Pinata uses, so a file's working CID is the CID it keeps if it's ever published. Each user's files are stored once, at `<store root>/users/<owner>/assets/<cid>/<name>`, where the owner is `STARGAZER_OWNER` (the Union subject) or `local`. An asset's `path` is a `flyte.io.File` naming that stored location, so an asset passed between tasks points somewhere every pod can read.
 
-Files are stored on the local filesystem under `STARGAZER_LOCAL` (defaults to `~/.stargazer/local`). Metadata is indexed in a TinyDB database.
+The index holds one row per CID: where the bytes live, the original filename, and the asset's keyvalues. Re-recording a CID with different keyvalues replaces them and logs a warning. Rows are written after the bytes, so a row never points at a missing file, and a write that doesn't land fails the task rather than being retried behind its back.
 
-Downloads check the local cache first. On a cache miss, the public IPFS gateway is used to fetch the file — no credentials needed for public CIDs.
-
-> **Note — public Pinata files require JWT to query:** Downloading a public CID works without credentials (any IPFS gateway can serve it), but *querying* Pinata's file index — even `/files/public` — requires a JWT. Without `PINATA_JWT`, `assemble()` searches only the local TinyDB; public files pinned to your Pinata account are invisible to it.
-
-### With JWT
-
-When `PINATA_JWT` is present, a `PinataClient` remote is attached. This enables upload, query, and delete via the Pinata API. `PINATA_VISIBILITY` controls whether files are uploaded to the public or private network:
-
-- **private** (default): uploads as private, downloads use signed URLs, queries hit `/files/private`
-- **public**: uploads as public, downloads use the public IPFS gateway, queries hit `/files/public`
-
-> **Warning — ephemeral compute:** Without `PINATA_JWT`, uploads and metadata are stored only on the local filesystem. In ephemeral compute environments (e.g. Union/Flyte pods, CI runners, serverless functions), local storage is lost when the container exits. Set `PINATA_JWT` to persist outputs beyond the lifetime of the compute instance.
+The cache keeps each downloaded file at `<STARGAZER_LOCAL>/<cid>/<name>`. Uploads seed it, so a task's outputs are already cached in the same pod or local run.
 
 ## Environment Variables
 
-All env vars are centralized in `utils/config.py`. If set (even to empty string), the value is used exactly. If unset, the default applies.
+All env var defaults are set in `config.py`. If set (even to empty string), the value is used exactly. If unset, the default applies.
 
 | Variable | Purpose | Default | Required |
 |----------|---------|---------|----------|
-| `STARGAZER_LOCAL` | Local storage directory | `~/.stargazer/local` | No |
-| `PINATA_JWT` | Pinata API authentication | None (unset) | Only for authenticated operations |
-| `PINATA_GATEWAY` | Public IPFS gateway URL | `https://dweb.link` | No (set to empty string to disable) |
-| `PINATA_VISIBILITY` | `public` or `private` | `private` | No |
+| `STARGAZER_STORE_ROOT` | Object-store root: a directory or a bucket URI | `~/.stargazer/store` | No |
+| `STARGAZER_INDEX_URL` | Index: a SQLite file path, or a dashboard URL | `~/.stargazer/index.db` | No |
+| `STARGAZER_LOCAL` | Scratch space for task outputs, and the download cache | `~/.stargazer/local` | No |
+| `STARGAZER_OWNER` | Owner of new assets: their folder in the store, and `_owner` | None (unset → `local`) | No |
+| `PINATA_JWT` | Turns on the public tier | None (unset) | Only for public data |
+| `PINATA_GATEWAY` | IPFS gateway for public downloads | `https://dweb.link` | No |
 | `STARGAZER_TARGET` | Flyte backend for images and deploys: `devbox` or `union` | `devbox` | No |
 | `STARGAZER_REGISTRY` | Image push registry | `localhost:30000` on `devbox`; unset on `union` (the builder's own registry) | No |
 
-## Resolution Logic
+`STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` are forwarded into task pods only when set explicitly. A pod can't use the local default store or index, so a remote run submitted locally with the defaults has nowhere shared to write. Local-to-cluster storage is tracked on the roadmap.
 
-1. If `PINATA_JWT` is set: attach `PinataClient` remote
-2. If no JWT: no remote (public gateway still available for downloads)
-
-Always returns `LocalStorageClient`. The remote is optional.
-
-## Download Flow
+## Writing and reading
 
 ```mermaid
 flowchart TD
-    Start([Download requested]) --> A{path exists?}
-    A -->|Yes| Done([Return])
-    A -->|No| B{CID in local cache?}
-    B -->|Yes| Done
-    B -->|No| C{local_ CID?}
-    C -->|Yes| D("Look up TinyDB") --> Done
-    C -->|No| E{Remote + private\nvisibility?}
-    E -->|Yes| F("Signed URL download → cache") --> Done
-    E -->|No| G("Public IPFS gateway → fetch + cache") --> Done
+    U([Asset.update path]) --> C("Compute the CID")
+    C --> S{Already in the store?}
+    S -->|No| P("Put the bytes at users/owner/assets/cid/name") --> R
+    S -->|Yes| R("Upsert the index row, stamping _owner")
+    R --> F("asset.path = the stored File; seed the cache")
+
+    G([Asset.fetch]) --> H{In the cache?}
+    H -->|Yes| L([Return the local path])
+    H -->|No| D("Download from the store, or the gateway for public files") --> L
+    L --> M("Link companions into the same directory")
 ```
 
-## Storage Client Protocol
+`fetch()` returns the local path. Companions — any asset recording `<asset_key>_cid` for this one, such as an index or dictionary — land in the same directory, where tools like GATK look for them. An asset built from a local file that was never stored is used in place. An asset known only by its CID is located through the index, then the public gateway.
 
-All storage operations go through `LocalStorageClient`:
+Gateway downloads use aiohttp directly: `flyte.io.File.download()` can't read an `https://` path.
 
-```mermaid
-flowchart LR
-    C[("LocalStorageClient")]
+## Querying
 
-    C --> U("upload(component)\nremote or local — never both")
-    C --> D("download(component)\nbool — cache → remote (private) → public gateway")
-    C --> Q("query(keyvalues)\nremote or local TinyDB")
-    C --> X("delete(component)\nremote or local")
-```
+`assemble(**filters)` asks the storage client for every record matching all the filters. Every key must match exactly; a list value matches any of its entries, in one query. With a Pinata key, Pinata's public records join the user's rows, deduplicated by CID, with the user's own row winning.
 
-The two modes are explicit and separate:
+## The public tier
 
-- **JWT set (remote mode):** Pinata owns metadata and bytes. TinyDB is not involved. Upload, query, and delete go to Pinata. Downloads fetch bytes by CID via signed URL or public gateway, cached locally as bytes only.
-- **No JWT (local mode):** TinyDB owns metadata. Local filesystem stores bytes. Downloads check TinyDB, then fall back to the public IPFS gateway for cache misses on bytes.
+Shared data — bundles, reference genomes — is public data on Pinata's public network: anyone can read it, and `_owner` records who uploaded it. The SDK reads Pinata's public index (which needs `PINATA_JWT` even for public files) and downloads public bytes from `PINATA_GATEWAY`. It no longer uses Pinata's private network; the asset-manager page still calls Pinata directly on both networks.
 
 ### Pinata upload paths
 
@@ -127,21 +108,11 @@ When a new Flyte task wraps a new CLI tool, layer it onto the image of the `Task
 
 ## Resource Bundles
 
-Bundles are curated sets of files (reference genomes, demo datasets) defined as YAML manifests in `src/stargazer/bundles/`. Each manifest lists CIDs and their keyvalues, with a `bundle` keyvalue on each file for queryability.
+Bundles are curated sets of public files (reference genomes, demo datasets) defined as YAML manifests in `src/stargazer/bundles/`. Each manifest lists CIDs and their keyvalues, with a `bundle` keyvalue on each file for queryability.
 
-### Hydration Flow
+### Fetching
 
-`fetch_resource_bundle(bundle_name)` downloads files by CID:
-
-```mermaid
-flowchart TD
-    Start([fetch_resource_bundle]) --> A("Load YAML manifest by name")
-    A --> B{JWT set?}
-    B -->|Yes| C("Files already registered in Pinata\nDownload bytes by CID\nNo TinyDB writes")
-    B -->|No| D("Seed TinyDB with manifest keyvalues\nDownload bytes from public IPFS gateway")
-    C --> Done([Assets queryable via assemble])
-    D --> Done
-```
+`fetch_resource_bundle(bundle_name)` downloads each file by CID from the IPFS gateway into the local cache and registers it in the user's index, pointing at the gateway. A fetched bundle is then findable with `assemble()` whether or not a Pinata key is set; with one, the same files also come back through the public tier.
 
 ### Bundle Format
 

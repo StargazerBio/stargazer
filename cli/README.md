@@ -1,133 +1,96 @@
 # Stargazer CLI Tools
 
-This directory contains command-line tools for managing Stargazer data and IPFS uploads.
+Maintenance scripts. Run them from the repo root.
 
-## Available Tools
+## upload_to_pinata.py
 
-### upload_to_pinata.py
-
-Generic file uploader for Pinata IPFS storage with custom metadata support.
-
-**Features:**
-- Upload any file(s) to Pinata IPFS
-- Support for JSON metadata or key=value pairs
-- Automatically updates `tests/config.py` with CIDs (optional)
-- Upload multiple files with the same metadata
-- Flexible metadata specification
+Uploads files to Pinata's public network with keyvalue metadata. **Anyone can
+read what it uploads**: use it for shared data such as reference genomes and
+demo bundles. A user's own files go to the object store through
+`Asset.update()` instead.
 
 **Usage:**
 
 ```bash
-# Upload a single file with JSON metadata
-python cli/upload_to_pinata.py /path/to/file.fa \
-  --metadata '{"type": "reference", "build": "GRCh38", "env": "test"}'
+# One file, JSON metadata
+uv run python cli/upload_to_pinata.py /path/to/file.fa \
+  --metadata '{"asset": "reference", "build": "GRCh38"}'
 
-# Upload using key=value metadata pairs (simpler syntax)
-python cli/upload_to_pinata.py myfile.txt \
-  -m type=data \
-  -m env=test \
-  -m version=1.0
+# key=value metadata (repeat -m)
+uv run python cli/upload_to_pinata.py results.vcf \
+  -m asset=variants -m sample_id=NA12829
 
-# Upload and automatically update tests/config.py
-python cli/upload_to_pinata.py tests/fixtures/GRCh38_TP53.fa \
-  -m type=reference -m build=GRCh38 -m region=TP53 -m env=test \
-  --update-config
+# Several files with the same metadata
+uv run python cli/upload_to_pinata.py file1.txt file2.txt \
+  --metadata '{"asset": "dataset"}'
 
-# Upload multiple files with the same metadata
-python cli/upload_to_pinata.py file1.txt file2.txt file3.txt \
-  --metadata '{"type": "test", "env": "dev"}'
-
-# Combine JSON and key=value (key=value takes precedence)
-python cli/upload_to_pinata.py data.csv \
-  --metadata '{"type": "dataset"}' \
-  -m env=production -m version=2.0
+# JSON plus key=value (key=value wins on a shared key)
+uv run python cli/upload_to_pinata.py data.csv \
+  --metadata '{"asset": "dataset"}' -m version=2
 ```
 
-**Metadata Formats:**
-
-1. **JSON format** (`--metadata`):
-   ```bash
-   --metadata '{"type": "reference", "build": "GRCh38", "env": "test"}'
-   ```
-
-2. **Key=value pairs** (`-m` or `--meta`):
-   ```bash
-   -m type=reference -m build=GRCh38 -m env=test
-   ```
-
-3. **Combined** (key=value overrides JSON):
-   ```bash
-   --metadata '{"type": "reference"}' -m env=production
-   ```
+`asset` names the asset type (`reference`, `alignment`, `variants`, …); the
+other keys are that type's fields.
 
 **Options:**
 
-- `files` - One or more file paths to upload (required)
-- `--metadata` / `--keyvalues` - Metadata as JSON string
-- `-m KEY=VALUE` / `--meta KEY=VALUE` - Metadata as key=value pairs (repeatable)
-- `--update-config` - Update tests/config.py with uploaded CIDs
-- `--config-path PATH` - Custom path to config file (default: tests/config.py)
+- `files`: one or more files to upload (required)
+- `--metadata` / `--keyvalues`: metadata as a JSON object
+- `-m KEY=VALUE` / `--meta KEY=VALUE`: one metadata pair; repeatable
+- `--update-config`: after each upload, fill that file's empty entry in the
+  `CIDS` dict of `--config-path` with its CID
+- `--config-path PATH`: the Python file holding `CIDS` (default:
+  `tests/utils/test_pinata.py`)
 
-**Requirements:**
-- `PINATA_JWT` environment variable must be set with your Pinata API key
+**Requirements:** `PINATA_JWT` set to a Pinata API key, from the
+[Pinata dashboard](https://app.pinata.cloud/):
 
-**Example Output:**
+```bash
+export PINATA_JWT='your_jwt_token_here'
+```
+
+**Example output:**
+
 ```
 Uploading 1 file(s) to Pinata...
 
-Uploading: tests/fixtures/GRCh38_TP53.fa
+Uploading: tests/fixtures/general/GRCh38_TP53.fa
   Size: 39,745 bytes
-  Metadata: {'type': 'reference', 'build': 'GRCh38', 'region': 'TP53', 'env': 'test'}
-  ✓ Success!
+  Metadata: {'asset': 'reference', 'build': 'GRCh38'}
+  Success!
     CID: bafkreib6vj3os7l4lqqytaw5vju46iorcknttfiwfnlbizjcqn7xd5hrvy
-    ID: 019b56fb-605b-79a6-96f5-571cdee82c9a
 
 ============================================================
 Upload Summary: 1/1 files uploaded
 ============================================================
 ```
 
-## Setting up Pinata API Key
+### Adding a test fixture's CID
 
-Get your JWT token from [Pinata Dashboard](https://app.pinata.cloud/):
-
-```bash
-export PINATA_JWT='your_jwt_token_here'
-```
-
-## Common Use Cases
-
-### Uploading Test Fixtures
-
-Upload all TP53 reference files for testing:
+`tests/utils/test_pinata.py` keeps the CIDs Pinata assigned to the fixture
+files. To add one, put an empty entry in its `CIDS` dict
+(`"new_fixture.fa": "",`), then upload with `--update-config`:
 
 ```bash
-# Upload main reference file
-python cli/upload_to_pinata.py tests/fixtures/GRCh38_TP53.fa \
-  -m type=reference -m build=GRCh38 -m region=TP53 -m env=test \
-  --update-config
-
-# Upload index files
-python cli/upload_to_pinata.py tests/fixtures/GRCh38_TP53.fa.fai \
-  -m type=reference -m build=GRCh38 -m region=TP53 -m tool=samtools_faidx -m env=test \
-  --update-config
-
-python cli/upload_to_pinata.py \
-  tests/fixtures/GRCh38_TP53.fa.{amb,ann,bwt,pac,sa} \
-  -m type=reference -m build=GRCh38 -m region=TP53 -m tool=bwa_index -m env=test \
-  --update-config
+uv run python cli/upload_to_pinata.py tests/fixtures/general/new_fixture.fa \
+  -m asset=reference --update-config
 ```
 
-### Uploading Analysis Results
+An entry that already has a CID is left alone, and the script prints the line
+to add by hand.
+
+## devbox-setup.sh
+
+Applies the cluster-side workarounds the local Flyte devbox needs: the storage
+signed-URL endpoint, the serving domain, and a CoreDNS wildcard. They're lost
+whenever the `flyte-devbox` container is recreated, so re-run it after every
+fresh devbox. It's safe to re-run.
 
 ```bash
-python cli/upload_to_pinata.py results/variant_calls.vcf \
-  -m type=results -m analysis=variant_calling -m sample=NA12829 -m date=2025-12-25
+cli/devbox-setup.sh [--dry-run] [--laptop] [--verify-pod] [--domain D]
 ```
 
-### Uploading Documentation
-
-```bash
-python cli/upload_to_pinata.py docs/README.md \
-  --metadata '{"type": "documentation", "version": "1.0", "format": "markdown"}'
-```
+`--laptop` also applies the macOS-side DNS change (needs sudo); without it,
+the script prints the commands. `--help` prints the full description. Each
+step's rationale is in
+[`.opencode/reference/devbox_workarounds.md`](../.opencode/reference/devbox_workarounds.md).

@@ -6,7 +6,7 @@ Builds a recalibration model for VQSR using GATK VariantRecalibrator.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.local_storage as _storage
+import stargazer.utils.storage as _storage
 from stargazer.assets import KnownSites, Reference, Variants, VQSRModel
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
@@ -52,10 +52,9 @@ async def variant_recalibrator(
     if not resources:
         raise ValueError(f"At least one resource VCF is required for mode={mode!r}")
 
-    await vcf.fetch()
-    await ref.fetch()
-    for r in resources:
-        await r.fetch()
+    vcf_path = await vcf.fetch()
+    ref_path = await ref.fetch()
+    resource_paths = [await r.fetch() for r in resources]
 
     output_dir = _storage.default_client.local_dir
     sample_id = vcf.sample_id or "cohort"
@@ -68,9 +67,9 @@ async def variant_recalibrator(
         "gatk",
         "VariantRecalibrator",
         "-R",
-        str(ref.path),
+        str(ref_path),
         "-V",
-        str(vcf.path),
+        str(vcf_path),
         "-mode",
         mode,
         "-O",
@@ -79,7 +78,7 @@ async def variant_recalibrator(
         str(output_tranches),
     ]
 
-    for r in resources:
+    for r, r_path in zip(resources, resource_paths, strict=True):
         name = r.resource_name or "unknown"
         known = r.known or "false"
         training = r.training or "false"
@@ -88,7 +87,7 @@ async def variant_recalibrator(
         cmd.extend(
             [
                 f"--resource:{name},known={known},training={training},truth={truth},prior={prior}",
-                str(r.path),
+                str(r_path),
             ]
         )
 

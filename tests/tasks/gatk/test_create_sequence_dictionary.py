@@ -30,7 +30,7 @@ async def test_create_sequence_dictionary_creates_dict(fixtures_db):
     assert result.build == "GRCh38"
     assert result.tool == "gatk_CreateSequenceDictionary"
     assert result.path is not None
-    assert result.path.exists()
+    assert (await result.fetch()).exists()
     assert result.path.name.endswith(".dict")
 
 

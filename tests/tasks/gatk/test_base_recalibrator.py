@@ -52,7 +52,7 @@ async def test_base_recalibrator_creates_report(fixtures_db):
     assert result.sample_id == sample_id
     assert result.tool == "gatk_base_recalibrator"
     assert result.path is not None
-    assert result.path.exists()
+    assert (await result.fetch()).exists()
 
 
 @pytest.mark.asyncio

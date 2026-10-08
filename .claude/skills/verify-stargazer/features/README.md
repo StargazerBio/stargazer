@@ -4,9 +4,9 @@ The maintained source for verifying Stargazer's user-facing behavior. Read this 
 
 ## Baseline preconditions
 
-- The Launch block in `../SKILL.md` has run, so `RUN_DIR`, `STARGAZER_LOCAL`, and an empty `PINATA_JWT` are exported.
+- The Launch block in `../SKILL.md` has run, so `RUN_DIR`, `STARGAZER_LOCAL`, `STARGAZER_STORE_ROOT`, `STARGAZER_INDEX_URL`, and an empty `PINATA_JWT` are exported.
 - `scripts/doctor.sh` exits `0`.
-- Never point `STARGAZER_LOCAL` at the user's `~/.stargazer/local`.
+- Never point the `STARGAZER_*` storage paths at the user's defaults under `~/.stargazer/`.
 
 ## Driving conventions
 

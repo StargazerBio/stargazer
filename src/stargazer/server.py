@@ -23,11 +23,11 @@ import flyte
 from mcp.server import MCPServer
 
 import stargazer.config  # ensure env var defaults are set  # noqa: F401
+import stargazer.utils.storage as _storage
 from stargazer.assets import build_asset
 from stargazer.assets.asset import Asset, assemble
 from stargazer.marshal import marshal_output
 from stargazer.registry import TaskInfo, TaskRegistry
-from stargazer.utils.local_storage import default_client
 
 
 def _asset_key_for_hint(hint: Any) -> str | None:
@@ -88,7 +88,7 @@ _registry = TaskRegistry()
 @mcp.tool()
 async def query_files(keyvalues: dict[str, str]) -> list[dict]:
     """Query files by metadata key-value pairs. Returns matching files."""
-    return await default_client.query(keyvalues)
+    return await _storage.default_client.query(keyvalues)
 
 
 @mcp.tool()
@@ -103,8 +103,8 @@ async def upload_file(path: str, keyvalues: dict[str, str]) -> dict:
 
     When displaying results, always show a table with the CID and all keyvalues.
     """
-    comp = build_asset(keyvalues, path=Path(path))
-    await default_client.upload(comp)
+    comp = build_asset(keyvalues)
+    await _storage.default_client.upload(comp, Path(path))
     result = comp.to_dict()
     if type(comp) is Asset:
         result["note"] = (
@@ -116,17 +116,18 @@ async def upload_file(path: str, keyvalues: dict[str, str]) -> dict:
 
 @mcp.tool()
 async def download_file(cid: str) -> str:
-    """Download a file by CID to local cache. Returns the local path."""
-    comp = Asset(cid=cid)
-    await default_client.download(comp)
-    return str(comp.path)
+    """Download a file by CID to local cache. Returns the local path.
+
+    A CID that isn't in your index is treated as public and fetched from the
+    IPFS gateway.
+    """
+    return str(await _storage.default_client.download(Asset(cid=cid)))
 
 
 @mcp.tool()
 async def delete_file(cid: str) -> str:
     """Delete a file by CID."""
-    comp = Asset(cid=cid)
-    await default_client.delete(comp)
+    await _storage.default_client.delete(Asset(cid=cid))
     return f"Deleted file {cid}"
 
 
@@ -144,7 +145,7 @@ async def update_file(cid: str, keyvalues: dict[str, str]) -> dict:
     When displaying results, always show a table with the CID and all keyvalues.
     """
     build_asset(keyvalues)  # validate the patch (raises ValueError on bad input)
-    return await default_client.update_metadata(cid, keyvalues)
+    return await _storage.default_client.update_metadata(cid, keyvalues)
 
 
 # ---------------------------------------------------------------------------
@@ -317,8 +318,9 @@ async def show_config() -> str:
     workflows = _registry.list_tasks(category="workflow")
     config = {
         "pinata_jwt": "set" if os.environ.get("PINATA_JWT") else "unset",
-        "pinata_visibility": os.environ["PINATA_VISIBILITY"],
-        "local_dir": str(default_client.local_dir),
+        "store_root": os.environ["STARGAZER_STORE_ROOT"],
+        "index": os.environ["STARGAZER_INDEX_URL"],
+        "local_dir": os.environ["STARGAZER_LOCAL"],
         "tasks": len(tasks),
         "workflows": len(workflows),
     }

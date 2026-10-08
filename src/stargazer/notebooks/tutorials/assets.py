@@ -100,11 +100,10 @@ def _():
 
         - **`cid`** — a content identifier. Same bytes anywhere → same
           CID. This is the asset's *identity*, independent of where it
-          physically lives. Local CIDs look like `local_<md5>`; remote
-          (Pinata/IPFS) ones are `bafy...` hashes.
-        - **`path`** — the local filesystem path, set after `fetch()` or
-          `update()`. Decoupled from `cid` so a workflow can refer to
-          data before it has been downloaded.
+          physically lives. CIDs are IPFS hashes (`bafk…` / `bafy…`).
+        - **`path`** — where the stored file lives, set by `update()`.
+          `fetch()` downloads it and returns the local path, so a
+          workflow can refer to data before it has been downloaded.
         - **Typed dataclass fields** — `sample_id`, `organism`,
           `stage`, … whatever the asset type needs. These get
           serialized to a flat `dict[str, str]` for storage via
@@ -124,12 +123,11 @@ def _():
         ### Aside: content addressing and IPFS
 
         A CID is a hash of the bytes. Same bytes anywhere → same CID;
-        different bytes → different CID. Always. Stargazer issues
-        `local_<md5>` CIDs when running locally (indexed in TinyDB on
-        your machine) and real **IPFS** hashes (`bafy…`) when
-        `PINATA_JWT` is set — so an asset uploaded by you and by a
-        colleague resolves to the same identity, fetchable from any IPFS
-        node that holds the bytes.
+        different bytes → different CID. Always. Stargazer computes the
+        real **IPFS** hash (`bafy…`) for every file, locally or on a
+        hosted deploy alike — so an asset uploaded by you and by a
+        colleague resolves to the same identity, and a file published
+        publicly is fetchable from any IPFS node that holds the bytes.
 
         That tiny shift unlocks four things at once:
 
@@ -143,9 +141,9 @@ def _():
           run once, and you can replay the pipeline on the *exact*
           same bytes months later regardless of where they're hosted.
         - **Location-independence** — a `Reference(cid="bafy…")`
-          handle doesn't care whether the bytes live on your laptop,
-          in Pinata, or on a stranger's IPFS node. `fetch()` resolves
-          it the same way every time.
+          handle doesn't care whether the bytes live on local disk,
+          in a cloud bucket, or on a stranger's IPFS node. `fetch()`
+          resolves it the same way every time.
 
         This is why Stargazer assets carry `cid` separately from
         `path`: identity travels with the asset; the location is
@@ -264,8 +262,8 @@ def _():
         """
         ## 3. Round-trip the metadata
 
-        Storage backends (TinyDB locally, Pinata remotely) only deal in
-        flat `dict[str, str]`. `to_keyvalues()` is the boundary
+        Storage only deals in flat `dict[str, str]` metadata.
+        `to_keyvalues()` is the boundary
         function: `str` fields pass through; everything else gets
         `json.dumps`'d. `from_keyvalues()` does the inverse.
         """
@@ -345,11 +343,11 @@ def _():
         storage" call:
 
         1. Sets any field kwargs on the asset
-        2. Sets `self.path` to the file you're publishing
-        3. Hashes the file contents and uploads to the configured
-           backend (local TinyDB by default, Pinata if `PINATA_JWT` is
-           set)
-        4. Sets `self.cid` to the resulting content ID
+        2. Works out the file's content ID (`cid`) from its bytes
+        3. Uploads the file to your storage (a folder on this machine
+           by default, the cloud bucket on a hosted deploy) and records
+           the asset's metadata so it can be found later
+        4. Sets `self.cid`, and `self.path` to the stored file
 
         We'll write a tiny CSV to a temp file and push it through.
         """
@@ -385,13 +383,14 @@ async def _():
         `update()`. The asset now has both an identity and a location:
 
         - `uploaded_sheet.cid` → `{uploaded_sheet.cid}`
-        - `uploaded_sheet.path` → `{uploaded_sheet.path}`
+        - `uploaded_sheet.path` → `{uploaded_sheet.path.path}`
         - `uploaded_sheet.cohort_id` → `{uploaded_sheet.cohort_id!r}`
         - `uploaded_sheet.n_samples` → `{uploaded_sheet.n_samples}`
 
-        The CID prefix `local_` tells you this lives in TinyDB on this
-        machine. With `PINATA_JWT` set, the same call would push to
-        Pinata and return an IPFS-style hash instead.
+        The CID is the file's IPFS content ID, computed from its bytes
+        alone, so it's the same wherever the file is stored and the same
+        ID it keeps if you ever publish it. `path` is where the stored
+        copy lives.
         """
     )
     return (uploaded_sheet,)
@@ -436,8 +435,8 @@ async def _(uploaded_sheet):
         - `isinstance(found[0], SampleSheet)` → **{isinstance(_hit, SampleSheet) if _hit else False}**
 
         From this point a downstream task can take the `SampleSheet`
-        as a typed argument, call `await sheet.fetch()` to pull the
-        bytes, and read `sheet.path`.
+        as a typed argument and call `await sheet.fetch()`, which
+        downloads the file and returns its local path.
         """
     )
 
@@ -477,7 +476,8 @@ def _():
 
         1. Download the FASTA itself
         2. `assemble(reference_cid=ref.cid)` to find any companions
-        3. Download every match alongside
+        3. Download every match into the same folder
+        4. Return the FASTA's local path
 
         So the BAI lands next to the BAM, the FAI next to the FASTA,
         without each task having to know about the pairing.
@@ -496,7 +496,7 @@ def _():
         """
         ## 7. "Isn't this overkill for a local filesystem?"
 
-        Honest question. On a single laptop with a fixed directory, you
+        Honest question. Locally, with a fixed directory, you
         could glob the right folder and read the file. The machinery
         earns its keep the moment compute stops being local and
         persistent — which is exactly what Flyte does to every task.
@@ -511,9 +511,11 @@ def _():
         and the only way the BAI lands next to the BAM everywhere is the
         companion convention.
 
-        The local TinyDB mode you're using now is the same API with a
-        one-machine backend. It looks like ceremony when you're alone on
-        your laptop, but the **Execution** tutorial shows it pay off:
+        Locally, storage is a folder and an index file on this machine;
+        on a hosted deploy it's a cloud bucket and your dashboard. Same
+        API either way. It looks like ceremony when you're working
+        alone and locally, but the **Execution** tutorial
+        shows it pay off:
         the identical code running on a remote cluster, inputs resolved
         by CID with no path coordination at all.
         """

@@ -157,8 +157,7 @@ async def _(mo, sample_picker):
 
     raw_ads = []
     for _a in raw_assets:
-        await _a.fetch()
-        _ad = sc.read_h5ad(_a.path)
+        _ad = sc.read_h5ad(await _a.fetch())
         _ad.var_names_make_unique()
         raw_ads.append(_ad)
 
@@ -376,8 +375,7 @@ async def _(
 
     annotated_ads = []
     for _a in annotated_assets:
-        await _a.fetch()
-        annotated_ads.append(sc.read_h5ad(_a.path))
+        annotated_ads.append(sc.read_h5ad(await _a.fetch()))
     return annotated_ads, annotated_assets
 
 

@@ -134,7 +134,7 @@ async def _(MyAsset, Path, file_input, mo, tempfile):
         Uploaded **`{_f.name}`** as a `MyAsset`:
 
         - `cid` → `{my_asset.cid}`
-        - `path` → `{my_asset.path}`
+        - `path` → `{my_asset.path.path}`
         """
     )
     return (my_asset,)
@@ -171,9 +171,9 @@ def _(MyAsset, my_env):
 
     @my_env.task
     async def my_task(asset: MyAsset) -> MyAsset:
-        """TODO: do work on `asset.path` and return a (new) asset."""
-        await asset.fetch()
-        # TODO: read asset.path, write a new file, then either:
+        """TODO: do work on the asset's file and return a (new) asset."""
+        local_path = await asset.fetch()  # noqa: F841 — the TODO below reads it
+        # TODO: read local_path, write a new file, then either:
         #   1. mutate + re-upload this asset, OR
         #   2. construct a NEW asset and `await new.update(path=..., **kw)`
         return asset
@@ -225,7 +225,7 @@ async def _(mo, my_asset, my_workflow):
     """Run the workflow on your uploaded asset."""
     results = await my_workflow([my_asset])
     mo.ui.table(
-        [{"cid": _r.cid, "path": str(_r.path)} for _r in results],
+        [{"cid": _r.cid, "path": _r.path.path} for _r in results],
         selection=None,
     )
 

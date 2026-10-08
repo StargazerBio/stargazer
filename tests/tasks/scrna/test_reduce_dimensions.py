@@ -27,7 +27,7 @@ async def test_reduce_dimensions_embeddings(fixtures_db):
     result = await reduce_dimensions(adata=adata, n_pcs=10, n_neighbors=5)
 
     assert result.stage == "reduced"
-    ad = sc.read_h5ad(result.path)
+    ad = sc.read_h5ad(await result.fetch())
     assert "X_pca" in ad.obsm
     assert "X_umap" in ad.obsm
     assert ad.obsm["X_umap"].shape == (ad.n_obs, 2)

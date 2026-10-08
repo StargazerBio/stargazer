@@ -61,9 +61,11 @@
 
 ## Utils
 
-::: stargazer.utils.local_storage
+::: stargazer.utils.cid
+::: stargazer.utils.index
 ::: stargazer.utils.pinata
 ::: stargazer.utils.query
+::: stargazer.utils.storage
 ::: stargazer.utils.subprocess
 
 ## Workflows

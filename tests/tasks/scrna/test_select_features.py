@@ -27,6 +27,6 @@ async def test_select_features_hvg(fixtures_db):
     result = await select_features(adata=adata, n_top_genes=100)
 
     assert result.stage == "featured"
-    ad = sc.read_h5ad(result.path)
+    ad = sc.read_h5ad(await result.fetch())
     assert "highly_variable" in ad.var.columns
     assert ad.var["highly_variable"].sum() <= 100

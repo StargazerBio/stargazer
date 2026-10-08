@@ -1,7 +1,5 @@
 """Tests for assemble() — storage query to specialized asset list."""
 
-from unittest.mock import AsyncMock, patch
-
 import pytest
 
 from stargazer.assets.asset import assemble
@@ -9,21 +7,26 @@ from stargazer.assets.reads import R1, R2
 from stargazer.assets.reference import AlignerIndex, Reference, ReferenceIndex
 
 
-def raw(cid, **kv):
-    return {"cid": cid, "keyvalues": kv}
+@pytest.fixture
+def write(tmp_path):
+    """Write a small file with unique contents and return its path."""
+
+    def _write(name: str) -> object:
+        path = tmp_path / "files" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"contents of {name}\n")
+        return path
+
+    return _write
 
 
 @pytest.mark.asyncio
-async def test_assemble_returns_specialized_list():
+async def test_assemble_returns_specialized_list(write):
     """assemble() returns a flat list of specialized assets."""
-    mock_client = AsyncMock()
-    mock_client.query.return_value = [
-        raw("Qmr", asset="reference", build="GRCh38"),
-        raw("Qmi", asset="reference_index", build="GRCh38"),
-    ]
+    await Reference().update(write("ref.fa"), build="GRCh38")
+    await ReferenceIndex().update(write("ref.fa.fai"), build="GRCh38")
 
-    with patch("stargazer.utils.local_storage.default_client", mock_client):
-        assets = await assemble(build="GRCh38")
+    assets = await assemble(build="GRCh38")
 
     assert len(assets) == 2
     assert len([a for a in assets if isinstance(a, Reference)]) == 1
@@ -31,57 +34,43 @@ async def test_assemble_returns_specialized_list():
 
 
 @pytest.mark.asyncio
-async def test_assemble_list_filter_issues_multiple_queries():
-    """asset=["r1", "r2"] generates two queries via cartesian product."""
-    mock_client = AsyncMock()
-    mock_client.query.side_effect = [
-        [raw("Qmr1", asset="r1", sample_id="S1")],
-        [raw("Qmr2", asset="r2", sample_id="S1")],
-    ]
+async def test_assemble_list_filter_matches_any(write):
+    """asset=["r1", "r2"] matches either asset type."""
+    await R1().update(write("s1_R1.fq"), sample_id="S1")
+    await R2().update(write("s1_R2.fq"), sample_id="S1")
+    await R1().update(write("s2_R1.fq"), sample_id="S2")
 
-    with patch("stargazer.utils.local_storage.default_client", mock_client):
-        assets = await assemble(sample_id="S1", asset=["r1", "r2"])
+    assets = await assemble(sample_id="S1", asset=["r1", "r2"])
 
-    assert mock_client.query.call_count == 2
     assert len([a for a in assets if isinstance(a, R1)]) == 1
     assert len([a for a in assets if isinstance(a, R2)]) == 1
+    assert len(assets) == 2
 
 
 @pytest.mark.asyncio
-async def test_assemble_deduplicates_by_cid():
-    """Duplicate CIDs across multiple queries are deduplicated."""
-    mock_client = AsyncMock()
-    dup = raw("Qmdup", asset="reference", build="GRCh38")
-    mock_client.query.side_effect = [[dup], [dup]]
+async def test_assemble_deduplicates_by_cid(write):
+    """A repeated list value doesn't return the same asset twice."""
+    await Reference().update(write("ref.fa"), build="GRCh38")
 
-    with patch("stargazer.utils.local_storage.default_client", mock_client):
-        assets = await assemble(build="GRCh38", asset=["reference", "reference"])
+    assets = await assemble(build="GRCh38", asset=["reference", "reference"])
 
     assert len([a for a in assets if isinstance(a, Reference)]) == 1
 
 
 @pytest.mark.asyncio
-async def test_assemble_empty_result():
+async def test_assemble_empty_result(write):
     """assemble() with no matches returns empty list."""
-    mock_client = AsyncMock()
-    mock_client.query.return_value = []
+    await Reference().update(write("ref.fa"), build="GRCh38")
 
-    with patch("stargazer.utils.local_storage.default_client", mock_client):
-        assets = await assemble(build="nonexistent")
-
-    assert assets == []
+    assert await assemble(build="nonexistent") == []
 
 
 @pytest.mark.asyncio
-async def test_assemble_multiple_same_key():
+async def test_assemble_multiple_same_key(write):
     """Multiple results with same _asset_key all appear in the list."""
-    mock_client = AsyncMock()
-    mock_client.query.return_value = [
-        raw("Qm1", asset="aligner_index", aligner="bwa"),
-        raw("Qm2", asset="aligner_index", aligner="bwa"),
-    ]
+    await AlignerIndex().update(write("ref.fa.amb"), build="GRCh38", aligner="bwa")
+    await AlignerIndex().update(write("ref.fa.ann"), build="GRCh38", aligner="bwa")
 
-    with patch("stargazer.utils.local_storage.default_client", mock_client):
-        assets = await assemble(build="GRCh38")
+    assets = await assemble(build="GRCh38")
 
     assert len([a for a in assets if isinstance(a, AlignerIndex)]) == 2

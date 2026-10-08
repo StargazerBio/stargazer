@@ -52,7 +52,7 @@ async def test_apply_bqsr_recalibrates_bam(fixtures_db):
     assert recalibrated.bqsr_applied is True
     assert recalibrated.tool == "gatk_apply_bqsr"
     assert recalibrated.path is not None
-    assert recalibrated.path.exists()
+    assert (await recalibrated.fetch()).exists()
 
 
 @pytest.mark.asyncio

@@ -85,10 +85,18 @@ A **snapshot** is a frozen notebook: a researcher takes an analysis to a publica
 
 This is deliberately the opposite of a **workflow**: workflows are off-the-shelf pipelines run again and again against new data; a snapshot is a single point-in-time record, valued precisely because it does not change. What's frozen is the notebook *source*, the auditable record of exactly what was run. The dashboard gives them separate sections. See [Notebooks → Promotion Paths](notebook.md#promotion-paths) for when to freeze versus graduate, and `.opencode/reference/architecture/app_internals.md` for the freeze/listing/launch mechanics.
 
+## Asset Index
+
+Each dashboard also holds its user's **asset index**: the metadata behind `assemble()` for every file the user's tasks and notebooks store. It is a SQLite file on the dashboard's own disk. The user's notebook pods, and the task pods their runs start, reach it at the dashboard's in-cluster address (`http://dashboard.<project>-<domain>.svc.cluster.local`), which needs no login. The files themselves go straight to the bucket, under the same root as the user's notebooks; only one small row per asset passes through the dashboard.
+
+The dashboard can scale to zero, so its disk isn't durable. Litestream copies every change to the bucket, at `<root>/users/<subject>/index`. At startup the dashboard restores the file before serving; at scale-to-zero it syncs one last time after the web server stops. Redeploying a dashboard briefly runs the old and new versions side by side, and a write the old one accepts after the new one has restored would be lost, so `stargazer-users upgrade` refuses while a user has runs going.
+
+See [Configuration](configuration.md) for the storage model and `.opencode/reference/architecture/app_internals.md` for the mechanics.
+
 ## Asset Manager
 
 The dashboard also hosts `/assets` — a browse-and-upload surface over the
-asset/metadata system, backed by Pinata (never the local TinyDB). **It is off
+asset/metadata system, backed by Pinata directly (not the storage index). **It is off
 on hosted dashboards for now**: a user can read their own dashboard's
 deployment, so a shared asset-store key can't be baked into it, and the page
 says asset storage isn't available yet. It returns with per-user storage.

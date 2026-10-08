@@ -11,7 +11,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 import tempfile
 from pathlib import Path
 
-import stargazer.utils.local_storage as _storage
+import stargazer.utils.storage as _storage
 from stargazer.assets import Reference, Variants, VariantsIndex
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
@@ -53,9 +53,8 @@ async def joint_call_gvcfs(
                 f"sample_id={gvcf.sample_id}"
             )
 
-    await ref.fetch()
-    for gvcf in gvcfs:
-        await gvcf.fetch()
+    ref_path = await ref.fetch()
+    gvcf_paths = [await gvcf.fetch() for gvcf in gvcfs]
 
     output_dir = _storage.default_client.local_dir
 
@@ -65,8 +64,8 @@ async def joint_call_gvcfs(
         # Write sample map
         sample_map = Path(tmpdir) / "sample_map.txt"
         with open(sample_map, "w") as f:
-            for gvcf in gvcfs:
-                f.write(f"{gvcf.sample_id}\t{gvcf.path}\n")
+            for gvcf, gvcf_path in zip(gvcfs, gvcf_paths, strict=True):
+                f.write(f"{gvcf.sample_id}\t{gvcf_path}\n")
 
         # GenomicsDBImport
         import_cmd = [
@@ -93,7 +92,7 @@ async def joint_call_gvcfs(
             "gatk",
             "GenotypeGVCFs",
             "-R",
-            str(ref.path),
+            str(ref_path),
             "-V",
             f"gendb://{workspace}",
             "-O",

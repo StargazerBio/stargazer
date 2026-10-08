@@ -6,7 +6,7 @@ Sorts BAM files using GATK SortSam.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.local_storage as _storage
+import stargazer.utils.storage as _storage
 from stargazer.assets import Alignment, AlignmentIndex
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
@@ -37,8 +37,7 @@ async def sort_sam(
             f"Invalid sort_order: {sort_order}. Must be one of {valid_sort_orders}"
         )
 
-    await alignment.fetch()
-    bam_path = alignment.path
+    bam_path = await alignment.fetch()
     output_dir = _storage.default_client.local_dir
     output_bam = output_dir / f"{alignment.sample_id}_sorted_{sort_order}.bam"
 

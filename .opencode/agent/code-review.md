@@ -39,10 +39,11 @@ You MUST scrutinize how code handles these environment-driven behaviors (see `co
 
 #### Storage & Network
 ```
-PINATA_JWT                  → Required for authenticated Pinata uploads/downloads (no default)
+PINATA_JWT                  → Turns on the public tier (Pinata's public network; no default)
 PINATA_GATEWAY              → Download gateway URL (default: https://dweb.link)
-PINATA_VISIBILITY           → "private" or "public" (default: "private")
-STARGAZER_LOCAL             → Local storage directory (default: ~/.stargazer/local)
+STARGAZER_STORE_ROOT        → Object-store root for asset bytes (default: ~/.stargazer/store)
+STARGAZER_INDEX_URL         → Asset index: SQLite path or dashboard URL (default: ~/.stargazer/index.db)
+STARGAZER_LOCAL             → Scratch space and download cache (default: ~/.stargazer/local)
 ```
 
 **Edge cases to catch:**
@@ -50,7 +51,7 @@ STARGAZER_LOCAL             → Local storage directory (default: ~/.stargazer/l
 - [ ] Hard-coded storage paths instead of using `STARGAZER_LOCAL`
 - [ ] Assuming files exist locally without calling `fetch()` first
 - [ ] Not handling the case where `fetch()` returns a path that doesn't exist
-- [ ] Uploads that ignore `PINATA_VISIBILITY` setting
+- [ ] Private data sent to Pinata (Pinata is the public tier only)
 
 #### Task Execution Environments
 ```

@@ -23,14 +23,14 @@ Preconditions:
 
 Steps:
 
-- **Run every cell with the default picks.** Run `uv run marimo export html src/stargazer/notebooks/workflows/scrna_pipeline.py -o "$RUN_DIR/evidence/scrna-pipeline.html" > "$RUN_DIR/evidence/scrna-pipeline.log" 2>&1`. This takes about 2 minutes on a laptop. Exit code `0`.
+- **Run every cell with the default picks.** Run `uv run marimo export html src/stargazer/notebooks/workflows/scrna_pipeline.py -o "$RUN_DIR/evidence/scrna-pipeline.html" > "$RUN_DIR/evidence/scrna-pipeline.log" 2>&1`. This takes about 2 minutes locally. Exit code `0`.
 - **Check every stage's outputs.** Run `uv run python .claude/skills/verify-stargazer/scripts/check_anndata.py | tee "$RUN_DIR/evidence/scrna-pipeline.check.txt"`. Every line reads `ok`, and both samples appear at every stage from `raw` through `annotated`.
 - **Proof.** Keep the HTML, the log, and the check output. The check output is the load-bearing artifact.
 
 ## Gotchas
 
-- An export exit of `0` with check lines reading `MISMATCH` or `SHARED` means the notebook rendered another sample's data. Parallel samples share one store, so each scRNA task must write a per-sample filename (`<sample_id>_qc_filtered.h5ad`, and so on). A `SHARED` line means a task has gone back to a fixed name.
-- If a sample is missing from later stages in the check output, two samples produced byte-identical files. The local store upserts records by CID, so the second record replaced the first.
+- An export exit of `0` with check lines reading `MISMATCH` means the notebook rendered another sample's data. Parallel samples share one cache directory, so each scRNA task must write a per-sample filename (`<sample_id>_qc_filtered.h5ad`, and so on).
+- A `MISSING` line means two samples produced byte-identical files at that stage. The index keeps one row per CID, so the second sample's metadata replaced the first's, and the log shows a WARNING naming the CID.
 - `scrna-fetch` hits public IPFS gateways, which rate-limit with HTTP `429` after a few full downloads. Drive it at most once per run, and only when the change touches fetching.
-- With a real `PINATA_JWT` in the environment, every task output also uploads to Pinata. Uploads have failed with `408` and connection resets, and they put verification data in the user's Pinata account.
+- With a real `PINATA_JWT` in the environment, `assemble()` also searches Pinata's public index, so a drive can pick up public records that aren't part of the run.
 - `flyte.init_from_config()` in the first cell reads `.flyte/config.yaml` but does not need the devbox. Tasks called directly from cells run in-process.

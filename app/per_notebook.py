@@ -177,6 +177,7 @@ def per_notebook_env(
     notebook_path: str,
     owner_subject: str,
     admin_url: str,
+    index_url: str,
     resources: NotebookResources | None = None,
 ) -> flyte.app.AppEnvironment:
     """Build a per-notebook AppEnvironment for one (slug, mode) launch.
@@ -191,7 +192,10 @@ def per_notebook_env(
     `SG_OWNER_SUBJECT` keys where the pod hydrates from and saves to in the
     workspace store
     (`STARGAZER_WORKSPACE_ROOT`). `admin_url` is the admin app's public base
-    URL, which the proxy's `/__sg__/dashboard` route redirects to. No
+    URL, which the proxy's `/__sg__/dashboard` route redirects to.
+    `index_url` is the dashboard's in-cluster address, where the pod and the
+    runs it starts index their assets (`STARGAZER_INDEX_URL`); the assets
+    themselves go under the workspace root (`STARGAZER_STORE_ROOT`). No
     credential is baked into the env: notebook code can read it.
 
     `resources` is the notebook's declared `[tool.stargazer]` spec, honored
@@ -247,6 +251,12 @@ def per_notebook_env(
             "SG_OWNER_SUBJECT": owner_subject,
             "STARGAZER_WORKSPACE_ROOT": config.WORKSPACE_ROOT,
             "STARGAZER_ADMIN_URL": admin_url,
+            "STARGAZER_INDEX_URL": index_url,
+            **(
+                {"STARGAZER_STORE_ROOT": config.WORKSPACE_ROOT}
+                if config.WORKSPACE_ROOT
+                else {}
+            ),
         },
     )
 

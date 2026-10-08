@@ -9,12 +9,17 @@ Also the source of truth for the lean per-task Flyte environments
 `infra/app.py` alongside the FastAPI application it deploys.
 
 Rules:
-- PINATA_JWT: No default — absence means no authenticated Pinata.
-- PINATA_GATEWAY: Defaults to dweb.link if unset.
-  Set to empty string to force a failure on public downloads.
-- PINATA_VISIBILITY: Defaults to "private" if unset.
-  Only evaluated by PinataClient — if JWT is unset, downloads are always public.
-- STARGAZER_LOCAL: Local storage directory. Defaults to ~/.stargazer/local.
+- PINATA_JWT: No default — absence means no public tier (Pinata) at all.
+- PINATA_GATEWAY: IPFS gateway for public downloads. Defaults to dweb.link.
+- STARGAZER_LOCAL: Scratch space for task outputs and the download cache.
+  Defaults to ~/.stargazer/local.
+- STARGAZER_STORE_ROOT: Where asset bytes are stored — a local directory or a
+  bucket URI (e.g. `s3://union-us-west-2-stargazerbio/stargazer`). Defaults
+  to ~/.stargazer/store.
+- STARGAZER_INDEX_URL: The asset index — a SQLite file path, or a user's
+  dashboard URL on Union. Defaults to ~/.stargazer/index.db.
+- STARGAZER_OWNER: The Union subject that owns new assets (their folder in
+  the store, and `_owner`). Unset locally.
 - STARGAZER_TARGET: Which Flyte backend images and deploys aim at — `devbox`
   (default, the local cluster) or `union` (the hosted tenant). Anything else
   is an error. Forwarded into every pod so in-pod builds resolve the same way.
@@ -38,8 +43,16 @@ from loguru import logger as logger  # noqa: PLC0414
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 os.environ.setdefault("PINATA_GATEWAY", "https://dweb.link")
-os.environ.setdefault("PINATA_VISIBILITY", "private")
 os.environ.setdefault("STARGAZER_LOCAL", str(Path.home() / ".stargazer" / "local"))
+
+# Storage locations set explicitly (a deploy, a pod's env) are forwarded into
+# task pods; the local defaults below are not, since a pod can't use them.
+_STORAGE_KEYS = ("STARGAZER_STORE_ROOT", "STARGAZER_INDEX_URL")
+_EXPLICIT_STORAGE = {k: os.environ[k] for k in _STORAGE_KEYS if os.environ.get(k)}
+os.environ.setdefault("STARGAZER_STORE_ROOT", str(Path.home() / ".stargazer" / "store"))
+os.environ.setdefault(
+    "STARGAZER_INDEX_URL", str(Path.home() / ".stargazer" / "index.db")
+)
 
 TARGETS = ("devbox", "union")
 os.environ.setdefault("STARGAZER_TARGET", "devbox")
@@ -66,11 +79,13 @@ def _stargazer_env_vars() -> dict[str, str]:
     locally, nothing requires it. STARGAZER_TARGET (and an explicit
     STARGAZER_REGISTRY) ride along so a pod that builds or submits images —
     the admin app, a notebook, a parent task — resolves them like the deployer.
+    STARGAZER_STORE_ROOT and STARGAZER_INDEX_URL ride along only when set
+    explicitly: a pod can't use the local store or index.
     """
     env = {
         "PINATA_GATEWAY": os.environ.get("PINATA_GATEWAY", "https://dweb.link"),
-        "PINATA_VISIBILITY": os.environ.get("PINATA_VISIBILITY", "private"),
         "STARGAZER_TARGET": os.environ["STARGAZER_TARGET"],
+        **_EXPLICIT_STORAGE,
     }
     registry = os.environ.get("STARGAZER_REGISTRY")
     if registry:
@@ -121,11 +136,12 @@ def log_execution() -> str:
     logger.add(_log_dir / f"{execution_id}.log")
 
     jwt_len = len(os.environ.get("PINATA_JWT", ""))
-    storage_mode = "pinata+local" if jwt_len else "local-only"
     logger.info(
-        f"Execution started: {execution_id} | storage={storage_mode} "
-        f"| PINATA_JWT={'set (' + str(jwt_len) + ' bytes)' if jwt_len else 'unset'} "
-        f"| gateway={os.environ['PINATA_GATEWAY']} | visibility={os.environ['PINATA_VISIBILITY']} "
+        f"Execution started: {execution_id} "
+        f"| store={os.environ['STARGAZER_STORE_ROOT']} "
+        f"| index={os.environ['STARGAZER_INDEX_URL']} "
+        f"| public tier={'on' if jwt_len else 'off'} "
+        f"| gateway={os.environ['PINATA_GATEWAY']} "
         f"| local_dir={os.environ['STARGAZER_LOCAL']} | target={os.environ['STARGAZER_TARGET']}"
     )
     return execution_id

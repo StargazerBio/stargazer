@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Upload files to Pinata IPFS storage with metadata.
+Upload files to Pinata's public network with keyvalue metadata.
 
-This CLI tool uploads any file to Pinata with custom metadata.
+Anyone can read what this uploads. With --update-config it also fills the
+file's empty entry in the CIDS dict of tests/utils/test_pinata.py.
 """
 
 import argparse
@@ -15,8 +16,7 @@ from pathlib import Path
 # Add parent directory to path to import stargazer modules
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from stargazer.assets.component import ComponentFile
-
+from stargazer.assets.asset import Asset
 from stargazer.utils.pinata import PinataClient
 
 
@@ -38,14 +38,14 @@ async def upload_file(
     print(f"  Metadata: {keyvalues}")
 
     try:
-        comp = ComponentFile(path=file_path, keyvalues=dict(keyvalues))
-        await client.upload(comp)
+        comp = Asset(keyvalues=dict(keyvalues))
+        await client.upload(comp, file_path)
 
         print("  Success!")
         print(f"    CID: {comp.cid}")
         print()
 
-        # Update config.py if requested
+        # Fill the test file's CIDS entry if requested
         if update_config and config_path:
             update_config_file(config_path, file_path.name, comp.cid)
 
@@ -57,7 +57,7 @@ async def upload_file(
 
 
 def update_config_file(config_path: Path, filename: str, cid: str):
-    """Update tests/config.py with the new CID."""
+    """Fill `filename`'s empty entry in the CIDS dict at `config_path`."""
     if not config_path.exists():
         print(f"  Config file not found: {config_path}")
         return
@@ -74,27 +74,27 @@ def update_config_file(config_path: Path, filename: str, cid: str):
         config_path.write_text(config_content)
         print(f"  Updated {filename} in {config_path}")
     else:
-        print(f"  No empty entry for {filename} in config.py")
+        print(f"  No empty entry for {filename} in {config_path}")
         print(f'     Add manually: "{filename}": "{cid}"')
 
 
 async def main():
     parser = argparse.ArgumentParser(
-        description="Upload files to Pinata IPFS storage with metadata",
+        description="Upload files to Pinata's public network with metadata",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Upload a single file with metadata
-  %(prog)s /path/to/file.fa --metadata '{"type": "reference", "build": "GRCh38"}'
+  # Upload a single file with JSON metadata
+  %(prog)s /path/to/file.fa --metadata '{"asset": "reference", "build": "GRCh38"}'
 
-  # Upload and update config.py
-  %(prog)s tests/fixtures/GRCh38_TP53.fa --metadata '{"type": "reference"}' --update-config
+  # Upload with key=value metadata
+  %(prog)s results.vcf -m asset=variants -m sample_id=NA12829
 
-  # Upload with metadata from command line key=value pairs
-  %(prog)s myfile.txt -m type=data -m env=test -m version=1.0
+  # Upload a test fixture and fill its CIDS entry in tests/utils/test_pinata.py
+  %(prog)s tests/fixtures/general/GRCh38_TP53.fa -m asset=reference --update-config
 
-  # Upload multiple files with the same metadata
-  %(prog)s file1.txt file2.txt --metadata '{"type": "test", "env": "dev"}'
+  # Upload several files with the same metadata
+  %(prog)s file1.txt file2.txt --metadata '{"asset": "dataset"}'
         """,
     )
 
@@ -109,7 +109,7 @@ Examples:
         "--metadata",
         "--keyvalues",
         type=str,
-        help='Metadata as JSON string (e.g., \'{"type": "reference", "env": "test"}\')',
+        help='Metadata as JSON string (e.g., \'{"asset": "reference", "build": "GRCh38"}\')',
     )
 
     parser.add_argument(
@@ -123,14 +123,14 @@ Examples:
     parser.add_argument(
         "--update-config",
         action="store_true",
-        help="Update tests/config.py CIDS dictionary with uploaded CIDs",
+        help="Fill empty entries in the CIDS dict of --config-path with uploaded CIDs",
     )
 
     parser.add_argument(
         "--config-path",
         type=Path,
-        default=Path(__file__).parent.parent / "tests" / "config.py",
-        help="Path to config.py file (default: tests/config.py)",
+        default=Path(__file__).parent.parent / "tests" / "utils" / "test_pinata.py",
+        help="Python file holding the CIDS dict (default: tests/utils/test_pinata.py)",
     )
 
     args = parser.parse_args()

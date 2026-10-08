@@ -4,7 +4,7 @@
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.local_storage as _storage
+import stargazer.utils.storage as _storage
 from stargazer.assets import KnownSites, KnownSitesIndex
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
@@ -25,10 +25,9 @@ async def index_feature_file(known_sites: KnownSites) -> KnownSitesIndex:
         KnownSitesIndex asset pointing to the generated .idx file
     """
     logger.info(known_sites.to_dict())
-    await known_sites.fetch()
+    vcf_path = await known_sites.fetch()
 
     output_dir = _storage.default_client.local_dir
-    vcf_path = known_sites.path
     idx_path = vcf_path.with_suffix(vcf_path.suffix + ".idx")
 
     if not idx_path.exists():

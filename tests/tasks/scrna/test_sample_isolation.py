@@ -62,5 +62,5 @@ async def test_parallel_samples_write_distinct_files(
     a, b = await asyncio.gather(*(task(adata=ad, **kwargs) for ad in inputs))
 
     assert a.path != b.path
-    assert a.path.exists()
-    assert b.path.exists()
+    assert (await a.fetch()).exists()
+    assert (await b.fetch()).exists()

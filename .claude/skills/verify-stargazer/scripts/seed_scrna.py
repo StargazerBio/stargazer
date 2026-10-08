@@ -1,4 +1,4 @@
-"""Seed a verify run's STARGAZER_LOCAL with the scrna_demo raw samples.
+"""Seed a verify run's store and index with the scrna_demo raw samples.
 
 Copies each bundle file from the verify cache (downloading it once on a miss)
 into the run directory and registers it as a local raw AnnData asset, so the
@@ -40,8 +40,14 @@ def cached(cid: str) -> Path:
 async def main() -> None:
     """Copy each bundle sample into the run directory and register it."""
     local = Path(os.environ["STARGAZER_LOCAL"])
-    if local == Path.home() / ".stargazer" / "local":
-        raise SystemExit("refusing to seed the user's default store")
+    defaults = Path.home() / ".stargazer"
+    for key, default in (
+        ("STARGAZER_LOCAL", defaults / "local"),
+        ("STARGAZER_STORE_ROOT", defaults / "store"),
+        ("STARGAZER_INDEX_URL", defaults / "index.db"),
+    ):
+        if Path(os.environ.get(key, str(default))) == default:
+            raise SystemExit(f"refusing to seed the user's default store: set {key}")
     local.mkdir(parents=True, exist_ok=True)
 
     for entry in yaml.safe_load(BUNDLE.read_text())["files"]:

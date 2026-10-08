@@ -37,7 +37,7 @@ async def test_bwa_index(fixtures_db):
         assert idx.aligner == "bwa"
         assert idx.build == "GRCh38"
         assert idx.path is not None
-        assert idx.path.exists()
+        assert (await idx.fetch()).exists()
 
 
 @pytest.mark.asyncio

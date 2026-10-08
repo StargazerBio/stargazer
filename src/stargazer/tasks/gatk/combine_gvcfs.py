@@ -9,7 +9,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 from pathlib import Path
 
-import stargazer.utils.local_storage as _storage
+import stargazer.utils.storage as _storage
 from stargazer.assets import Reference, Variants, VariantsIndex
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
@@ -48,17 +48,15 @@ async def combine_gvcfs(
             )
 
     # fetch() auto-downloads companions (.fai, .dict for ref; .idx for each gvcf)
-    await ref.fetch()
+    ref_path = await ref.fetch()
 
     gvcf_paths: list[Path] = []
     sample_ids: list[str] = []
 
     for gvcf in gvcfs:
-        await gvcf.fetch()
-        gvcf_paths.append(gvcf.path)
+        gvcf_paths.append(await gvcf.fetch())
         sample_ids.append(gvcf.sample_id)
 
-    ref_path = ref.path
     output_dir = _storage.default_client.local_dir
     output_gvcf = output_dir / f"{cohort_id}_combined.g.vcf"
 

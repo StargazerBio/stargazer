@@ -36,7 +36,7 @@ async def test_mark_duplicates_marks_duplicates(fixtures_db):
     assert marked.duplicates_marked is True
     assert marked.tool == "gatk_mark_duplicates"
     assert marked.path is not None
-    assert marked.path.exists()
+    assert (await marked.fetch()).exists()
 
 
 @pytest.mark.asyncio

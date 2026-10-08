@@ -156,15 +156,20 @@ The project follows this structure:
     - `general/` - General bioinformatics tasks (bwa, bwa_mem2, samtools)
     - `scrna/` - Single-cell RNA-seq tasks (cluster, normalize, qc_filter, etc.)
   - `workflows/` - Flyte workflow definitions (one module per pipeline)
-  - `types/` - Asset dataclasses (all inherit from `Asset` base class)
-  - `utils/` - Utility functions (subprocess, pinata, local_storage, query)
+  - `assets/` - Asset dataclasses (all inherit from `Asset` base class)
+  - `utils/` - Utility functions (subprocess, pinata, storage, index, cid, query)
   - `bundles/` - Predefined workflow input bundles (YAML configs)
 - `tests/` - Test directory
-  - `conftest.py` - Pytest configuration (Flyte init, Pinata JWT injection, fixture paths)
-  - `fixtures/` - Test fixtures organized by domain (`gatk/`, `general/`, `scrna/`)
-  - `unit/` - Unit tests
-  - `tasks/` - Task-level tests mirroring `src/stargazer/tasks/` structure
+  - `conftest.py` - Pytest configuration (Flyte init, fixture paths, an isolated store/index/cache per test, the seeded fixture store, Pinata JWT injection)
   - `helpers.py` - Shared test helper functions
+  - `TESTING_GUIDE.md` - How Flyte tasks are tested here
+  - `fixtures/` - Test data organized by domain (`gatk/`, `general/`, `scrna/`), plus `seed.py`, which loads it into a test store
+  - `assets/` - Tests for `src/stargazer/assets/` (asset types, `assemble()`)
+  - `tasks/` - Task-level tests mirroring `src/stargazer/tasks/` structure
+  - `utils/` - Tests for `src/stargazer/utils/` (storage, index, CID, Pinata, query, subprocess)
+  - `notebooks/` - Smoke tests that every notebook in `src/stargazer/notebooks/` imports and parses
+  - `unit/` - Unit tests for the rest: the app tier (`app/`), registry, MCP marshalling, bundles, `Asset` itself
+  - Tests marked `pinata` call the real Pinata API and are deselected by default; run them with `uv run pytest -m pinata`
 - `docs/` - Project documentation
   - `architecture/` - System design and contracts
   - `workflows/` - Workflow-specific documentation (e.g., scRNA-seq)
@@ -196,7 +201,7 @@ The project follows this structure:
   - Task files: `{tool}.py` or `{function}.py` within domain subdirectories
   - Task functions: `{action}_{tool}` (e.g., `bwa_mem`, `haplotype_caller`, `sort_sam`)
 - **One Task Per Function:** Each task should do one thing well
-- **Use Structured I/O:** Leverage dataclasses from `types/` for inputs/outputs
+- **Use Structured I/O:** Leverage dataclasses from `assets/` for inputs/outputs
 - **Resource Specification:** Define appropriate resource requests (CPU, memory, GPU)
 
 ### Workflows Directory (`src/stargazer/workflows/`)

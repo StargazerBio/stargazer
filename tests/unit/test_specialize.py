@@ -16,8 +16,14 @@ from stargazer.assets.variants import Variants, VariantsIndex
 
 
 def record(cid="Qm", path=None, **kv) -> dict:
-    """Build a raw storage record for specialize()."""
-    return {"cid": cid, "path": path, "keyvalues": kv}
+    """Build a raw storage record for specialize(): an index row's shape."""
+    uri = str(path) if path else None
+    return {
+        "cid": cid,
+        "uri": uri,
+        "name": path.name if path else None,
+        "keyvalues": kv,
+    }
 
 
 class TestSpecialize:
@@ -29,7 +35,7 @@ class TestSpecialize:
         )
         assert type(result) is Reference
         assert result.cid == "Qmfasta"
-        assert result.path == Path("/tmp/ref.fa")
+        assert (result.path.path, result.path.name) == ("/tmp/ref.fa", "ref.fa")
         assert result.build == "GRCh38"
 
     def test_reference_index(self):

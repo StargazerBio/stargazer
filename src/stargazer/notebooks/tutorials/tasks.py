@@ -32,7 +32,6 @@ with app.setup:
     import csv
     import json
     from dataclasses import dataclass
-    from pathlib import Path
     from typing import ClassVar
 
     import flyte
@@ -191,9 +190,10 @@ def _():
           called with the wrong kind of asset.
         - **Output is typed**: `-> CohortSummary`. Downstream tasks
           consuming the result get the same guarantee.
-        - **Storage is automatic**: `await sheet.fetch()` materializes
-          the CSV; `await summary.update(path=..., **fields)` uploads
-          the new JSON and assigns its CID. No manual path juggling.
+        - **Storage is automatic**: `await sheet.fetch()` downloads the
+          CSV and returns its local path; `await summary.update(path=...,
+          **fields)` uploads the new JSON and assigns its CID. No manual
+          path juggling.
 
         Defining the task is all this notebook does — the next two
         tutorials feed it inputs and run it.
@@ -205,13 +205,13 @@ def _():
 @tutorial_env.task
 async def summarize_cohort(sheet: SampleSheet) -> CohortSummary:
     """Count samples and unique organisms in a cohort sample sheet."""
-    await sheet.fetch()
+    sheet_path = await sheet.fetch()
 
-    with sheet.path.open() as fh:
+    with sheet_path.open() as fh:
         rows = list(csv.DictReader(fh))
     organisms = sorted({r["organism"] for r in rows if r.get("organism")})
 
-    out_path = Path(sheet.path).parent / f"{sheet.cohort_id}_summary.json"
+    out_path = sheet_path.parent / f"{sheet.cohort_id}_summary.json"
     out_path.write_text(
         json.dumps(
             {

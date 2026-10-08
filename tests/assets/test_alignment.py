@@ -2,10 +2,12 @@
 Tests for Alignment asset types.
 """
 
+from pathlib import Path
+
 import pytest
 from conftest import GATK_FIXTURES_DIR
 
-import stargazer.utils.local_storage as _storage_mod
+import stargazer.utils.storage as _storage_mod
 from stargazer.assets import specialize
 from stargazer.assets.alignment import (
     Alignment,
@@ -17,7 +19,7 @@ from stargazer.assets.alignment import (
 
 @pytest.mark.asyncio
 async def test_alignment_fetch(fixtures_db):
-    """Test query + specialize resolves BAM and BAI paths from TinyDB."""
+    """Test query + specialize resolves BAM and BAI local copies from the store."""
     [bam_r] = await _storage_mod.default_client.query(
         {"asset": "alignment", "sample_id": "NA12829", "bqsr_applied": "true"}
     )
@@ -29,9 +31,9 @@ async def test_alignment_fetch(fixtures_db):
     idx = specialize(idx_r)
 
     assert bam.path is not None
-    assert bam.path.exists()
+    assert (await bam.fetch()).exists()
     assert idx.path is not None
-    assert idx.path.exists()
+    assert (await idx.fetch()).exists()
 
 
 @pytest.mark.asyncio
@@ -42,8 +44,8 @@ async def test_alignment_get_bam_path():
 
     bam = Alignment(cid="test", path=bam_path, sample_id="NA12829")
 
-    assert bam.path == bam_path
-    assert bam.path.exists()
+    assert bam.path.path == str(bam_path)
+    assert Path(bam.path.path).exists()
 
 
 @pytest.mark.asyncio
@@ -54,8 +56,8 @@ async def test_alignment_get_bai_path():
 
     idx = AlignmentIndex(cid="test", path=bai_path, sample_id="NA12829")
 
-    assert idx.path == bai_path
-    assert idx.path.exists()
+    assert idx.path.path == str(bai_path)
+    assert Path(idx.path.path).exists()
 
 
 @pytest.mark.asyncio
