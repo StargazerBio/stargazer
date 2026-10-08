@@ -488,7 +488,8 @@ Tests run against a SQLite file in a temp dir. No mocks.
       region as `?region=` on the URL, instead of a generated config file.
       Measured locally with Litestream 0.5.17 and a `file://` replica: rows
       written under the launcher came back after the file was deleted, and a
-      present file skipped the restore. Not yet redeployed to the tenant.
+      present file skipped the restore. Not redeployed to the tenant: the
+      user waived that check in review.
 - [x] Two fixes found on the tenant (2026-10-07), both measured from the pod
       logs:
       - The first deploy crash-looped with `No module named

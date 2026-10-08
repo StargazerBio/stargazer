@@ -15,8 +15,7 @@ from pathlib import Path
 # Add parent directory to path to import stargazer modules
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from stargazer.assets.component import ComponentFile
-
+from stargazer.assets.asset import Asset
 from stargazer.utils.pinata import PinataClient
 
 
@@ -38,8 +37,8 @@ async def upload_file(
     print(f"  Metadata: {keyvalues}")
 
     try:
-        comp = ComponentFile(path=file_path, keyvalues=dict(keyvalues))
-        await client.upload(comp)
+        comp = Asset(keyvalues=dict(keyvalues))
+        await client.upload(comp, file_path)
 
         print("  Success!")
         print(f"    CID: {comp.cid}")
