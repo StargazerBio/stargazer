@@ -276,7 +276,11 @@ Q7–Q12 decided 2026-10-07; the settled decisions above carry them.
       case to kubo's CIDs; both fail if the node width is off by one. The
       empty file is the zero-byte raw leaf (tested). Pinata matching kubo
       past two levels is inferred: Pinata itself was checked up to the
-      116 MB two-level `s1d1.h5ad`.
+      116 MB two-level `s1d1.h5ad`. A live drift test
+      (`test_pinata_assigns_the_same_cid`) uploads fresh random bytes to
+      Pinata at one block, three chunks, two levels and past the TUS
+      threshold, and compares Pinata's CID with ours (about 30s; it failed
+      on three of the four when the chunk size was switched to 1 MiB).
 - [x] **Q14. `File.from_local` to a `file://` destination.** Moot: uploads use
       `flyte.storage.put` and then build the `File` directly, which works on
       a local root outside any task context (measured).
