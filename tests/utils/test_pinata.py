@@ -4,7 +4,7 @@ Test for Pinata file upload, deletion, and querying using real API.
 This test requires a valid PINATA_JWT environment variable.
 
 To populate expected CIDs for test files, run:
-    python cli/upload_to_pinata.py tests/fixtures/FILE -m type=reference -m env=test --update-config
+    uv run python cli/upload_to_pinata.py tests/fixtures/general/FILE -m asset=reference --update-config
 """
 
 import pytest
