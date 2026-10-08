@@ -23,7 +23,23 @@ If you don't have mamba/conda on your host, install [miniforge](https://github.c
 
 Use `flyte start devbox` to spin up a local Flyte cluster for development. See the [official devbox docs](https://www.union.ai/docs/v2/flyte/user-guide/run-modes/running-devbox/) for setup instructions.
 
-This environment is much closer to production and lets you actually test your task and app environments.
+This environment is much closer to production and lets you actually test your task and app environments. After every fresh devbox, apply the cluster-side fixes, then deploy a dashboard to hold the asset index:
+
+```bash
+cli/devbox-setup.sh                      # prints the one-time DNS steps for your machine too
+uv run --all-extras stargazer-users devbox
+```
+
+The dashboard opens at `http://dashboard-flytesnacks-development.devbox.stargazer.bio:30081` as a stand-in user, "Devbox user". To have runs you submit store their assets there, export these first and keep the storage port-forward open while submitting:
+
+```bash
+export STARGAZER_STORE_ROOT=s3://flyte-data/stargazer
+export STARGAZER_INDEX_URL=http://dashboard-flytesnacks-development.flyte.svc.cluster.local
+export STARGAZER_OWNER=devbox-user
+kubectl port-forward -n flyte svc/rustfs-svc 9000:9000
+```
+
+The `verify-stargazer` skill's devbox recipe (`.claude/skills/verify-stargazer/features/devbox-asset-storage.md`) checks the whole path in about a minute.
 
 ## Running Tests
 

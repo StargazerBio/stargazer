@@ -33,7 +33,7 @@ There is no single host/IP that's reachable from both the laptop and from in-clu
    - DNS / `/etc/hosts`: `rustfs-svc.flyte → 127.0.0.1`
    - Port-forward: `kubectl port-forward -n flyte svc/rustfs-svc 9000:9000`
 
-   `app/admin_app.py:main()` starts the port-forward automatically (`_start_storage_port_forward()`) so `python -m app.admin_app` "just works" given the DNS step is done once. It only does so with `STARGAZER_TARGET=devbox` (the default).
+   `stargazer-users devbox` holds the port-forward open while it deploys (`app.onboard.storage_port_forward`, skipped when something already listens on :9000), and so does the verify skill's devbox probe. Anything else that uploads from the laptop, such as a `flyte.run` against the devbox, needs the forward running: without it the code-bundle upload logs `Upload failed … ConnectError: All connection attempts failed` (measured 2026-10-08).
 
 ---
 
@@ -77,7 +77,7 @@ docker exec flyte-devbox kubectl rollout restart deployment/flyte-binary -n flyt
 docker exec flyte-devbox kubectl rollout status deployment/flyte-binary -n flyte --timeout=120s
 ```
 
-To diagnose: check the actual env on a failed App pod — `kubectl get pod <pod> -n flyte -o yaml | grep -A1 FLYTE_AWS_ENDPOINT`. If it shows the bare `rustfs.flyte` while the ConfigMap shows `rustfs-svc.flyte`, flyte-binary is running stale config; restart it again. Delete the failed ksvc (`kubectl delete ksvc admin-app-flytesnacks-development -n flyte`) before redeploying so you get a clean revision.
+To diagnose: check the actual env on a failed App pod — `kubectl get pod <pod> -n flyte -o yaml | grep -A1 FLYTE_AWS_ENDPOINT`. If it shows the bare `rustfs.flyte` while the ConfigMap shows `rustfs-svc.flyte`, flyte-binary is running stale config; restart it again. Delete the failed ksvc (`kubectl delete ksvc dashboard-flytesnacks-development -n flyte`) before redeploying so you get a clean revision.
 
 ---
 
@@ -98,6 +98,26 @@ To diagnose: check the actual env on a failed App pod — `kubectl get pod <pod>
 **Cause:** Same root as the previous entry — the pod's Flyte connection is auto-discovered from `_U_EP_OVERRIDE` and friends at *Python process startup* by `flyte.init_in_cluster()`. A fresh subprocess inherits those env vars but does not run the discovery logic before its first SDK call, so `ensure_client()` raises. The Flyte v2 docs at `core-concepts/projects-and-domains` further claim that "the Python SDK provides read-only access to projects, to create or modify projects use the `flyte` CLI or the UI" — this is **wrong against the installed SDK**, `flyte.remote.Project.create(...)` exists and is what the CLI itself calls under the hood.
 
 **Workaround:** When provisioning Flyte resources from inside an App pod, always prefer the in-process SDK (`Project.create.aio(...)`, `Project.get.aio(...)`, etc.) over CLI subprocesses. The pod's auto-discovered endpoint is only available to the parent Python process. Trust the SDK's actual surface over the v2 docs when they disagree. See `app/provision.py` for the working pattern. (On Union the in-cluster identity isn't allowed to create projects at all; that's a permission, not this quirk.)
+
+---
+
+## Litestream can't reach the devbox store without its endpoint and keys
+
+**Symptom:** The devbox dashboard crash-loops before uvicorn starts. Its log shows `litestream restore` failing with `s3: cannot lookup bucket region: operation error S3: GetBucketLocation, get identity: get credentials: failed to refresh cached credentials, no EC2 IMDS role found` (measured 2026-10-08).
+
+**Cause:** The devbox store is rustfs, S3-compatible but not AWS. Given a bare `s3://flyte-data/…` URL, Litestream talks to AWS, finds no region and no credentials, and the launcher stops the dashboard on the failed restore. Flyte gives app pods the store's address and keys as `FLYTE_AWS_ENDPOINT`, `FLYTE_AWS_ACCESS_KEY_ID` and `FLYTE_AWS_SECRET_ACCESS_KEY` (from `internalApps.defaultEnvVars`), names Litestream doesn't read.
+
+**Fix (in code):** `app.dashboard_launch` puts `FLYTE_AWS_ENDPOINT` on the replica URL as `?endpoint=` (Litestream then defaults to path-style addressing) and copies the `FLYTE_AWS_*` keys to `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` for Litestream unless those are already set. On Union neither variable is set and the pod's role supplies credentials.
+
+---
+
+## No Union login: the devbox dashboard uses a stand-in user
+
+**Symptom:** On the devbox the dashboard answers `401 not signed in` to every page, though `/health` and the index routes work.
+
+**Cause:** The dashboard reads the signed-in user from `X-User-Subject`, which Union's login sets. The devbox has no login in front of apps, so the header never arrives.
+
+**Workaround (in code):** `stargazer-users devbox` bakes `SG_DEVBOX_SUBJECT=devbox-user` into the dashboard, and `app.identity` treats a request with no subject as that user ("Devbox user"). `app.config` reads the variable only when `STARGAZER_TARGET=devbox`, and the command refuses to run on any other target, so the stand-in never reaches Union. A real subject header, when one arrives, still wins.
 
 ---
 
@@ -258,7 +278,7 @@ Not strictly devbox-specific. Bites any AppEnvironment whose image bakes a Pytho
 
 ## Laptop-side Flyte cache goes stale when the devbox is recreated/restarted
 
-**Symptom (two faces, same cause).** After recreating or restarting the devbox, `python -m app.admin_app` fails in one of two places:
+**Symptom (two faces, same cause).** After recreating or restarting the devbox, a deploy (`stargazer-users devbox`) fails in one of two places:
 
 1. **Image stage** — `flyte.build` logs `Image localhost:30000/notebook-app:<hash> already exists, skipping build`, then the retag dies:
 
@@ -294,7 +314,7 @@ c.commit()
 PY
 ```
 
-`task_cache` and `runs` point at the same wiped object storage, so clear them too. Then delete any failed ksvc (`kubectl delete ksvc admin-app-flytesnacks-development -n flyte`) so the redeploy gets a clean revision.
+`task_cache` and `runs` point at the same wiped object storage, so clear them too. Then delete any failed ksvc (`kubectl delete ksvc dashboard-flytesnacks-development -n flyte`) so the redeploy gets a clean revision.
 
 ## `AppEnvironment.clone_with` breaks `include=` (and the pod loader)
 

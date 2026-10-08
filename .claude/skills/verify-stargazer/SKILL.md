@@ -1,6 +1,6 @@
 ---
 name: verify-stargazer
-description: Drive Stargazer the way a user does and capture evidence that a change works. Covers the marimo notebooks run headless, with SDK tasks executing locally against an isolated asset store. Use before declaring a task, workflow, or notebook change done, or when asked to verify, prove, or reproduce Stargazer behavior.
+description: Drive Stargazer the way a user does and capture evidence that a change works. Covers the marimo notebooks run headless, with SDK tasks executing locally against an isolated asset store, and asset storage on the local devbox (task pods storing and finding assets through the devbox dashboard). Use before declaring a task, workflow, or notebook change done, or when asked to verify, prove, or reproduce Stargazer behavior.
 ---
 
 # Verify Stargazer

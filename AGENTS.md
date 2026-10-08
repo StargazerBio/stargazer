@@ -95,7 +95,7 @@ The markdown body contains detailed instructions including:
 |-------|-------------|
 | `bug-fix` | A defect is reported. Reproduce on the same surface, find the cause by elimination, fix at the root, verify on the same surface |
 | `blast-radius` | A change could break something outside its diff (stored keyvalues, MCP wire format, Flyte images, notebook imports). Proves the one fact it's safe because of by running code |
-| `verify-stargazer` | Before declaring a task, workflow, or notebook change done. Drives notebooks headless against an isolated asset store and checks the stored outputs. Its `features/` map is the maintained list of what can be verified and how; add a feature file once a feature has been driven end to end |
+| `verify-stargazer` | Before declaring a task, workflow, or notebook change done. Drives notebooks headless against an isolated asset store and checks the stored outputs, and checks asset storage on the devbox. Its `features/` map is the maintained list of what can be verified and how; add a feature file once a feature has been driven end to end |
 
 ## Docstring Spec References
 
