@@ -58,8 +58,11 @@ python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
 asyncio_mode = "auto"
+# Pinata tests call the real API (uploads up to ~100 MB), so they're opt-in:
+# `uv run pytest -m pinata`. A `-m` on the command line replaces this one.
+addopts = ["-m", "not pinata"]
 markers = [
-    "pinata: tests that require Pinata API access (PINATA_JWT)",
+    "pinata: calls the real Pinata API with tests/.secrets/pinata_jwt; opt-in with -m pinata",
 ]
 filterwarnings = [
     # Ignore Pydantic deprecation warnings from flyte package (third-party)

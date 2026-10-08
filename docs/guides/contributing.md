@@ -31,7 +31,7 @@ This environment is much closer to production and lets you actually test your ta
 pytest tests/
 ```
 
-Tests run with no `PINATA_JWT`. Every test gets its own empty store, index and cache under its temp directory, so nothing touches `~/.stargazer`; tests that query the fixture files use a store seeded once per session (`tests/fixtures/seed.py`). Tests marked `pinata` call the real Pinata API with the key in `tests/.secrets/pinata_jwt`, and skip without it.
+Tests run with no `PINATA_JWT`. Every test gets its own empty store, index and cache under its temp directory, so nothing touches `~/.stargazer`; tests that query the fixture files use a store seeded once per session (`tests/fixtures/seed.py`). Tests marked `pinata` call the real Pinata API with the key in `tests/.secrets/pinata_jwt`. They don't run by default; `uv run pytest -m pinata` runs them, and they skip without the key.
 
 ```bash
 pytest tests/unit/

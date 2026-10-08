@@ -2,7 +2,8 @@
 
 PINATA_JWT is stripped before any stargazer imports, so storage runs without
 the public tier. Tests marked @pytest.mark.pinata get the JWT injected from
-tests/.secrets/pinata_jwt at runtime.
+tests/.secrets/pinata_jwt at runtime. They're deselected by default
+(`addopts` in pyproject.toml); `uv run pytest -m pinata` runs them.
 
 Every test runs against its own empty store, index and cache under tmp_path
 (`isolated_storage`, autouse), so nothing reads or writes ~/.stargazer.
