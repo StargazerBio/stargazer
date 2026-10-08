@@ -8,7 +8,6 @@ Deploying the dashboard is faked at `app.onboard.deploy_dashboard`.
 """
 
 import sys
-from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -432,61 +431,6 @@ def test_dashboard_deploy_carries_the_asset_store_and_index(monkeypatch):
     assert served["env_vars"]["STARGAZER_STORE_ROOT"] == "s3://bucket/stargazer"
     assert served["env_vars"]["STARGAZER_INDEX_URL"] == "~/.stargazer/index.db"
     assert served["env_vars"]["STARGAZER_OWNER"] == ALICE
-
-
-def test_devbox_deploy_names_a_stand_in_and_the_devbox_store(monkeypatch):
-    """`stargazer-users devbox` serves the dashboard into the default project
-    for a stand-in user, on the devbox's bucket, with the storage port-forward
-    open while it uploads the code bundle."""
-    served, forwards = {}, []
-
-    def fake_servecontext(**ctx):
-        def serve(env):
-            served.update(ctx=ctx, env_vars=dict(env.env_vars))
-            forwards.append("served")
-            return SimpleNamespace(endpoint="http://dashboard.devbox.example:30081")
-
-        return SimpleNamespace(serve=serve)
-
-    @contextmanager
-    def fake_forward():
-        forwards.append("open")
-        yield
-        forwards.append("closed")
-
-    monkeypatch.setattr(onboard.flyte, "with_servecontext", fake_servecontext)
-    monkeypatch.setattr(onboard, "storage_port_forward", fake_forward)
-    monkeypatch.setattr(onboard, "_notebook_image", lambda: "reg/notebook-app:h1")
-    monkeypatch.setattr(onboard, "get_init_config", lambda: SimpleNamespace(org=None))
-    assert onboard.deploy_devbox() == "http://dashboard.devbox.example:30081"
-    assert forwards == ["open", "served", "closed"]
-    assert served["ctx"] == {"project": "flytesnacks", "domain": "development"}
-    assert {
-        k: served["env_vars"][k]
-        for k in (
-            "SG_DEVBOX_SUBJECT",
-            "SG_OWNER_SUBJECT",
-            "STARGAZER_OWNER",
-            "STARGAZER_WORKSPACE_ROOT",
-            "STARGAZER_STORE_ROOT",
-        )
-    } == {
-        "SG_DEVBOX_SUBJECT": "devbox-user",
-        "SG_OWNER_SUBJECT": "devbox-user",
-        "STARGAZER_OWNER": "devbox-user",
-        "STARGAZER_WORKSPACE_ROOT": "s3://flyte-data/stargazer",
-        "STARGAZER_STORE_ROOT": "s3://flyte-data/stargazer",
-    }
-
-
-def test_devbox_command_is_refused_off_the_devbox(monkeypatch):
-    """A stand-in user must never reach a Union deploy."""
-    monkeypatch.setattr(config, "TARGET", "union")
-    monkeypatch.setattr(config, "WORKSPACE_ROOT", "s3://bucket/stargazer")
-    monkeypatch.setattr(onboard, "init", lambda *a, **k: pytest.fail("init ran"))
-    monkeypatch.setattr(sys, "argv", ["stargazer-users", "devbox"])
-    with pytest.raises(SystemExit, match="STARGAZER_TARGET=devbox"):
-        onboard.main()
 
 
 def test_dashboard_deploy_waits_out_a_stale_watch_failure(monkeypatch):

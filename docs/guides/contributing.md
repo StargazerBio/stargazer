@@ -27,10 +27,10 @@ This environment is much closer to production and lets you actually test your ta
 
 ```bash
 cli/devbox-setup.sh                      # prints the one-time DNS steps for your machine too
-uv run --all-extras stargazer-users devbox
+uv run --all-extras python cli/devbox_dashboard.py
 ```
 
-The dashboard opens at `http://dashboard-flytesnacks-development.devbox.stargazer.bio:30081` as a stand-in user, "Devbox user". To have runs you submit store their assets there, export these first and keep the storage port-forward open while submitting:
+The dashboard opens at `http://dashboard-flytesnacks-development.devbox.stargazer.bio:30081` as a stand-in user, `devbox-user`. To have runs you submit store their assets there, export these first and keep the storage port-forward open while submitting:
 
 ```bash
 export STARGAZER_STORE_ROOT=s3://flyte-data/stargazer

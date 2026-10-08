@@ -228,10 +228,9 @@ Onboarding (`stargazer-users onboard|upgrade`) runs `flyte.build` on the recipe 
 |---|---|---|
 | Deployer's Flyte config (`app.config.FLYTE_CONFIG`) | `.flyte/config.yaml` | `.flyte/union.yaml` (remote builder) |
 | `STARGAZER_REGISTRY` default | `localhost:30000` | unset: the remote builder pushes to Union's registry |
-| Login | none: `stargazer-users devbox` bakes in a stand-in user, `SG_DEVBOX_SUBJECT=devbox-user`, which `app.identity` uses for requests with no subject (read only when `STARGAZER_TARGET=devbox`) | Union's gate |
-| Dashboard deploy | `stargazer-users devbox`: one dashboard in `flytesnacks` for the stand-in user, storing under `s3://flyte-data/stargazer` | `stargazer-users onboard`, one per user in their project |
-| Object store | rustfs inside the devbox. Flyte gives pods its address and keys as `FLYTE_AWS_*`; the Litestream launcher puts the address on the replica URL (`?endpoint=`) and copies the keys to `AWS_*` | the tenant bucket, through the pod's role |
-| Uploads from the deployer's machine | Flyte signs them for `rustfs-svc.flyte:9000`: `/etc/hosts` maps it to 127.0.0.1, and a `kubectl port-forward` to `svc/rustfs-svc` must be open (`stargazer-users devbox` holds one while it deploys) | direct to the bucket |
+| Login | none: a stand-in user (`SG_STAND_IN_SUBJECT`) for requests with no subject, never honored on Union | Union's gate |
+| Dashboard deploy | `cli/devbox_dashboard.py`: one dashboard for the stand-in user (details in `.opencode/reference/devbox_workarounds.md` → Devbox dashboard) | `stargazer-users onboard`, one per user in their project |
+| Object store | rustfs inside the devbox, reached through `FLYTE_AWS_*` | the tenant bucket, through the pod's role |
 
 `FLYTE_DOMAIN` (default `development`) is independent of the target: it's the domain onboarding grants access on and deploys dashboards into, and where dashboards serve and look up per-notebook apps, so a prod deploy sets `FLYTE_DOMAIN=production`. Both `.flyte/` files are gitignored; create `union.yaml` with `flyte create config --endpoint dns:///<tenant> --image-builder remote -o .flyte/union.yaml`.
 

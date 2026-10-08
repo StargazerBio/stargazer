@@ -36,4 +36,4 @@ Add a file here once a feature has been driven end to end.
 - **Tutorial notebooks** (`notebooks/tutorials/`). Reachable locally.
 - **MCP server tools** (`list_tasks`, `run_task`, `query_files`). Reachable locally.
 - **Germline variant calling** (`workflows/`). Needs `bwa`, `samtools`, and `gatk` on PATH, or the devbox.
-- **Hosted app** (`app/`: notebook launch, asset manager). Needs the devbox dashboard (`stargazer-users devbox`, see [Asset storage on the devbox](./devbox-asset-storage.md)).
+- **Hosted app** (`app/`: notebook launch, asset manager). Needs the devbox dashboard (`cli/devbox_dashboard.py`, see [Asset storage on the devbox](./devbox-asset-storage.md)).

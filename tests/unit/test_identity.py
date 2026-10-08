@@ -93,31 +93,31 @@ def test_initial_is_first_letter_uppercased():
     assert User("1", "", "ann lee").initial == "A"
 
 
-def test_devbox_stands_in_a_fixed_user(monkeypatch):
-    """The devbox has no login in front of apps; its deploy names a stand-in."""
-    monkeypatch.setattr(config, "DEVBOX_SUBJECT", "devbox-user")
-    assert user_from_request(_request({})) == User("devbox-user", "", "Devbox user")
+def test_a_deploy_without_a_login_can_name_a_stand_in(monkeypatch):
+    """With no login in front, a request without a subject is the stand-in."""
+    monkeypatch.setattr(config, "STAND_IN_SUBJECT", "devbox-user")
+    assert user_from_request(_request({})) == User("devbox-user")
 
 
-def test_a_forwarded_identity_beats_the_devbox_stand_in(monkeypatch):
+def test_a_forwarded_identity_beats_the_stand_in(monkeypatch):
     """A subject header, when there is one, is still who's signed in."""
-    monkeypatch.setattr(config, "DEVBOX_SUBJECT", "devbox-user")
+    monkeypatch.setattr(config, "STAND_IN_SUBJECT", "devbox-user")
     user = user_from_request(_request({"X-User-Subject": OWNER}))
     assert user is not None and user.subject == OWNER
 
 
-def test_the_stand_in_only_exists_on_the_devbox():
-    """Baked into a Union deploy, the variable does nothing."""
+def test_the_stand_in_is_never_honored_on_union():
+    """Union's login always forwards a subject; set there, the variable does nothing."""
     assert (
-        config.devbox_subject(
-            {"STARGAZER_TARGET": "devbox", "SG_DEVBOX_SUBJECT": "devbox-user"}
+        config.stand_in_subject(
+            {"STARGAZER_TARGET": "devbox", "SG_STAND_IN_SUBJECT": "devbox-user"}
         )
         == "devbox-user"
     )
     assert (
-        config.devbox_subject(
-            {"STARGAZER_TARGET": "union", "SG_DEVBOX_SUBJECT": "devbox-user"}
+        config.stand_in_subject(
+            {"STARGAZER_TARGET": "union", "SG_STAND_IN_SUBJECT": "devbox-user"}
         )
         == ""
     )
-    assert config.devbox_subject({"STARGAZER_TARGET": "devbox"}) == ""
+    assert config.stand_in_subject({"STARGAZER_TARGET": "devbox"}) == ""

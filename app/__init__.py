@@ -17,9 +17,7 @@ deployed into the owning user's own Flyte project (`u-<handle>`):
   user's Union subject) is the durable copy, pods are working copies.
 
 Both are deployed by `app.onboard` (`stargazer-users`), which an org admin
-runs to give a user their project, access and dashboard. On the local devbox,
-which has no Union login, `stargazer-users devbox` deploys one dashboard for
-a stand-in user instead.
+runs to give a user their project, access and dashboard.
 
 Plus supporting modules: `identity`, `workspace_store`,
 `notebooks`, `notebook_meta`, `assets`, `index_api` (the user's asset index,

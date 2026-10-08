@@ -2,7 +2,7 @@
 #
 # devbox-setup.sh — apply the known cluster-side Flyte devbox workarounds to a
 # fresh `flyte-devbox` container. Tasks and workflows run here, and
-# `stargazer-users devbox` deploys a dashboard for a stand-in user (the devbox
+# `cli/devbox_dashboard.py` deploys a dashboard for a stand-in user (the devbox
 # has no Union login).
 #
 # These patches live in the k3s addon manifest (and CoreDNS) and are LOST when
@@ -197,7 +197,7 @@ fi
 # ---------------------------------------------------------------------------
 laptop_steps() {
     cat <<EOF
-  # 1) Resolve the storage host to a port-forward on :9000 (stargazer-users devbox opens one while it deploys; run 'kubectl port-forward -n flyte svc/rustfs-svc 9000:9000' when submitting runs yourself):
+  # 1) Resolve the storage host to a port-forward on :9000 (cli/devbox_dashboard.py opens one while it deploys; run 'kubectl port-forward -n flyte svc/rustfs-svc 9000:9000' when submitting runs yourself):
   echo '127.0.0.1 rustfs-svc.flyte' | sudo tee -a /etc/hosts
 
   # 2) Wildcard-resolve *.$DOMAIN → 127.0.0.1 (the published :30081 port is unchanged):

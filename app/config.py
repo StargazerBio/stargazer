@@ -56,18 +56,16 @@ FLYTE_DOMAIN: str = os.environ.get("FLYTE_DOMAIN", "development")
 WORKSPACE_ROOT: str = os.environ.get("STARGAZER_WORKSPACE_ROOT", "")
 
 
-def devbox_subject(env) -> str:
-    """The devbox's stand-in user (`SG_DEVBOX_SUBJECT`), only on the devbox."""
-    if env.get("STARGAZER_TARGET") != "devbox":
+def stand_in_subject(env) -> str:
+    """`SG_STAND_IN_SUBJECT`, except on Union, where it's never honored."""
+    if env.get("STARGAZER_TARGET") == "union":
         return ""
-    return env.get("SG_DEVBOX_SUBJECT", "")
+    return env.get("SG_STAND_IN_SUBJECT", "")
 
 
-# The devbox has no Union login in front of apps, so nothing forwards an
-# identity there. A devbox deploy (`stargazer-users devbox`) bakes in a fixed
-# subject that stands in for the signed-in user (`app.identity`). It's honored
-# only when the target is the devbox, so the variable does nothing on Union.
-DEVBOX_SUBJECT: str = devbox_subject(os.environ)
+# A subject for requests that arrive with no identity, for a deploy with no
+# login in front of it (`app.identity`). Union's login always forwards one.
+STAND_IN_SUBJECT: str = stand_in_subject(os.environ)
 
 # The one user this dashboard serves: their Union subject, baked in when the
 # dashboard is deployed into their project. Unset admits nobody (fail closed).

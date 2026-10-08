@@ -6,7 +6,7 @@ index), then `consume` runs in a second pod, finds them with `assemble()` and
 reads each back with `fetch()`. Exits 0 only when every file comes back with
 its own contents.
 
-Needs the devbox dashboard (`stargazer-users devbox`). The probe runs on the
+Needs the devbox dashboard (`cli/devbox_dashboard.py`). The probe runs on the
 dashboard's image recipe; that image carries the project's source, so a source
 change since the last deploy builds it again (a few seconds from cache). The
 storage port-forward is held open while the code bundle uploads.
@@ -15,6 +15,7 @@ Usage: uv run --all-extras python .claude/skills/verify-stargazer/scripts/devbox
 """
 
 import importlib
+import importlib.util
 import os
 import sys
 from pathlib import Path
@@ -22,10 +23,19 @@ from pathlib import Path
 import flyte
 
 from app.admin_app import app_env
-from app.onboard import DEVBOX_STORE_ROOT, DEVBOX_SUBJECT, storage_port_forward
 from stargazer.config import PROJECT_ROOT
 
 N = 3
+
+
+def _devbox_dashboard():
+    """`cli/devbox_dashboard.py`, loaded from its path (it isn't a package)."""
+    spec = importlib.util.spec_from_file_location(
+        "devbox_dashboard", PROJECT_ROOT / "cli" / "devbox_dashboard.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def main(tag: str) -> int:
@@ -37,8 +47,9 @@ def main(tag: str) -> int:
     # once the dashboard image's address is known.
     os.environ["SG_PROBE_IMAGE"] = flyte.build(app_env.image).uri
     tasks = importlib.import_module("devbox_probe_tasks")
-    assert (tasks.STORE_ROOT, tasks.OWNER) == (DEVBOX_STORE_ROOT, DEVBOX_SUBJECT)
-    with storage_port_forward():
+    devbox = _devbox_dashboard()
+    assert (tasks.STORE_ROOT, tasks.OWNER) == (devbox.STORE_ROOT, devbox.SUBJECT)
+    with devbox.storage_port_forward():
         run = flyte.run(tasks.probe, n=N, tag=tag)
     print(f"run: {run.url}")
     run.wait()

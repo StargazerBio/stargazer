@@ -17,7 +17,7 @@ from stargazer.utils.storage import default_client
 
 # What a notebook pod launched from the devbox dashboard gets: the devbox
 # bucket, the dashboard's in-cluster address, the stand-in owner. The driver
-# checks these against `app.onboard`'s devbox settings.
+# checks these against `cli/devbox_dashboard.py`.
 STORE_ROOT = "s3://flyte-data/stargazer"
 INDEX_URL = "http://dashboard-flytesnacks-development.flyte.svc.cluster.local"
 OWNER = "devbox-user"

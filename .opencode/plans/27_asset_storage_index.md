@@ -292,7 +292,7 @@ Q7–Q12 decided 2026-10-07; the settled decisions above carry them.
       will exceed.
 - [x] **Q16. The devbox.** Its app tier doesn't run (no Union auth), so
       remote runs there have no dashboard to index into. Resolved
-      2026-10-08: `stargazer-users devbox` deploys a dashboard for a stand-in
+      2026-10-08: `cli/devbox_dashboard.py` deploys a dashboard for a stand-in
       user, and the launcher handles the devbox's S3-compatible store.
       Verified with the `verify-stargazer` devbox recipe.
 - [x] **Q17. The cache behind `File.download()`.** Flyte's `download()` has no

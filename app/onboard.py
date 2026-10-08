@@ -27,19 +27,12 @@ A redeploy waits for the user's runs to finish (`refuse_while_running`): the
 dashboard holds their asset index, and a write that lands on the outgoing
 version is lost.
 
-`devbox` deploys one dashboard on the local devbox, which has no Union users
-or login: it goes into the default project for a stand-in user
-(`config.DEVBOX_SUBJECT`), stores under the devbox's bucket, and holds a
-`kubectl` port-forward to the devbox's object store open while it uploads the
-code bundle (Flyte signs upload URLs for the in-cluster store address).
-
 The control-plane classes are module attributes so tests can swap in fakes.
 
 Usage (deploy settings exported; see `app_internals.md` → Deploy Settings):
     stargazer-users onboard --email jane@uni.edu --first-name Jane --last-name Doe
     stargazer-users upgrade
     stargazer-users offboard --email jane@uni.edu
-    stargazer-users devbox
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -48,10 +41,7 @@ import argparse
 import asyncio
 import os
 import re
-import socket
-import subprocess
 import time
-from contextlib import contextmanager
 from functools import cache
 
 import flyte
@@ -79,9 +69,6 @@ _BASE_ENV_VARS = dict(app_env.env_vars)
 # Where the dashboard keeps its SQLite index, on its own disk (Litestream
 # makes it durable). `~` expands in the pod.
 _DASHBOARD_INDEX = "~/.stargazer/index.db"
-# The devbox's stand-in user and the bucket every devbox deploy stores under.
-DEVBOX_SUBJECT = "devbox-user"
-DEVBOX_STORE_ROOT = "s3://flyte-data/stargazer"
 # Phases of a run that hasn't finished.
 _UNFINISHED = (
     ActionPhase.QUEUED,
@@ -231,7 +218,7 @@ def deploy_dashboard(
     Same app definition for every user: only the project, the owner and the
     subdomain differ. Images are content-hashed, so a release builds each
     once and every user's dashboard runs the same build. `extra_env` is
-    applied last (the devbox deploy's store and stand-in user).
+    applied last.
     """
     env_vars = {
         **_BASE_ENV_VARS,
@@ -277,57 +264,6 @@ def deploy_dashboard(
                 return app.endpoint
             time.sleep(_ACTIVE_POLL_SECONDS)
         raise
-
-
-def _port_open(port: int) -> bool:
-    """Whether something already listens on localhost:`port`."""
-    with socket.socket() as sock:
-        sock.settimeout(0.2)
-        return sock.connect_ex(("127.0.0.1", port)) == 0
-
-
-@contextmanager
-def storage_port_forward():
-    """Hold `localhost:9000 → svc/rustfs-svc:9000` open on the devbox.
-
-    The devbox signs code-bundle upload URLs for `rustfs-svc.flyte:9000`, the
-    store's in-cluster address, so its pods can use them. On the deployer's
-    machine that name resolves to 127.0.0.1 (`/etc/hosts`, set up once per
-    `cli/devbox-setup.sh`) and needs this forward behind it. A forward the
-    deployer already runs is left alone.
-    """
-    if _port_open(9000):
-        yield
-        return
-    proc = subprocess.Popen(
-        ["kubectl", "port-forward", "-n", "flyte", "svc/rustfs-svc", "9000:9000"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    try:
-        for _ in range(40):
-            if _port_open(9000):
-                break
-            time.sleep(0.25)
-        else:
-            raise RuntimeError("kubectl port-forward to the devbox store didn't open")
-        yield
-    finally:
-        proc.terminate()
-
-
-def deploy_devbox() -> str:
-    """Deploy a dashboard on the devbox for its stand-in user; return its URL."""
-    with storage_port_forward():
-        return deploy_dashboard(
-            config.FLYTE_PROJECT,
-            DEVBOX_SUBJECT,
-            extra_env={
-                "SG_DEVBOX_SUBJECT": DEVBOX_SUBJECT,
-                "STARGAZER_WORKSPACE_ROOT": DEVBOX_STORE_ROOT,
-                "STARGAZER_STORE_ROOT": DEVBOX_STORE_ROOT,
-            },
-        )
 
 
 def active_runs(project: str) -> list[str]:
@@ -441,12 +377,7 @@ def main() -> None:
         "offboard", help="stop a user's apps and archive their project"
     )
     remove.add_argument("--email", required=True)
-    sub.add_parser("devbox", help="deploy a dashboard on the local devbox")
     args = parser.parse_args()
-
-    # The stand-in user must never reach Union.
-    if args.command == "devbox" and config.TARGET != "devbox":
-        raise SystemExit("stargazer-users devbox needs STARGAZER_TARGET=devbox.")
 
     # Same guard as the dashboard deploy: without a root nothing can be saved.
     if (
@@ -467,8 +398,6 @@ def main() -> None:
         elif args.command == "upgrade":
             for url in upgrade():
                 print(f"Dashboard: {url}")
-        elif args.command == "devbox":
-            print(f"Dashboard: {deploy_devbox()}")
         else:
             offboard(args.email)
             print(f"Offboarded {args.email}")

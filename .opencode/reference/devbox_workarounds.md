@@ -33,7 +33,7 @@ There is no single host/IP that's reachable from both the laptop and from in-clu
    - DNS / `/etc/hosts`: `rustfs-svc.flyte → 127.0.0.1`
    - Port-forward: `kubectl port-forward -n flyte svc/rustfs-svc 9000:9000`
 
-   `stargazer-users devbox` holds the port-forward open while it deploys (`app.onboard.storage_port_forward`, skipped when something already listens on :9000), and so does the verify skill's devbox probe. Anything else that uploads from the laptop, such as a `flyte.run` against the devbox, needs the forward running: without it the code-bundle upload logs `Upload failed … ConnectError: All connection attempts failed` (measured 2026-10-08).
+   `cli/devbox_dashboard.py` holds the port-forward open while it deploys (reusing one already listening on :9000), and so does the verify skill's devbox probe. Anything else that uploads from the laptop, such as a `flyte.run` against the devbox, needs the forward running: without it the code-bundle upload logs `Upload failed … ConnectError: All connection attempts failed` (measured 2026-10-08).
 
 ---
 
@@ -101,23 +101,37 @@ To diagnose: check the actual env on a failed App pod — `kubectl get pod <pod>
 
 ---
 
+## Devbox dashboard: `cli/devbox_dashboard.py`
+
+The app tier is built for Union, where onboarding gives each user a project and Union's login sits in front of every app. The devbox has neither, so it gets one dashboard from `uv run --all-extras python cli/devbox_dashboard.py` (after `cli/devbox-setup.sh`), which calls the same `app.onboard.deploy_dashboard` with devbox settings. Everything devbox-specific about it lives in that script and in this section; the code under `app/` stays target-agnostic. What it sets, and why:
+
+- **Project and owner.** The default project (`flytesnacks`) and a stand-in owner, `devbox-user`, which is also the asset owner (`STARGAZER_OWNER`) and the folder in the store.
+- **A stand-in user (`SG_STAND_IN_SUBJECT=devbox-user`).** Symptom without it: every dashboard page answers `401 not signed in` (`/health` and the index routes still work). The dashboard reads the user from `X-User-Subject`, which only Union's login sets. `app.identity` treats a request with no subject as the stand-in. `app.config.stand_in_subject` ignores the variable when `STARGAZER_TARGET=union`, and the script refuses to run off the devbox, so it can't reach Union. A real subject header still wins.
+- **The store root, `s3://flyte-data/stargazer`.** `flyte-data` is the devbox's bucket, served by rustfs. Assets land under `stargazer/users/devbox-user/assets/<cid>/<name>` and the index replica under `stargazer/users/devbox-user/index`.
+- **A storage port-forward while it deploys.** See "Storage signed URLs use `localhost`" above: the code bundle uploads to `rustfs-svc.flyte:9000`. The script holds `kubectl port-forward -n flyte svc/rustfs-svc 9000:9000` open, or reuses one already listening.
+
+The dashboard ends up at `http://dashboard-flytesnacks-development.devbox.stargazer.bio:30081`. Its in-cluster address comes from the `INTERNAL_APP_ENDPOINT_PATTERN` the devbox gives app pods (`http://{app_fqdn}-flytesnacks-development.flyte.svc.cluster.local`), so pods index at `http://dashboard-flytesnacks-development.flyte.svc.cluster.local`.
+
+**Runs submitted from the laptop** store into it when these are exported (`stargazer.config` forwards them into every pod), with the port-forward open for the code-bundle upload:
+
+```bash
+export STARGAZER_STORE_ROOT=s3://flyte-data/stargazer
+export STARGAZER_INDEX_URL=http://dashboard-flytesnacks-development.flyte.svc.cluster.local
+export STARGAZER_OWNER=devbox-user
+kubectl port-forward -n flyte svc/rustfs-svc 9000:9000
+```
+
+The `verify-stargazer` skill's devbox recipe (`features/devbox-asset-storage.md`) checks all of this end to end.
+
+---
+
 ## Litestream can't reach the devbox store without its endpoint and keys
 
 **Symptom:** The devbox dashboard crash-loops before uvicorn starts. Its log shows `litestream restore` failing with `s3: cannot lookup bucket region: operation error S3: GetBucketLocation, get identity: get credentials: failed to refresh cached credentials, no EC2 IMDS role found` (measured 2026-10-08).
 
-**Cause:** The devbox store is rustfs, S3-compatible but not AWS. Given a bare `s3://flyte-data/…` URL, Litestream talks to AWS, finds no region and no credentials, and the launcher stops the dashboard on the failed restore. Flyte gives app pods the store's address and keys as `FLYTE_AWS_ENDPOINT`, `FLYTE_AWS_ACCESS_KEY_ID` and `FLYTE_AWS_SECRET_ACCESS_KEY` (from `internalApps.defaultEnvVars`), names Litestream doesn't read.
+**Cause:** rustfs is S3-compatible but not AWS. Given a bare `s3://flyte-data/…` URL, Litestream talks to AWS, finds no region and no credentials, and the launcher stops the dashboard on the failed restore. Flyte gives app pods the store's address and keys as `FLYTE_AWS_ENDPOINT`, `FLYTE_AWS_ACCESS_KEY_ID` and `FLYTE_AWS_SECRET_ACCESS_KEY` (from `internalApps.defaultEnvVars`), names Litestream doesn't read.
 
-**Fix (in code):** `app.dashboard_launch` puts `FLYTE_AWS_ENDPOINT` on the replica URL as `?endpoint=` (Litestream then defaults to path-style addressing) and copies the `FLYTE_AWS_*` keys to `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` for Litestream unless those are already set. On Union neither variable is set and the pod's role supplies credentials.
-
----
-
-## No Union login: the devbox dashboard uses a stand-in user
-
-**Symptom:** On the devbox the dashboard answers `401 not signed in` to every page, though `/health` and the index routes work.
-
-**Cause:** The dashboard reads the signed-in user from `X-User-Subject`, which Union's login sets. The devbox has no login in front of apps, so the header never arrives.
-
-**Workaround (in code):** `stargazer-users devbox` bakes `SG_DEVBOX_SUBJECT=devbox-user` into the dashboard, and `app.identity` treats a request with no subject as that user ("Devbox user"). `app.config` reads the variable only when `STARGAZER_TARGET=devbox`, and the command refuses to run on any other target, so the stand-in never reaches Union. A real subject header, when one arrives, still wins.
+**Fix (in code, target-agnostic):** `app.dashboard_launch` puts `FLYTE_AWS_ENDPOINT` on the replica URL as `?endpoint=` (Litestream then defaults to path-style addressing) and copies the `FLYTE_AWS_*` keys to `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` unless those are already set. On Union neither variable is set and the pod's role supplies credentials.
 
 ---
 
@@ -278,7 +292,7 @@ Not strictly devbox-specific. Bites any AppEnvironment whose image bakes a Pytho
 
 ## Laptop-side Flyte cache goes stale when the devbox is recreated/restarted
 
-**Symptom (two faces, same cause).** After recreating or restarting the devbox, a deploy (`stargazer-users devbox`) fails in one of two places:
+**Symptom (two faces, same cause).** After recreating or restarting the devbox, a deploy (`cli/devbox_dashboard.py`) fails in one of two places:
 
 1. **Image stage** — `flyte.build` logs `Image localhost:30000/notebook-app:<hash> already exists, skipping build`, then the retag dies:
 

@@ -17,11 +17,10 @@ startup command (`exec python -m app.dashboard_launch`):
 Both commands take the index file and the replica URL as arguments, so there
 is no Litestream config file.
 
-On the devbox the store is S3-compatible but not AWS. Flyte gives pods its
-address and keys as `FLYTE_AWS_ENDPOINT` and `FLYTE_AWS_*`; the endpoint rides
-on the replica URL (`?endpoint=`) and the keys are copied to the `AWS_*` names
-Litestream reads. On Union neither is set and the pod's role supplies
-credentials.
+An S3-compatible store other than AWS reaches pods as `FLYTE_AWS_ENDPOINT`
+and `FLYTE_AWS_*` keys: the endpoint rides on the replica URL (`?endpoint=`)
+and the keys are copied to the `AWS_*` names Litestream reads. Without them
+the pod's role supplies credentials.
 
 Without a bucket root or an owner (local development, a deploy with no
 store) there is nowhere durable to replicate to, and the launcher execs
@@ -81,8 +80,8 @@ def replica_url(env: dict) -> str | None:
 def litestream_env(env: dict) -> dict:
     """`env` plus the store's keys under the `AWS_*` names Litestream reads.
 
-    Flyte gives pods an S3-compatible store's keys as `FLYTE_AWS_*` (the
-    devbox does). Keys already under the `AWS_*` names win.
+    Flyte gives pods an S3-compatible store's keys as `FLYTE_AWS_*`. Keys
+    already under the `AWS_*` names win.
     """
     out = dict(env)
     for name in ("ACCESS_KEY_ID", "SECRET_ACCESS_KEY"):

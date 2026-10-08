@@ -13,9 +13,8 @@ user as headers it sets itself, overwriting anything a client sends:
 There is no session cookie and no sign-in route of our own: Union owns both.
 Each dashboard belongs to one user, but Union alone decides who may open it.
 
-The devbox has no Union login, so its deploy names a stand-in user
-(`config.DEVBOX_SUBJECT`) for requests that arrive without a subject. It is
-never set on Union.
+A deploy with no login in front of it can name a stand-in user
+(`config.STAND_IN_SUBJECT`) for requests that arrive without a subject.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -66,12 +65,12 @@ def _claim(raw: str | None) -> str:
 def user_from_request(request: Request) -> User | None:
     """The signed-in user, or None when Union forwarded no subject.
 
-    On the devbox, a request with no subject is the deploy's stand-in user.
+    With a stand-in configured, a request with no subject is that user.
     """
     subject = request.headers.get(SUBJECT_HEADER, "").strip()
     if not subject:
-        if config.DEVBOX_SUBJECT:
-            return User(subject=config.DEVBOX_SUBJECT, name="Devbox user")
+        if config.STAND_IN_SUBJECT:
+            return User(subject=config.STAND_IN_SUBJECT)
         return None
     return User(
         subject=subject,
