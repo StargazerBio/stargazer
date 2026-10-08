@@ -12,6 +12,12 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    modes and Pinata as the working store go. Pinata stays as the public tier
    for shared data, attributed by `_owner`. The tenant checks are done.
    [`27_asset_storage_index.md`](./27_asset_storage_index.md)
+- **Make `Asset.fetch()` cheaper.** Even when the file is already in the
+   cache, `fetch()` looks up the asset's companions every time: one index
+   query (an HTTP call to the dashboard on Union) and, with `PINATA_JWT` set,
+   one Pinata API call (measured 2026-10-07). A task that fetches many assets
+   pays that many round-trips. Options: memoize companion lookups per
+   process, or ask Pinata only about assets that came from the public tier.
 - **Union production deploy** (tenant: `stargazerbio.us-west-2.unionai.cloud`).
    Done in PRs: per-pod session keys (#2), the `STARGAZER_TARGET`
    devbox/union switch, a configurable domain, and a fixed per-deploy
