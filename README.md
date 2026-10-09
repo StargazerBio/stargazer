@@ -19,7 +19,7 @@ Collecting early feedback on direction and architecture. Try the quickstart!
 - "Download the scrna_demo bundle"
 - "Run the scrna workflow"
 
-Stargazer is an agent-first project - you'll need to login with your agent harness before interacting with the MCP server. However, everything is just a Flyte workflow under the hood, feel free to start the container with `--entrypoint bash` and run any workflows or check out the [TUI](https://www.union.ai/docs/v2/flyte/user-guide/running-locally/#terminal-ui) from there.
+Stargazer is an agent-first project - you'll need to login with your agent harness before interacting with the MCP server. Also, any other agent can pick it up if you run `uv run stargazer`. Finally, everything is just a Flyte workflow under the hood, feel free to start the container with `--entrypoint bash` and run any workflows or check out the [TUI](https://www.union.ai/docs/v2/flyte/user-guide/running-locally/#terminal-ui) from there.
 
 Additional quickstart options and details are available in the [docs](https://docs.stargazer.bio/getting-started/).
 
@@ -46,11 +46,13 @@ A familiar interface where researchers express intent. The LLM has access to a r
 ### Orchestrator - Flyte V2
 [Flyte V2's](https://www.union.ai/docs/v2/flyte/user-guide/overview/) pure-Python and async-native orchestration engine does the heavy-lifting of each Stargazer execution. Everything runs in a container with task resource requirements and dependencies declared in-line. Tasks can be nested arbitrarily and executed async with standard Python patterns. Types are enforced at the task boundary and capture inputs and outputs with all necessary metadata.
 
-### Storage - IPFS via Pinata
-Every file in Stargazer is content-addressable on [IPFS](https://docs.ipfs.tech/concepts/how-ipfs-works/) and self-describing via [Pinata](https://pinata.cloud/blog/using-file-centric-architecture-to-build-simple-and-capable-apps/). This powerful combination means that workflows interact with data via key-value attributes, not their location. Moreover, reproducibility becomes intrinsic as data is identified by an immutable, cryptographic commitment to its content.
+### Storage - Content-Addressed Assets
+Every file in Stargazer is content-addressable, inspired by [IPFS](https://docs.ipfs.tech/concepts/how-ipfs-works/). They are also self-describing via key-value metadata, inspired by [Pinata](https://pinata.cloud/blog/using-file-centric-architecture-to-build-simple-and-capable-apps/). Reproducibility becomes intrinsic as data is identified by an immutable, cryptographic commitment to its content. This powerful combination also means that workflows interact with data via composable queries, not their location.
 
 ## Execution Modes
-Stargazer has a few execution modes to control exactly where data is processed and stored. The default is fully local compute and storage. By adding a PINATA_JWT env var, you can push and pull assets from IPFS via Pinata, either publicly or privately. This is the persistence layer for hosted compute (coming soon!) and an integral part of Stargazer's collaboration strategy. Details are available in the configuration [docs](https://docs.stargazer.bio/architecture/configuration/).
+Stargazer has a few execution modes to control exactly where data is processed and stored. The default is fully local compute and storage, with your files under `~/.stargazer`. By adding a PINATA_JWT env var, you can push and pull public assets from IPFS via Pinata. 
+
+Stargazer is also hosted on [Union](https://www.union.ai/), where you can work on notebooks, workflows, and assets from your browser.
 
 ## Perpetual progress machine?
 Never before has there been a greater opportunity to converge the fragmented landscape of bioinformatics tools and techniques. Frontier models enable integrating the plurality of inputs and contributions faster and more fairly than ever before. Stargazer doesn't aim to be yet another standard, but an organic substrate that evolves and responds to the needs of discovery in real-time.
