@@ -94,6 +94,15 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    (`cli/devbox_dashboard.py`, a stand-in user), and a tutorial launched in
    run mode from that dashboard starts and serves marimo (2026-10-08). Edit
    mode, workspace saving and the in-notebook terminal haven't been driven.
+- **Rebuild the note and chat images.** The Dockerfile's `base` stage runs
+   `uv sync` with no extras, so the chat image has neither `mcp` (its
+   `.mcp.json` runs `uv run stargazer`, which can't import the server) nor
+   `bio` (measured on the local copy of `stargazer-chat:latest`), and it
+   carries no Flyte config. Nothing publishes either image: the GHCR `:latest`
+   tags date from 2026-05-21, and the note image there opens
+   `preprocessing_tutorial.py`, which no longer exists (measured from its
+   config). The docs now describe what the Dockerfile builds and send MCP
+   users to a source install.
 - **Local-to-cluster storage.** A run submitted from this machine with the
    default local store and index has nowhere shared to write: those
    defaults aren't forwarded into task pods (`_stargazer_env_vars` in

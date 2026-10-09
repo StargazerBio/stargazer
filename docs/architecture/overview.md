@@ -4,7 +4,7 @@ Stargazer is organized around four layers:
 
 ```mermaid
 flowchart TD
-    MCP("MCP Server\ninterface — tools, resources, prompts")
+    MCP("MCP Server\ninterface — tools and resources")
     WF("Workflows\ncomposition — tasks orchestrated into pipelines")
     T("Tasks\nexecution — atomic bioinformatics operations")
     A[("Asset / Storage\ntyped metadata + content-addressed files")]
@@ -14,7 +14,7 @@ flowchart TD
 
 ## Asset System
 
-Every file is an `Asset` — a dataclass with a content identifier, optional local path, and flat keyvalue metadata. Subclasses like `Reference`, `Alignment`, and `Variants` add typed fields with automatic coercion to/from the string-valued keyvalue store.
+Every file is an `Asset` — a dataclass with a content identifier, where its stored bytes live (a `flyte.io.File`), and typed metadata stored as flat keyvalues. Subclasses like `Reference`, `Alignment`, and `Variants` add typed fields with automatic coercion to/from the string-valued keyvalue store.
 
 Assets link to related files (e.g., an index to its primary file) via the companion pattern: `{asset_key}_cid` keyvalues. Calling `fetch()` on an asset downloads it and all its companions.
 
@@ -45,12 +45,12 @@ See [MCP Server](mcp-server.md) for the full server specification.
 
 The marimo notebook is the primary user surface. The hosted app serves a per-user dashboard of four notebook types — Tutorials, Workflows, Workspace, Snapshots — and notebooks are also where new tasks are prototyped before being promoted into the SDK. See [Notebooks](notebook.md) for the taxonomy, user archetypes, and promotion paths, and [App](app.md) for the hosting machinery.
 
-For local use, Stargazer ships two end-user Docker images:
+For local use, the repository's Dockerfile builds two end-user Docker images:
 
 - **`stargazer-note`** — Marimo notebook in edit mode, for running pipelines and exploring data locally (the hosted app uses a separate, richer image — see [App → Images](app.md#images)).
-- **`stargazer-chat`** — pre-wired Claude Code + OpenCode harness driving the Stargazer MCP server. End-user image, not a contributor dev shell.
+- **`stargazer-chat`** — Claude Code + OpenCode with the project's MCP config. End-user image, not a contributor dev shell.
 
-Both include the MCP server over stdio. Any MCP client connects to `stargazer serve`. Tasks and workflows can also be managed directly via the [Flyte CLI](cli.md#flyte-cli). Source contributors install natively — see [Contributing](../guides/contributing.md).
+The MCP server runs over stdio from a source install with the `mcp` extra; any MCP client connects to `stargazer`. Tasks and workflows can also be managed directly via the [Flyte CLI](cli.md#flyte-cli). Source contributors install natively — see [Contributing](../guides/contributing.md).
 
 ## Configuration
 
