@@ -64,7 +64,7 @@ asyncio_mode = "auto"
 # Each top-level directory under tests/ is in exactly one tier, and its tests
 # carry that tier's marker (`TIERS` in tests/conftest.py). A bare run is the
 # unit tier; a `-m` on the command line replaces this one to pick another
-# (tests/TESTING_GUIDE.md). --strict-markers makes an unregistered marker,
+# (.opencode/agent/test.md). --strict-markers makes an unregistered marker,
 # such as a typo in `TIERS`, an error.
 addopts = ["--strict-markers", "-m", "unit"]
 markers = [

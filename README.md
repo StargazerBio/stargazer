@@ -19,7 +19,7 @@ Collecting early feedback on direction and architecture. Try the quickstart!
 - "Download the scrna_demo bundle"
 - "Run the scrna workflow"
 
-Stargazer is an agent-first project - you'll need to login with Claude before interacting with the MCP server. However, everything is just a Flyte workflow under the hood, feel free to start the container with `--entrypoint bash` and run any workflows or check out the [TUI](https://www.union.ai/docs/v2/flyte/user-guide/running-locally/#terminal-ui) from there.
+Stargazer is an agent-first project - you'll need to login with your agent harness before interacting with the MCP server. However, everything is just a Flyte workflow under the hood, feel free to start the container with `--entrypoint bash` and run any workflows or check out the [TUI](https://www.union.ai/docs/v2/flyte/user-guide/running-locally/#terminal-ui) from there.
 
 Additional quickstart options and details are available in the [docs](https://docs.stargazer.bio/getting-started/).
 

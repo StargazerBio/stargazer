@@ -59,7 +59,7 @@ uv run --all-extras pytest -m pinata                  # the real Pinata API
 - **Devbox** (`tests/devbox`) is anything that needs a cluster: deploying the dashboard, workflows across pods, the devbox's store and index. It deploys the dashboard itself; the devbox has to be up with `cli/devbox-setup.sh` applied. Add `-rP` to see each run's URL.
 - **Pinata** (`tests/pinata`) calls the real Pinata API with the key in `tests/.secrets/pinata_jwt`, and fails without it.
 
-Outside its tier a test is deselected, never skipped, and inside it a missing tool or service fails the run. A new directory under `tests/` needs a tier in `TIERS` in `tests/conftest.py`. More in [`tests/TESTING_GUIDE.md`](https://github.com/StargazerBio/stargazer/blob/main/tests/TESTING_GUIDE.md).
+Outside its tier a test is deselected, never skipped, and inside it a missing tool or service fails the run. A new directory under `tests/` needs a tier in `TIERS` in `tests/conftest.py`. The full testing conventions are in [`.opencode/agent/test.md`](https://github.com/StargazerBio/stargazer/blob/main/.opencode/agent/test.md).
 
 ## Code Style
 

@@ -52,7 +52,7 @@ The `.opencode/agent/` directory contains specialized agent definitions for [Ope
 |-------|------|---------|
 | **Architecture** | `architecture.md` | Designs feature plans in `.opencode/plans/` and maintains docs in `docs/` |
 | **Task** | `task.md` | Implements individual Flyte v2 tasks for bioinformatics tools |
-| **Test** | `test.md` | Writes unit and integration tests following TDD approach |
+| **Test** | `test.md` | Writes tests following the TDD approach; the reference for test tiers, isolation and fixtures |
 | **Workflow** | `workflow.md` | Composes Flyte v2 tasks into end-to-end pipelines |
 | **Code Review** | `code-review.md` | Strict code reviewer that audits for edge cases, UX issues, and data provenance |
 | **Technical Writer** | `technical-writer.md` | Writes and edits user-facing docs — assumes competent readers, never gatekeeps surfaces by role |
@@ -163,7 +163,6 @@ The project follows this structure:
   - `bundles/` - Predefined workflow input bundles (YAML configs)
 - `tests/` - Test directory
   - `conftest.py` - Pytest configuration (Flyte init, fixture paths, an isolated store/index/cache per test, the seeded fixture store; `PINATA_JWT` is stripped, and the pinata tier's own conftest sets it)
-  - `TESTING_GUIDE.md` - How Flyte tasks are tested here
   - `fixtures/` - Test data organized by domain (`gatk/`, `general/`, `scrna/`), plus `seed.py`, which loads it into a test store
   - `assets/` - Tests for `src/stargazer/assets/` (asset types, `assemble()`)
   - `tasks/` - Task-level tests mirroring `src/stargazer/tasks/` structure
@@ -172,7 +171,7 @@ The project follows this structure:
   - `unit/` - Unit tests for the rest: the app tier (`app/`), registry, MCP marshalling, bundles, `Asset` itself
   - `devbox/` - The devbox tier: dashboard deploy, asset storage across pods, the germline workflow. `pod_tasks.py` holds what runs in their pods
   - `pinata/` - The pinata tier: the Pinata client against the real API
-  - Each top-level directory here belongs to exactly one tier, and its tests carry that tier's marker (`TIERS` in `conftest.py`; `TESTING_GUIDE.md` → Test Tiers). `unit` (`assets/`, `notebooks/`, `unit/`, `utils/`) is a bare `uv run --all-extras pytest` and runs in pre-commit on every commit; `tasks` (`tasks/`) runs in each task's image via `cli/docker_task_tests.py`; `devbox` runs against the local devbox with `-m devbox`; `pinata` calls the real Pinata API with `-m pinata`. A new directory needs a tier in `TIERS`. A test never skips: outside its tier it's deselected, inside it a missing tool or service fails
+  - Each top-level directory here belongs to exactly one tier, and its tests carry that tier's marker (`TIERS` in `conftest.py`; `.opencode/agent/test.md` → Test Tiers). `unit` (`assets/`, `notebooks/`, `unit/`, `utils/`) is a bare `uv run --all-extras pytest` and runs in pre-commit on every commit; `tasks` (`tasks/`) runs in each task's image via `cli/docker_task_tests.py`; `devbox` runs against the local devbox with `-m devbox`; `pinata` calls the real Pinata API with `-m pinata`. A new directory needs a tier in `TIERS`. A test never skips: outside its tier it's deselected, inside it a missing tool or service fails
 - `docs/` - Project documentation
   - `architecture/` - System design and contracts
   - `guides/` - Step-by-step walkthroughs with code examples
