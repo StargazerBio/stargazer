@@ -41,6 +41,14 @@ There is no single host/IP that's reachable from both the laptop and from in-clu
 
    Pods now resolve `rustfs-svc.flyte:9000` via k8s DNS — same code path as a production Flyte that returns real S3 URLs.
 
+   **The restart races the addon controller — you usually need to restart twice.** Editing the manifest makes the k3s Addon controller re-render the `flyte-binary-config` ConfigMap, asynchronously, and flyte-binary reads its config only once at startup. A restart issued right after the `sed` often boots on the *old* ConfigMap, so the patch looks like it didn't take. Check the live ConfigMap, then restart again:
+
+   ```bash
+   kubectl get cm flyte-binary-config -n flyte -o yaml | grep -n 'localhost:30002'   # prints nothing once the patch is live
+   kubectl rollout restart deployment/flyte-binary -n flyte
+   kubectl rollout status deployment/flyte-binary -n flyte --timeout=120s
+   ```
+
 2. On the laptop, make `rustfs-svc.flyte:9000` resolvable:
    - DNS / `/etc/hosts`: `rustfs-svc.flyte → 127.0.0.1`
    - Port-forward: `kubectl port-forward -n flyte svc/rustfs-svc 9000:9000`
@@ -72,39 +80,6 @@ There is no single host/IP that's reachable from both the laptop and from in-clu
 **Trade-off / prod gap:** secret values are stored in the App spec in Flyte's DB. This is the one accepted parity gap in `app/` — revisit when Flyte supports App-pod secret injection (then switch to `secrets=[flyte.Secret(key=…, as_env_var=…)]` and drop the baking).
 
 Paths investigated and rejected: (a) `pod_template=PodTemplate(labels={"inject-flyte-secrets": "true"})` — even with the label the webhook has no secret annotations to inject, because flyte-binary never stamps them on App pods; (b) relaxing the webhook `objectSelector` — same reason, and `failurePolicy: Fail` makes a match-all selector dangerous (a webhook blip would block all pod scheduling).
-
----
-
-## App pods get `rustfs.flyte` as the store address (fixed upstream)
-
-> **Fixed upstream:** the devbox image now ships the right service name, so `cli/devbox-setup.sh` no longer patches it; its verify step warns if a bare `rustfs.flyte:9000` comes back. Kept so a regression is recognizable.
-
-**Symptom:** App pod crash-loops before user code runs, logs show `GenericError: Generic S3 error ... http://rustfs.flyte:9000/... Name or service not known`.
-
-**Cause:** `/var/lib/rancher/k3s/server/manifests/flyte.yaml` (line ~7776) sets `internalApps.defaultEnvVars.FLYTE_AWS_ENDPOINT = http://rustfs.flyte:9000`. The actual k8s service is `rustfs-svc`. (The `plugins.k8s.default-env-vars` block uses the correct name; only `internalApps` is wrong.) The manifest is owned by a k3s Addon controller, so `kubectl patch` on the ConfigMap reverts.
-
-**Workaround:** Patch the manifest inside the devbox container (lost on container restart):
-
-```bash
-docker exec flyte-devbox sed -i \
-  's|FLYTE_AWS_ENDPOINT: http://rustfs.flyte:9000|FLYTE_AWS_ENDPOINT: http://rustfs-svc.flyte:9000|' \
-  /var/lib/rancher/k3s/server/manifests/flyte.yaml
-docker exec flyte-devbox kubectl rollout restart deployment/flyte-binary -n flyte
-```
-
-**The restart races the addon controller — you usually need to restart twice.** Editing the manifest file triggers the k3s Addon controller to re-render the `flyte-binary-config` ConfigMap, but that's async. A `rollout restart` issued right after the `sed` will often boot a flyte-binary pod that mounts the *old* ConfigMap, and flyte-binary reads config only once at startup — so freshly-deployed App pods still get `FLYTE_AWS_ENDPOINT: http://rustfs.flyte:9000` even though the manifest file is patched. The deploy fails identically and looks like the patch didn't take.
-
-Verify the live ConfigMap (not the manifest file) reflects the change, *then* restart again:
-
-```bash
-# confirm the ConfigMap the controller actually serves is patched
-docker exec flyte-devbox kubectl get cm flyte-binary-config -n flyte -o yaml | grep -nE 'rustfs.*:9000'
-# all hits should read rustfs-svc.flyte; then restart so flyte-binary loads it
-docker exec flyte-devbox kubectl rollout restart deployment/flyte-binary -n flyte
-docker exec flyte-devbox kubectl rollout status deployment/flyte-binary -n flyte --timeout=120s
-```
-
-To diagnose: check the actual env on a failed App pod — `kubectl get pod <pod> -n flyte -o yaml | grep -A1 FLYTE_AWS_ENDPOINT`. If it shows the bare `rustfs.flyte` while the ConfigMap shows `rustfs-svc.flyte`, flyte-binary is running stale config; restart it again. Delete the failed ksvc (`kubectl delete ksvc dashboard-flytesnacks-development -n flyte`) before redeploying so you get a clean revision.
 
 ---
 
@@ -264,18 +239,6 @@ printf 'nameserver 127.0.0.1\n' | sudo tee /etc/resolver/devbox.stargazer.bio
 **Cause:** The redeploy rolls a new Knative revision. While the rollout converges, the app's status can sample as failed and the SDK watch surfaces the first failed state it sees instead of waiting out the transition.
 
 **Workaround:** Before re-running the deploy, check reality: `kubectl get ksvc -n flyte` (READY True, LATESTREADY = newest revision) and curl the endpoint. If the ksvc is ready, the deploy succeeded and the error is noise. Observed 2026-06-11 redeploying admin-app with a new `PINATA_JWT`: watch raised, yet both revisions were Running 2/2 and `/assets` served 200 seconds later. Distinct from the CrashLoopBackOff "has failed!" below, where the pod really is down.
-
----
-
-## Auth cookies are non-`Secure` on devbox (http), `Secure` in prod (TLS)
-
-> **Obsolete since plan 25:** the app tier sets no cookies any more (Union owns sign-in), and `STARGAZER_SECURE_COOKIES` is gone. Kept so a regression is recognizable if cookies come back.
-
-**Symptom (if mis-defaulted):** With `Secure` cookies forced on, login over devbox's plain HTTP silently fails — the browser never sends a `Secure` cookie over http, so every request looks unauthenticated and you bounce back to the login page.
-
-**Cause:** Devbox serves the admin and per-notebook apps over `http://…:30081` (no TLS). A `Secure` cookie is dropped by the browser on http, so it can never round-trip.
-
-**Workaround / design:** The `Secure` attribute is **parametrized**, not hardcoded — `app.config.SECURE_COOKIES` (the app-tier config home) parses `STARGAZER_SECURE_COOKIES` (truthy = `1/true/yes/on`), defaulting **off** under `STARGAZER_TARGET=devbox` and **on** under `union`; an explicit value overrides either. The resolved value is baked as `1`/`0` into the admin App env (`_PUBLIC_CONFIG`, re-serialized from `config.SECURE_COOKIES`) and propagated into each notebook pod's env (`per_notebook_env`), so the standalone proxy's mirror (`sg_proxy._cookie_secure`) — which can't import `app.config` — sets the cookie identically. `httponly=True` and `samesite="lax"` stay constant — only `Secure` is environment-dependent. All cookie writes go through `admin_app._session_redirect` (session) / the proxy middleware (launch handoff); there is no other set-cookie site to keep in sync.
 
 ---
 

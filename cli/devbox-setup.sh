@@ -23,10 +23,6 @@
 #      it org-wide). Its value comes from $PINATA_JWT, else the repo's .env,
 #      else it's empty and task pods run without the public tier.
 #
-# internalApps FLYTE_AWS_ENDPOINT (`rustfs.flyte` → `rustfs-svc.flyte`) was
-# fixed upstream — the devbox image now ships the correct service name, so
-# there is nothing to patch. The verify step still warns if it ever regresses.
-#
 # What it does NOT do (already handled in app code — see the workarounds doc):
 #   - init_in_cluster in App pods (app/init.py); SDK-over-CLI project
 #     creation (app/onboard.py)
@@ -207,11 +203,6 @@ fi
 if [ "$DRY_RUN" = 0 ]; then
     log "Verifying cluster-side state"
     cm="$(kc get cm flyte-binary-config -n flyte -o yaml 2>/dev/null || true)"
-    # Regression guard: the bare `rustfs.flyte` service name was an upstream
-    # devbox bug, fixed in the image — we no longer patch it, only notice it.
-    grep -qE 'rustfs\.flyte:9000' <<<"$cm" \
-        && warn "flyte-binary-config has a bare rustfs.flyte:9000 — upstream regression, patch it by hand (see devbox_workarounds.md)" \
-        || ok "no bare rustfs.flyte endpoints remain"
     grep -q "baseDomain: $DOMAIN" <<<"$cm" && ok "baseDomain=$DOMAIN" || warn "baseDomain not set to $DOMAIN"
     kc get cm coredns-custom -n kube-system -o name >/dev/null 2>&1 \
         && ok "coredns-custom present" || warn "coredns-custom missing"
