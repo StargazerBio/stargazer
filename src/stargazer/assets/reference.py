@@ -7,6 +7,8 @@ spec: [docs/architecture/types.md](../architecture/types.md)
 from dataclasses import dataclass
 from typing import ClassVar
 
+import aiofiles
+
 from stargazer.assets.asset import Asset
 
 
@@ -17,28 +19,21 @@ class Reference(Asset):
     _asset_key: ClassVar[str] = "reference"
     build: str = ""
 
-    @property
-    def contigs(self) -> list[str]:
+    async def contigs(self) -> list[str]:
         """Read contig names from the companion .fai index.
 
-        Requires fetch() to have been called first so the ReferenceIndex
-        companion is downloaded alongside this reference.
+        Fetches the reference first, which brings the ReferenceIndex
+        companion alongside the local copy, so it works in any pod.
         """
-        if self.path is None:
-            raise ValueError("Reference has no local path — call fetch() first")
-        fai_path = self.path.parent / (self.path.name + ".fai")
+        path = await self.fetch()
+        fai_path = path.with_name(path.name + ".fai")
         if not fai_path.exists():
             raise FileNotFoundError(
-                f"Reference index not found at {fai_path}. "
-                f"Run samtools_faidx first, then fetch() to download companions."
+                f"Reference index not found at {fai_path}. Run samtools_faidx first."
             )
-        contigs = []
-        with open(fai_path) as f:
-            for line in f:
-                name = line.split("\t", 1)[0].strip()
-                if name:
-                    contigs.append(name)
-        return contigs
+        async with aiofiles.open(fai_path) as f:
+            lines = (await f.read()).splitlines()
+        return [line.split("\t", 1)[0].strip() for line in lines if line.strip()]
 
 
 @dataclass

@@ -15,7 +15,7 @@
 | `create_sequence_dictionary` | Create a sequence dictionary (.dict file) using GATK CreateSequenceDictionary. | `ref` (`Reference`) |
 | `haplotype_caller` | Call germline variants in GVCF mode using GATK HaplotypeCaller. | `alignment` (`Alignment`), `ref` (`Reference`) |
 | `index_feature_file` | Index a VCF file using GATK IndexFeatureFile. | `known_sites` (`KnownSites`) |
-| `joint_call_gvcfs` | Consolidate GVCFs into GenomicsDB and joint-genotype in a single task. | `gvcfs` (`list[Variants]`), `ref` (`Reference`), `intervals` (`list[str]`), `cohort_id` (`str`) |
+| `joint_call_gvcfs` | Consolidate GVCFs into GenomicsDB and joint-genotype in a single task. | `gvcfs` (`list[Variants]`), `ref` (`Reference`), `intervals` (`list[str] | NoneType`), `cohort_id` (`str`) |
 | `mark_duplicates` | Mark duplicate reads in a BAM file. | `alignment` (`Alignment`) |
 | `merge_bam_alignment` | Merge alignment data from aligned BAM with data in unmapped BAM. | `aligned_bam` (`Alignment`), `unmapped_bam` (`Alignment`), `ref` (`Reference`) |
 | `samtools_faidx` | Create a FASTA index (.fai file) using samtools faidx. | `ref` (`Reference`) |

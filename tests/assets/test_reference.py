@@ -78,6 +78,16 @@ async def test_reference_fetch(fixtures_db):
 
 
 @pytest.mark.asyncio
+async def test_reference_contigs_from_the_store(fixtures_db):
+    """contigs() reads a stored reference's index, as a pod that didn't make it would."""
+    [fasta_r] = await _storage_mod.default_client.query(
+        {"asset": "reference", "build": "GRCh38"}
+    )
+
+    assert await specialize(fasta_r).contigs() == ["chr17:7658421-7697490"]
+
+
+@pytest.mark.asyncio
 async def test_reference_aligner_index_query(fixtures_db):
     """Test querying multiple aligner index files."""
     results = await _storage_mod.default_client.query(

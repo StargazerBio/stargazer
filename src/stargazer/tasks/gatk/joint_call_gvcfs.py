@@ -21,7 +21,7 @@ from stargazer.utils import _run
 async def joint_call_gvcfs(
     gvcfs: list[Variants],
     ref: Reference,
-    intervals: list[str],
+    intervals: list[str] | None = None,
     cohort_id: str = "cohort",
 ) -> Variants:
     """
@@ -33,7 +33,8 @@ async def joint_call_gvcfs(
     Args:
         gvcfs: Per-sample GVCF Variants assets from HaplotypeCaller
         ref: Reference FASTA asset
-        intervals: Genomic intervals to process (required by GenomicsDBImport)
+        intervals: Genomic intervals to process (GenomicsDBImport needs at
+            least one); defaults to every contig in the reference
         cohort_id: Sample ID label for the output VCF (default: "cohort")
 
     Returns:
@@ -54,6 +55,8 @@ async def joint_call_gvcfs(
             )
 
     ref_path = await ref.fetch()
+    if intervals is None:
+        intervals = await ref.contigs()
     gvcf_paths = [await gvcf.fetch() for gvcf in gvcfs]
 
     output_dir = _storage.default_client.local_dir
