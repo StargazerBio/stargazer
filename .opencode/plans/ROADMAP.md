@@ -84,6 +84,17 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    from a stale copy (inferred; the restart test still found every row).
    Applies to `upgrade` on Union too. The devbox tests deploy once per
    session, so they add revisions quickly.
+- **Small gaps found while testing on the devbox (2026-10-09).**
+   - `gatk_env` sets no `resources=`, which AGENTS.md requires of every
+     TaskEnvironment for the devbox's ~7.5 GiB node.
+   - `apply_bqsr` stores the recalibrated BAM but not its index, unlike
+     `mark_duplicates` and `sort_sam`. The germline workflow still finishes
+     on the devbox, so a later step may be indexing it again (inferred).
+   - `docs/architecture/configuration.md` → Building locally says the Flyte
+     images set no `registry=`; they take `STARGAZER_REGISTRY`, which the
+     devbox sets to its own registry.
+   - `tests/helpers.py` is imported nowhere.
+   - `tests/unit/test_devbox_dashboard.py` isn't `ruff format`ted on main.
 - **Notebooks on the devbox.** The devbox dashboard and asset storage work
    (`cli/devbox_dashboard.py`, a stand-in user), and a tutorial launched in
    run mode from that dashboard starts and serves marimo (2026-10-08). Edit
