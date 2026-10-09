@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "stargazer"
 version = "0.1.0"
-description = "Bioinformatics workflow orchestration system combining IPFS storage with Flyte v2"
+description = "Bioinformatics workflow orchestration on Flyte v2, with assets identified by their IPFS CID"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -64,7 +64,7 @@ asyncio_mode = "auto"
 # Each top-level directory under tests/ is in exactly one tier, and its tests
 # carry that tier's marker (`TIERS` in tests/conftest.py). A bare run is the
 # unit tier; a `-m` on the command line replaces this one to pick another
-# (tests/TESTING_GUIDE.md). --strict-markers makes an unregistered marker,
+# (.opencode/agent/test.md). --strict-markers makes an unregistered marker,
 # such as a typo in `TIERS`, an error.
 addopts = ["--strict-markers", "-m", "unit"]
 markers = [

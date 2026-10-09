@@ -819,7 +819,7 @@ function renderDetailEditor(el, rec) {
         `<div class="detail-head"><h3>Edit metadata</h3><span class="detail-cid">${esc(shortCid(rec.cid))}</span></div>` +
         `<div class="detail-edit" id="edit-rows">${rows}</div>` +
         `<div><button type="button" class="btn btn-muted" data-edit-add>+ Add field</button></div>` +
-        `<p class="edit-note">Editing changes values and adds fields (Pinata merges) — it can't remove a key. <code>asset</code> is required; non-text values should be JSON (<code>true</code>, <code>42</code>).</p>` +
+        `<p class="edit-note">Editing changes values and adds fields — it can't remove a key. <code>asset</code> is required; non-text values should be JSON (<code>true</code>, <code>42</code>).</p>` +
         `<p class="edit-err" id="edit-err" hidden></p>` +
         `<div class="detail-actions">` +
         `<button type="button" class="btn btn-notebook" data-edit-save="${esc(rec.cid)}">Save</button>` +

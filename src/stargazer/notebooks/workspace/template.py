@@ -16,7 +16,7 @@ and fan that task out in a workflow. Each section is a TODO-style
 template — pair with `assets.py` and `tasks.py` for the
 why and the deeper patterns.
 
-spec: [docs/architecture/notebook.md](../../docs/architecture/notebook.md)
+spec: [docs/architecture/notebook.md](../architecture/notebook.md)
 """
 
 import marimo
@@ -47,9 +47,8 @@ def _():
         Defaults work as-is (your file round-trips through a no-op
         pipeline). Replace the TODOs to make it do real work.
 
-        Reference: [`assets.py`](../tutorials/assets.py) for asset
-        internals, [`tasks.py`](../tutorials/tasks.py) for tasks, and
-        [`workflows.py`](../tutorials/workflows.py) for composition.
+        Reference: the Assets tutorial for asset internals, Tasks for
+        tasks, and Workflows for composition — all on your dashboard.
         """
     )
     return ClassVar, Path, asyncio, dataclass, flyte, mo, tempfile

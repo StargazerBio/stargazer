@@ -1,7 +1,7 @@
 """
 ### scRNA-seq asset types for Stargazer.
 
-spec: [docs/workflows/scrna.md](../workflows/scrna.md)
+spec: [docs/architecture/types.md](../architecture/types.md)
 """
 
 from dataclasses import dataclass

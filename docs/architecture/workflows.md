@@ -4,11 +4,11 @@ Workflows are tasks that compose other tasks into end-to-end pipelines. In Flyte
 
 ## Conventions
 
-- Workflows accept scalar parameters and handle their own assembly via `assemble()`
+- Workflows accept scalar parameters and handle their own assembly via `assemble()`, one call per kind of input: every filter must match each asset a call returns
 - Workflow files live in `src/stargazer/workflows/`, named by analysis type
 - Parallel execution uses `asyncio.gather`
 - Workflows filter assembled assets with `isinstance` checks
 
 ## Available Workflows
 
-See the [Catalog](../reference/catalog.md#workflows) for a complete list of registered workflows.
+The MCP registry and the [Catalog](../reference/catalog.md#workflows) list the workflows `stargazer.workflows` exports. Notebooks can define their own workflows the same way; those run in the notebook and aren't registered.

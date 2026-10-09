@@ -190,7 +190,7 @@ def per_notebook_env(
     platform login (`requires_auth=True`), which is its only access control.
     `SG_OWNER_SUBJECT` keys where the pod hydrates from and saves to in the
     workspace store
-    (`STARGAZER_WORKSPACE_ROOT`). `admin_url` is the admin app's public base
+    (`STARGAZER_WORKSPACE_ROOT`). `admin_url` is the dashboard's public base
     URL, which the proxy's `/__sg__/dashboard` route redirects to.
     `index_url` is the dashboard's in-cluster address, where the pod and the
     runs it starts index their assets (`STARGAZER_INDEX_URL`); the assets

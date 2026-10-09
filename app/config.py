@@ -9,8 +9,8 @@ defaults across modules.
 
 What does **not** live here:
 
-- **Secrets** (`PINATA_JWT`) — no committable default; baked into the App
-  `env_vars` spec in `admin_app`.
+- **Secrets** — none. A dashboard's or notebook pod's owner can read its app
+  spec, so nothing secret is baked into one (`admin_app`).
 - **The per-notebook proxy** (`app/proxy.py`) — it's baked into the notebook
   image as a *standalone* module with no `app` package on its path, so it can't
   import this; it re-reads the few env vars it needs (mirroring the values here).
@@ -43,8 +43,8 @@ FLYTE_CONFIG = (
 # bare local `uvicorn` run, where launching a notebook then errors clearly.
 NOTEBOOK_IMAGE: str | None = os.environ.get("STARGAZER_NOTEBOOK_IMAGE") or None
 
-# Default Flyte project/domain the admin pod targets for code-bundle uploads
-# during per-user `serve.aio(...)` calls. The domain is also where every
+# The Flyte project/domain the dashboard pod targets for code-bundle uploads
+# during per-notebook `serve.aio(...)` calls. The domain is also where every
 # per-notebook app is served and looked up — `production` for a prod deploy.
 FLYTE_PROJECT: str = os.environ.get("FLYTE_PROJECT", "flytesnacks")
 FLYTE_DOMAIN: str = os.environ.get("FLYTE_DOMAIN", "development")
@@ -72,6 +72,8 @@ STAND_IN_SUBJECT: str = stand_in_subject(os.environ)
 VERSION: str = os.environ.get("STARGAZER_VERSION", "")
 
 # The one user this dashboard serves: their Union subject, baked in when the
-# dashboard is deployed into their project. Unset admits nobody (fail closed).
-# Notebook pods read the same variable for the same check (`app/proxy.py`).
+# dashboard is deployed into their project. It keys their state whoever
+# visits; unset (a local run), the visitor's own subject does
+# (`app.identity.current_user`). Notebook pods read the same variable to key
+# where they load and save notebooks (`app/proxy.py`).
 OWNER_SUBJECT: str = os.environ.get("SG_OWNER_SUBJECT", "")

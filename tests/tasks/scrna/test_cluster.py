@@ -29,5 +29,4 @@ async def test_cluster_leiden_labels(fixtures_db):
     assert result.stage == "clustered"
     ad = sc.read_h5ad(await result.fetch())
     assert "leiden" in ad.obs.columns
-    # At least 1 cluster
     assert ad.obs["leiden"].nunique() >= 1

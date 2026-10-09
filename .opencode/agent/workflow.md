@@ -20,7 +20,7 @@ Compose individual tasks into end-to-end bioinformatics pipelines following Flyt
 2. **Clear Composition**: Show task dependencies and data flow clearly
 3. **Async by Default**: Use async/await for workflow orchestration
 4. **Parallelism Where Possible**: Use asyncio.gather() for independent operations
-5. **Structured I/O**: Use dataclasses for workflow inputs/outputs
+5. **Scalar Inputs, Typed Outputs**: Workflows take scalars (build, sample IDs) and `assemble()` their assets; they return `Asset` subclasses
 
 ## Implementation Process
 
@@ -38,95 +38,59 @@ When implementing a workflow:
 
 3. **Implement Workflow**:
    - Place in appropriate module in `src/stargazer/workflows/`
-   - Use naming pattern: `{pipeline_description}` (e.g., `germline_variant_calling_pipeline`)
+   - Use naming pattern: `{pipeline_description}` (e.g., `germline_short_variant_discovery`)
+   - `assemble()` once per kind of input: every filter must match each asset returned, so a reference (`build`) and a sample's reads (`sample_id`) take separate calls
    - Compose tasks with clear await statements
    - Use asyncio.gather() for parallel operations
-
-4. **Add Runnable Main Block**:
-   - Include `if __name__ == "__main__"` with example usage
-   - Show both local and remote execution modes
-   - Make it easy to test the workflow
+   - Export it from `src/stargazer/workflows/__init__.py` (`__all__`), which the MCP registry and the catalog read
 
 ## Workflow Template
 
 ```python
 # src/stargazer/workflows/{pipeline_name}.py
 """
-{Pipeline name} workflow.
+### {Pipeline name}.
 
 This workflow chains together:
 1. {Step 1 description}
 2. {Step 2 description}
-3. {Step 3 description}
+
+spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
 import asyncio
-import flyte
 
-from stargazer.config import gatk_env  # or scrna_env
 from stargazer.assets import {InputType}, {OutputType}
-from stargazer.tasks.{tool1} import {task1}
-from stargazer.tasks.{tool2} import {task2}
+from stargazer.assets.asset import assemble
+from stargazer.config import gatk_env, log_execution  # or scrna_env
+from stargazer.tasks import {task1}, {task2}
 
 
 @gatk_env.task
-async def {pipeline_name}(
-    input_param: {InputType}
-) -> {OutputType}:
+async def {pipeline_name}(build: str, sample_ids: list[str]) -> list[{OutputType}]:
     """
     {Brief description of the pipeline}.
-    
-    This workflow performs:
-    - {Operation 1}
-    - {Operation 2}
-    - {Operation 3}
-    
+
     Args:
-        input_param: {Description}
-    
+        build: Reference genome build to assemble the inputs for
+        sample_ids: Samples to run, in parallel
+
     Returns:
         {Description of workflow outputs}
-    
-    Example:
-        flyte.init_from_config()
-        run = flyte.run(
-            {pipeline_name},
-            input_param=...
-        )
-        print(run.url)
     """
-    # Step 1: {Description}
-    result1 = await {task1}(input_param)
-    
-    # Step 2: {Description} - can run in parallel
-    result2a, result2b = await asyncio.gather(
-        {task2}(result1),
-        {task3}(result1)
-    )
-    
-    # Step 3: {Description}
-    final_result = await {task4}(result2a, result2b)
-    
-    return final_result
+    log_execution()
+    assets = await assemble(build=build, asset="{input_key}")
+    inputs = [a for a in assets if isinstance(a, {InputType})]
+    if not inputs:
+        raise ValueError(f"No {input_key} found for build={build!r}")
 
-
-if __name__ == "__main__":
-    import pprint
-    
-    flyte.init_from_config()
-    
-    # Run locally for testing
-    run = flyte.with_runcontext(mode="local").run(
-        {pipeline_name},
-        input_param=...
+    prepared = await {task1}(inputs[0])
+    return list(
+        await asyncio.gather(*[{task2}(prepared, sample_id=s) for s in sample_ids])
     )
-    run.wait()
-    pprint.pprint(run.outputs)
-    
-    # Or run remotely
-    # run = flyte.run({pipeline_name}, input_param=...)
-    # print(run.url)
 ```
+
+Run it from a script or a notebook: `flyte.with_runcontext(mode="local").run({pipeline_name}, build=..., sample_ids=[...])` in-process, or `flyte.run(...)` against the cluster `flyte.init_from_config()` points at. `.outputs()[0]` is the result.
 
 ## Key Patterns
 
@@ -179,64 +143,59 @@ async def fanout_workflow(files: list[File]) -> CombinedOutput:
 ## File Organization
 
 - **Pipeline-based modules**: One file per major pipeline
-- **Examples**: `germline_variant_calling.py`, `rna_seq_analysis.py`, `alignment_pipeline.py`
+- **Examples**: `germline_short_variant_discovery.py`, `gatk_data_preprocessing.py`, `scrna_clustering.py`
 - **Related workflows** can share a module
 
 ## Key Imports
 
 ```python
 import asyncio  # For parallelism
-import flyte    # Main SDK
 
-from stargazer.config import gatk_env  # or scrna_env
 from stargazer.assets import {YourTypes}
-from stargazer.tasks.{module} import {tasks}
+from stargazer.assets.asset import assemble
+from stargazer.config import gatk_env, log_execution  # or scrna_env
+from stargazer.tasks import {tasks}
 ```
 
 ## Workflow Design Guidelines
 
 1. **Document the Pipeline**: Explain the biological/computational purpose
 2. **Show Dependencies**: Make task ordering and data flow obvious
-3. **Enable Testing**: Include runnable main block with examples
+3. **Enable Testing**: Keep the signature scalar so the MCP server and a test can run it by name
 4. **Handle Errors**: Tasks should validate inputs and provide clear error messages
 5. **Resource Efficiency**: Use parallel execution where tasks are independent
 
 ## Common Workflow Patterns in Stargazer
 
-### Reference Indexing
+`src/stargazer/workflows/` holds the real ones; read them before writing another.
+
+### Reference Preparation (`gatk_data_preprocessing.prepare_reference`)
 ```python
-from stargazer.tasks import hydrate
-
-
 @gatk_env.task
-async def index_reference_workflow(ref_name: str) -> Reference:
-    refs = await hydrate({"type": "reference", "build": ref_name})
-    ref = next((r for r in refs if isinstance(r, Reference)), None)
-    if not ref:
-        raise ValueError(f"Reference not found for build: {ref_name}")
-    ref = await samtools_faidx(ref)
-    ref = await bwa_index(ref)
+async def prepare_reference(build: str) -> Reference:
+    assets = await assemble(build=build, asset="reference")
+    refs = [a for a in assets if isinstance(a, Reference)]
+    if not refs:
+        raise ValueError(f"No reference found for build={build!r}")
+    ref = refs[0]
+    await samtools_faidx(ref)
+    await create_sequence_dictionary(ref)
+    await bwa_mem2_index(ref)
     return ref
 ```
 
-### Alignment Pipeline
-```python
-@gatk_env.task
-async def alignment_workflow(fastq: Fastq, ref: Reference) -> Alignment:
-    aligned = await align_with_bwa(fastq, ref)
-    sorted_bam = await sort_bam(aligned)
-    marked = await mark_duplicates(sorted_bam)
-    return marked
-```
+The index tasks store their outputs as companions of the reference (`reference_cid`), so later tasks get them by fetching the reference.
 
-### Variant Calling
+### Per-sample Fan-out (`germline_short_variant_discovery`)
 ```python
-@gatk_env.task
-async def variant_calling_workflow(alignment: Alignment, ref: Reference) -> Variants:
-    recalibrated = await bqsr(alignment, ref)
-    variants = await call_variants(recalibrated, ref)
-    filtered = await filter_variants(variants)
-    return filtered
+ref = await prepare_reference(build=build)
+alignments = await asyncio.gather(
+    *[preprocess_sample(build=build, sample_id=sid) for sid in sample_ids]
+)
+gvcfs = await asyncio.gather(
+    *[haplotype_caller(alignment=aln, ref=ref) for aln in alignments]
+)
+return await joint_call_gvcfs(gvcfs=list(gvcfs), ref=ref, cohort_id=cohort_id)
 ```
 
 ## Style Requirements
@@ -250,9 +209,8 @@ async def variant_calling_workflow(alignment: Alignment, ref: Reference) -> Vari
 ## Testing Expectations
 
 You are NOT responsible for writing tests - that's the test agent's job. However:
-- Ensure your workflow has a runnable main block
-- Show example inputs in docstring
-- Make it easy to run locally for testing
+- Show example inputs in the docstring
+- Say which tier can test it end to end (a GATK workflow needs the devbox)
 
 ## Don't
 

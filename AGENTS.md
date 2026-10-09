@@ -19,7 +19,7 @@
 
 **Positioning**
 - The marimo notebook is Stargazer's primary user surface for both experimentation (`marimo edit`) and reproducible production (`marimo run`) — it's the most approachable entry point, so default new feature designs to the notebook surface (marimo, `mo.ui`) over CLI or other entry points. The SDK (`src/stargazer/tasks/`, `src/stargazer/workflows/`) is a first-class user surface too: authoring workflows in an IDE by importing SDK tasks directly is a fully supported use case, not a maintainer-only path.
-- Two top-level packages: `src/stargazer/` is the bioinformatics SDK (tasks, workflows, assets, TaskEnvironment configs). `app/` at repo root is the deployment / web tier (FastAPI apps, `flyte.app.AppEnvironment` definitions, OAuth/session helpers, HTML templates, deploy entrypoints). When asked to add a deploy entrypoint, FastAPI route, AppEnvironment for a hosted service, OAuth integration, or any other non-SDK runtime code, it goes under `app/`.
+- Two top-level packages: `src/stargazer/` is the bioinformatics SDK (tasks, workflows, assets, TaskEnvironment configs). `app/` at repo root is the deployment / web tier (FastAPI apps, `flyte.app.AppEnvironment` definitions, identity helpers, HTML templates, deploy entrypoints). When asked to add a deploy entrypoint, FastAPI route, AppEnvironment for a hosted service, an auth integration, or any other non-SDK runtime code, it goes under `app/`.
 
 **Dev Process**
 - You will implement features piece by piece in a sequential fashion
@@ -39,7 +39,7 @@
 - When defining a new `TaskEnvironment` in `src/stargazer/config.py`, always call `.with_uv_project(PROJECT_ROOT / "pyproject.toml")` on its image so the stargazer package and its pip deps end up installed, and set explicit `resources=` (e.g. `flyte.Resources(memory=("2Gi", "6Gi"))`). The devbox node has a hard ~7.5 GiB memory budget — see `.opencode/reference/devbox_workarounds.md`.
 - **CRITICAL** Do not consider backwards compatibility unless explicitly requested!
 - **Keep development minutiae out of user-facing surfaces.** App UI strings/pages, user guides, and the README describe behavior in product terms — a limit, what a control does, what an error means. Do **not** leak implementation detail into them: internal vendor/service names, env vars, workaround mechanisms, ticket/plan references, or "X limit, not ours" rationalizations. (E.g. an upload cap reads "100 MB", not "100 MB — a Pinata limit; larger needs TUS".) That rationale lives in code comments, `.opencode/` references, and plans — and architecture docs under `docs/architecture/` may name internals since they're the technical spec, not a product surface.
-- Run `ruff --fix` after every set of changes to satisfy the pre-commit. This only holds because the ruff version is pinned in **two** places that must match: `rev:` in `.pre-commit-config.yaml` (pre-commit builds its own isolated env) and the `ruff` pin in `pyproject.toml`'s dev group. Bump them together — when they drifted across 0.14→0.16, ruff's *default* rule set went from 59 rules to 413 and the two gates silently enforced different things. Deliberate rule exceptions live in `[tool.ruff.lint]` in `pyproject.toml`, each with a comment saying why.
+- Run `uv run ruff check --fix . && uv run ruff format .` after every set of changes to satisfy the pre-commit. This only holds because the ruff version is pinned in **two** places that must match: `rev:` in `.pre-commit-config.yaml` (pre-commit builds its own isolated env) and the `ruff` pin in `pyproject.toml`'s dev group. Bump them together — when they drifted across 0.14→0.16, ruff's *default* rule set went from 59 rules to 413 and the two gates silently enforced different things. Deliberate rule exceptions live in `[tool.ruff.lint]` in `pyproject.toml`, each with a comment saying why.
 - Prefer bounded version ranges (`>=X,<Y`) over open-ended ones for anything whose API you import. Two breakages this project has actually hit came from unbounded pins walking across a major: `ruff` (rule-set change) and `mcp` (1.x→2.0 renamed `FastMCP`/`mcp.server.fastmcp` to `MCPServer`/`mcp.server`).
 
 ## OpenCode Agent Definitions
@@ -52,7 +52,7 @@ The `.opencode/agent/` directory contains specialized agent definitions for [Ope
 |-------|------|---------|
 | **Architecture** | `architecture.md` | Designs feature plans in `.opencode/plans/` and maintains docs in `docs/` |
 | **Task** | `task.md` | Implements individual Flyte v2 tasks for bioinformatics tools |
-| **Test** | `test.md` | Writes unit and integration tests following TDD approach |
+| **Test** | `test.md` | Writes tests following the TDD approach; the reference for test tiers, isolation and fixtures |
 | **Workflow** | `workflow.md` | Composes Flyte v2 tasks into end-to-end pipelines |
 | **Code Review** | `code-review.md` | Strict code reviewer that audits for edge cases, UX issues, and data provenance |
 | **Technical Writer** | `technical-writer.md` | Writes and edits user-facing docs — assumes competent readers, never gatekeeps surfaces by role |
@@ -108,6 +108,8 @@ Every module in `src/` has two conventions in its module-level docstring:
 spec: [docs/architecture/types.md](../architecture/types.md)
 ```
 
+The link is relative to `docs/reference/api.md`, where mkdocstrings renders every `src/` module, so it is `../architecture/<doc>.md` however deep the module sits. Modules under `app/` aren't rendered there and link relative to their own file (`../docs/architecture/app.md`).
+
 **Rationale:** This serves two purposes:
 1. **Diff scanning** — when reviewing recent PRs or commits, an LLM can immediately see which spec doc is affected by any changed module and check whether the docs need updating.
 2. **Low-overhead lookup** — when making changes to a specific module, the relevant high-level architecture is one link away without any search.
@@ -120,7 +122,7 @@ The `spec:` line is **module-level only** — class and function docstrings do n
 
 - **`.opencode/reference/flyte_v2_docs.md`** - Official Flyte v2 documentation
 - **`.opencode/reference/sdk_examples_concise.md`** - Flyte SDK v2 examples
-- **`.opencode/reference/devbox_workarounds.md`** - Known devbox-specific quirks and workarounds (signed-URL host, App-pod secrets webhook + the full deploy-secret table, in-cluster init, serving domain off `.localhost` + CoreDNS wildcard, node memory budget, code-bundle non-Python assets). Check first when deploying/debugging against the local devbox cluster. The cluster-side subset is automated by [`cli/devbox-setup.sh`](./cli/devbox-setup.sh) — run it after recreating the container, and keep script and doc in sync. Append any new devbox quirk you diagnose; mark ones fixed upstream rather than deleting them, so a regression is recognizable.
+- **`.opencode/reference/devbox_workarounds.md`** - Known devbox-specific quirks and workarounds (signed-URL host, the `PINATA_JWT` task secret, App-pod secrets being dropped, in-cluster init, serving domain off `.localhost` + CoreDNS wildcard, node memory budget, code-bundle non-Python assets). Check first when deploying/debugging against the local devbox cluster. The cluster-side subset is automated by [`cli/devbox-setup.sh`](./cli/devbox-setup.sh) — run it after recreating the container, and keep script and doc in sync. Append any new devbox quirk you diagnose. When one is fixed upstream or no longer applies, delete its entry and any script step or check for it; a retired workaround is noise.
 - **`.opencode/reference/tool_refs/`** - Bioinformatics tool documentation, use as the source of truth for tool parameters and behavior
 - **`.opencode/reference/architecture/`** - Deep, agent-facing internals for Stargazer's *own* subsystems (vs. `tool_refs/` and the Flyte docs, which are external). Verbose by design — the cross-cutting, multi-module implementation detail that's too granular for the human-facing `docs/architecture/` doc but valuable context when working on that subsystem. Each file is the companion to a `docs/architecture/*.md` doc, which links to it. Keep them in sync when you change the subsystem. (e.g. `app_internals.md` ↔ `docs/architecture/app.md`.)
 - **`docs/`** - Project documentation (architecture, guides, reference)
@@ -144,7 +146,7 @@ The `spec:` line is **module-level only** — class and function docstrings do n
 ### Directory Organization
 
 The project follows this structure:
-- `app/` - Deployment / web tier (FastAPI apps, `flyte.app.AppEnvironment` definitions, OAuth + session helpers, HTML templates, deploy entrypoints). Installed alongside the main package via `[tool.setuptools.packages.find] where = ["src", "."]`. Uvicorn import path is `app:asgi_app`; deploy entry is `app:main`.
+- `app/` - Deployment / web tier (FastAPI apps, `flyte.app.AppEnvironment` definitions, Union-identity helpers, HTML templates, deploy entrypoints). Installed alongside the main package via `[tool.setuptools.packages.find] where = ["src", "."]`. The dashboard's uvicorn import path is `app.admin_app:asgi_app`; the deploy entry is `stargazer-users` (`app.onboard:main`), and `cli/devbox_dashboard.py` on the devbox.
 - `src/stargazer/` - Main package
   - `__init__.py` - Package root, re-exports key symbols
   - `config.py` - Centralized configuration, env var defaults, TaskEnvironment definitions (`gatk_env`, `scrna_env`), logger setup
@@ -160,9 +162,7 @@ The project follows this structure:
   - `utils/` - Utility functions (subprocess, pinata, storage, index, cid, query)
   - `bundles/` - Predefined workflow input bundles (YAML configs)
 - `tests/` - Test directory
-  - `conftest.py` - Pytest configuration (Flyte init, fixture paths, an isolated store/index/cache per test, the seeded fixture store, Pinata JWT injection)
-  - `helpers.py` - Shared test helper functions
-  - `TESTING_GUIDE.md` - How Flyte tasks are tested here
+  - `conftest.py` - Pytest configuration (Flyte init, fixture paths, an isolated store/index/cache per test, the seeded fixture store; `PINATA_JWT` is stripped, and the pinata tier's own conftest sets it)
   - `fixtures/` - Test data organized by domain (`gatk/`, `general/`, `scrna/`), plus `seed.py`, which loads it into a test store
   - `assets/` - Tests for `src/stargazer/assets/` (asset types, `assemble()`)
   - `tasks/` - Task-level tests mirroring `src/stargazer/tasks/` structure
@@ -171,10 +171,9 @@ The project follows this structure:
   - `unit/` - Unit tests for the rest: the app tier (`app/`), registry, MCP marshalling, bundles, `Asset` itself
   - `devbox/` - The devbox tier: dashboard deploy, asset storage across pods, the germline workflow. `pod_tasks.py` holds what runs in their pods
   - `pinata/` - The pinata tier: the Pinata client against the real API
-  - Each top-level directory here belongs to exactly one tier, and its tests carry that tier's marker (`TIERS` in `conftest.py`; `TESTING_GUIDE.md` → Test Tiers). `unit` (`assets/`, `notebooks/`, `unit/`, `utils/`) is a bare `uv run --all-extras pytest` and runs in pre-commit on every commit; `tasks` (`tasks/`) runs in each task's image via `cli/docker_task_tests.py`; `devbox` runs against the local devbox with `-m devbox`; `pinata` calls the real Pinata API with `-m pinata`. A new directory needs a tier in `TIERS`. A test never skips: outside its tier it's deselected, inside it a missing tool or service fails
+  - Each top-level directory here belongs to exactly one tier, and its tests carry that tier's marker (`TIERS` in `conftest.py`; `.opencode/agent/test.md` → Test Tiers). `unit` (`assets/`, `notebooks/`, `unit/`, `utils/`) is a bare `uv run --all-extras pytest` and runs in pre-commit on every commit; `tasks` (`tasks/`) runs in each task's image via `cli/docker_task_tests.py`; `devbox` runs against the local devbox with `-m devbox`; `pinata` calls the real Pinata API with `-m pinata`. A new directory needs a tier in `TIERS`. A test never skips: outside its tier it's deselected, inside it a missing tool or service fails
 - `docs/` - Project documentation
   - `architecture/` - System design and contracts
-  - `workflows/` - Workflow-specific documentation (e.g., scRNA-seq)
   - `guides/` - Step-by-step walkthroughs with code examples
   - `reference/` - API reference (catalog of tasks and types)
 - `.opencode/reference/` - Agent-facing reference materials (Flyte docs, tool refs)
@@ -234,4 +233,5 @@ The project follows this structure:
 - **Formatting:** Use `ruff` for formatting and correctness checking
 - **Imports:** Use the `stargazer` package name, not relative imports across packages. Module level imports should be at the top of the file!!
 - **Documentation:** Include docstrings explaining purpose and behavior
+- **Comments:** A comment says what the code can't: why it's done this way, a constraint or invariant it upholds, the external quirk it works around, a non-obvious unit or shape. Don't write comments that restate the next line (`# Assemble the reference` above `refs = await assemble(...)`), narrate control flow (`# Unwrap single outputs` above `if len(named) == 1:`), label a block whose names already say what it does (`# GenomicsDBImport` above `import_cmd = ["gatk", "GenomicsDBImport", ...]`), or group entries in a list that ruff will re-sort. If the code needs a comment to be understood, try a better name first. When you touch code, delete the superfluous comments around it.
 - **Resource Awareness:** Specify appropriate resource requests for bioinformatics workloads

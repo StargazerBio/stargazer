@@ -19,7 +19,7 @@ and the round-trip from Python object to storage and back.
 imports this exact class rather than redefining it — one definition, no
 drift across the tutorial sequence.
 
-spec: [docs/architecture/types.md](../../docs/architecture/types.md)
+spec: [docs/architecture/types.md](../architecture/types.md)
 """
 
 import marimo
@@ -81,8 +81,8 @@ def _():
         | "Where are the companion files?" | A BAM and its `.bai` are conceptually one thing but two paths. |
 
         Stargazer's answer: every file is an `Asset` — a small
-        dataclass that carries (a) the content's identity, (b) the
-        local path once fetched, and (c) typed metadata fields. Tasks
+        dataclass that carries (a) the content's identity, (b) where
+        the stored file lives, and (c) typed metadata fields. Tasks
         accept and return Assets, not strings. Metadata travels with
         the file in storage and the storage layer is queryable.
         """

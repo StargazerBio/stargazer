@@ -14,9 +14,7 @@ import pytest
 
 import stargazer.notebooks as notebooks_pkg
 
-# Notebooks live in section directories (tutorials/, workflows/, workspace/)
-# that aren't Python packages — no __init__.py. pkgutil won't descend into
-# them, so walk the filesystem and rebuild dotted module names manually.
+# Every notebook under the section directories, as a dotted module name.
 _NOTEBOOKS_ROOT = Path(notebooks_pkg.__path__[0])
 _notebook_modules = [
     f"{notebooks_pkg.__name__}."

@@ -119,9 +119,9 @@ time, workspace SDK/MCP uploads from a launcher-injected `STARGAZER_OWNER`,
 pipeline outputs from that var forwarded into task pods. Users never type
 it (`_`-prefixed keys are a reserved namespace `build_asset()` rejects). So
 an unowned record on the hosted deployment is legacy data or a bug, never
-expected. Because the Pinata JWT is shared, this is attribution only — it
-drives default filtering, not access control; anyone with SDK/MCP access
-can still read or delete anything. See [Types → Ownership](types.md#ownership-_owner).
+expected. Because the Pinata key is shared, this is attribution only — it
+drives default filtering, not access control; anyone holding the key can
+still edit or delete any record. See [Types → Ownership](types.md#ownership-_owner).
 
 **Two networks, two visibility rules.** The browse panel has Public and
 Private tabs mapping to Pinata's two networks:

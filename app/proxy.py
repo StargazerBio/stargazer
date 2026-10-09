@@ -130,7 +130,7 @@ def _upstream_client() -> httpx.AsyncClient:
 
 
 # ---------------------------------------------------------------------------
-# Owner gate
+# Request headers
 # ---------------------------------------------------------------------------
 
 
@@ -345,7 +345,7 @@ async def dashboard_redirect() -> Response:
 
 @asgi_app.get("/__sg__/ready")
 async def ready() -> Response:
-    """200 once local marimo answers, else 503. Reveals nothing, so not gated."""
+    """200 once local marimo answers, else 503."""
     try:
         resp = await _upstream_client().get(
             f"http://{MARIMO_HOST}:{MARIMO_HTTP_PORT}/", timeout=2.0
@@ -385,7 +385,7 @@ def _set_winsize(fd: int, rows: int, cols: int) -> None:
 async def term_proxy(websocket: WebSocket) -> None:
     """Bridge the injected xterm.js overlay to a login bash via a PTY.
 
-    Owner-gated like the marimo proxy. Forks a `bash -l` on a pseudo-terminal
+    Forks a `bash -l` on a pseudo-terminal
     with a secret-scrubbed environment (`_shell_env`) and pumps bytes both ways:
     PTY output is read off the master fd (registered with the event loop) and
     sent as binary frames; the client sends JSON text frames — `{"type":
@@ -488,7 +488,7 @@ _HOP_BY_HOP = {
     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
 )
 async def http_proxy(request: Request, path: str) -> Response:
-    """Forward any HTTP method to marimo on localhost:8081 after the owner check.
+    """Forward any HTTP method to marimo on localhost:8081.
 
     Runs on the shared keep-alive client. Platform cookies and identity headers
     are dropped before forwarding. Only `text/html` responses are buffered —
@@ -561,7 +561,7 @@ async def http_proxy(request: Request, path: str) -> Response:
 
 @asgi_app.websocket("/{path:path}")
 async def ws_proxy(websocket: WebSocket, path: str) -> None:
-    """Bridge a client websocket to marimo's websocket after the owner check.
+    """Bridge a client websocket to marimo's websocket.
 
     The upstream connection is opened without the client's headers, so no
     cookie or identity header reaches marimo here either.

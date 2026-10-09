@@ -255,7 +255,7 @@ async def assets_update(request: Request):
 
 @router.get("/assets/download/{cid}")
 async def assets_download(request: Request, cid: str):
-    """Redirect to the file bytes — they never transit the admin pod.
+    """Redirect to the file bytes — they never transit the dashboard pod.
 
     Public files live on world-readable IPFS, so the redirect is anonymous,
     but split-gateway: only signed-in users go through PINATA_GATEWAY

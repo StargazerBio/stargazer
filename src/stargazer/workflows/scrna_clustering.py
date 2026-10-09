@@ -11,7 +11,7 @@ Prerequisites:
 Reference:
     https://scanpy.readthedocs.io/en/stable/tutorials/basics/clustering.html
 
-spec: [docs/workflows/scrna.md](../workflows/scrna.md)
+spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
 from stargazer.assets.asset import assemble

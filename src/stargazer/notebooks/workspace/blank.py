@@ -14,7 +14,7 @@ copies this seed under your chosen name and injects a `[tool.stargazer]`
 resource block into the header above — edit those values to rightsize the
 pod for your workload.
 
-spec: [docs/architecture/notebook.md](../../docs/architecture/notebook.md)
+spec: [docs/architecture/notebook.md](../architecture/notebook.md)
 """
 
 import marimo

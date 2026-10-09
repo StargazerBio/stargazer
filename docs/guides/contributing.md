@@ -59,17 +59,17 @@ uv run --all-extras pytest -m pinata                  # the real Pinata API
 - **Devbox** (`tests/devbox`) is anything that needs a cluster: deploying the dashboard, workflows across pods, the devbox's store and index. It deploys the dashboard itself; the devbox has to be up with `cli/devbox-setup.sh` applied. Add `-rP` to see each run's URL.
 - **Pinata** (`tests/pinata`) calls the real Pinata API with the key in `tests/.secrets/pinata_jwt`, and fails without it.
 
-Outside its tier a test is deselected, never skipped, and inside it a missing tool or service fails the run. A new directory under `tests/` needs a tier in `TIERS` in `tests/conftest.py`. More in [`tests/TESTING_GUIDE.md`](https://github.com/StargazerBio/stargazer/blob/main/tests/TESTING_GUIDE.md).
+Outside its tier a test is deselected, never skipped, and inside it a missing tool or service fails the run. A new directory under `tests/` needs a tier in `TIERS` in `tests/conftest.py`. The full testing conventions are in [`.opencode/agent/test.md`](https://github.com/StargazerBio/stargazer/blob/main/.opencode/agent/test.md).
 
 ## Code Style
 
 ```bash
-ruff --fix .
+uv run ruff check --fix . && uv run ruff format .
 ```
 
-Pre-commit enforces `ruff` formatting and `docstr-coverage` (100% module-level docstrings required), and runs the unit tests.
+Pre-commit runs `ruff` (lint and format) and `docstr-coverage` (a docstring on every module, class and function in `src/`), regenerates the catalog and API reference, builds the docs, checks the MCP server imports, and runs the unit tests.
 
-Ruff is pinned twice — `rev:` in `.pre-commit-config.yaml` and the `ruff` entry in `pyproject.toml`'s dev group — because pre-commit runs hooks in its own isolated environment rather than your project venv. **Bump both together**, or `ruff --fix .` and the commit hook will enforce different rule sets. Rule exceptions live in `[tool.ruff.lint]` in `pyproject.toml`, each annotated with the reason; if a rule is fighting a deliberate pattern (a blind `except` used for graceful degradation, a bare expression that is how a marimo cell renders), add it there rather than contorting the code.
+Ruff is pinned twice — `rev:` in `.pre-commit-config.yaml` and the `ruff` entry in `pyproject.toml`'s dev group — because pre-commit runs hooks in its own isolated environment rather than your project venv. **Bump both together**, or `uv run ruff check` and the commit hook will enforce different rule sets. Rule exceptions live in `[tool.ruff.lint]` in `pyproject.toml`, each annotated with the reason; if a rule is fighting a deliberate pattern (a blind `except` used for graceful degradation, a bare expression that is how a marimo cell renders), add it there rather than contorting the code.
 
 ## Submitting Changes
 
@@ -96,23 +96,22 @@ Every change goes through a pull request — nothing is committed directly to `m
 
 ## Building Images
 
-Image rebuilds are only needed when you change `config.py` (a Flyte task tool/env) or the `Dockerfile` (a system tool in the human-runnable note/chat images). Routine code work doesn't need this — `uv add` covers Python deps via the lockfile, and contributors pulling your branch pick the change up automatically on their next `uv sync`. See [Configuration → Container Images](../architecture/configuration.md#container-images) for the split between Flyte task images and human-runnable images.
+See [Configuration → Container Images](../architecture/configuration.md#container-images) for the split between Flyte task images and human-runnable images. `uv add` covers Python deps via the lockfile, and contributors pulling your branch pick the change up on their next `uv sync`.
 
-All builds below stay local — nothing is pushed to a registry, so you don't need `docker login` or write access to `ghcr.io/stargazerbio`. CI will handle publishing on merge to main.
+**Flyte task images (`stargazer-scrna`, `stargazer-gatk`)** build themselves. Each is tagged by a hash of its recipe and the project's source, so a change to either builds a new one the first time something needs it: a run on the devbox or Union, or the tasks test tier, which builds into your local docker without pushing anywhere. `image.builder` in the Flyte config picks `local` (needs a working Docker daemon) or `remote` (Union only, builds on the cluster). Runs push to `STARGAZER_REGISTRY` — the devbox's own registry by default when targeting the devbox.
 
-**Flyte task images (`stargazer-scrna`, `stargazer-gatk`):**
-
-```bash
-stargazer-build-images   # builds scrna and gatk into the local docker cache
-```
-
-`image.builder: local` in `.flyte/config.yaml` is the default (needs a working Docker daemon). The Flyte images have no `registry=` set in `config.py`, so the docker builder uses `--load` and the results land in `docker images` rather than being pushed. For Union backends you can flip to `image.builder: remote` and the build runs on the cluster instead.
-
-**Human-runnable images (`stargazer-note`, `stargazer-chat`):**
+**Human-runnable images (`stargazer-note`, `stargazer-chat`)** build from the `Dockerfile` when you change it or want the current source in them:
 
 ```bash
 docker build --target note -t ghcr.io/stargazerbio/stargazer-note:latest .
 docker build --target chat -t ghcr.io/stargazerbio/stargazer-chat:latest .
 ```
 
-Tag both with the published `ghcr.io/stargazerbio/...` URL even though you're not pushing — `docker run` resolves them from the local cache by that name. (The hosted notebook pods use a different image, `notebook-app`, built by the onboarding command (`stargazer-users`) — see [App → Images](../architecture/app.md#images).) The shared `base` stage (bioconda CLIs + uv + project venv) is reused between targets, so the second `docker build` is mostly cache hits.
+Tag both with the published `ghcr.io/stargazerbio/...` URL even though you're not pushing — `docker run` resolves them from the local cache by that name. Nothing publishes them automatically. A maintainer publishes both platforms with buildx, logged in to `ghcr.io` with a token that has `write:packages`:
+
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 --target note -t ghcr.io/stargazerbio/stargazer-note:latest --push .
+docker buildx build --platform linux/amd64,linux/arm64 --target chat -t ghcr.io/stargazerbio/stargazer-chat:latest --push .
+```
+
+The hosted notebook pods use a different image, `notebook-app`, built by the onboarding command (`stargazer-users`) — see [App → Images](../architecture/app.md#images). The shared `base` stage (bioconda CLIs + uv + project venv) is reused between targets, so the second `docker build` is mostly cache hits.

@@ -82,7 +82,8 @@ to add by hand.
 ## devbox-setup.sh
 
 Applies the cluster-side workarounds the local Flyte devbox needs: the storage
-signed-URL endpoint, the serving domain, and a CoreDNS wildcard. They're lost
+signed-URL endpoint, the serving domain, a CoreDNS wildcard, and the
+`PINATA_JWT` secret every task environment declares. They're lost
 whenever the `flyte-devbox` container is recreated, so re-run it after every
 fresh devbox. It's safe to re-run.
 
@@ -91,7 +92,8 @@ cli/devbox-setup.sh [--dry-run] [--laptop] [--verify-pod] [--domain D]
 ```
 
 `--laptop` also applies the macOS-side DNS change (needs sudo); without it,
-the script prints the commands. `--help` prints the full description. Each
+the script prints the commands. `--verify-pod` checks, from a throwaway pod,
+that the devbox dashboard resolves and answers in-cluster. `--help` prints the full description. Each
 step's rationale is in
 [`.opencode/reference/devbox_workarounds.md`](../.opencode/reference/devbox_workarounds.md).
 

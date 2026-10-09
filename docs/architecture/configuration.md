@@ -31,6 +31,7 @@ All env var defaults are set in `config.py`. If set (even to empty string), the 
 | `PINATA_GATEWAY` | IPFS gateway for public downloads | `https://dweb.link` | No |
 | `STARGAZER_TARGET` | Flyte backend for images and deploys: `devbox` or `union` | `devbox` | No |
 | `STARGAZER_REGISTRY` | Image push registry | `localhost:30000` on `devbox`; unset on `union` (the builder's own registry) | No |
+| `FLYTE_DOCKER_BUILD_EXTRA_ARGS` | Extra flags for local image builds | `--provenance=false` on `devbox` | No |
 
 `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` are forwarded into task pods only when set explicitly. A pod can't use the local default store or index, so a remote run submitted locally with the defaults has nowhere shared to write. Local-to-cluster storage is tracked on the roadmap.
 
@@ -73,8 +74,8 @@ chunked-first (no resume yet) with a 10 GiB/file ceiling — itself a Pinata
 limit, not an IPFS one (IPFS chunks files into a DAG with no inherent size
 cap).
 
-`query(keyvalues, network=)` queries one network when `network` is given,
-else merges both; each record carries the network it was found on.
+`query(keyvalues, network=)` queries one network, the public one unless
+told otherwise; each record carries the network it was found on.
 
 `create_signed_upload_url(filename, keyvalues, network, ...)` mints a signed
 URL with the filename and keyvalues fixed at mint time — used by the admin
@@ -85,14 +86,14 @@ metadata ever passing through (or being chooseable at) the upload client.
 
 ## Container Images
 
-Stargazer ships four container images on `ghcr.io/stargazerbio`. They split along a sharp line: **task images** (run only by Flyte) are declared as `flyte.Image` / `flyte.Environment` in `src/stargazer/config.py`; **human-runnable images** (used via `docker run` and hosted via `flyte.serve`) are built from the project's multi-stage `Dockerfile`.
+Stargazer has four container images. They split along a sharp line: **task images** (run only by Flyte) are declared as `flyte.Image`s on the `TaskEnvironment`s in `src/stargazer/config.py`; **human-runnable images** (used via `docker run`) are built from the project's multi-stage `Dockerfile`.
 
 | Image | Source | Type | Where it runs |
 |-------|--------|------|---------------|
 | `stargazer-scrna` | `config.py` (`scrna_env`) | `flyte.TaskEnvironment` | scRNA-seq tasks (`tasks/scrna/`) |
 | `stargazer-gatk` | `config.py` (`gatk_env`) | `flyte.TaskEnvironment` | GATK + alignment tasks (`tasks/gatk/`, `tasks/general/`) |
 | `stargazer-note` | `Dockerfile` (`--target note`) | Marimo notebook | Local `docker run` exploration only |
-| `stargazer-chat` | `Dockerfile` (`--target chat`) | Claude Code + OpenCode + MCP | Local `docker run` only |
+| `stargazer-chat` | `Dockerfile` (`--target chat`) | Claude Code + OpenCode + the MCP server | Local `docker run` only |
 
 Why the split: task images need nothing but Flyte's contract (an entrypoint Flyte injects, a content-hash tag Flyte pins by) — perfectly served by the SDK. Human-runnable images need a real `ENTRYPOINT`, baked-in source, and a stable `:latest` tag — none of which the Flyte Image SDK exposes. Rather than reinvent the Dockerfile via post-build wrapping, we just use a Dockerfile.
 
@@ -100,19 +101,21 @@ Both task images install the stargazer package itself, not only its dependencies
 
 Every image Flyte builds — the task images, the dashboard, the notebook image — is built for `linux/amd64` only, the architecture Union runs. GATK's GenomicsDB, which joint calling uses, has no arm64 build. On an Apple-silicon devbox the cluster itself runs natively and these pods run under emulation. A devbox build pushes a plain image rather than a multi-platform index (`FLYTE_DOCKER_BUILD_EXTRA_ARGS` defaults to `--provenance=false` there), since an arm64 node won't pull an index with no arm64 entry.
 
-Hosted notebook pods use a separate image, **`notebook-app`**, defined programmatically in `app/per_notebook.py` and built/published by the admin deploy entrypoint — it is not `stargazer-note`. See [App → Images](app.md#images).
+The two `Dockerfile` images are published for both `linux/amd64` and `linux/arm64`, so they run natively on Apple silicon. Both carry the `mcp` and `bio` extras and the bioconda tools, and a Flyte config that runs workflows in the container. Because GenomicsDB has no arm64 build, joint calling works only in the amd64 variant.
+
+Hosted notebook pods use a separate image, **`notebook-app`**, defined programmatically in `app/per_notebook.py` and built by onboarding (`stargazer-users`) — it is not `stargazer-note`. See [App → Images](app.md#images).
 
 ### Building locally
 
-Contributor builds stay on the host. Nothing is pushed to a registry — no `docker login` needed, no write access to `ghcr.io/stargazerbio` required; CI publishes on merge to main. The Flyte task images build into the local docker cache (no `registry=` is set on the Flyte Images, so the docker builder falls through to `--load` instead of `--push`), with the builder selected in `.flyte/config.yaml` — `local` requires a working Docker daemon, `remote` (Union only) builds on the cluster. The human-runnable images build from the Dockerfile and are tagged with their published URLs even when local-only, so docker resolves them from the local cache by name. Commands in [Contributing → Building Images](../guides/contributing.md#building-images).
+The Flyte task images build the first time a run needs them, tagged by content hash, with the builder selected in the Flyte config: `local` needs a working Docker daemon, `remote` (Union only) builds on the cluster. They are pushed to `STARGAZER_REGISTRY`, which on `devbox` defaults to the devbox's own registry (`localhost:30000`) and on `union` is left to the remote builder, which pushes to Union's registry. The human-runnable images build from the Dockerfile and are tagged with their published `ghcr.io/stargazerbio` URLs even when local-only, so docker resolves them from the local cache by name; nothing publishes them automatically. Commands in [Contributing → Building Images](../guides/contributing.md#building-images).
 
 ### Adding a tool
 
-When a new Flyte task wraps a new CLI tool, layer it onto the image of the `TaskEnvironment` it is decorated against in `config.py` — via `with_apt_packages`, `with_commands`, or the bioconda install block. For tools that should be available in the human-runnable note/chat images, edit the bioconda block in the Dockerfile's `base` stage instead. See [Writing a Task](../guides/writing-a-task.md).
+When a new Flyte task wraps a new CLI tool, layer it onto the image of the `TaskEnvironment` it is decorated against in `config.py` — via `with_apt_packages`, `with_commands`, or the bioconda install block. A tool notebooks should reach directly goes in the bioconda block of the hosted notebook image (`notebook_app_img_recipe` in `app/per_notebook.py`), and, for the local note/chat images, in the Dockerfile's `base` stage. See [Writing a Task](../guides/writing-a-task.md).
 
 ## Resource Bundles
 
-Bundles are curated sets of public files (reference genomes, demo datasets) defined as YAML manifests in `src/stargazer/bundles/`. Each manifest lists CIDs and their keyvalues, with a `bundle` keyvalue on each file for queryability.
+Bundles are curated sets of public files (reference genomes, demo datasets) defined as YAML manifests in `src/stargazer/bundles/`. Each manifest lists its files' CIDs and keyvalues; a manifest can tag its files with a `bundle` keyvalue so they can be queried as a set (`scrna_demo` does).
 
 ### Fetching
 
@@ -120,7 +123,7 @@ Bundles are curated sets of public files (reference genomes, demo datasets) defi
 
 ### Bundle Format
 
-A manifest carries a `name`, a `description`, and a `files` list; each file entry is a `cid` plus its `keyvalues` (asset type, sample metadata, and the `bundle` tag). See the manifests in `src/stargazer/bundles/` for live examples.
+A manifest carries a `name`, a `description`, and a `files` list; each file entry is a `cid`, the file's `name` (the filename tools see on disk), and its `keyvalues` (asset type and metadata). See the manifests in `src/stargazer/bundles/` for live examples.
 
 After hydration, bundled assets are queryable via `assemble()` and `query_files` like any other asset.
 

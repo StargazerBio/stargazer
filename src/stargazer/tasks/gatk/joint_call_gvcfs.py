@@ -64,13 +64,11 @@ async def joint_call_gvcfs(
     with tempfile.TemporaryDirectory() as tmpdir:
         workspace = Path(tmpdir) / f"{cohort_id}_genomicsdb"
 
-        # Write sample map
         sample_map = Path(tmpdir) / "sample_map.txt"
         with open(sample_map, "w") as f:
             for gvcf, gvcf_path in zip(gvcfs, gvcf_paths, strict=True):
                 f.write(f"{gvcf.sample_id}\t{gvcf_path}\n")
 
-        # GenomicsDBImport
         import_cmd = [
             "gatk",
             "GenomicsDBImport",
@@ -89,7 +87,6 @@ async def joint_call_gvcfs(
                 f"GenomicsDBImport did not create workspace at {workspace}"
             )
 
-        # GenotypeGVCFs
         output_vcf = output_dir / f"{cohort_id}_genotyped.vcf"
         genotype_cmd = [
             "gatk",

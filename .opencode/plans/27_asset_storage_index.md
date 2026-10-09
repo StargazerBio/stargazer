@@ -569,7 +569,7 @@ branch.
       `.opencode/reference/architecture/app_internals.md`: the index API and
       Litestream.
 - [x] Module docstrings on every module touched.
-- [ ] ROADMAP: mark ✅, move to Complete, and add the follow-ups below.
+- [x] ROADMAP: mark ✅, move to Complete, and add the follow-ups below (2026-10-09).
 
 ## Follow-ups (not in this plan)
 

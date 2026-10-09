@@ -67,7 +67,9 @@ def test_deploys_the_dashboard_for_a_stand_in_on_the_devbox_store(monkeypatch):
 def test_refuses_off_the_devbox(monkeypatch):
     """A stand-in user must never reach a Union deploy."""
     monkeypatch.setattr(config, "TARGET", "union")
-    monkeypatch.setattr(devbox_dashboard, "init", lambda *a, **k: pytest.fail("init ran"))
+    monkeypatch.setattr(
+        devbox_dashboard, "init", lambda *a, **k: pytest.fail("init ran")
+    )
     monkeypatch.setattr(sys, "argv", ["devbox_dashboard.py"])
     with pytest.raises(SystemExit, match="STARGAZER_TARGET=devbox"):
         devbox_dashboard.main()

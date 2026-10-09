@@ -18,7 +18,7 @@ Multi-sample fan-out preprocessing plus interactive clustering, side-by-side
 UMAPs, and marker-gene tables. The workflow-tier showcase: the same
 primitives the tutorials teach, applied as a full-fat scRNA-seq pipeline.
 
-spec: [docs/architecture/notebook.md](../../docs/architecture/notebook.md)
+spec: [docs/architecture/notebook.md](../architecture/notebook.md)
 """
 
 import marimo
@@ -85,9 +85,9 @@ def _(mo):
         [
             mo.md(
                 "## Task Catalog\n\n"
-                "Every Stargazer task and workflow registered with the MCP server. "
-                "The two workflows defined later in this notebook will appear here as "
-                "well once the cell runs."
+                "Every task and workflow the Stargazer package exports, as the MCP "
+                "server lists them. The two workflows this notebook defines below run "
+                "here and aren't registered."
             ),
             mo.ui.table(
                 _task_rows,
@@ -448,12 +448,13 @@ def _(mo):
         """
         ## Next Steps
 
-        The tutorials build up the primitives behind this pipeline:
+        The tutorials on your dashboard build up the primitives behind
+        this pipeline:
 
-        - [Assets](/tutorials/assets) — typed, content-addressed I/O
-        - [Tasks](/tutorials/tasks) — single units of work
-        - [Workflows](/tutorials/workflows) — composing tasks
-        - [Execution](/tutorials/execution) — local vs remote
+        - **Assets** — typed, content-addressed I/O
+        - **Tasks** — single units of work
+        - **Workflows** — composing tasks
+        - **Execution** — local vs remote
         """
     )
 

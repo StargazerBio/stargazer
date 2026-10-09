@@ -26,8 +26,9 @@ async def apply_vqsr(
     """
     Apply VQSR recalibration to a VCF using GATK ApplyVQSR.
 
-    The recalibration mode (SNP or INDEL) is read from vqsr_model.keyvalues["mode"].
-    If truth_sensitivity_filter_level is not provided, defaults to 99.5 for SNP
+    The recalibration mode (SNP or INDEL) is read from `vqsr_model.mode`, and
+    the tranches file from `vqsr_model.tranches_path`. If
+    truth_sensitivity_filter_level is not provided, defaults to 99.5 for SNP
     and 99.0 for INDEL.
 
     Args:

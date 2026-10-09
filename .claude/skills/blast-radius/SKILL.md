@@ -28,7 +28,7 @@ Step 4 is usually one small script in `scratch/` that imports the real module an
 1. **Read the change.** The diff, the symbols it adds, changes, and deletes, and what now behaves differently, including what the diff doesn't spell out.
 2. **Find the one fact it's safe because of.** Most risky-looking changes are safe because of one fact. Find it. If it holds, most risky cases clear at once. Spend your time here, not on a long list of maybes.
 3. **Look where grep stops.** In Stargazer that usually means:
-   - **Stored metadata.** `Asset.to_keyvalues()` / `from_keyvalues()` output lives in Pinata and local storage. Renaming or retyping a field leaves old records unreadable or unqueryable. Check `query_files` against existing data, not just new data.
+   - **Stored metadata.** `Asset.to_keyvalues()` / `from_keyvalues()` output lives in each user's asset index (a SQLite file locally, the user's dashboard on Union) and in Pinata's public records. Renaming or retyping a field leaves old records unreadable or unqueryable. Check `query_files` against existing data, not just new data.
    - **Wire formats.** `marshal.py` shapes what MCP clients and the in-notebook assistant see. The registry in `registry.py` shapes what they can discover.
    - **Flyte images and environments.** A new import or CLI tool must exist in the `flyte.Image` of the env the task runs in (`config.py`). Code bundles ship only `.py` files, and bundled code can shadow image-baked packages (see `devbox_workarounds.md`).
    - **Notebooks.** Notebooks import SDK functions by name, and `@app.function` exports are imported across notebooks. A rename breaks them without any test in `tests/tasks/` noticing.

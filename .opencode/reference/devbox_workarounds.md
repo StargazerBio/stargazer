@@ -4,7 +4,7 @@
 
 When you hit a deploy/runtime issue against devbox that takes more than one round-trip to diagnose, append it here with a one-line description and the minimum the next session needs to know.
 
-**Automation:** the *cluster-side* workarounds below (signed-URL endpoint, serving domain off `.localhost`, CoreDNS wildcard, the restarts that race the addon controller, and the `PINATA_JWT` task secret) are applied to a fresh devbox by [`cli/devbox-setup.sh`](../../cli/devbox-setup.sh) — run it once after recreating the container (`./cli/devbox-setup.sh`, or `--dry-run` to preview, `--laptop` to also apply the macOS DNS steps, `--domain` to override). It's idempotent. The remaining entries are app-code/design (already in the codebase), not scriptable; keep this file and the script in sync when you add a new cluster-side quirk.
+**Automation:** the *cluster-side* workarounds below (signed-URL endpoint, serving domain off `.localhost`, CoreDNS wildcard, the restarts that race the addon controller, and the `PINATA_JWT` task secret) are applied to a fresh devbox by [`cli/devbox-setup.sh`](../../cli/devbox-setup.sh) — run it once after recreating the container (`./cli/devbox-setup.sh`, or `--dry-run` to preview, `--laptop` to also apply the macOS DNS steps, `--domain` to override). It's idempotent; `--verify-pod` also resolves and calls the devbox dashboard from a throwaway pod. The remaining entries are app-code/design (already in the codebase), not scriptable; keep this file and the script in sync when you add a new cluster-side quirk.
 
 ---
 
@@ -41,6 +41,14 @@ There is no single host/IP that's reachable from both the laptop and from in-clu
 
    Pods now resolve `rustfs-svc.flyte:9000` via k8s DNS — same code path as a production Flyte that returns real S3 URLs.
 
+   **The restart races the addon controller — you usually need to restart twice.** Editing the manifest makes the k3s Addon controller re-render the `flyte-binary-config` ConfigMap, asynchronously, and flyte-binary reads its config only once at startup. A restart issued right after the `sed` often boots on the *old* ConfigMap, so the patch looks like it didn't take. Check the live ConfigMap, then restart again:
+
+   ```bash
+   kubectl get cm flyte-binary-config -n flyte -o yaml | grep -n 'localhost:30002'   # prints nothing once the patch is live
+   kubectl rollout restart deployment/flyte-binary -n flyte
+   kubectl rollout status deployment/flyte-binary -n flyte --timeout=120s
+   ```
+
 2. On the laptop, make `rustfs-svc.flyte:9000` resolvable:
    - DNS / `/etc/hosts`: `rustfs-svc.flyte → 127.0.0.1`
    - Port-forward: `kubectl port-forward -n flyte svc/rustfs-svc 9000:9000`
@@ -73,34 +81,6 @@ There is no single host/IP that's reachable from both the laptop and from in-clu
 
 Paths investigated and rejected: (a) `pod_template=PodTemplate(labels={"inject-flyte-secrets": "true"})` — even with the label the webhook has no secret annotations to inject, because flyte-binary never stamps them on App pods; (b) relaxing the webhook `objectSelector` — same reason, and `failurePolicy: Fail` makes a match-all selector dangerous (a webhook blip would block all pod scheduling).
 
-
-**Symptom:** App pod crash-loops before user code runs, logs show `GenericError: Generic S3 error ... http://rustfs.flyte:9000/... Name or service not known`.
-
-**Cause:** `/var/lib/rancher/k3s/server/manifests/flyte.yaml` (line ~7776) sets `internalApps.defaultEnvVars.FLYTE_AWS_ENDPOINT = http://rustfs.flyte:9000`. The actual k8s service is `rustfs-svc`. (The `plugins.k8s.default-env-vars` block uses the correct name; only `internalApps` is wrong.) The manifest is owned by a k3s Addon controller, so `kubectl patch` on the ConfigMap reverts.
-
-**Workaround:** Patch the manifest inside the devbox container (lost on container restart):
-
-```bash
-docker exec flyte-devbox sed -i \
-  's|FLYTE_AWS_ENDPOINT: http://rustfs.flyte:9000|FLYTE_AWS_ENDPOINT: http://rustfs-svc.flyte:9000|' \
-  /var/lib/rancher/k3s/server/manifests/flyte.yaml
-docker exec flyte-devbox kubectl rollout restart deployment/flyte-binary -n flyte
-```
-
-**The restart races the addon controller — you usually need to restart twice.** Editing the manifest file triggers the k3s Addon controller to re-render the `flyte-binary-config` ConfigMap, but that's async. A `rollout restart` issued right after the `sed` will often boot a flyte-binary pod that mounts the *old* ConfigMap, and flyte-binary reads config only once at startup — so freshly-deployed App pods still get `FLYTE_AWS_ENDPOINT: http://rustfs.flyte:9000` even though the manifest file is patched. The deploy fails identically and looks like the patch didn't take.
-
-Verify the live ConfigMap (not the manifest file) reflects the change, *then* restart again:
-
-```bash
-# confirm the ConfigMap the controller actually serves is patched
-docker exec flyte-devbox kubectl get cm flyte-binary-config -n flyte -o yaml | grep -nE 'rustfs.*:9000'
-# all hits should read rustfs-svc.flyte; then restart so flyte-binary loads it
-docker exec flyte-devbox kubectl rollout restart deployment/flyte-binary -n flyte
-docker exec flyte-devbox kubectl rollout status deployment/flyte-binary -n flyte --timeout=120s
-```
-
-To diagnose: check the actual env on a failed App pod — `kubectl get pod <pod> -n flyte -o yaml | grep -A1 FLYTE_AWS_ENDPOINT`. If it shows the bare `rustfs.flyte` while the ConfigMap shows `rustfs-svc.flyte`, flyte-binary is running stale config; restart it again. Delete the failed ksvc (`kubectl delete ksvc dashboard-flytesnacks-development -n flyte`) before redeploying so you get a clean revision.
-
 ---
 
 ## App pod needs `flyte.init_in_cluster()`, not `flyte.init()`
@@ -119,7 +99,7 @@ To diagnose: check the actual env on a failed App pod — `kubectl get pod <pod>
 
 **Cause:** Same root as the previous entry — the pod's Flyte connection is auto-discovered from `_U_EP_OVERRIDE` and friends at *Python process startup* by `flyte.init_in_cluster()`. A fresh subprocess inherits those env vars but does not run the discovery logic before its first SDK call, so `ensure_client()` raises. The Flyte v2 docs at `core-concepts/projects-and-domains` further claim that "the Python SDK provides read-only access to projects, to create or modify projects use the `flyte` CLI or the UI" — this is **wrong against the installed SDK**, `flyte.remote.Project.create(...)` exists and is what the CLI itself calls under the hood.
 
-**Workaround:** When provisioning Flyte resources from inside an App pod, always prefer the in-process SDK (`Project.create.aio(...)`, `Project.get.aio(...)`, etc.) over CLI subprocesses. The pod's auto-discovered endpoint is only available to the parent Python process. Trust the SDK's actual surface over the v2 docs when they disagree. See `app/provision.py` for the working pattern. (On Union the in-cluster identity isn't allowed to create projects at all; that's a permission, not this quirk.)
+**Workaround:** When provisioning Flyte resources from inside an App pod, always prefer the in-process SDK (`Project.create.aio(...)`, `Project.get.aio(...)`, etc.) over CLI subprocesses. The pod's auto-discovered endpoint is only available to the parent Python process. Trust the SDK's actual surface over the v2 docs when they disagree. `app/onboard.py` creates projects this way, from the deployer's shell rather than a pod: on Union the in-cluster identity isn't allowed to create projects at all (a permission, not this quirk).
 
 ---
 
@@ -179,7 +159,7 @@ The `verify-stargazer` skill's devbox recipe (`features/devbox-asset-storage.md`
 
 ## Serving domain must not be `.localhost` (so `App.endpoint` resolves in-cluster)
 
-**Symptom:** A pod (e.g. the admin app) calling another App's `App.endpoint` over HTTP fails with `[Errno -2] Name or service not known` / `[Errno -5] No address associated with hostname`. Example: notebook Save (`POST /workspace/save` → notebook pod's `/__sg__/workspace/sync`) returned `could not reach notebook: ...`. (The admin App is Knative-scaled-to-zero between requests, so the failing call runs in a freshly-activated *pod*, not on the laptop — easy to misdiagnose as a local issue.)
+**Symptom:** A pod (e.g. the admin app) calling another App's `App.endpoint` over HTTP fails with `[Errno -2] Name or service not known` / `[Errno -5] No address associated with hostname`. Example: the since-removed notebook Save (`POST /workspace/save` → notebook pod's `/__sg__/workspace/sync`) returned `could not reach notebook: ...`. (The dashboard is Knative-scaled-to-zero between requests, so the failing call runs in a freshly-activated *pod*, not on the laptop — easy to misdiagnose as a local issue.)
 
 **Cause:** Stock devbox serves apps under the `localhost` TLD, so `App.endpoint` is `http://{ksvc}.localhost:30081`. Two compounding problems: (1) cluster DNS doesn't know `*.localhost`; (2) more fundamentally, **glibc special-cases the `.localhost` TLD and never sends it to a nameserver at all** (`getaddrinfo('x.localhost')` → EAI_NODATA / EAI_NONAME without a single DNS query), so *no* CoreDNS change can fix `.localhost`. The fix is to move apps off `.localhost` onto a normal domain (here `devbox.stargazer.bio` — needs no real public DNS records) and make that domain resolve in-cluster. Then app code uses `App.endpoint` everywhere with **zero devbox branches**.
 
@@ -236,7 +216,7 @@ docker exec flyte-devbox kubectl rollout restart deployment/coredns -n kube-syst
 
 Why node IP and not the kourier ClusterIP: `App.endpoint` carries `:30081`, which is a NodePort — only reachable on a node IP, not on a ClusterIP (which listens on 80). kourier still routes by the public `Host`, so resolving to the node IP and hitting `:30081` works. The AAAA template returns NOERROR-empty so glibc (AF_UNSPEC) falls back to the A record cleanly.
 
-**Verify** from a throwaway pod (`kubectl run t --image=localhost:30000/notebook-app:latest --command -- sleep 200`):
+**Verify** from a throwaway pod (`cli/devbox-setup.sh --verify-pod` does this with `python:3.13-slim` against the devbox dashboard):
 `getaddrinfo('{ksvc}.devbox.stargazer.bio', 30081)` → node IP, and `GET http://{ksvc}.devbox.stargazer.bio:30081/health` → 200.
 
 **Laptop side:** the browser already reached `*.localhost:30081` via 127.0.0.1 + the published `:30081` docker port; only the hostname changes. Point `*.devbox.stargazer.bio` → `127.0.0.1` with a wildcard resolver (the published `:30081` port is unchanged). No real public DNS records are needed — CoreDNS handles pods, the local resolver handles the laptop:
@@ -254,23 +234,11 @@ printf 'nameserver 127.0.0.1\n' | sudo tee /etc/resolver/devbox.stargazer.bio
 
 ## `flyte.serve()` watch can report "failed" on a successful redeploy
 
-**Symptom:** Redeploying an existing App (e.g. `python -m app.admin_app` after changing `env_vars`) raises `RuntimeError: App deployment for app admin-app has failed!` from `watch(wait_for="activated")` — but the app is actually fine.
+**Symptom:** Redeploying an existing App (e.g. the dashboard, after changing `env_vars`) raises `RuntimeError: App deployment for app <name> has failed!` from `watch(wait_for="activated")` — but the app is actually fine. `app.onboard.deploy_dashboard` checks the app's real state before believing it.
 
 **Cause:** The redeploy rolls a new Knative revision. While the rollout converges, the app's status can sample as failed and the SDK watch surfaces the first failed state it sees instead of waiting out the transition.
 
 **Workaround:** Before re-running the deploy, check reality: `kubectl get ksvc -n flyte` (READY True, LATESTREADY = newest revision) and curl the endpoint. If the ksvc is ready, the deploy succeeded and the error is noise. Observed 2026-06-11 redeploying admin-app with a new `PINATA_JWT`: watch raised, yet both revisions were Running 2/2 and `/assets` served 200 seconds later. Distinct from the CrashLoopBackOff "has failed!" below, where the pod really is down.
-
----
-
-## Auth cookies are non-`Secure` on devbox (http), `Secure` in prod (TLS)
-
-> **Obsolete since plan 25:** the app tier sets no cookies any more (Union owns sign-in), and `STARGAZER_SECURE_COOKIES` is gone. Kept so a regression is recognizable if cookies come back.
-
-**Symptom (if mis-defaulted):** With `Secure` cookies forced on, login over devbox's plain HTTP silently fails — the browser never sends a `Secure` cookie over http, so every request looks unauthenticated and you bounce back to the login page.
-
-**Cause:** Devbox serves the admin and per-notebook apps over `http://…:30081` (no TLS). A `Secure` cookie is dropped by the browser on http, so it can never round-trip.
-
-**Workaround / design:** The `Secure` attribute is **parametrized**, not hardcoded — `app.config.SECURE_COOKIES` (the app-tier config home) parses `STARGAZER_SECURE_COOKIES` (truthy = `1/true/yes/on`), defaulting **off** under `STARGAZER_TARGET=devbox` and **on** under `union`; an explicit value overrides either. The resolved value is baked as `1`/`0` into the admin App env (`_PUBLIC_CONFIG`, re-serialized from `config.SECURE_COOKIES`) and propagated into each notebook pod's env (`per_notebook_env`), so the standalone proxy's mirror (`sg_proxy._cookie_secure`) — which can't import `app.config` — sets the cookie identically. `httponly=True` and `samesite="lax"` stay constant — only `Secure` is environment-dependent. All cookie writes go through `admin_app._session_redirect` (session) / the proxy middleware (launch handoff); there is no other set-cookie site to keep in sync.
 
 ---
 

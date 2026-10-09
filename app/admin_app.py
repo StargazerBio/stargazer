@@ -829,10 +829,10 @@ async def launch(
 ):
     """Spawn (or reuse) the owner's per-notebook app for slug+mode; return its URL.
 
-    The pod is served into the dashboard's project and owned by the same user
-    (only they get past its proxy), hydrates and
-    saves its own workspace, and shows a starting page until the notebook is
-    ready, so the URL is returned as soon as the app is admitted.
+    The pod is served into the dashboard's project and owned by the same
+    user, hydrates and saves its own workspace, and shows a starting page
+    until the notebook is ready, so the URL is returned as soon as the app is
+    admitted.
     """
     if mode not in ("edit", "run"):
         return JSONResponse({"error": f"invalid mode: {mode}"}, status_code=400)

@@ -1,8 +1,8 @@
 """
 ### Query generation utilities for Stargazer.
 
-Utilities for generating metadata queries, including support for
-cartesian product queries across multiple dimensions.
+Expands list-valued filters into one exact-match query per combination, for
+backends that can't match a list in one query (Pinata's keyvalue filters).
 
 spec: [docs/architecture/types.md](../architecture/types.md)
 """
@@ -31,25 +31,24 @@ def generate_query_combinations(
         List of query dicts representing all combinations
 
     Example:
-        >>> base = {"type": "reference"}
-        >>> filters = {"build": "GRCh38", "tool": ["fasta", "bwa"]}
+        >>> base = {"asset": "reference"}
+        >>> filters = {"build": "GRCh38", "tool": ["samtools_faidx", "gatk"]}
         >>> generate_query_combinations(base, filters)
         [
-            {"type": "reference", "build": "GRCh38", "tool": "fasta"},
-            {"type": "reference", "build": "GRCh38", "tool": "bwa"}
+            {"asset": "reference", "build": "GRCh38", "tool": "samtools_faidx"},
+            {"asset": "reference", "build": "GRCh38", "tool": "gatk"}
         ]
 
-        >>> base = {"type": "reference"}
-        >>> filters = {"build": ["GRCh38", "GRCh37"], "tool": ["fasta", "bwa"]}
+        >>> base = {}
+        >>> filters = {"asset": ["r1", "r2"], "sample_id": ["S1", "S2"]}
         >>> generate_query_combinations(base, filters)
         [
-            {"type": "reference", "build": "GRCh38", "tool": "fasta"},
-            {"type": "reference", "build": "GRCh38", "tool": "bwa"},
-            {"type": "reference", "build": "GRCh37", "tool": "fasta"},
-            {"type": "reference", "build": "GRCh37", "tool": "bwa"}
+            {"asset": "r1", "sample_id": "S1"},
+            {"asset": "r1", "sample_id": "S2"},
+            {"asset": "r2", "sample_id": "S1"},
+            {"asset": "r2", "sample_id": "S2"}
         ]
     """
-    # Separate list-valued and scalar-valued filters
     list_filters = {}
     scalar_filters = {}
 
@@ -59,20 +58,16 @@ def generate_query_combinations(
         else:
             scalar_filters[key] = value
 
-    # Generate cartesian product of list-valued filters
     if list_filters:
-        # Get keys and values for cartesian product
         keys = list(list_filters.keys())
         value_lists = [list_filters[k] for k in keys]
 
-        # Generate all combinations
         query_combinations = []
         for combo in product(*value_lists):
             query = {**base_query, **scalar_filters}
             query.update(dict(zip(keys, combo)))
             query_combinations.append(query)
     else:
-        # No list filters, just one query
         query_combinations = [{**base_query, **scalar_filters}]
 
     return query_combinations

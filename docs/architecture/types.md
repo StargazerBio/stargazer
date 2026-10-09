@@ -25,7 +25,7 @@ There is no separate "storage primitive" layer. `Asset` is both the typed schema
 
 ## Asset: The Base Class
 
-`Asset` (`types/asset.py`) is a single dataclass for all typed file assets. Every file in the system is an Asset instance.
+`Asset` (`assets/asset.py`) is a single dataclass for all typed file assets. Every file in the system is an Asset instance.
 
 | Field | Type | Purpose |
 |-------|------|---------|
@@ -54,11 +54,11 @@ A bare `Asset` (no `_asset_key`) carries a free-form `keyvalues` dict, serialize
 
 ### Validation: `build_asset()`
 
-`build_asset(keyvalues, path=)` (`assets/__init__.py`) is the single validation choke point shared by the MCP server (`upload_file`, `update_file`) and the admin asset page (`/assets/sign` uploads and `/assets/update` metadata edits). It requires an `asset` key, rejects reserved `_`-prefixed keys (stamped automatically — see Ownership), validates registered keys strictly against their dataclass, and builds a bare `Asset` for unregistered keys. One place decides typed-vs-generic so the page and the SDK never drift.
+`build_asset(keyvalues)` (`assets/__init__.py`) is the single validation choke point shared by the MCP server (`upload_file`, `update_file`) and the admin asset page (`/assets/sign` uploads and `/assets/update` metadata edits). It requires an `asset` key, rejects reserved `_`-prefixed keys (stamped automatically — see Ownership), validates registered keys strictly against their dataclass, and builds a bare `Asset` for unregistered keys. One place decides typed-vs-generic so the page and the SDK never drift.
 
 ### Ownership (`_owner`)
 
-`_owner` is a reserved keyvalue stamped server-side for attribution — never typed by users (`build_asset()` rejects `_*` keys). `PinataClient.upload()` stamps it from `STARGAZER_OWNER` when set (env wins over any stale value); the admin page stamps the session user. It drives default filtering, not access control — the Pinata JWT is shared, so anyone with SDK/MCP access can read or delete anything. Hosted-deployment plumbing is in [App → Asset Manager](app.md#asset-manager).
+`_owner` is a reserved keyvalue stamped automatically for attribution — never typed by users (`build_asset()` rejects `_*` keys). The storage client stamps it from `STARGAZER_OWNER` on every index row it writes (`upload()` and `update_metadata()`), and `PinataClient` on public uploads; the env wins over any stale value, and with it unset nothing is stamped. The asset page stamps the signed-in user. It records who made a record; it grants or denies nothing, and on Pinata's public network anyone holding the key can edit or delete any record. Hosted-deployment plumbing is in [App → Asset Manager](app.md#asset-manager).
 
 ### Core Methods
 
@@ -79,11 +79,11 @@ Assets link to related files via `{asset_key}_cid` keyvalues. When `fetch()` is 
 3. Downloads all matching companions into the same directory, so tools find an index next to its file
 4. Returns the asset's local path
 
-Example: `Reference(cid="Qmref").fetch()` also finds and downloads any `ReferenceIndex` with `reference_cid="Qmref"`.
+Example: `Reference(cid="bafk…").fetch()` also finds and downloads any `ReferenceIndex` with `reference_cid="bafk…"`. Any asset recording that key counts, not only indexes: an `Alignment` records `reference_cid` too, so fetching a reference also downloads every alignment made against it. A mate isn't a companion — reads link each other through `mate_cid`, which no asset key produces.
 
 ## Assembly
 
-`assemble(**filters)` is a module-level async function in `types/asset.py`. It queries storage with keyvalue filters, deduplicates by CID, and returns a flat `list[Asset]` of specialized subclass instances.
+`assemble(**filters)` is a module-level async function in `assets/asset.py`. It queries storage with keyvalue filters, deduplicates by CID, and returns a flat `list[Asset]` of specialized subclass instances.
 
 Every filter must match exactly. A list value matches any of its entries, in a single query (the `asset` key accepts a list too).
 

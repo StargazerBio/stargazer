@@ -47,7 +47,6 @@ class TestGenerateQueryCombinations:
         # Should generate 2 x 2 = 4 combinations
         assert len(result) == 4
 
-        # Verify all combinations are present
         expected = [
             {"type": "reference", "build": "GRCh38", "tool": "fasta"},
             {"type": "reference", "build": "GRCh38", "tool": "bwa"},
@@ -72,7 +71,6 @@ class TestGenerateQueryCombinations:
         # Should generate 2 x 2 x 2 = 8 combinations
         assert len(result) == 8
 
-        # Verify a sample of combinations
         assert {
             "type": "reference",
             "build": "GRCh38",

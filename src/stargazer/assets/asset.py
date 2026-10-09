@@ -155,8 +155,9 @@ class Asset:
         """Make a local copy of this asset and its companions; return its path.
 
         The asset lands at `<STARGAZER_LOCAL>/<cid>/<name>`, and every asset
-        that names it via ``{_asset_key}_cid`` (indices, dictionaries, mate
-        reads) lands in the same directory, where tools look for them. An
+        that names it via ``{_asset_key}_cid`` (indices, dictionaries, and
+        any output that records it as a source) lands in the same directory,
+        where tools look for them. An
         asset built from a local file that was never uploaded is returned in
         place. Copies already on disk are reused.
         """

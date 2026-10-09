@@ -39,12 +39,12 @@ parabricks germline
 
 The script automatically:
 - Creates directories based on the first word of the command
-- Converts subcommands to lowercase with underscores
+- Lowercases the rest of the command and turns its spaces into underscores (no CamelCase splitting)
 - Saves output as markdown `.md` files
 - Strips HTML tags and formats as clean markdown
 
 **Examples:**
-- `gatk BaseRecalibrator` → `gatk/base_recalibrator.md`
+- `gatk BaseRecalibrator` → `gatk/baserecalibrator.md`
 - `parabricks fq2bam` → `parabricks/fq2bam.md`
 - `samtools view` → `samtools/view.md`
 
@@ -73,8 +73,8 @@ EOF
 ```
 
 This will create:
-- `gatk/base_recalibrator.md`
-- `gatk/apply_bqsr.md`
+- `gatk/baserecalibrator.md`
+- `gatk/applybqsr.md`
 - `parabricks/fq2bam.md`
 
 All files will be formatted as markdown with HTML tags cleaned up for easy reading.

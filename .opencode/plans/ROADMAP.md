@@ -4,14 +4,6 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 
 ## Upcoming
 
-- **Asset storage on the object store, indexed per user.** Asset bytes move
-   off Pinata into object storage as `flyte.io.File`s, identified by an IPFS
-   CID computed locally (it matches Pinata's). The keyvalue index moves into
-   SQLite: a file on disk when run locally, owned by each user's dashboard on Union
-   and served to task and notebook pods over HTTP. TinyDB, the two storage
-   modes and Pinata as the working store go. Pinata stays as the public tier
-   for shared data, attributed by `_owner`. The tenant checks are done.
-   [`27_asset_storage_index.md`](./27_asset_storage_index.md)
 - **Make `Asset.fetch()` cheaper.** Even when the file is already in the
    cache, `fetch()` looks up the asset's companions every time: one index
    query (an HTTP call to the dashboard on Union) and, with `PINATA_JWT` set,
@@ -25,8 +17,8 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    images on 2026-10-06, so deploys are back on the remote builder and the
    GHCR workaround is gone. Remaining:
    - **Union-native app secrets.** Dashboards carry no secret today (the
-     asset manager is off for that reason). When storage returns, its key
-     can't be baked into `env_vars`, where the owner sees it. Move to
+     asset manager is off for that reason). When the asset manager returns, a
+     Pinata key can't be baked into `env_vars`, where the owner sees it. Move to
      `flyte create secret` plus `secrets=[flyte.Secret(...)]`, after
      confirming Union injects app secrets at all.
    - **`flyte.deploy` with commit-SHA versions** in place of `flyte.serve`
@@ -90,15 +82,57 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    - `apply_bqsr` stores the recalibrated BAM but not its index, unlike
      `mark_duplicates` and `sort_sam`. The germline workflow still finishes
      on the devbox, so a later step may be indexing it again (inferred).
-   - `docs/architecture/configuration.md` → Building locally says the Flyte
-     images set no `registry=`; they take `STARGAZER_REGISTRY`, which the
-     devbox sets to its own registry.
-   - `tests/helpers.py` is imported nowhere.
-   - `tests/unit/test_devbox_dashboard.py` isn't `ruff format`ted on main.
+- **Code bugs found in the docs correctness sweep (2026-10-09).** Each
+   changes stored outputs or behavior, so each wants its own branch.
+   - `Asset.fetch()` pulls more than companions: any asset recording
+     `<key>_cid` comes along, so `Reference.fetch()` downloads every
+     `Alignment` made against it (`reference_cid`), and every task that
+     fetches the reference after alignment pays for them (measured against
+     an isolated store). Related to "Make `Asset.fetch()` cheaper".
+   - `normalize` copies `X` into `layers["counts"]` after `normalize_total`,
+     so the layer holds normalized counts (every row sums to ~498 on the
+     fixture), while its docstring, and `find_markers`, which tests on that
+     layer, say raw counts (measured).
+   - `variant_recalibrator` records the tranches file only as a path in its
+     own pod (`VQSRModel.tranches_path`) and never stores it, so
+     `apply_vqsr` in another pod can't read it (inferred from the code; no
+     test runs the two in separate pods). Plan 27's open Q20: the tranches
+     file should be its own companion asset.
+   - `haplotype_caller` sets `source_samples` to a string, not a list; it
+     round-trips as a string, so `len()` counts characters (measured: 7 for
+     `"NA12829"`).
+   - The scRNA tasks aren't exported from `stargazer.tasks`, so `list_tasks`
+     and the catalog omit them, and `run_task` can't run them.
+   - The default `PINATA_GATEWAY`, `https://dweb.link`, no longer serves
+     files: every request answers 429 "This IPFS gateway is switching to a
+     service worker gateway only" (`sunset: 21 Sep 2026`), so
+     `fetch_resource_bundle` and any public download fail on a default
+     config, and with them the README quickstart. `gateway.pinata.cloud`
+     answered a full download with a Cloudflare challenge (429) and
+     `w3s.link` with 429 (all measured 2026-10-09). The account's dedicated
+     gateway (`<name>.mypinata.cloud`) served the demo files during plan 27,
+     but anonymous downloads through it spend account bandwidth. Picking the
+     default is a decision, not a one-line fix.
 - **Notebooks on the devbox.** The devbox dashboard and asset storage work
    (`cli/devbox_dashboard.py`, a stand-in user), and a tutorial launched in
    run mode from that dashboard starts and serves marimo (2026-10-08). Edit
    mode, workspace saving and the in-notebook terminal haven't been driven.
+- **Local-to-cluster storage.** A run submitted from this machine with the
+   default local store and index has nowhere shared to write: those
+   defaults aren't forwarded into task pods (`_stargazer_env_vars` in
+   `config.py`), since a pod can't reach them. Today a remote run needs
+   `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` exported to a store and
+   index pods can reach, as in the devbox recipe in
+   `docs/guides/contributing.md`. Inputs uploaded to the local store before
+   the switch point at paths no pod can read. On Union a local machine can't
+   write to the bucket, and `HttpIndex` sends no token to the dashboard's
+   public URL. Plan 27's open Q15 and Q21.
+- **Asset storage follow-ups (plan 27).** `publish(asset)` to promote a
+   stored asset to Pinata's public network with its keyvalues and `_owner`
+   (the CID doesn't change); the asset-manager page on the index instead of
+   Pinata, which also retires most of the TUS browser-upload item; a
+   read-only Artifacts projection of selected outputs, for console lineage
+   and triggers.
 - **Union console handoff (per-user project access).** Delivered by the
    per-user dashboards' onboarding (users get `contributor` on their own
    project); what remains is the dashboard's link out to the console.
@@ -151,14 +185,16 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
     `[tool.stargazer]` table + settings modal — every new environment knob
     currently costs a form field, parser, writer, and template row — with one
     object that already has the whole Image API behind it. **Blocked on a
-    remote image builder:** the admin pod cannot build with the local Docker
-    builder (see `_build_and_push_notebook_image`). Scoped to workspace
+    remote image builder:** a dashboard pod has no Docker daemon, so today the
+    deployer builds the notebook image (`onboard.build_notebook_image`). Scoped to workspace
     notebooks first; image-baked tutorials/workflows deferred.
     [`23_notebook_declared_image.md`](./23_notebook_declared_image.md)
 
 ## Complete
 
+- ✅ Note and chat images rebuilt and published (2026-10-09): the Dockerfile's `base` stage ran `uv sync` with no extras, so the chat image couldn't start the MCP server its `.mcp.json` names or run the scRNA workflow, and it had no Flyte config. The GHCR `:latest` tags dated from 2026-05-21, and that note image opened a tutorial that no longer exists. `base` now installs the `mcp` and `bio` extras and writes the local Flyte config for both images. Both are published to GHCR for amd64 and arm64, as `:latest` and the commit's short hash. Verified on native arm64 builds: the chat image's server lists all ten tools, and with the demo files in its cache, `scrna_clustering_pipeline` stored `s1d1_markers.h5ad` (6,307 cells, annotated) in 84s; the note image serves the Assets tutorial. The bundle download itself still fails on the default gateway (above).
 - ✅ Per-user dashboard upgrades and a version tag (2026-10-09): `stargazer-users upgrade` used to deploy nothing while any user had a run going, though a redeploy only risks its own owner's index. It now goes one user at a time, checking each just before their deploy, skips busy users and comes back for them every minute until every dashboard is redeployed. Each dashboard carries the deployer's commit (`git describe --always --dirty`) as `STARGAZER_VERSION` and shows it in its footer. Verified on the tenant: with a run going in `u-pryce`, `upgrade` waited four passes, deployed once the run finished, and the dashboard served the commit in its footer.
+- ✅ Asset storage on the object store, indexed per user (2026-10-08, PR #13): asset bytes moved off Pinata into object storage as `flyte.io.File`s, identified by an IPFS CID computed locally (it matches Pinata's). The keyvalue index is SQLite: a file on disk locally, owned by each user's dashboard on Union, served to task and notebook pods over HTTP and kept durable by Litestream. TinyDB, the two storage modes and Pinata as the working store are gone; Pinata stays as the public tier for shared data, attributed by `_owner`. Verified on the tenant with the real scRNA pipeline for both demo samples and a 20-way fan-out. Its open questions and follow-ups are in Upcoming (Local-to-cluster storage, Asset storage follow-ups, the VQSR tranches bug). [`27_asset_storage_index.md`](./27_asset_storage_index.md)
 - ✅ Test tiers, and the germline workflow on the devbox (2026-10-08): each top-level directory under `tests/` belongs to exactly one tier, and its tests carry that tier's marker. `unit` (assets, notebooks, unit, utils) is a bare run, and pre-commit runs it on every commit. `tasks` runs every task test in the image its task runs in (`cli/docker_task_tests.py`): the GATK and alignment tests in `gatk_env`'s, which carries the tools so no one installs them (the tests that call them used to skip wherever the tools were missing, which was everywhere), and the scRNA ones in `scrna_env`'s. `pinata` holds the tests that call the real Pinata API. `devbox` tests deploy the dashboard, store and find assets across pods, and run `germline_short_variant_discovery` end to end on the devbox; the `verify-stargazer` devbox recipes drive them. A test never skips: outside its tier it's deselected, inside it a missing tool or service fails. Every Stargazer image is now x86_64-only, as on Union, because GATK's GenomicsDB has no arm64 build; on an Apple-silicon devbox those pods run emulated. Getting the workflow through on the devbox fixed six things. Task pods couldn't import `stargazer`, so the task images now install it. The devbox had no `PINATA_JWT` secret, so every task pod was refused; `cli/devbox-setup.sh` creates it. Picard's BAM index (`<name>.bai`) was never stored. Joint calling read contigs from a path it hadn't fetched, and now defaults to every contig. `bwa-mem2` couldn't find its CPU-specific binaries on x86_64, which likely broke it on Union too. And joint calling needed x86_64. Verified: unit 393 passed in 8s; tasks 52 passed, 37 in `gatk_env`'s image and 15 in `scrna_env`'s, in 2m34s including both image builds; devbox 6 passed in 2m55s, with the germline run joint-calling the cohort; one read-only pinata test passed.
 - ✅ Devbox dashboard and asset storage (2026-10-08): `cli/devbox_dashboard.py` deploys one dashboard on the devbox for a stand-in user (`SG_STAND_IN_SUBJECT`, never honored on Union), storing under `s3://flyte-data/stargazer`, and holds the storage port-forward open while it uploads. The Litestream launcher now takes an S3-compatible store's endpoint and keys from Flyte's `FLYTE_AWS_*`. Verified with the `verify-stargazer` devbox recipe: one pod stored three files, a second found and read them all back, and the index came back whole after two dashboard restarts.
 - ✅ Per-user dashboards (2026-10-06): the shared admin is replaced by one dashboard per user, in their own readable project (`u-<handle>`), serving only its owner. An org admin runs `stargazer-users onboard` to invite or find the user, create the project, grant `contributor` on it alone, and deploy the dashboard at a stable subdomain; `upgrade` is the release, `offboard` stops apps, removes access and archives. Union's app gate needs project view, so this keeps every user's console to their own project, and no privileged credential is deployed. Verified on the tenant end to end. Still open: whether an invited user's first sign-in arrives with the subject `User.create` returned (needs a real second address). [`26_per_user_dashboard.md`](./26_per_user_dashboard.md)

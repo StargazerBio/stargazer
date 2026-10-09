@@ -55,8 +55,8 @@ STARGAZER_LOCAL             → Scratch space and download cache (default: ~/.st
 
 #### Task Execution Environments
 ```
-@gatk_env.task   → GATK, BWA, samtools workloads (broadinstitute/gatk image)
-@scrna_env.task  → scanpy-based scRNA analysis (Debian + scanpy image)
+@gatk_env.task   → GATK, BWA, BWA-MEM2, samtools workloads (Debian + bioconda image)
+@scrna_env.task  → scanpy-based scRNA analysis (Debian + the `bio` extra)
 ```
 Resources are set on the TaskEnvironment in `config.py`, not per-task.
 
@@ -67,7 +67,7 @@ Resources are set on the TaskEnvironment in `config.py`, not per-task.
 
 ### Type System Rules
 
-All types inherit from `Asset` (in `types/asset.py`) and follow this pattern:
+All types inherit from `Asset` (in `assets/asset.py`) and follow this pattern:
 ```python
 @dataclass
 class TypeName(Asset):
@@ -77,8 +77,8 @@ class TypeName(Asset):
     # ... domain-specific fields with defaults
 
     # Inherited from Asset:
-    # cid: str = ""           — content identifier
-    # path: Path | None = None — local filesystem path (set after fetch/upload)
+    # cid: str = ""           — content identifier (IPFS CID, computed locally)
+    # path: File | None = None — the stored file (flyte.io.File), set by update()
     # to_keyvalues() → dict[str, str]  — serialize fields for storage
     # from_keyvalues(cls, kv) → Self    — reconstruct from storage
     # to_dict() → dict                  — full dict representation
@@ -87,7 +87,7 @@ class TypeName(Asset):
 **Review checklist for types:**
 - [ ] Inherits from `Asset` and sets `_asset_key` ClassVar
 - [ ] All fields have defaults (required by dataclass inheritance)
-- [ ] `fetch()` called before accessing `path`
+- [ ] Tools read the local path `fetch()` returns, not `asset.path` (the stored File)
 - [ ] Return types are properly annotated
 - [ ] No mutable default arguments (use `field(default_factory=...)`)
 - [ ] Fields support serialization via `to_keyvalues()` (str fields pass through, others use json)
@@ -151,7 +151,7 @@ step2 = await task_b(step1)  # Depends on step1
 - What if they haven't set `PINATA_JWT`?
 - What if the input files don't exist?
 - What if the output directory isn't writable?
-- What if they're offline and `LOCAL_ONLY=false`?
+- What if `PINATA_JWT` is set and the public tier returns records they didn't make?
 - What error message will they see? Is it actionable?
 
 **Common UX failures:**
@@ -173,10 +173,11 @@ step2 = await task_b(step1)  # Depends on step1
 - [ ] Fields not populated before storage (will serialize as empty strings)
 
 **Key provenance fields per type (check `src/stargazer/assets/`):**
-- `Reference`: `ref_name`, `build`, `tool`
-- `R1`/`R2`: `sample_id`
+- `Reference`: `build`
+- `R1`/`R2`: `sample_id`, `mate_cid`
 - `Alignment`: `sample_id`, `format`, `sorted`, `duplicates_marked`, `bqsr_applied`, `tool`, `reference_cid`, `r1_cid`
-- `Variants`: `sample_id`, `caller`, `is_gvcf`, `is_multi_sample`
+- `Variants`: `sample_id`, `caller`, `variant_type`, `build`, `sample_count`, `source_samples`
+- `docs/reference/catalog.md` lists every asset type's fields
 
 ### 3. Error Handling Violations
 
@@ -198,8 +199,8 @@ async def task_name(input: InputType) -> OutputType:
         raise ValueError(f"No CID set for {input.sample_id}")
 
     # Fetch and verify
-    await input.fetch()
-    if not input.path or not input.path.exists():
+    local = await input.fetch()
+    if not local.exists():
         raise FileNotFoundError(f"Failed to fetch asset for sample {input.sample_id}")
 
     # Run tool
@@ -241,7 +242,7 @@ async def my_task(...): ...
 - [ ] Args documentation with constraints
 - [ ] Returns documentation with file descriptions
 - [ ] Reference URL to tool documentation
-- [ ] Example usage in docstring or `if __name__ == "__main__"` block
+- [ ] Example inputs in the docstring
 
 **Missing documentation patterns to catch:**
 - Docstring that just repeats the function name
@@ -282,7 +283,7 @@ if apply_bqsr:
 
 **Every notebook in `src/stargazer/notebooks/` must have a smoke test:**
 - [ ] Notebook must import without errors and expose a `marimo.App` object
-- [ ] A corresponding parametrized test case must exist in `tests/notebooks/test_notebook_smoke.py` (auto-discovered via `pkgutil.iter_modules`, so adding the `.py` file is sufficient)
+- [ ] A corresponding parametrized test case must exist in `tests/notebooks/test_notebook_smoke.py` (it walks `src/stargazer/notebooks/`, so adding the `.py` file is sufficient)
 - [ ] Async cells must use `async def`, never `asyncio.get_event_loop().run_until_complete()`
 - [ ] Notebooks must only import from `stargazer.*` public APIs — never define production tasks or types inline
 - [ ] Every cell function must have a docstring
@@ -324,7 +325,7 @@ Actively search for edge cases:
 1. Empty inputs (empty lists, None values, empty strings)
 2. Missing files (input doesn't exist, fetch fails)
 3. Partial failures (tool runs but produces incomplete output)
-4. Environment variations (local-only, public IPFS, missing JWT)
+4. Environment variations (no `PINATA_JWT`, a public-gateway CID, the default local store vs a bucket)
 5. Resource exhaustion (disk full, OOM)
 
 ### Phase 5: Metadata Audit
@@ -378,37 +379,32 @@ Clarifying questions about design decisions.
 
 ### Critical Issues
 
-1. **Missing input validation** (line 45)
+1. **Output returned without being stored** (line 72)
    ```python
-   # Current - no validation
-   local_path = await alignment.fetch()
-
-   # Required - validate first
-   if not alignment.files:
-       raise ValueError(f"No alignment files for sample {alignment.sample_id}")
-   local_path = await alignment.fetch()
-   ```
-
-2. **Resource specs as integers** (line 23)
-   ```python
-   # Current
-   requests = {"cpu": 4, "mem": "16Gi"}
+   # Current — the asset has no CID or stored file
+   return Alignment(sample_id=alignment.sample_id, bqsr_applied=True)
 
    # Required
-   requests = {"cpu": "4", "mem": "16Gi"}
+   recal_bam = Alignment()
+   await recal_bam.update(output_bam, sample_id=alignment.sample_id, bqsr_applied=True)
+   return recal_bam
    ```
+
+2. **Fixed output filename** (line 47)
+   `output_dir / "recalibrated.bam"` collides when two samples run in one
+   process; name it after `alignment.sample_id`.
 
 3. **Missing output verification** (line 78)
    The task doesn't verify the recalibrated BAM was created before returning.
 
 ### Major Issues
 
-1. **No PINATA_JWT validation** (line 1-50)
-   If user runs without JWT set, they'll get a cryptic error
-   during upload. Should fail fast with clear message.
+1. **Provenance link missing** (line 72)
+   The output records no `reference_cid`, so nothing ties it to the
+   reference it was recalibrated against.
 
-2. **Incomplete keyvalues metadata** (line 72)
-   Missing `bqsr_applied: "true"` in output keyvalues.
+2. **Incomplete metadata** (line 72)
+   `duplicates_marked` isn't carried over from the input alignment.
 
 ### Edge Cases to Consider
 

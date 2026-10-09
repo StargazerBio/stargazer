@@ -45,7 +45,7 @@ class Notebook:
     """A single tile on the dashboard.
 
     `path_in_image` is the absolute path to the `.py` file inside the
-    `note` image. `section` drives which dashboard column the tile
+    `notebook-app` image. `section` drives which dashboard column the tile
     renders under and (with `slug`) keys the per-notebook AppEnvironment
     Knative name.
     """
