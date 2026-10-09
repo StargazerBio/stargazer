@@ -6,10 +6,10 @@ Stargazer exposes its bioinformatics capabilities through a [Model Context Proto
 
 | Transport | Client | Use Case |
 |-----------|--------|----------|
-| **stdio** (default) | Claude Code, OpenCode | Local. Client spawns `stargazer serve` as a subprocess. |
-| **Streamable HTTP** | Remote MCP clients | Remote. `stargazer serve --http`. |
+| **stdio** (default) | Claude Code, OpenCode | Local. The client spawns `stargazer` as a subprocess. |
+| **Streamable HTTP** | Remote MCP clients | Remote. `stargazer --http`. |
 
-The same server implementation supports both transports, selected at startup via CLI flag.
+The same server implementation supports both transports, selected at startup by the `--http` flag. The `stargazer` command needs the `mcp` extra installed.
 
 ## Tools
 
@@ -40,11 +40,11 @@ Tasks and workflows are not registered as individual MCP tools. The client disco
 |------|-------------|--------|
 | `query_files` | Find files by metadata | `keyvalues: dict[str, str]` |
 | `upload_file` | Upload a file with metadata | `path: str, keyvalues: dict[str, str]` |
-| `download_file` | Download a file by CID to local cache | `cid: str` |
-| `delete_file` | Delete a file by CID | `cid: str` |
+| `download_file` | Download a file by CID to the local cache | `cid: str` |
+| `delete_file` | Delete a file's index row and stored bytes by CID | `cid: str` |
 | `update_file` | Merge a metadata patch onto an existing file | `cid: str, keyvalues: dict[str, str]` |
 
-`upload_file` validates that `keyvalues["asset"]` is a registered asset key and that all other keys are declared fields on that asset subclass. `update_file` runs the same validation on its patch, then merges it onto the stored record — supplied keys are added or overwritten, omitted keys preserved (no key removal), and the bytes/CID are untouched so `*_cid` provenance edges stay valid. It's the in-place fix for a mis-tagged record (no delete-and-re-upload, no CID churn).
+`upload_file` requires `keyvalues["asset"]` and rejects underscore-prefixed keys, which are reserved and stamped automatically (`_owner`). A registered asset key validates strictly: every other key must be a declared field of that subclass. An unregistered key is stored as a generic asset, its keyvalues verbatim. `update_file` runs the same validation on its patch, then merges it onto the user's index row — supplied keys are added or overwritten, omitted keys preserved (no key removal), and the bytes/CID are untouched so `*_cid` provenance edges stay valid. It's the in-place fix for a mis-tagged record (no delete-and-re-upload, no CID churn). `download_file` fetches a CID that isn't in the user's index from the public IPFS gateway.
 
 ### Bundles
 
@@ -53,13 +53,13 @@ Tasks and workflows are not registered as individual MCP tools. The client disco
 | `list_bundles` | List available resource bundles | (none) |
 | `fetch_resource_bundle` | Download a predefined bundle into local storage | `bundle_name: str` |
 
-Bundles are curated sets of files defined as YAML manifests in the codebase. Each file carries a `bundle` keyvalue for queryability. `fetch_resource_bundle` downloads each file by CID from the IPFS gateway into the local cache and registers it in the user's index, so `assemble()` can discover it with or without a Pinata key. See [Configuration — Resource Bundles](configuration.md#resource-bundles).
+Bundles are curated sets of public files defined as YAML manifests in the codebase. `fetch_resource_bundle` downloads each file by CID from the IPFS gateway into the local cache and registers it in the user's index, so `assemble()` can discover it with or without a Pinata key. See [Configuration — Resource Bundles](configuration.md#resource-bundles).
 
 ## Resources
 
 | Resource | URI | Description |
 |----------|-----|-------------|
-| Server configuration | `stargazer://config` | Current mode, local directory, task/workflow counts |
+| Server configuration | `stargazer://config` | Whether a Pinata key is set, the store root, the index, the local directory, and task/workflow counts |
 
 ## Type Serialization
 
@@ -67,4 +67,4 @@ MCP tools accept and return JSON. Asset dataclasses serialize via `to_dict()`. T
 
 ## Error Handling
 
-Tool errors return structured content with error type and actionable message. The server does not crash on tool failure — it reports the error through the MCP response.
+A tool that raises returns an MCP error result carrying the exception's message: an unknown task or workflow names the available ones, and a task whose asset parameter matched nothing names the filters it tried. The server keeps running.

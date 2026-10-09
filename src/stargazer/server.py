@@ -4,7 +4,8 @@
 Exposes storage tools and a dynamic task runner via the MCP SDK's
 high-level `MCPServer` (named `FastMCP` before SDK 2.0).
 Tasks and workflows are auto-discovered from the registry and executed
-through the Flyte local run context.
+with `flyte.run`: remotely when `flyte.init_from_config()` finds an
+endpoint in `.flyte/config.yaml`, in-process otherwise.
 
 Usage:
     stargazer              # stdio transport (default)
@@ -15,6 +16,7 @@ spec: [docs/architecture/mcp-server.md](../architecture/mcp-server.md)
 
 import json
 import os
+import sys
 import types as _types
 from pathlib import Path
 from typing import Any, get_args, get_origin
@@ -22,6 +24,7 @@ from typing import Any, get_args, get_origin
 import flyte
 from mcp.server import MCPServer
 
+import stargazer.bundles as _bundles
 import stargazer.config  # ensure env var defaults are set  # noqa: F401
 import stargazer.utils.storage as _storage
 from stargazer.assets import build_asset
@@ -36,20 +39,17 @@ def _asset_key_for_hint(hint: Any) -> str | None:
     Handles plain Asset subclasses, list[Asset], and unions containing Assets.
     Returns None for non-Asset hints (scalars, Path, etc.).
     """
-    # Direct Asset subclass
     if isinstance(hint, type) and issubclass(hint, Asset) and hint._asset_key:
         return hint._asset_key
 
     origin = get_origin(hint)
     args = get_args(hint)
 
-    # list[AssetSubclass]
     if origin is list and args:
         inner = args[0]
         if isinstance(inner, type) and issubclass(inner, Asset) and inner._asset_key:
             return inner._asset_key
 
-    # Union / X | Y — find the Asset branch
     if isinstance(hint, _types.UnionType) and args:
         for arg in args:
             if arg is type(None):
@@ -160,31 +160,27 @@ def list_bundles() -> list[dict]:
     Returns:
         List of bundles with name, description, and file_count.
     """
-    from stargazer.bundles import list_bundles as _list_bundles
-
-    return _list_bundles()
+    return _bundles.list_bundles()
 
 
 @mcp.tool()
 async def fetch_resource_bundle(bundle_name: str) -> list[dict]:
     """Download a predefined resource bundle into local storage.
 
-    Bundles are curated sets of files (e.g. reference genomes, demo datasets)
-    defined in the codebase. Each file is identified by CID and downloaded
-    via the standard storage path (signed URL with JWT, or public IPFS gateway).
-
-    When PINATA_JWT is set, remote metadata is authoritative and overwrites
-    local records. Without a JWT, the bundle manifest provides the metadata.
+    Bundles are curated sets of public files (e.g. reference genomes, demo
+    datasets) defined in the codebase. Each file is downloaded by CID from
+    the public IPFS gateway and recorded in the user's index with the
+    manifest's keyvalues, so assemble() and query_files find it afterwards,
+    with or without a Pinata key.
 
     Args:
         bundle_name: Name of the bundle (from list_bundles).
 
     Returns:
-        List of fetched files with cid, keyvalues, and local path.
+        List of fetched files with cid, name, keyvalues, local path, and
+        whether each was already cached.
     """
-    from stargazer.bundles import fetch_bundle
-
-    return await fetch_bundle(bundle_name)
+    return await _bundles.fetch_bundle(bundle_name)
 
 
 # ---------------------------------------------------------------------------
@@ -211,15 +207,18 @@ async def run_task(task_name: str, filters: dict, inputs: dict | None = None) ->
 
     Use this for testing individual tools in isolation. Asset parameters
     are assembled from storage using the provided filters — one call to
-    assemble() resolves all required assets. Scalar and Path parameters
-    are passed separately via inputs.
+    assemble() resolves all required assets, and every filter must match
+    each asset, so assets with different keys (a reference's build, a
+    sample's sample_id) can't be filled from one call. Scalar and Path
+    parameters are passed separately via inputs.
 
     For reproducible pipeline runs, use run_workflow instead.
 
     Args:
         task_name: Name of the task (from list_tasks with category="task").
         filters: Keyvalue filters for assemble() to resolve asset parameters
-                 (e.g. {"build": "GRCh38", "sample_id": "NA12878"}).
+                 (e.g. {"asset": "reference", "build": "GRCh38"}); a list
+                 value matches any of its entries.
         inputs: Optional scalar/Path keyword arguments (str, int, bool, list[str]).
 
     Returns:
@@ -234,11 +233,8 @@ async def run_task(task_name: str, filters: dict, inputs: dict | None = None) ->
         raise ValueError(f"{task_name!r} is a workflow — use run_workflow instead.")
 
     inputs = inputs or {}
-
-    # Assemble all assets from storage in one query
     assets = await assemble(**filters) if filters else []
 
-    # Build kwargs: match Asset params from the assembled list, scalars from inputs
     kwargs = {}
     for p in info.params:
         asset_key = _asset_key_for_hint(p.type_hint)
@@ -296,8 +292,6 @@ async def _execute(info: TaskInfo, kwargs: dict) -> dict:
     run = flyte.run(info.task_obj, **kwargs)
     run.wait()
     named = run.outputs().named_outputs  # {"o0": value, ...}
-
-    # Unwrap single outputs; keep dict for multi-output tasks
     if len(named) == 1:
         result = next(iter(named.values()))
     else:
@@ -334,8 +328,6 @@ async def show_config() -> str:
 
 def main():
     """Run the Stargazer MCP server."""
-    import sys
-
     transport = "stdio"
     if "--http" in sys.argv:
         transport = "streamable-http"
