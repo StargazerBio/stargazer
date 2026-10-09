@@ -162,6 +162,10 @@ project/
     └── test_hello_world.py   # Simple type tests (local_flyte.run)
 ```
 
+## Tests That Need Bioinformatics Tools
+
+Tests under `tests/tasks/gatk/` and `tests/tasks/general/` call `gatk`, `bwa` or `samtools` and skip when the tool isn't on PATH. To run them without installing the tools, use `uv run python cli/docker_task_tests.py`: pytest runs in a local docker container from `gatk_env`'s image, with the repo mounted, and the tests call the tasks in-process there as they do locally.
+
 ## Best Practices
 
 1. **Always call `flyte.init_from_config()`** in a session-scoped fixture

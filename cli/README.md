@@ -111,3 +111,23 @@ It prints the dashboard's URL. What each setting is for, and how to send runs'
 assets to it:
 [`.opencode/reference/devbox_workarounds.md`](../.opencode/reference/devbox_workarounds.md)
 → Devbox dashboard.
+
+## docker_task_tests.py
+
+Runs the GATK and alignment task tests in `gatk_env`'s image, locally in
+docker. They skip without `gatk`, `bwa` and `samtools` on your PATH; this
+builds that image into your local docker (x86_64, like Union; never pushed)
+and runs pytest in it, with the repo mounted. On Apple silicon it runs under
+emulation. Source changes need no
+rebuild. The run fails if any of those tools is missing from the image, so the
+tests can't pass by skipping. Needs docker, not the devbox.
+
+```bash
+uv run python cli/docker_task_tests.py [pytest args...]
+```
+
+With no arguments it runs `tests/tasks/gatk` and `tests/tasks/general`. It
+exits with pytest's exit code. The first build takes a minute or so from a
+warm cache; later runs start in seconds. The scRNA tests don't belong here:
+they need the `bio` extra, which this image doesn't carry, and they run
+locally.

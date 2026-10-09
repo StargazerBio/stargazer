@@ -51,6 +51,14 @@ pytest tests/
 
 Tests run with no `PINATA_JWT`. Every test gets its own empty store, index and cache under its temp directory, so nothing touches `~/.stargazer`; tests that query the fixture files use a store seeded once per session (`tests/fixtures/seed.py`). Tests marked `pinata` call the real Pinata API with the key in `tests/.secrets/pinata_jwt`. They don't run by default; `uv run pytest -m pinata` runs them, and they skip without the key.
 
+The GATK and alignment task tests (`tests/tasks/gatk/`, `tests/tasks/general/`) skip when `gatk`, `bwa` or `samtools` isn't on your PATH. Without those tools installed, run them in docker instead, in the image those tasks run on:
+
+```bash
+uv run python cli/docker_task_tests.py
+```
+
+It builds the image the first time (x86_64, as on Union; emulated on Apple silicon), mounts your checkout, and exits with pytest's exit code. Pass pytest arguments to run a subset, such as `tests/tasks/gatk/test_sort_sam.py -v`.
+
 ```bash
 pytest tests/unit/
 pytest tests/integration/
