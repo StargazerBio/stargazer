@@ -147,6 +147,13 @@ def log_execution() -> str:
     return execution_id
 
 
+# Both task images install the stargazer package itself, not only its
+# dependencies. A task pod resolves the tasks it calls as installed modules
+# (`stargazer.tasks…`), so without the package a workflow's child tasks can't
+# import, wherever the run was submitted from. The project's files feed the
+# image hash, so a source change builds a new image; .dockerignore keeps docs,
+# tests and git history out of it.
+
 # scRNA-seq task environment for scanpy-based single-cell analysis.
 # Lean image: the project's `bio` extra on top of the Flyte debian base —
 # scanpy plus what its steps import lazily (scikit-image for scrublet's
@@ -161,7 +168,11 @@ scrna_env = flyte.TaskEnvironment(
             registry=os.environ.get("STARGAZER_REGISTRY"),
         )
         .with_apt_packages("ca-certificates")
-        .with_uv_project(PROJECT_ROOT / "pyproject.toml", extra_args="--extra bio")
+        .with_uv_project(
+            PROJECT_ROOT / "pyproject.toml",
+            extra_args="--extra bio",
+            project_install_mode="install_project",
+        )
     ),
     resources=flyte.Resources(memory=("2Gi", "6Gi")),
     env_vars=STARGAZER_ENV_VARS,
@@ -204,7 +215,9 @@ gatk_env = flyte.TaskEnvironment(
                 "&& ln -s /opt/conda/bin/bwa-mem2 /usr/local/bin/bwa-mem2",
             ]
         )
-        .with_uv_project(PROJECT_ROOT / "pyproject.toml")
+        .with_uv_project(
+            PROJECT_ROOT / "pyproject.toml", project_install_mode="install_project"
+        )
     ),
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,

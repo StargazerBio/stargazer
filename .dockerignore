@@ -1,10 +1,19 @@
-scratch/
-__pycache__/
-__marimo__/
-*.egg-info
-.venv/
-.ruff_cache
-# Local-only state: credentials and the Flyte CLI cache (which changes every
-# run and would otherwise change every image hash built from this context).
-.env
-.flyte/
+# An allowlist: only what an image build copies. Every file left in the
+# context feeds the hash of the images that install the project (the task
+# images, the dashboard), so anything else here (docs, tests, git history, a
+# pytest cache, the Flyte CLI cache, .env) would rebuild them on every change.
+*
+!src
+!app
+!pyproject.toml
+!uv.lock
+!README.md
+# The root Dockerfile's MCP config.
+!.mcp.json
+!.claude
+.claude/*
+!.claude/settings.json
+**/__pycache__
+**/__marimo__
+**/*.egg-info
+**/.DS_Store
