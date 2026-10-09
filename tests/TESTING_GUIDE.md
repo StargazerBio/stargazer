@@ -4,6 +4,24 @@
 
 This guide explains how to test Flyte v2 tasks with pytest, based on the working implementation in this project.
 
+## Test Tiers
+
+Every test belongs to one tier, chosen by its pytest marker. A bare `pytest` run is the unit tier; the others are opt-in (`addopts` in `pyproject.toml`), and `--strict-markers` turns a misspelled marker into an error.
+
+| Tier | Marker | Where it runs | Command |
+|------|--------|---------------|---------|
+| Unit | none | This venv, on every commit (pre-commit) | `uv run --all-extras pytest` |
+| Tools | `tools` | `gatk_env`'s image, x86_64 | `uv run --all-extras python cli/docker_task_tests.py` |
+| Devbox | `devbox` | The local devbox | `uv run --all-extras pytest -m devbox` |
+| Pinata | `pinata` | Against the real Pinata API | `uv run --all-extras pytest -m pinata` |
+
+- **Unit:** anything that runs on Python alone, the scRNA task tests and the notebook smoke tests included. Hence `--all-extras`: they need the `bio` and `notebook` extras.
+- **Tools:** a test that calls a task wrapping a command-line tool (gatk, bwa, bwa-mem2, samtools). Those tools are only in `gatk_env`'s image, so no one has to install them. The runner builds the image as a task pod gets it, with the project installed, and mounts only `tests/` and `pyproject.toml`. So a source change builds the image again before the tests run. x86_64 like Union, emulated on Apple silicon.
+- **Devbox:** anything that needs a cluster: deploying the dashboard, running workflows across pods, the devbox's object store and index. The session deploys the dashboard itself and passes the devbox storage settings to each run. It needs the devbox up, with `cli/devbox-setup.sh` applied. Pod-side tasks live in `tests/devbox/pod_tasks.py`, which imports only what the task image carries.
+- **Pinata:** calls the real API with the key in `tests/.secrets/pinata_jwt`, and fails without it.
+
+A marked test never skips for a missing tool or service. Outside its tier it's deselected; inside it, a missing tool or an unreachable devbox fails the test, so a run can't pass by testing nothing. Running a workflow locally, outside the tests, needs its tools on your own PATH; nothing here requires them.
+
 ## The Problem
 
 When testing Flyte v2 tasks, you may encounter:
@@ -161,10 +179,6 @@ project/
     ├── hello_world.py        # Simple task example
     └── test_hello_world.py   # Simple type tests (local_flyte.run)
 ```
-
-## Tests That Need Bioinformatics Tools
-
-Tests under `tests/tasks/gatk/` and `tests/tasks/general/` call `gatk`, `bwa` or `samtools` and skip when the tool isn't on PATH. To run them without installing the tools, use `uv run python cli/docker_task_tests.py`: pytest runs in a local docker container from `gatk_env`'s image, with the repo mounted, and the tests call the tasks in-process there as they do locally.
 
 ## Best Practices
 

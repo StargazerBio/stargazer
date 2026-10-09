@@ -2,8 +2,6 @@
 Tests for sort_sam task.
 """
 
-import shutil
-
 import pytest
 from conftest import GATK_FIXTURES_DIR
 
@@ -11,12 +9,10 @@ from stargazer.assets import Alignment
 from stargazer.tasks.gatk.sort_sam import sort_sam
 
 
+@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_sort_sam_sorts_bam(fixtures_db):
     """Test that sort_sam creates a sorted BAM."""
-    if shutil.which("gatk") is None:
-        pytest.skip("gatk not available in environment")
-
     sample_id = "NA12829_TP53_merged"
 
     alignment = Alignment(

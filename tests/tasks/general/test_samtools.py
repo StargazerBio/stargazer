@@ -2,7 +2,6 @@
 Tests for samtools tasks.
 """
 
-import shutil
 from pathlib import Path
 
 import pytest
@@ -12,12 +11,10 @@ from stargazer.assets import Reference, ReferenceIndex
 from stargazer.tasks.general.samtools import samtools_faidx
 
 
+@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_samtools_faidx(fixtures_db):
     """Test samtools faidx creates .fai index file."""
-    if shutil.which("samtools") is None:
-        pytest.skip("samtools not available in environment")
-
     ref = Reference(path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
 
     fixtures_db()  # checkout: switch to isolated work dir
@@ -32,12 +29,10 @@ async def test_samtools_faidx(fixtures_db):
     assert result.path.name.endswith(".fai")
 
 
+@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_samtools_faidx_idempotent(fixtures_db):
     """Test that samtools_faidx is idempotent (doesn't fail if .fai already exists)."""
-    if shutil.which("samtools") is None:
-        pytest.skip("samtools not available in environment")
-
     ref = Reference(path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
 
     fixtures_db()  # checkout
@@ -51,9 +46,6 @@ async def test_samtools_faidx_idempotent(fixtures_db):
 @pytest.mark.asyncio
 async def test_samtools_faidx_missing_file():
     """Test that samtools_faidx raises error when reference file is missing."""
-    if shutil.which("samtools") is None:
-        pytest.skip("samtools not available in environment")
-
     ref = Reference(path=Path("/nonexistent/path/ref.fasta"), build="GRCh38")
 
     with pytest.raises((FileNotFoundError, RuntimeError)):

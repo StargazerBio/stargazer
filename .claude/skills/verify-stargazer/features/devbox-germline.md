@@ -16,31 +16,21 @@
 
 ## Driving it
 
-Preconditions:
+Driven by the devbox test tier, `tests/devbox/test_germline.py`. The session deploys the dashboard and passes the devbox storage settings to every run, so nothing needs exporting first.
 
-- Everything [Asset storage on the devbox](./devbox-asset-storage.md) lists, plus a deployed dashboard: `curl -s -o /dev/null -w "%{http_code}" http://dashboard-flytesnacks-development.devbox.stargazer.bio:30081/` prints `200`.
-- `cli/devbox-setup.sh` has run since the devbox was created, so its verify step printed `✓ PINATA_JWT secret present`.
-- These are exported, exactly:
-
-  ```bash
-  export STARGAZER_STORE_ROOT=s3://flyte-data/stargazer
-  export STARGAZER_INDEX_URL=http://dashboard-flytesnacks-development.flyte.svc.cluster.local
-  export STARGAZER_OWNER=devbox-user
-  ```
-
-The script below opens the store port-forward itself. Each subcommand prints its run URL.
+Preconditions: the same as [Asset storage on the devbox](./devbox-asset-storage.md).
 
 Steps:
 
-- **Seed.** Run `uv run --all-extras python .claude/skills/verify-stargazer/scripts/devbox_germline.py seed`. It ends with the three CIDs it stored (`reference`, `r1`, `r2`) and exits `0`. Seeding twice stores the same CIDs again, which is harmless. Covers `devbox-germline-seed`.
-- **Run.** Run `uv run --all-extras python .claude/skills/verify-stargazer/scripts/devbox_germline.py run <cohort>` with a cohort ID not used before. It ends with `output: Variants(...)` and exits `0`; a failed run raises and exits non-zero. In the run's page, every action succeeded, `joint_call_gvcfs` included. With the image already built, the run takes about a minute and a half (1m26s measured 2026-10-08). Covers `devbox-germline-run` and `devbox-germline-joint-call`.
-- **Check.** Run `uv run --all-extras python .claude/skills/verify-stargazer/scripts/devbox_germline.py check <cohort>`. It prints the VCF's keyvalues (`sample_id` is the cohort), its samples, its record count and contigs, then `ok`, and exits `0`. `samples` is `["NA12829"]`, `records` is above zero, and `contigs` is `["chr17:7658421-7697490"]`. Covers `devbox-germline-output`.
-- **Proof.** Keep all three outputs and the run URLs.
+- **Run the tests.** Run `uv run --all-extras pytest -m devbox -rP tests/devbox/test_germline.py`. Both tests pass and it exits `0`. Their shared setup seeds the TP53 reference and NA12829's reads from a pod (`devbox-germline-seed`), then runs the workflow for a fresh cohort, which has to succeed (`devbox-germline-run`).
+  - `test_workflow_joint_calls_the_cohort` covers `devbox-germline-joint-call`: the workflow returns a VCF from `joint_call_gvcfs` for the cohort, built from `NA12829` on `GRCh38`.
+  - `test_cohort_vcf_found_from_another_pod` covers `devbox-germline-output`: another pod finds the VCF by cohort, and it holds sample `NA12829`, contig `chr17:7658421-7697490`, and at least one record.
+- **Proof.** Keep the pytest output. `-rP` prints each run's URL. With the images already built, the workflow run takes about a minute and a half (1m26s measured 2026-10-08).
 
 ## Gotchas
 
 - Every Stargazer image is built for x86_64 only. On Apple silicon the devbox runs natively and these pods run emulated, which is slower than Union. Don't start the devbox itself as x86_64: no pod ever starts (`.opencode/reference/devbox_workarounds.md`, "Stargazer pods run x86_64 on an arm64 devbox").
-- The first `seed` or `run` after a source change builds the GATK image under emulation. When only the source changed, that's the install layer; a recipe change rebuilds more.
-- `run` bundles code from the repo root, as SDK code does by default. `seed` and `check` bundle only this skill's `scripts/` directory, and their pods import `stargazer` from the image.
-- After the devbox is recreated, clear Flyte's local cache before the first run (`.opencode/reference/devbox_workarounds.md`, "Laptop-side Flyte cache"), and seed again: the store and the index went with it.
+- The first run after a source change builds the GATK image under emulation. When only the source changed, that's the project's install layer; a recipe change rebuilds more.
+- The tests bundle code from the repo root, as SDK code does by default. Their pods import `tests.devbox.pod_tasks` from the bundle and `stargazer` from the image.
+- After the devbox is recreated, clear Flyte's local cache before the first run (`.opencode/reference/devbox_workarounds.md`, "Laptop-side Flyte cache"). Each session seeds again, so the store and index needn't survive.
 - A run with no `PINATA_JWT` secret on the devbox fails before any pod starts, with `none of the secret managers injected secret`. `cli/devbox-setup.sh` creates it.

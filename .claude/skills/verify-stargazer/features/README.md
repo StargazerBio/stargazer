@@ -22,13 +22,13 @@ The maintained source for verifying Stargazer's user-facing behavior. Read this 
 
 ## Feature entry contract
 
-Each feature file starts with an H1 title and one paragraph describing the user-visible behavior, then four H2 sections in this order: `Sub-features`, `How to get to it (user POV)`, `Driving it with marimo export` (or `Driving it`, for a feature driven by a script rather than a notebook), `Gotchas`.
+Each feature file starts with an H1 title and one paragraph describing the user-visible behavior, then four H2 sections in this order: `Sub-features`, `How to get to it (user POV)`, `Driving it with marimo export` (or `Driving it`, for a feature driven by tests rather than a notebook), `Gotchas`.
 
 ## Features
 
 - [scRNA-seq pipeline notebook](./scrna-pipeline.md) covers loading the demo samples, the fan-out of preprocessing and clustering, and the per-sample summary.
-- [Asset storage on the devbox](./devbox-asset-storage.md) covers the devbox dashboard, storing and finding assets across task pods, and the index surviving a dashboard restart. It needs the devbox, not the Launch block.
-- [Germline variant calling on the devbox](./devbox-germline.md) covers seeding a reference and paired reads, the germline workflow from alignment to joint calling with each step in its own pod, and finding the cohort's VCF afterwards. It needs the devbox and its dashboard, not the Launch block.
+- [Asset storage on the devbox](./devbox-asset-storage.md) covers the devbox dashboard, storing and finding assets across task pods, and the index surviving a dashboard restart. It needs the devbox, not the Launch block, and is driven by the devbox test tier (`pytest -m devbox`).
+- [Germline variant calling on the devbox](./devbox-germline.md) covers seeding a reference and paired reads, the germline workflow from alignment to joint calling with each step in its own pod, and finding the cohort's VCF afterwards. It needs the devbox, not the Launch block, and is driven by the devbox test tier.
 
 ## Not yet mapped
 

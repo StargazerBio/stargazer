@@ -45,7 +45,7 @@ There is no single host/IP that's reachable from both the laptop and from in-clu
    - DNS / `/etc/hosts`: `rustfs-svc.flyte → 127.0.0.1`
    - Port-forward: `kubectl port-forward -n flyte svc/rustfs-svc 9000:9000`
 
-   `cli/devbox_dashboard.py` holds the port-forward open while it deploys (reusing one already listening on :9000), and so does the verify skill's devbox probe. Anything else that uploads from the laptop, such as a `flyte.run` against the devbox, needs the forward running: without it the code-bundle upload logs `Upload failed … ConnectError: All connection attempts failed` (measured 2026-10-08).
+   `cli/devbox_dashboard.py` holds the port-forward open while it deploys (reusing one already listening on :9000), and so do the devbox tests (`pytest -m devbox`). Anything else that uploads from the laptop, such as a `flyte.run` against the devbox, needs the forward running: without it the code-bundle upload logs `Upload failed … ConnectError: All connection attempts failed` (measured 2026-10-08).
 
 ---
 

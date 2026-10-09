@@ -2,8 +2,6 @@
 Tests for create_sequence_dictionary task.
 """
 
-import shutil
-
 import pytest
 from conftest import GENERAL_FIXTURES_DIR
 
@@ -11,12 +9,10 @@ from stargazer.assets import Reference, SequenceDict
 from stargazer.tasks.gatk.create_sequence_dictionary import create_sequence_dictionary
 
 
+@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_create_sequence_dictionary_creates_dict(fixtures_db):
     """Test create_sequence_dictionary creates .dict file."""
-    if shutil.which("gatk") is None:
-        pytest.skip("gatk not available in environment")
-
     ref = Reference(
         path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa",
         build="GRCh38",

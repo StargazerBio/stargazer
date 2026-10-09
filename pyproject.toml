@@ -61,10 +61,15 @@ python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
 asyncio_mode = "auto"
-# Pinata tests call the real API (uploads up to ~100 MB), so they're opt-in:
-# `uv run pytest -m pinata`. A `-m` on the command line replaces this one.
-addopts = ["-m", "not pinata"]
+# A bare run is the unit tier: everything that runs in this venv. The other
+# tiers are opt-in by marker (tests/TESTING_GUIDE.md); a `-m` on the command
+# line replaces this one. Pinata tests call the real API (uploads up to
+# ~100 MB). --strict-markers makes a misspelled marker an error rather than a
+# test that silently lands in the wrong tier.
+addopts = ["--strict-markers", "-m", "not tools and not devbox and not pinata"]
 markers = [
+    "tools: needs gatk_env's command-line tools; runs in its image via cli/docker_task_tests.py",
+    "devbox: needs the local devbox; run with `uv run --all-extras pytest -m devbox`",
     "pinata: calls the real Pinata API with tests/.secrets/pinata_jwt; opt-in with -m pinata",
 ]
 filterwarnings = [

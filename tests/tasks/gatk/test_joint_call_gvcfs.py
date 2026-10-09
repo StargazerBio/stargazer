@@ -2,8 +2,6 @@
 Tests for joint_call_gvcfs task.
 """
 
-import shutil
-
 import pytest
 from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
 
@@ -11,12 +9,10 @@ from stargazer.assets import Reference, Variants
 from stargazer.tasks.gatk.joint_call_gvcfs import joint_call_gvcfs
 
 
+@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_joint_call_gvcfs_defaults_to_every_contig(fixtures_db):
     """With no intervals, joint calling covers every contig in the reference."""
-    if shutil.which("gatk") is None:
-        pytest.skip("gatk not available in environment")
-
     gvcf = Variants(
         path=GATK_FIXTURES_DIR / "NA12829_TP53.g.vcf",
         sample_id="NA12829",

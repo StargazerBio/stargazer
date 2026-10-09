@@ -2,8 +2,9 @@
 
 PINATA_JWT is stripped before any stargazer imports, so storage runs without
 the public tier. Tests marked @pytest.mark.pinata get the JWT injected from
-tests/.secrets/pinata_jwt at runtime. They're deselected by default
-(`addopts` in pyproject.toml); `uv run pytest -m pinata` runs them.
+tests/.secrets/pinata_jwt at runtime. Like the `tools` and `devbox` tiers,
+they're deselected by default (`addopts` in pyproject.toml); `uv run pytest -m
+pinata` runs them.
 
 Every test runs against its own empty store, index and cache under tmp_path
 (`isolated_storage`, autouse), so nothing reads or writes ~/.stargazer.
@@ -73,16 +74,17 @@ def seeded_client(tmp_path_factory) -> StorageClient:
 def pytest_runtest_setup(item):
     """Inject PINATA_JWT for tests marked @pytest.mark.pinata.
 
-    Loads the JWT from tests/.secrets/pinata_jwt. If the file doesn't
-    exist, the test is skipped.
+    Loads the JWT from tests/.secrets/pinata_jwt. A run that selected
+    these tests without a JWT fails rather than skipping, so it can't pass
+    by testing nothing.
     """
     if item.get_closest_marker("pinata"):
         jwt_file = SECRETS_DIR / "pinata_jwt"
         if not jwt_file.exists():
-            pytest.skip(f"Pinata JWT not found — put your token in {jwt_file}")
+            pytest.fail(f"Pinata JWT not found — put your token in {jwt_file}")
         jwt = jwt_file.read_text().strip()
         if not jwt:
-            pytest.skip(f"Pinata JWT file is empty: {jwt_file}")
+            pytest.fail(f"Pinata JWT file is empty: {jwt_file}")
         os.environ["PINATA_JWT"] = jwt
 
 

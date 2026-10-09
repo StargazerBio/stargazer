@@ -114,20 +114,20 @@ assets to it:
 
 ## docker_task_tests.py
 
-Runs the GATK and alignment task tests in `gatk_env`'s image, locally in
-docker. They skip without `gatk`, `bwa` and `samtools` on your PATH; this
-builds that image into your local docker (x86_64, like Union; never pushed)
-and runs pytest in it, with the repo mounted. On Apple silicon it runs under
-emulation. Source changes need no
-rebuild. The run fails if any of those tools is missing from the image, so the
-tests can't pass by skipping. Needs docker, not the devbox.
+Runs the `tools` test tier: the tests marked `tools`, which call tasks
+wrapping gatk, bwa, bwa-mem2 or samtools. Those tools are installed in
+`gatk_env`'s image, not on your machine. This builds that image into your
+local docker as a task pod gets it (x86_64 like Union, emulated on Apple
+silicon; never pushed) and runs pytest in it against the stargazer the image
+installs. Only `tests/` and `pyproject.toml` are mounted, so a source change
+builds the image again first. Needs docker, not the devbox.
 
 ```bash
-uv run python cli/docker_task_tests.py [pytest args...]
+uv run --all-extras python cli/docker_task_tests.py [paths or -k EXPR]
 ```
 
-With no arguments it runs `tests/tasks/gatk` and `tests/tasks/general`. It
-exits with pytest's exit code. The first build takes a minute or so from a
-warm cache; later runs start in seconds. The scRNA tests don't belong here:
-they need the `bio` extra, which this image doesn't carry, and they run
-locally.
+With no arguments it runs every `tools` test under `tests/`; paths or `-k`
+pick a subset. The tests are collected in your venv, since the image can't
+import every test module, and their IDs passed to pytest in the container.
+It exits with pytest's exit code.
+

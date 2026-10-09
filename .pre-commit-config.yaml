@@ -35,3 +35,12 @@ repos:
         language: system
         pass_filenames: false
         files: ^(src/stargazer/(server|registry|marshal)\.py|src/stargazer/assets/.*\.py|pyproject\.toml)$
+      # The unit tier: a bare pytest run, which excludes the `tools`, `devbox`
+      # and `pinata` tiers (`addopts` in pyproject.toml). The scRNA tests need
+      # the `bio` extra and the notebook smoke tests `notebook`, so all extras.
+      - id: unit-tests
+        name: unit tests (pytest)
+        entry: uv run --all-extras pytest -q
+        language: system
+        pass_filenames: false
+        files: ^(src/|app/|cli/|tests/|pyproject\.toml$|uv\.lock$)

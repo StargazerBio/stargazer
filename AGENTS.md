@@ -34,7 +34,7 @@
 - Tests will run until they pass
 - Passing tests are not proof a feature works. Before declaring user-facing work done, drive it on its real surface with the `verify-stargazer` skill when its feature map covers it, and report the evidence
 - Every claim in a report carries its evidence or a label: measured, inferred, or guess. Never hand the user a check you could run yourself
-- All necessary CLI tools e.g. parabricks, bwa etc, are available in PATH. Use them to generate test assets as needed and alert the user if they are not available.
+- The bioinformatics CLI tools (gatk, bwa, bwa-mem2, samtools) are not on the dev machine's PATH. They live in `gatk_env`'s image: tests that call them are marked `tools` and run there (`uv run --all-extras python cli/docker_task_tests.py`), and test assets that need them are generated in that image too (`docker run --platform linux/amd64 <image> ...`). Don't install them locally or ask the user to.
 - When adding a task that wraps a new CLI tool, check the `TaskEnvironment` it is decorated against in `src/stargazer/config.py` and confirm the tool is layered onto that env's `flyte.Image` (via `with_apt_packages`, `with_commands`, or the bioconda block in `_BIOCONDA_INSTALL`). If it is missing, add it and notify the user.
 - When defining a new `TaskEnvironment` in `src/stargazer/config.py`, always call `.with_uv_project(PROJECT_ROOT / "pyproject.toml")` on its image so the stargazer package and its pip deps end up installed, and set explicit `resources=` (e.g. `flyte.Resources(memory=("2Gi", "6Gi"))`). The devbox node has a hard ~7.5 GiB memory budget — see `.opencode/reference/devbox_workarounds.md`.
 - **CRITICAL** Do not consider backwards compatibility unless explicitly requested!
@@ -169,7 +169,8 @@ The project follows this structure:
   - `utils/` - Tests for `src/stargazer/utils/` (storage, index, CID, Pinata, query, subprocess)
   - `notebooks/` - Smoke tests that every notebook in `src/stargazer/notebooks/` imports and parses
   - `unit/` - Unit tests for the rest: the app tier (`app/`), registry, MCP marshalling, bundles, `Asset` itself
-  - Tests marked `pinata` call the real Pinata API and are deselected by default; run them with `uv run pytest -m pinata`
+  - `devbox/` - The devbox tier: dashboard deploy, asset storage across pods, the germline workflow. `pod_tasks.py` holds what runs in their pods
+  - Every test is in one tier, by marker (`tests/TESTING_GUIDE.md` → Test Tiers). A bare `uv run --all-extras pytest` is the unit tier and runs in pre-commit; `tools` runs in `gatk_env`'s image via `cli/docker_task_tests.py`; `devbox` runs against the local devbox with `-m devbox`; `pinata` calls the real Pinata API with `-m pinata`. A marked test never skips: outside its tier it's deselected, inside it a missing tool or service fails
 - `docs/` - Project documentation
   - `architecture/` - System design and contracts
   - `workflows/` - Workflow-specific documentation (e.g., scRNA-seq)

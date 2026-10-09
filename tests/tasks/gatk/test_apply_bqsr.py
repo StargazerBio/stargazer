@@ -2,8 +2,6 @@
 Tests for apply_bqsr task.
 """
 
-import shutil
-
 import pytest
 from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
 
@@ -11,12 +9,10 @@ from stargazer.assets import Alignment, BQSRReport, Reference
 from stargazer.tasks.gatk.apply_bqsr import apply_bqsr
 
 
+@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_apply_bqsr_recalibrates_bam(fixtures_db):
     """Test that apply_bqsr creates a recalibrated BAM."""
-    if shutil.which("gatk") is None:
-        pytest.skip("gatk not available in environment")
-
     sample_id = "NA12829_TP53_markdup"
 
     alignment = Alignment(

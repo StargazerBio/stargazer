@@ -2,8 +2,6 @@
 Tests for BWA-MEM2 tasks.
 """
 
-import shutil
-
 import pytest
 from conftest import GENERAL_FIXTURES_DIR
 
@@ -11,12 +9,10 @@ from stargazer.assets import Reference
 from stargazer.tasks.general.bwa_mem2 import bwa_mem2_index
 
 
+@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_bwa_mem2_index(fixtures_db):
     """bwa-mem2 index writes its five index files, stored as assets."""
-    if shutil.which("bwa-mem2") is None:
-        pytest.skip("bwa-mem2 not available in environment")
-
     ref = Reference(path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
 
     fixtures_db()  # checkout: switch to isolated work dir
