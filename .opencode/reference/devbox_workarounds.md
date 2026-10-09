@@ -4,7 +4,7 @@
 
 When you hit a deploy/runtime issue against devbox that takes more than one round-trip to diagnose, append it here with a one-line description and the minimum the next session needs to know.
 
-**Automation:** the *cluster-side* workarounds below (signed-URL endpoint, serving domain off `.localhost`, CoreDNS wildcard, and the restarts that race the addon controller) are applied to a fresh devbox by [`cli/devbox-setup.sh`](../../cli/devbox-setup.sh) — run it once after recreating the container (`./cli/devbox-setup.sh`, or `--dry-run` to preview, `--laptop` to also apply the macOS DNS steps, `--domain` to override). It's idempotent. The remaining entries are app-code/design (already in the codebase), not scriptable; keep this file and the script in sync when you add a new cluster-side quirk.
+**Automation:** the *cluster-side* workarounds below (signed-URL endpoint, serving domain off `.localhost`, CoreDNS wildcard, the restarts that race the addon controller, and the `PINATA_JWT` task secret) are applied to a fresh devbox by [`cli/devbox-setup.sh`](../../cli/devbox-setup.sh) — run it once after recreating the container (`./cli/devbox-setup.sh`, or `--dry-run` to preview, `--laptop` to also apply the macOS DNS steps, `--domain` to override). It's idempotent. The remaining entries are app-code/design (already in the codebase), not scriptable; keep this file and the script in sync when you add a new cluster-side quirk.
 
 ---
 
@@ -34,6 +34,16 @@ There is no single host/IP that's reachable from both the laptop and from in-clu
    - Port-forward: `kubectl port-forward -n flyte svc/rustfs-svc 9000:9000`
 
    `cli/devbox_dashboard.py` holds the port-forward open while it deploys (reusing one already listening on :9000), and so does the verify skill's devbox probe. Anything else that uploads from the laptop, such as a `flyte.run` against the devbox, needs the forward running: without it the code-bundle upload logs `Upload failed … ConnectError: All connection attempts failed` (measured 2026-10-08).
+
+---
+
+## Task pods are rejected without the `PINATA_JWT` secret
+
+**Symptom:** Every `gatk_env` or `scrna_env` run fails at once, before a pod starts: `admission webhook "flyte-pod-webhook.flyte.org" denied the request: none of the secret managers injected secret [key:"PINATA_JWT" …]` (measured 2026-10-08).
+
+**Cause:** Both task environments declare `secrets=[flyte.Secret(key="PINATA_JWT")]` (`STARGAZER_SECRETS` in `src/stargazer/config.py`), and the pod webhook refuses a pod whose declared secret doesn't exist. Union has it as an org-wide secret; a fresh devbox has no secrets at all. Flyte has no optional secrets.
+
+**Fix (automated):** `cli/devbox-setup.sh` creates it, org-wide like Union's, from `$PINATA_JWT` or else the repo's `.env`. With neither it creates it empty, which schedules the pods and leaves them without the public tier. It replaces any existing one, so re-running picks up a changed key.
 
 ---
 

@@ -19,6 +19,9 @@
 #   3. CoreDNS wildcard  *.${DEVBOX_DOMAIN} → node InternalIP  (so App.endpoint
 #      resolves in-cluster on the :30081 NodePort)
 #   4. flyte-binary + coredns restarts, racing the addon controller correctly
+#   5. The PINATA_JWT task secret every task environment declares (Union has
+#      it org-wide). Its value comes from $PINATA_JWT, else the repo's .env,
+#      else it's empty and task pods run without the public tier.
 #
 # internalApps FLYTE_AWS_ENDPOINT (`rustfs.flyte` → `rustfs-svc.flyte`) was
 # fixed upstream — the devbox image now ships the correct service name, so
@@ -37,6 +40,7 @@
 set -euo pipefail
 
 CONTAINER="${DEVBOX_CONTAINER:-flyte-devbox}"
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
 DOMAIN="${DEVBOX_DOMAIN:-devbox.stargazer.bio}"
 MANIFEST="/var/lib/rancher/k3s/server/manifests/flyte.yaml"
 DRY_RUN=0
@@ -69,6 +73,7 @@ done
 DOMAIN_RE="${DOMAIN//./\\.}"
 
 dex()  { docker exec "$CONTAINER" "$@"; }
+flyte_cli() { uv run --project "$REPO" flyte --config "$REPO/.flyte/config.yaml" "$@"; }
 kc()   { docker exec "$CONTAINER" kubectl "$@"; }
 # Run a mutating command, or just print it under --dry-run.
 run()  { if [ "$DRY_RUN" = 1 ]; then printf '   %s[dry-run]%s %s\n' "$c_yellow" "$c_off" "$*"; else "$@"; fi; }
@@ -169,6 +174,30 @@ run kc rollout status deployment/coredns -n kube-system --timeout=120s \
 ok "coredns restart issued"
 
 # ---------------------------------------------------------------------------
+# 5. The PINATA_JWT secret. Every task environment declares it, and the pod
+#    webhook rejects a task pod whose secret is missing, so without it no
+#    task runs. Replaced on every run, so a changed key takes effect.
+# ---------------------------------------------------------------------------
+log "Creating the PINATA_JWT task secret"
+jwt="${PINATA_JWT:-}"
+if [ -z "$jwt" ] && [ -f "$REPO/.env" ]; then
+    jwt="$(sed -n "s/^PINATA_JWT=//p" "$REPO/.env" | tail -1 | tr -d "\"'")"
+fi
+[ -n "$jwt" ] || warn "no PINATA_JWT in the environment or .env — the secret is empty, so task pods run without the public tier"
+if [ "$DRY_RUN" = 1 ]; then
+    printf '   %s[dry-run]%s flyte delete secret PINATA_JWT; flyte create secret PINATA_JWT --from-file <value>\n' "$c_yellow" "$c_off"
+else
+    secret_file="$(mktemp)"
+    trap 'rm -f "$secret_file"' EXIT
+    printf '%s' "$jwt" > "$secret_file"
+    flyte_cli delete secret PINATA_JWT >/dev/null 2>&1 || true  # absent on a fresh devbox
+    flyte_cli create secret PINATA_JWT --from-file "$secret_file" >/dev/null \
+        || die "could not create the PINATA_JWT secret (is flyte-binary up? 'kubectl get pods -n flyte')"
+    rm -f "$secret_file"
+    ok "PINATA_JWT secret created"
+fi
+
+# ---------------------------------------------------------------------------
 # Verify (read-only)
 # ---------------------------------------------------------------------------
 if [ "$DRY_RUN" = 0 ]; then
@@ -182,6 +211,8 @@ if [ "$DRY_RUN" = 0 ]; then
     grep -q "baseDomain: $DOMAIN" <<<"$cm" && ok "baseDomain=$DOMAIN" || warn "baseDomain not set to $DOMAIN"
     kc get cm coredns-custom -n kube-system -o name >/dev/null 2>&1 \
         && ok "coredns-custom present" || warn "coredns-custom missing"
+    flyte_cli get secret 2>/dev/null | grep -q PINATA_JWT \
+        && ok "PINATA_JWT secret present" || warn "PINATA_JWT secret missing — task pods will be rejected"
 
     if [ "$VERIFY_POD" = 1 ]; then
         log "Throwaway-pod DNS/HTTP check (may take ~30s)"
