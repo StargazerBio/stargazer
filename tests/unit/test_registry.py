@@ -63,25 +63,20 @@ def test_to_catalog_structure():
     assert isinstance(catalog, list)
     assert len(catalog) > 0
 
-    # Find bwa_mem in catalog
     bwa_mem_entry = next(e for e in catalog if e["name"] == "bwa_mem")
     assert bwa_mem_entry["category"] == "task"
     assert bwa_mem_entry["description"]  # non-empty
 
-    # Check params
     param_names = {p["name"] for p in bwa_mem_entry["params"]}
     assert param_names == {"r1", "r2", "ref", "read_group"}
 
-    # r1 is required
     r1_param = next(p for p in bwa_mem_entry["params"] if p["name"] == "r1")
     assert r1_param["required"] is True
     assert "R1" in r1_param["type"]
 
-    # read_group is optional
     rg_param = next(p for p in bwa_mem_entry["params"] if p["name"] == "read_group")
     assert rg_param["required"] is False
 
-    # Check outputs
     assert len(bwa_mem_entry["outputs"]) == 1
     assert bwa_mem_entry["outputs"][0]["name"] == "o0"
     assert "Alignment" in bwa_mem_entry["outputs"][0]["type"]

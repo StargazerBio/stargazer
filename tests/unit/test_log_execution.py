@@ -24,7 +24,6 @@ def test_log_execution_clean_repo(tmp_path):
     assert re.search(r"-\d{8}T\d{6}Z$", execution_id)
     assert "-dirty" not in execution_id
 
-    # Log file was created
     log_files = list(tmp_path.glob("*.log"))
     assert len(log_files) == 1
     assert execution_id in log_files[0].name

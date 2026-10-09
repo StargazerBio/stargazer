@@ -76,7 +76,6 @@ _BASE_ENV_VARS = dict(app_env.env_vars)
 # Where the dashboard keeps its SQLite index, on its own disk (Litestream
 # makes it durable). `~` expands in the pod.
 _DASHBOARD_INDEX = "~/.stargazer/index.db"
-# Phases of a run that hasn't finished.
 _UNFINISHED = (
     ActionPhase.QUEUED,
     ActionPhase.WAITING_FOR_RESOURCES,

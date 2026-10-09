@@ -45,7 +45,6 @@ async def upload_file(
         print(f"    CID: {comp.cid}")
         print()
 
-        # Fill the test file's CIDS entry if requested
         if update_config and config_path:
             update_config_file(config_path, file_path.name, comp.cid)
 
@@ -62,10 +61,8 @@ def update_config_file(config_path: Path, filename: str, cid: str):
         print(f"  Config file not found: {config_path}")
         return
 
-    # Read current config
     config_content = config_path.read_text()
 
-    # Try to update existing empty entry
     old_line_pattern = f'    "{filename}": ""'
     new_line = f'    "{filename}": "{cid}"'
 
@@ -135,17 +132,14 @@ Examples:
 
     args = parser.parse_args()
 
-    # Check for API key
     if not os.environ.get("PINATA_JWT"):
         print("ERROR: PINATA_JWT environment variable not set")
         print("Please set your Pinata JWT token:")
         print("  export PINATA_JWT='your_jwt_token_here'")
         return 1
 
-    # Parse metadata
     keyvalues = {}
 
-    # First, parse JSON metadata if provided
     if args.metadata:
         try:
             keyvalues = json.loads(args.metadata)
@@ -153,7 +147,6 @@ Examples:
             print(f"ERROR: Invalid JSON in --metadata: {e}")
             return 1
 
-    # Then, add/override with -m key=value pairs
     if args.meta:
         for pair in args.meta:
             if "=" not in pair:
@@ -163,13 +156,11 @@ Examples:
             key, value = pair.split("=", 1)
             keyvalues[key.strip()] = value.strip()
 
-    # Ensure we have some metadata
     if not keyvalues:
         print("ERROR: No metadata provided")
         print("Use --metadata with JSON or -m key=value")
         return 1
 
-    # Initialize client
     client = PinataClient()
 
     print(f"Uploading {len(args.files)} file(s) to Pinata...\n")
@@ -186,7 +177,6 @@ Examples:
         if result:
             uploaded_count += 1
 
-    # Summary
     print("=" * 60)
     print(f"Upload Summary: {uploaded_count}/{len(args.files)} files uploaded")
     print("=" * 60)
