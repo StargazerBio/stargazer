@@ -21,11 +21,11 @@ Opens the Assets tutorial, a [Marimo](https://marimo.io/) notebook, at `http://l
 docker run -it ghcr.io/stargazerbio/stargazer-chat
 ```
 
-Starts Claude Code in the image's Stargazer install (`/stargazer`), with OpenCode installed alongside and the project's MCP server config (`.mcp.json`) in place.
+Starts Claude Code in the image's Stargazer install (`/stargazer`), with OpenCode installed alongside. The MCP server is installed and configured (`.mcp.json`), along with the tools the bundled workflows call, so the agent can run them for you.
 
 ## MCP Client Configuration
 
-The MCP server runs from a source install (below) with the `mcp` extra. Point your MCP client at the `stargazer` command:
+Outside the chat image, the MCP server runs from a source install with the `mcp` extra. Point your MCP client at the `stargazer` command:
 
 **Claude Code** — add to `.mcp.json`:
 

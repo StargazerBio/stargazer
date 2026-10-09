@@ -48,9 +48,9 @@ The marimo notebook is the primary user surface. The hosted app serves a per-use
 For local use, the repository's Dockerfile builds two end-user Docker images:
 
 - **`stargazer-note`** — Marimo notebook in edit mode, for running pipelines and exploring data locally (the hosted app uses a separate, richer image — see [App → Images](app.md#images)).
-- **`stargazer-chat`** — Claude Code + OpenCode with the project's MCP config. End-user image, not a contributor dev shell.
+- **`stargazer-chat`** — Claude Code + OpenCode with the MCP server installed and configured. End-user image, not a contributor dev shell.
 
-The MCP server runs over stdio from a source install with the `mcp` extra; any MCP client connects to `stargazer`. Tasks and workflows can also be managed directly via the [Flyte CLI](cli.md#flyte-cli). Source contributors install natively — see [Contributing](../guides/contributing.md).
+The MCP server runs over stdio, in the chat image or from a source install with the `mcp` extra; any MCP client connects to `stargazer`. Tasks and workflows can also be managed directly via the [Flyte CLI](cli.md#flyte-cli). Source contributors install natively — see [Contributing](../guides/contributing.md).
 
 ## Configuration
 

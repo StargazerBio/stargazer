@@ -93,13 +93,15 @@ Stargazer has four container images. They split along a sharp line: **task image
 | `stargazer-scrna` | `config.py` (`scrna_env`) | `flyte.TaskEnvironment` | scRNA-seq tasks (`tasks/scrna/`) |
 | `stargazer-gatk` | `config.py` (`gatk_env`) | `flyte.TaskEnvironment` | GATK + alignment tasks (`tasks/gatk/`, `tasks/general/`) |
 | `stargazer-note` | `Dockerfile` (`--target note`) | Marimo notebook | Local `docker run` exploration only |
-| `stargazer-chat` | `Dockerfile` (`--target chat`) | Claude Code + OpenCode | Local `docker run` only |
+| `stargazer-chat` | `Dockerfile` (`--target chat`) | Claude Code + OpenCode + the MCP server | Local `docker run` only |
 
 Why the split: task images need nothing but Flyte's contract (an entrypoint Flyte injects, a content-hash tag Flyte pins by) — perfectly served by the SDK. Human-runnable images need a real `ENTRYPOINT`, baked-in source, and a stable `:latest` tag — none of which the Flyte Image SDK exposes. Rather than reinvent the Dockerfile via post-build wrapping, we just use a Dockerfile.
 
 Both task images install the stargazer package itself, not only its dependencies. A task pod finds the tasks a workflow calls by their installed module names, so without the package a workflow's child tasks can't load, wherever the run was submitted from. Your own tasks and workflows still travel in each run's code bundle. Since the package is in the image, a change to the project's source builds new task images; `.dockerignore` keeps docs, tests and local caches out of the build context, so they don't.
 
 Every image Flyte builds — the task images, the dashboard, the notebook image — is built for `linux/amd64` only, the architecture Union runs. GATK's GenomicsDB, which joint calling uses, has no arm64 build. On an Apple-silicon devbox the cluster itself runs natively and these pods run under emulation. A devbox build pushes a plain image rather than a multi-platform index (`FLYTE_DOCKER_BUILD_EXTRA_ARGS` defaults to `--provenance=false` there), since an arm64 node won't pull an index with no arm64 entry.
+
+The two `Dockerfile` images are published for both `linux/amd64` and `linux/arm64`, so they run natively on Apple silicon. Both carry the `mcp` and `bio` extras and the bioconda tools, and a Flyte config that runs workflows in the container. Because GenomicsDB has no arm64 build, joint calling works only in the amd64 variant.
 
 Hosted notebook pods use a separate image, **`notebook-app`**, defined programmatically in `app/per_notebook.py` and built by onboarding (`stargazer-users`) — it is not `stargazer-note`. See [App → Images](app.md#images).
 

@@ -29,7 +29,12 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
 WORKDIR /stargazer
 COPY --chown=ubuntu:ubuntu pyproject.toml uv.lock ./
 COPY --chown=ubuntu:ubuntu src/ src/
-RUN uv sync && chown -R ubuntu:ubuntu /stargazer
+# `mcp` for the server the chat image's agents and the notebook assistant
+# call, `bio` for the scRNA tasks. The Flyte config makes runs local, with
+# their records in SQLite for the TUI.
+RUN uv sync --extra mcp --extra bio \
+    && flyte create config --local-persistence \
+    && chown -R ubuntu:ubuntu /stargazer
 
 # --- Note target (local Marimo notebook UI) ---
 # Plain marimo on top of the stargazer base image — for `docker run`
@@ -38,9 +43,9 @@ RUN uv sync && chown -R ubuntu:ubuntu /stargazer
 # layers in the cookie-validating proxy, launch script, and per-notebook
 # sandbox tooling separately.
 FROM base AS note
-RUN uv sync --extra notebook && chown -R ubuntu:ubuntu /stargazer
+# `uv sync` removes every extra it isn't given, so base's are named again.
+RUN uv sync --extra mcp --extra bio --extra notebook && chown -R ubuntu:ubuntu /stargazer
 USER ubuntu
-RUN flyte create config --local-persistence
 ENTRYPOINT ["marimo", "edit", "src/stargazer/notebooks/tutorials/assets.py", \
     "--port", "8080", "--host", "0.0.0.0", "--headless", "--no-token"]
 
