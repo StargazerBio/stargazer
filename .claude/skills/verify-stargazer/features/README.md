@@ -28,6 +28,7 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 
 - [scRNA-seq pipeline notebook](./scrna-pipeline.md) covers loading the demo samples, the fan-out of preprocessing and clustering, and the per-sample summary.
 - [Asset storage on the devbox](./devbox-asset-storage.md) covers the devbox dashboard, storing and finding assets across task pods, and the index surviving a dashboard restart. It needs the devbox, not the Launch block.
+- [Germline variant calling on the devbox](./devbox-germline.md) covers seeding a reference and paired reads, the germline workflow from alignment to joint calling with each step in its own pod, and finding the cohort's VCF afterwards. It needs the devbox and its dashboard, not the Launch block.
 
 ## Not yet mapped
 
@@ -35,5 +36,5 @@ Add a file here once a feature has been driven end to end.
 
 - **Tutorial notebooks** (`notebooks/tutorials/`). Reachable locally.
 - **MCP server tools** (`list_tasks`, `run_task`, `query_files`). Reachable locally.
-- **Germline variant calling** (`workflows/`). Needs `bwa`, `samtools`, and `gatk` on PATH, or the devbox.
+- **Germline variant calling locally** (`workflows/`). Needs `bwa`, `samtools`, and `gatk` on PATH; on the devbox it's mapped above.
 - **Hosted app** (`app/`: notebook launch, asset manager). Needs the devbox dashboard (`cli/devbox_dashboard.py`, see [Asset storage on the devbox](./devbox-asset-storage.md)).

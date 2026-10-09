@@ -76,8 +76,9 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    notebook pages too, where they can read whatever the page shows. Ask
    Union whether apps can opt out.
 - **Notebooks on the devbox.** The devbox dashboard and asset storage work
-   (`cli/devbox_dashboard.py`, a stand-in user), but launching a notebook
-   from that dashboard hasn't been driven yet.
+   (`cli/devbox_dashboard.py`, a stand-in user), and a tutorial launched in
+   run mode from that dashboard starts and serves marimo (2026-10-08). Edit
+   mode, workspace saving and the in-notebook terminal haven't been driven.
 - **Union console handoff (per-user project access).** Delivered by the
    per-user dashboards' onboarding (users get `contributor` on their own
    project); what remains is the dashboard's link out to the console.
@@ -136,6 +137,8 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
     [`23_notebook_declared_image.md`](./23_notebook_declared_image.md)
 
 ## Complete
+
+- ✅ Germline workflow on the devbox (2026-10-08): `germline_short_variant_discovery` runs on the devbox end to end, each step in its own pod, and the `verify-stargazer` skill drives it (`features/devbox-germline.md`). Getting there fixed six things. Task pods couldn't import `stargazer`, so the task images now install it. The devbox had no `PINATA_JWT` secret, so every task pod was refused; `cli/devbox-setup.sh` creates it. Picard's BAM index (`<name>.bai`) was never stored, so HaplotypeCaller found the BAM unindexed. Joint calling read contigs from a path it hadn't fetched, and now defaults to every contig in the reference. `bwa-mem2` couldn't find its CPU-specific binaries on x86_64, which likely broke it on Union too. GenomicsDB has no arm64 build, so every Stargazer image is now x86_64-only and runs emulated on an Apple-silicon devbox. Verified: run `r5sxg8bmfcsdhbdhztdz` succeeded in 1m26s, a second pod found the cohort's VCF (NA12829, 47 records), and the GATK and alignment tests pass in the x86_64 image (37 passed, none skipped).
 
 - ✅ Devbox dashboard and asset storage (2026-10-08): `cli/devbox_dashboard.py` deploys one dashboard on the devbox for a stand-in user (`SG_STAND_IN_SUBJECT`, never honored on Union), storing under `s3://flyte-data/stargazer`, and holds the storage port-forward open while it uploads. The Litestream launcher now takes an S3-compatible store's endpoint and keys from Flyte's `FLYTE_AWS_*`. Verified with the `verify-stargazer` devbox recipe: one pod stored three files, a second found and read them all back, and the index came back whole after two dashboard restarts.
 - ✅ Per-user dashboards (2026-10-06): the shared admin is replaced by one dashboard per user, in their own readable project (`u-<handle>`), serving only its owner. An org admin runs `stargazer-users onboard` to invite or find the user, create the project, grant `contributor` on it alone, and deploy the dashboard at a stable subdomain; `upgrade` is the release, `offboard` stops apps, removes access and archives. Union's app gate needs project view, so this keeps every user's console to their own project, and no privileged credential is deployed. Verified on the tenant end to end. Still open: whether an invited user's first sign-in arrives with the subject `User.create` returned (needs a real second address). [`26_per_user_dashboard.md`](./26_per_user_dashboard.md)
