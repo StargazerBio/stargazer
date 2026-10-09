@@ -10,12 +10,14 @@
 - The README is a document written exclusively BY HUMANS FOR HUMANS. Never modify the README. Notify if it is out of spec only.
 
 **Git Workflow**
-- Every change gets its own branch, cut from an up-to-date `main`. Name it after the change in short kebab-case (e.g. `fix/scrna-oom`, `docs/branch-pr-workflow`). Never commit directly to `main`
-- One change per branch. An unrelated fix spotted along the way gets its own branch and PR, or a ROADMAP entry
-- Follow-up work on a branch that is still unmerged (changes to the same feature, fixes, or review feedback) is committed on that branch, not on a new one cut from it. Keep the merge tree flat: a new branch is only for a new, independent change cut from `main`
+- Every change gets its own worktree, on its own branch cut from an up-to-date `origin/main`. Name the branch after the change in short kebab-case (e.g. `fix/scrna-oom`, `docs/branch-pr-workflow`) and the worktree after its slug, under `.claude/worktrees/` (gitignored): `git fetch origin && git worktree add --no-track .claude/worktrees/scrna-oom -b fix/scrna-oom origin/main`. Claude Code's `EnterWorktree` makes them in the same place. All work happens in the worktree; the main checkout stays on a clean `main`. Never commit directly to `main`
+- A new worktree has none of the gitignored local state. `uv run` builds it its own `.venv`, but link the rest from the main checkout as the work needs it: `.flyte/config.yaml` and `.flyte/union.yaml` for anything that talks to Flyte (devbox tier, deploys), `tests/.secrets` for the pinata tier. From the worktree root: `MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")`, then `mkdir -p .flyte && ln -s "$MAIN"/.flyte/{config,union}.yaml .flyte/` and `ln -s "$MAIN/tests/.secrets" tests/.secrets`
+- One change per worktree. An unrelated fix spotted along the way gets its own worktree and PR, or a ROADMAP entry
+- Follow-up work on a branch that is still unmerged (changes to the same feature, fixes, or review feedback) is committed in that branch's worktree, not on a new branch cut from it. Keep the merge tree flat: a new branch is only for a new, independent change cut from `main`
 - Commit on the branch as the work progresses; no need to ask first. Never force-push `main`
 - When the change is done (tests pass, verified on its real surface), push the branch and open a PR against `main` with `gh pr create`. The description says what changed and why, the verification evidence, and anything deferred
 - The PR is where human review happens. Never merge a PR yourself — the user reviews and merges it. Review feedback is addressed with further commits on the same branch
+- Once the PR is merged, remove its worktree (`git worktree remove .claude/worktrees/<slug>`) and delete the branch
 
 **Positioning**
 - The marimo notebook is Stargazer's primary user surface for both experimentation (`marimo edit`) and reproducible production (`marimo run`) — it's the most approachable entry point, so default new feature designs to the notebook surface (marimo, `mo.ui`) over CLI or other entry points. The SDK (`src/stargazer/tasks/`, `src/stargazer/workflows/`) is a first-class user surface too: authoring workflows in an IDE by importing SDK tasks directly is a fully supported use case, not a maintainer-only path.
