@@ -121,7 +121,7 @@ def _(audit_cohorts, flyte, mo, sheets, time):
         local_run = flyte.with_runcontext(mode="local").run(
             audit_cohorts, sheets=sheets
         )
-        summaries_local = local_run.outputs()
+        summaries_local = local_run.outputs()[0]
         _elapsed_local = time.perf_counter() - _t0
 
     mo.md(
@@ -169,7 +169,7 @@ def _(audit_cohorts, flyte, mo, sheets, summaries_local, time):
 
     with mo.status.spinner(title="Waiting for remote run..."):
         remote_run.wait()
-        summaries_remote = remote_run.outputs()
+        summaries_remote = remote_run.outputs()[0]
         _elapsed_remote = time.perf_counter() - _t0
 
     _local_cids = sorted(s.cid for s in summaries_local)
@@ -193,7 +193,7 @@ def _(audit_cohorts, flyte, mo, sheets, summaries_local, time):
 def _(mo, plt, summaries_remote):
     """Section 5 — chart the per-cohort counts."""
     _summaries = sorted(summaries_remote, key=lambda s: s.cohort_id)
-    _labels = [s.cohort_id.removeprefix("workflows_") for s in _summaries]
+    _labels = [s.cohort_id.removeprefix("demo_") for s in _summaries]
     _x = range(len(_summaries))
 
     _fig, _ax = plt.subplots(figsize=(7, 4))

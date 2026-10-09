@@ -133,10 +133,11 @@ def _():
           in the same scanpy image; every task attached to `gatk_env`
           runs in the GATK image. New workload, new env.
         - **Typed signatures cross the wire.** Inputs and outputs are
-          serialized through their declared types — for us that's
-          `Asset` subclasses via `to_keyvalues()` / `from_keyvalues()`.
-          A task called remotely receives the same typed object it
-          would have received locally.
+          serialized through their declared types — an `Asset` subclass
+          travels as its dataclass fields, its `path` a `flyte.io.File`
+          naming where the stored bytes live. A task called remotely
+          receives the same typed object it would have received
+          locally.
         - **Same function, two execution shapes.** `await fn(...)` runs
           it in-process; `flyte.with_runcontext(mode="local").run(...)`
           goes through the full Flyte machinery (caching, retries, typed

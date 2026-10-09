@@ -47,9 +47,8 @@ def _():
         Defaults work as-is (your file round-trips through a no-op
         pipeline). Replace the TODOs to make it do real work.
 
-        Reference: [`assets.py`](../tutorials/assets.py) for asset
-        internals, [`tasks.py`](../tutorials/tasks.py) for tasks, and
-        [`workflows.py`](../tutorials/workflows.py) for composition.
+        Reference: the Assets tutorial for asset internals, Tasks for
+        tasks, and Workflows for composition — all on your dashboard.
         """
     )
     return ClassVar, Path, asyncio, dataclass, flyte, mo, tempfile

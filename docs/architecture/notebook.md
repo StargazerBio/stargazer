@@ -76,7 +76,7 @@ Snapshot or graduate? A snapshot answers "what exactly did I run?" — frozen, r
 
 ### Copy to workspace — read-only source → editable notebook
 
-The reverse of freeze: a **Copy to workspace** button on every Workflows and Snapshots tile drops an editable copy into the Workspace, so a shipped pipeline or a frozen analysis becomes a starting point to iterate on rather than just run. The original is untouched — the copy is a fresh notebook under `notebooks/workspace/`, free to edit, re-freeze, or graduate. It takes the source's name, so if a notebook by that name already exists the copy is refused; rename the existing one and copy again. Mechanics in [App → Snapshots](app.md#snapshots) and `.opencode/reference/architecture/app_internals.md`.
+The reverse of freeze: a **Copy to workspace** button on every Workflows and Snapshots tile drops an editable copy into the Workspace, so a shipped pipeline or a frozen analysis becomes a starting point to iterate on rather than just run. The original is untouched — the copy is a fresh notebook in the user's workspace store, free to edit, re-freeze, or graduate. It takes the source's name, so if a notebook by that name already exists the copy is refused; rename the existing one and copy again. Mechanics in [App → Snapshots](app.md#snapshots) and `.opencode/reference/architecture/app_internals.md`.
 
 ## The SDK Loop
 
@@ -104,12 +104,12 @@ Notebook-to-notebook reuse *is* allowed: marimo notebooks can export importable 
 
 ### Packaging boundary
 
-In production, stargazer is installed as a proper package (not editable): each notebook's sandbox resolves the SDK from the image at `/stargazer`. This means:
+In production, each notebook's sandbox installs the SDK from the image's own source tree at `/stargazer` (the `[tool.uv.sources]` entry in its PEP 723 header), fixed when the image was built. This means:
 
 - **Package tasks** in `src/stargazer/tasks/` are available in every production notebook automatically.
 - **Notebook-defined tasks** run in the notebook that defines them, but are not importable elsewhere until promoted into the package.
 
-This is a feature — it prevents untested code from silently ending up in production. The boundary is blurred in local dev (editable install) so contributors can experiment freely. It also means saved notebooks can't change execution: the workspace store carries notebook *sources*; the SDK they import always comes from the image.
+This is a feature — it prevents untested code from silently ending up in production. Locally a notebook imports your checkout, so contributors see SDK changes as they make them. It also means saved notebooks can't change execution: the workspace store carries notebook *sources*; the SDK they import always comes from the image.
 
 ## Notebook Modes
 
@@ -125,7 +125,7 @@ A notebook runs in one mode at a time — see [App → Core Concepts](app.md#cor
 ## Adding Notebooks
 
 - **Workspace notebooks** are created from the dashboard (blank or template seed) and live in the user's workspace store — no repo change involved.
-- **Tutorials and Workflow notebooks** ship in the image: add the `.py` file (standard marimo format, importing only `stargazer` public APIs) under `src/stargazer/notebooks/tutorials/` or `notebooks/workflows/`, register a tile in the `NOTEBOOKS` tuple in `app/notebooks.py`, and it lands when the admin deploy entrypoint next builds and publishes the `notebook-app` image.
+- **Tutorials and Workflow notebooks** ship in the image: add the `.py` file (standard marimo format, importing only `stargazer` public APIs) under `src/stargazer/notebooks/tutorials/` or `notebooks/workflows/`, register a tile in the `NOTEBOOKS` tuple in `app/notebooks.py`, and it lands when onboarding next builds the `notebook-app` image (`stargazer-users upgrade`).
 - **Published snapshots** ship in the image from `src/stargazer/notebooks/snapshots/`. They can be added by hand, but usually start as a 📸 freeze that the author downloads and contributes.
 
 ## In-Notebook AI
