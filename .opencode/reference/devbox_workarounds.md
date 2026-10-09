@@ -8,6 +8,18 @@ When you hit a deploy/runtime issue against devbox that takes more than one roun
 
 ---
 
+## Stargazer pods run x86_64 on an arm64 devbox
+
+**Symptom:** On a multi-arch build, `joint_call_gvcfs` fails in GenomicsDBImport with `Could not load genomicsdb native library`, while every other germline step succeeds (measured 2026-10-08, run `rq67nc297wm8x45tg6cd`).
+
+**Cause:** On Apple silicon `flyte start devbox` pulls the devbox image's arm64 variant, so the k3s node is arm64 and pods got the arm64 side of Stargazer's images. GATK 4.6.2's GenomicsDB native library ships for x86_64 only. Union's nodes are x86_64.
+
+**An x86_64 devbox doesn't work.** `DOCKER_DEFAULT_PLATFORM=linux/amd64 flyte start devbox` starts the container as x86_64 under Rosetta, but no pod ever starts: every sandbox fails with `failed to generate seccomp spec opts: seccomp is not supported` (measured 2026-10-08). k3s's containerd and runc are then x86_64 binaries under emulation, and the emulator refuses to install seccomp filters.
+
+**Fix (in code):** Stargazer's images are built for `linux/amd64` only (`IMAGE_PLATFORM` in `src/stargazer/config.py`), and the arm64 node runs those pods under Docker Desktop's emulation (measured: a pod on an amd64-only image prints `x86_64`). The pull is the catch: buildx attaches a provenance attestation by default, which makes even a one-platform push an index, and the node refuses it with `no match for platform in manifest: not found` (measured). `stargazer.config` sets `FLYTE_DOCKER_BUILD_EXTRA_ARGS=--provenance=false` on the devbox target, so the push is a plain image the node pulls whatever its architecture. Flyte's own images (flyte-binary, Knative, the devbox plumbing) stay native.
+
+---
+
 ## Storage signed URLs use `localhost`
 
 **Symptom:** Inside any App pod, `flyte.serve.aio(env)` (or any code-bundle upload) fails with `All connection attempts failed` on `http://localhost:30002/flyte-data/...`.

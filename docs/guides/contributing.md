@@ -23,6 +23,8 @@ If you don't have mamba/conda on your host, install [miniforge](https://github.c
 
 Use `flyte start devbox` to spin up a local Flyte cluster for development. See the [official devbox docs](https://www.union.ai/docs/v2/flyte/user-guide/run-modes/running-devbox/) for setup instructions.
 
+Stargazer's images are built for x86_64 only, like the machines they run on in production. On Apple silicon the devbox itself runs natively and Stargazer's pods run under emulation, so they're slower than on Union. Docker Desktop runs them through Rosetta, so keep its Rosetta setting enabled.
+
 This environment is much closer to production and lets you actually test your task and app environments. After every fresh devbox, apply the cluster-side fixes, then deploy a dashboard to hold the asset index:
 
 ```bash
