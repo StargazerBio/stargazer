@@ -103,6 +103,16 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
      `"NA12829"`).
    - The scRNA tasks aren't exported from `stargazer.tasks`, so `list_tasks`
      and the catalog omit them, and `run_task` can't run them.
+   - The default `PINATA_GATEWAY`, `https://dweb.link`, no longer serves
+     files: every request answers 429 "This IPFS gateway is switching to a
+     service worker gateway only" (`sunset: 21 Sep 2026`), so
+     `fetch_resource_bundle` and any public download fail on a default
+     config, and with them the README quickstart. `gateway.pinata.cloud`
+     answered a full download with a Cloudflare challenge (429) and
+     `w3s.link` with 429 (all measured 2026-10-09). The account's dedicated
+     gateway (`<name>.mypinata.cloud`) served the demo files during plan 27,
+     but anonymous downloads through it spend account bandwidth. Picking the
+     default is a decision, not a one-line fix.
 - **Notebooks on the devbox.** The devbox dashboard and asset storage work
    (`cli/devbox_dashboard.py`, a stand-in user), and a tutorial launched in
    run mode from that dashboard starts and serves marimo (2026-10-08). Edit
