@@ -93,8 +93,6 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    - `docs/architecture/configuration.md` → Building locally says the Flyte
      images set no `registry=`; they take `STARGAZER_REGISTRY`, which the
      devbox sets to its own registry.
-   - `tests/helpers.py` is imported nowhere.
-   - `tests/unit/test_devbox_dashboard.py` isn't `ruff format`ted on main.
 - **Notebooks on the devbox.** The devbox dashboard and asset storage work
    (`cli/devbox_dashboard.py`, a stand-in user), and a tutorial launched in
    run mode from that dashboard starts and serves marimo (2026-10-08). Edit
