@@ -14,11 +14,8 @@ from stargazer.workflows.germline_short_variant_discovery import (
 from stargazer.workflows.scrna_clustering import scrna_clustering_pipeline
 
 __all__ = [
-    # GATK Best Practices germline workflows
     "germline_short_variant_discovery",
-    # GATK Best Practices data preprocessing workflows
     "prepare_reference",
     "preprocess_sample",
-    # scRNA-seq clustering
     "scrna_clustering_pipeline",
 ]

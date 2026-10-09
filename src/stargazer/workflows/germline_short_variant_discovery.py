@@ -2,7 +2,7 @@
 ### GATK Best Practices: Germline Short Variant Discovery (SNPs + Indels)
 
 End-to-end GATK pipeline from raw reads to joint-genotyped variants:
-    1. prepare_reference  — FASTA index, sequence dictionary, BWA index
+    1. prepare_reference  — FASTA index, sequence dictionary, BWA-MEM2 index
     2. preprocess_sample  — align, sort, mark duplicates (per sample, parallel)
     3. haplotype_caller   — per-sample GVCF (parallel)
     4. joint_call_gvcfs   — GenomicsDBImport + GenotypeGVCFs
@@ -52,23 +52,20 @@ async def germline_short_variant_discovery(
     """
     log_execution()
 
-    # 1. Reference preparation
     ref = await prepare_reference(build=build)
 
-    # 2. Per-sample preprocessing — parallel across samples
     alignments = list(
         await asyncio.gather(
             *[preprocess_sample(build=build, sample_id=sid) for sid in sample_ids]
         )
     )
 
-    # 3. HaplotypeCaller — per-sample GVCFs in parallel
     gvcfs = list(
         await asyncio.gather(
             *[haplotype_caller(alignment=aln, ref=ref) for aln in alignments]
         )
     )
 
-    # 4. GenomicsDBImport + GenotypeGVCFs — joint calling over every contig.
-    # The task reads them from the reference where it's already fetched.
+    # Joint calling covers every contig: the task reads them from the
+    # reference's .fai, which prepare_reference built.
     return await joint_call_gvcfs(gvcfs=gvcfs, ref=ref, cohort_id=cohort_id)

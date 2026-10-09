@@ -2,8 +2,8 @@
 ### GATK Best Practices: Data Pre-processing for Variant Discovery
 
 Implements:
-1. Reference preparation — FASTA index, sequence dictionary, BWA index
-2. Sample preprocessing — align, sort, mark duplicates, BQSR
+1. Reference preparation — FASTA index, sequence dictionary, BWA-MEM2 index
+2. Sample preprocessing — align, sort, mark duplicates
 
 References:
     - https://gatk.broadinstitute.org/hc/en-us/articles/360035535912-Data-pre-processing-for-variant-discovery
@@ -29,11 +29,13 @@ async def prepare_reference(build: str) -> Reference:
     """
     Prepare reference genome for alignment and variant calling.
 
-    Assembles the reference FASTA from storage and creates necessary indices:
+    Assembles the reference FASTA from storage and creates its indices:
     1. FASTA index (samtools faidx)
-    2. BWA index (bwa index)
+    2. Sequence dictionary (GATK CreateSequenceDictionary)
+    3. BWA-MEM2 index (bwa-mem2 index)
 
-    All indices are uploaded to storage as side-effects.
+    Each is stored as a companion of the reference, so fetching the
+    reference brings them along.
 
     Args:
         build: Reference genome build identifier (e.g. "GRCh38")
@@ -64,7 +66,7 @@ async def preprocess_sample(
     Pre-process a single sample's reads for variant calling.
 
     Assembles reference and reads from storage, then runs:
-    1. BWA-MEM alignment
+    1. BWA-MEM2 alignment
     2. Coordinate sort (GATK SortSam)
     3. Mark duplicates (GATK MarkDuplicates)
 
@@ -76,14 +78,12 @@ async def preprocess_sample(
         Alignment asset with the preprocessed BAM file
     """
     log_execution()
-    # Assemble reference
     ref_assets = await assemble(build=build, asset="reference")
     refs = [a for a in ref_assets if isinstance(a, Reference)]
     if not refs:
         raise ValueError(f"No reference found for build={build!r}")
     ref = refs[0]
 
-    # Assemble reads
     read_assets = await assemble(sample_id=sample_id, asset=["r1", "r2"])
     r1_list = [a for a in read_assets if isinstance(a, R1)]
     if not r1_list:
@@ -92,7 +92,6 @@ async def preprocess_sample(
     r2_list = [a for a in read_assets if isinstance(a, R2)]
     r2 = r2_list[0] if r2_list else None
 
-    # Alignment pipeline — tasks call fetch() internally
     alignment = await bwa_mem2_mem(ref=ref, r1=r1, r2=r2)
     alignment = await sort_sam(alignment=alignment, sort_order="coordinate")
     alignment = await mark_duplicates(alignment=alignment)
