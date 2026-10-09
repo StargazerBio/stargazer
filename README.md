@@ -15,11 +15,13 @@ Collecting early feedback on direction and architecture. Try the quickstart!
 
 ## Quickstart
 
-- `docker run -it ghcr.io/stargazerbio/stargazer-chat`
+- `git clone https://github.com/StargazerBio/stargazer.git && cd stargazer`
+- `uv sync --extra mcp --extra bio`
+- `claude`
 - "Download the scrna_demo bundle"
 - "Run the scrna workflow"
 
-Stargazer is an agent-first project - you'll need to login with Claude before interacting with the MCP server. However, everything is just a Flyte workflow under the hood, feel free to start the container with `--entrypoint bash` and run any workflows or check out the [TUI](https://www.union.ai/docs/v2/flyte/user-guide/running-locally/#terminal-ui) from there.
+Stargazer is an agent-first project - Claude Code picks up the MCP server from the repo's `.mcp.json`, and any other MCP client can launch it with `uv run stargazer`. However, everything is just a Flyte workflow under the hood, feel free to skip the agent and run any workflows with the Flyte CLI or check out the [TUI](https://www.union.ai/docs/v2/flyte/user-guide/running-locally/#terminal-ui).
 
 Additional quickstart options and details are available in the [docs](https://docs.stargazer.bio/getting-started/).
 
@@ -46,11 +48,11 @@ A familiar interface where researchers express intent. The LLM has access to a r
 ### Orchestrator - Flyte V2
 [Flyte V2's](https://www.union.ai/docs/v2/flyte/user-guide/overview/) pure-Python and async-native orchestration engine does the heavy-lifting of each Stargazer execution. Everything runs in a container with task resource requirements and dependencies declared in-line. Tasks can be nested arbitrarily and executed async with standard Python patterns. Types are enforced at the task boundary and capture inputs and outputs with all necessary metadata.
 
-### Storage - IPFS via Pinata
-Every file in Stargazer is content-addressable on [IPFS](https://docs.ipfs.tech/concepts/how-ipfs-works/) and self-describing via [Pinata](https://pinata.cloud/blog/using-file-centric-architecture-to-build-simple-and-capable-apps/). This powerful combination means that workflows interact with data via key-value attributes, not their location. Moreover, reproducibility becomes intrinsic as data is identified by an immutable, cryptographic commitment to its content.
+### Storage - Content-Addressed Assets
+Every file in Stargazer is identified by its [IPFS](https://docs.ipfs.tech/concepts/how-ipfs-works/) content ID and described by key-value metadata. The bytes live in an object store and the metadata in a per-user index, which means that workflows interact with data via key-value attributes, not their location. Shared data like reference genomes and demo datasets is public on IPFS via [Pinata](https://pinata.cloud/). Moreover, reproducibility becomes intrinsic as data is identified by an immutable, cryptographic commitment to its content.
 
 ## Execution Modes
-Stargazer has a few execution modes to control exactly where data is processed and stored. The default is fully local compute and storage. By adding a PINATA_JWT env var, you can push and pull assets from IPFS via Pinata, either publicly or privately. This is the persistence layer for hosted compute (coming soon!) and an integral part of Stargazer's collaboration strategy. Details are available in the configuration [docs](https://docs.stargazer.bio/architecture/configuration/).
+Stargazer has a few execution modes to control exactly where data is processed and stored. The default is fully local compute and storage, with your files under `~/.stargazer`. Point Stargazer at a different store and index to keep them elsewhere, a cloud bucket for example; hosted compute (coming soon!) runs the same code with each user's files in a bucket and their own index. By adding a PINATA_JWT env var, you can also search public datasets on IPFS via Pinata, an integral part of Stargazer's collaboration strategy. Details are available in the configuration [docs](https://docs.stargazer.bio/architecture/configuration/).
 
 ## Perpetual progress machine?
 Never before has there been a greater opportunity to converge the fragmented landscape of bioinformatics tools and techniques. Frontier models enable integrating the plurality of inputs and contributions faster and more fairly than ever before. Stargazer doesn't aim to be yet another standard, but an organic substrate that evolves and responds to the needs of discovery in real-time.
