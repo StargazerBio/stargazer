@@ -1,7 +1,7 @@
 """
 ### Static parsing of a notebook's `[tool.stargazer]` resource block.
 
-The admin app sets a per-notebook pod's resources at `/launch` time —
+The dashboard sets a per-notebook pod's resources at `/launch` time —
 before the pod exists — so the resource spec has to be readable from the
 notebook *source*, not from running code. Notebooks already carry a PEP
 723 script header (`# /// script … # ///`) for their deps; this module

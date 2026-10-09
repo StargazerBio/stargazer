@@ -431,7 +431,7 @@ def main() -> None:
     remove.add_argument("--email", required=True)
     args = parser.parse_args()
 
-    # Same guard as the dashboard deploy: without a root nothing can be saved.
+    # Without a workspace root, a Union dashboard could save nothing.
     if (
         args.command != "offboard"
         and config.TARGET == "union"
