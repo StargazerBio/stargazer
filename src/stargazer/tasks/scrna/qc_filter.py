@@ -1,7 +1,7 @@
 """
 ### Quality control and cell/gene filtering for scRNA-seq data.
 
-spec: [docs/workflows/scrna.md](../workflows/scrna.md)
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 import stargazer.utils.storage as _storage

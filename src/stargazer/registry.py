@@ -1,44 +1,35 @@
-"""Task registry for auto-discovery of Flyte tasks and workflows.
+"""
+### Task registry for auto-discovery of Flyte tasks and workflows.
 
-Discovers all tasks from stargazer.tasks and stargazer.workflows modules,
-extracts parameter types, defaults, and return types for MCP catalog exposure.
+Discovers the tasks exported by `stargazer.tasks` and the workflows exported
+by `stargazer.workflows` (their `__all__`), and extracts parameter types,
+defaults, and return types for the MCP catalog. A task a package doesn't
+export isn't discovered.
 
-spec: docs/architecture/mcp-server.md
+spec: [docs/architecture/mcp-server.md](../architecture/mcp-server.md)
 """
 
 import inspect
+import types
 from dataclasses import dataclass, field
 from typing import Any, get_type_hints
 
 
 def _type_name(hint: Any) -> str:
-    """Convert a type hint to a human-readable string."""
+    """Convert a type hint to a human-readable string (`list[str]`, `R2 | NoneType`)."""
     origin = getattr(hint, "__origin__", None)
     args = getattr(hint, "__args__", None)
 
     if origin is not None:
-        # Handle generic types like list[str], dict[str, str], tuple[Path, Path]
         origin_name = getattr(origin, "__name__", str(origin))
         if args:
             arg_names = ", ".join(_type_name(a) for a in args)
             return f"{origin_name}[{arg_names}]"
         return origin_name
 
-    # Handle Union types (e.g., str | None)
-    if hasattr(hint, "__args__") and hasattr(hint, "__origin__"):
-        pass  # already handled above
-
-    # types.UnionType (Python 3.10+ X | Y syntax)
-    import types as _types
-
-    if isinstance(hint, _types.UnionType):
+    if isinstance(hint, types.UnionType):
         return " | ".join(_type_name(a) for a in hint.__args__)
 
-    # typing.Union
-    if getattr(hint, "__origin__", None) is not None:
-        pass  # already handled
-
-    # Simple class
     if hasattr(hint, "__name__"):
         return hint.__name__
 
@@ -121,7 +112,6 @@ class TaskRegistry:
         sig = inspect.signature(func)
         hints = get_type_hints(func)
 
-        # Extract parameters
         params = []
         for pname, param in sig.parameters.items():
             hint = hints.get(pname, Any)
@@ -136,11 +126,9 @@ class TaskRegistry:
                 )
             )
 
-        # Extract outputs from return type
         return_hint = hints.get("return", type(None))
         outputs = _parse_outputs(return_hint)
 
-        # Extract description from docstring
         doc = func.__doc__ or ""
         description = doc.strip().split("\n")[0] if doc.strip() else ""
 
@@ -202,7 +190,6 @@ def _parse_outputs(return_hint: Any) -> list[TaskOutput]:
             TaskOutput(name=f"o{i}", type_hint=arg, type_name=_type_name(arg))
             for i, arg in enumerate(args)
         ]
-    # Single output
     return [
         TaskOutput(name="o0", type_hint=return_hint, type_name=_type_name(return_hint))
     ]

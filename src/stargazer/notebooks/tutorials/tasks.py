@@ -20,7 +20,7 @@ before that.
 as marimo *reusable* top-level symbols, so the later tutorials import
 these exact objects rather than redefining them — no drift.
 
-spec: [docs/architecture/tasks.md](../../docs/architecture/tasks.md)
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 import marimo

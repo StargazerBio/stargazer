@@ -47,7 +47,7 @@ def _asset_table() -> str:
         )
         field_str = ", ".join(f"`{f}`" for f in fields) if fields else "—"
         rows.append(
-            f"| `{asset_key}` | `{cls.__name__}` | `types/{module}.py` | {field_str} |"
+            f"| `{asset_key}` | `{cls.__name__}` | `assets/{module}.py` | {field_str} |"
         )
     return "\n".join(rows)
 
@@ -88,7 +88,6 @@ def build() -> None:
     ref_dir = DOCS / "reference"
     ref_dir.mkdir(exist_ok=True)
 
-    # Catalog page
     catalog_lines = [
         "# Catalog",
         "",
@@ -113,7 +112,6 @@ def build() -> None:
     catalog_path.write_text("\n".join(catalog_lines))
     print(f"Generated {catalog_path}")
 
-    # API reference page
     api_lines = [
         "# API Reference",
         "",

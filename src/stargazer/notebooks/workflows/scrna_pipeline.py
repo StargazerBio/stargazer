@@ -18,7 +18,7 @@ Multi-sample fan-out preprocessing plus interactive clustering, side-by-side
 UMAPs, and marker-gene tables. The workflow-tier showcase: the same
 primitives the tutorials teach, applied as a full-fat scRNA-seq pipeline.
 
-spec: [docs/architecture/notebook.md](../../docs/architecture/notebook.md)
+spec: [docs/architecture/notebook.md](../architecture/notebook.md)
 """
 
 import marimo

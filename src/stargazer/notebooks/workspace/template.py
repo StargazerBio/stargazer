@@ -16,7 +16,7 @@ and fan that task out in a workflow. Each section is a TODO-style
 template — pair with `assets.py` and `tasks.py` for the
 why and the deeper patterns.
 
-spec: [docs/architecture/notebook.md](../../docs/architecture/notebook.md)
+spec: [docs/architecture/notebook.md](../architecture/notebook.md)
 """
 
 import marimo

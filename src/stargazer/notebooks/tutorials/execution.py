@@ -17,7 +17,7 @@ then on a remote cluster with no code changes. It imports the very same
 `audit_cohorts` workflow composed in `workflows.py` and runs it both ways,
 charting the result.
 
-spec: [docs/architecture/workflows.md](../../docs/architecture/workflows.md)
+spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
 import marimo

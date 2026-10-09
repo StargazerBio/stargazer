@@ -19,7 +19,7 @@ and the round-trip from Python object to storage and back.
 imports this exact class rather than redefining it — one definition, no
 drift across the tutorial sequence.
 
-spec: [docs/architecture/types.md](../../docs/architecture/types.md)
+spec: [docs/architecture/types.md](../architecture/types.md)
 """
 
 import marimo

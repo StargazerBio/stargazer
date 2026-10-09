@@ -18,7 +18,7 @@ calls other tasks, so fan-out is plain `asyncio.gather` over task calls.
 (`with app.setup:` + `@app.function`), so the Execution tutorial runs
 this exact workflow object — no copy, no drift.
 
-spec: [docs/architecture/workflows.md](../../docs/architecture/workflows.md)
+spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
 import marimo

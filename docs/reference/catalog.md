@@ -35,22 +35,22 @@
 
 | Asset Key | Class | Module | Fields |
 |-----------|-------|--------|--------|
-| `aligner_index` | `AlignerIndex` | `types/reference.py` | `aligner`, `build`, `reference_cid` |
-| `alignment` | `Alignment` | `types/alignment.py` | `bqsr_applied`, `duplicates_marked`, `format`, `r1_cid`, `reference_cid`, `sample_id`, `sorted`, `tool` |
-| `alignment_index` | `AlignmentIndex` | `types/alignment.py` | `alignment_cid`, `sample_id` |
-| `anndata` | `AnnData` | `types/scrna.py` | `n_obs`, `n_vars`, `organism`, `sample_id`, `source_cid`, `stage` |
-| `bqsr_report` | `BQSRReport` | `types/alignment.py` | `alignment_cid`, `sample_id`, `tool` |
-| `duplicate_metrics` | `DuplicateMetrics` | `types/alignment.py` | `alignment_cid`, `sample_id`, `tool` |
-| `known_sites` | `KnownSites` | `types/variants.py` | `build`, `known`, `prior`, `resource_name`, `training`, `truth`, `vqsr_mode` |
-| `known_sites_index` | `KnownSitesIndex` | `types/variants.py` | `known_sites_cid` |
-| `r1` | `R1` | `types/reads.py` | `mate_cid`, `sample_id`, `sequencing_platform` |
-| `r2` | `R2` | `types/reads.py` | `mate_cid`, `sample_id`, `sequencing_platform` |
-| `reference` | `Reference` | `types/reference.py` | `build` |
-| `reference_index` | `ReferenceIndex` | `types/reference.py` | `build`, `reference_cid`, `tool` |
-| `sequence_dict` | `SequenceDict` | `types/reference.py` | `build`, `reference_cid`, `tool` |
-| `variants` | `Variants` | `types/variants.py` | `build`, `caller`, `sample_count`, `sample_id`, `source_samples`, `variant_type`, `vqsr_mode` |
-| `variants_index` | `VariantsIndex` | `types/variants.py` | `sample_id`, `variants_cid` |
-| `vqsr_model` | `VQSRModel` | `types/variants.py` | `build`, `mode`, `sample_id`, `tranches_path`, `variants_cid` |
+| `aligner_index` | `AlignerIndex` | `assets/reference.py` | `aligner`, `build`, `reference_cid` |
+| `alignment` | `Alignment` | `assets/alignment.py` | `bqsr_applied`, `duplicates_marked`, `format`, `r1_cid`, `reference_cid`, `sample_id`, `sorted`, `tool` |
+| `alignment_index` | `AlignmentIndex` | `assets/alignment.py` | `alignment_cid`, `sample_id` |
+| `anndata` | `AnnData` | `assets/scrna.py` | `n_obs`, `n_vars`, `organism`, `sample_id`, `source_cid`, `stage` |
+| `bqsr_report` | `BQSRReport` | `assets/alignment.py` | `alignment_cid`, `sample_id`, `tool` |
+| `duplicate_metrics` | `DuplicateMetrics` | `assets/alignment.py` | `alignment_cid`, `sample_id`, `tool` |
+| `known_sites` | `KnownSites` | `assets/variants.py` | `build`, `known`, `prior`, `resource_name`, `training`, `truth`, `vqsr_mode` |
+| `known_sites_index` | `KnownSitesIndex` | `assets/variants.py` | `known_sites_cid` |
+| `r1` | `R1` | `assets/reads.py` | `mate_cid`, `sample_id`, `sequencing_platform` |
+| `r2` | `R2` | `assets/reads.py` | `mate_cid`, `sample_id`, `sequencing_platform` |
+| `reference` | `Reference` | `assets/reference.py` | `build` |
+| `reference_index` | `ReferenceIndex` | `assets/reference.py` | `build`, `reference_cid`, `tool` |
+| `sequence_dict` | `SequenceDict` | `assets/reference.py` | `build`, `reference_cid`, `tool` |
+| `variants` | `Variants` | `assets/variants.py` | `build`, `caller`, `sample_count`, `sample_id`, `source_samples`, `variant_type`, `vqsr_mode` |
+| `variants_index` | `VariantsIndex` | `assets/variants.py` | `sample_id`, `variants_cid` |
+| `vqsr_model` | `VQSRModel` | `assets/variants.py` | `build`, `mode`, `sample_id`, `tranches_path`, `variants_cid` |
 
 ## Bundles
 

@@ -1,7 +1,7 @@
 """
 ### scRNA-seq tasks for Stargazer.
 
-spec: [docs/workflows/scrna.md](../workflows/scrna.md)
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 from stargazer.tasks.scrna.cluster import cluster
