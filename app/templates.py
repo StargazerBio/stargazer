@@ -32,6 +32,8 @@ Context shape consumed by `dashboard.html`:
   (what launch/copy/download send) and no delete. Workflows and Snapshots
   tiles carry a Copy-to-workspace button; Workspace and Snapshots tiles a
   Download link.
+- `version` (str) — the commit the dashboard was deployed from, shown in
+  the footer; empty shows nothing.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """

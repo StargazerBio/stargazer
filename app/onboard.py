@@ -23,9 +23,12 @@ Re-running is safe: every step checks before it writes, so onboarding an
 onboarded user only redeploys their dashboard. `upgrade` redeploys every
 active Stargazer dashboard; `offboard` stops a user's apps, removes their
 access, and archives their project, leaving their notebooks in the store.
-A redeploy waits for the user's runs to finish (`refuse_while_running`): the
+A redeploy waits for the user's runs to finish (`active_runs`): the
 dashboard holds their asset index, and a write that lands on the outgoing
-version is lost.
+version is lost. Onboarding refuses while the user has runs going; `upgrade`
+goes one user at a time and comes back around for busy users until every
+dashboard is redeployed. Each dashboard carries the commit it was deployed
+from (`release_version`) and shows it on its page.
 
 The control-plane classes are module attributes so tests can swap in fakes.
 
@@ -41,8 +44,10 @@ import argparse
 import asyncio
 import os
 import re
+import subprocess
 import time
 from functools import cache
+from pathlib import Path
 
 import flyte
 import flyte.app
@@ -63,6 +68,8 @@ _SUBJECT_LABEL = "union-subject"
 _HANDLE_MAX = 30
 # How long a deploy whose watch reported failure gets to come up anyway.
 _ACTIVE_POLLS, _ACTIVE_POLL_SECONDS = 24, 5
+# How long `upgrade` waits before coming back for users whose runs were going.
+_UPGRADE_RETRY_SECONDS = 60
 # The dashboard's env as defined, before any user's settings are applied, so
 # deploying several users in one run never carries one user's values over.
 _BASE_ENV_VARS = dict(app_env.env_vars)
@@ -210,6 +217,27 @@ def _notebook_image() -> str:
     return build_notebook_image()
 
 
+def release_version(root: Path = PROJECT_ROOT) -> str:
+    """The commit the deployer's checkout is at, shown on the dashboard's page.
+
+    `git describe --always --dirty`: the short hash (tag-relative once the
+    repo has tags), with `-dirty` when tracked files have uncommitted changes,
+    since a deploy ships the working tree, not the commit. Read at each
+    deploy, so it names what that deploy shipped. `unknown` outside a git
+    checkout.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "describe", "--always", "--dirty"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return "unknown"
+    return result.stdout.strip() if result.returncode == 0 else "unknown"
+
+
 def deploy_dashboard(
     project: str, owner_subject: str, extra_env: dict[str, str] | None = None
 ) -> str:
@@ -227,6 +255,7 @@ def deploy_dashboard(
         "STARGAZER_OWNER": owner_subject,
         "STARGAZER_NOTEBOOK_IMAGE": _notebook_image(),
         "STARGAZER_INDEX_URL": _DASHBOARD_INDEX,
+        "STARGAZER_VERSION": release_version(),
     }
     # Assets live under the same root as the workspace notebooks.
     env_vars.pop("STARGAZER_STORE_ROOT", None)
@@ -325,19 +354,39 @@ def onboard(
 
 
 def upgrade() -> list[str]:
-    """Redeploy every active Stargazer dashboard; return their URLs.
+    """Redeploy every active Stargazer dashboard, one at a time; return their URLs.
 
-    Refuses, deploying nothing, while any user has runs going.
+    Each user is checked for unfinished runs just before their own deploy. A
+    busy user is skipped, and once a pass ends the skipped ones are tried
+    again every `_UPGRADE_RETRY_SECONDS` until every dashboard is redeployed.
+    Each dashboard holds only its owner's index, so one user's runs never hold
+    up anyone else's upgrade.
     """
     active, _ = _all_projects()
-    users = [
+    pending = [
         (project.pb2.id, labels[_SUBJECT_LABEL])
         for project in active
         if (labels := _labels(project)).get("managed-by") == "stargazer"
         and labels.get(_SUBJECT_LABEL)
     ]
-    refuse_while_running([pid for pid, _ in users])
-    return [deploy_dashboard(pid, subject) for pid, subject in users]
+    urls = []
+    while True:
+        busy = []
+        for pid, subject in pending:
+            if runs := active_runs(pid):
+                logger.info(f"{pid}: waiting for {', '.join(runs)} to finish")
+                busy.append((pid, subject))
+                continue
+            urls.append(url := deploy_dashboard(pid, subject))
+            logger.info(f"{pid}: upgraded, {url}")
+        if not busy:
+            return urls
+        logger.info(
+            f"{len(busy)} dashboard(s) waiting on runs; "
+            f"trying again in {_UPGRADE_RETRY_SECONDS}s"
+        )
+        time.sleep(_UPGRADE_RETRY_SECONDS)
+        pending = busy
 
 
 def offboard(email: str) -> None:
@@ -372,7 +421,10 @@ def main() -> None:
     add.add_argument(
         "--handle", help="names the project; default: the email's local part"
     )
-    sub.add_parser("upgrade", help="redeploy every user's dashboard")
+    sub.add_parser(
+        "upgrade",
+        help="redeploy every user's dashboard, waiting on users with runs going",
+    )
     remove = sub.add_parser(
         "offboard", help="stop a user's apps and archive their project"
     )

@@ -67,6 +67,10 @@ def stand_in_subject(env) -> str:
 # login in front of it (`app.identity`). Union's login always forwards one.
 STAND_IN_SUBJECT: str = stand_in_subject(os.environ)
 
+# The commit this dashboard was deployed from (`app.onboard.release_version`),
+# shown on its page for debugging. Unset in a bare local run, which shows none.
+VERSION: str = os.environ.get("STARGAZER_VERSION", "")
+
 # The one user this dashboard serves: their Union subject, baked in when the
 # dashboard is deployed into their project. Unset admits nobody (fail closed).
 # Notebook pods read the same variable for the same check (`app/proxy.py`).
