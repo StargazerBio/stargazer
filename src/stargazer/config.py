@@ -26,6 +26,9 @@ Rules:
 - STARGAZER_REGISTRY: Image push registry. Defaults to the devbox's in-cluster
   registry on `devbox`; left unset on `union`, where the remote builder pushes
   to Union's own registry. An explicit value wins on either target.
+- FLYTE_DOCKER_BUILD_EXTRA_ARGS: Extra flags for local image builds. Defaults
+  to `--provenance=false` on `devbox`, so a build pushes a plain image the
+  devbox's node will pull whatever its architecture (see IMAGE_PLATFORM).
 
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
@@ -62,6 +65,15 @@ if os.environ["STARGAZER_TARGET"] not in TARGETS:
     )
 if os.environ["STARGAZER_TARGET"] == "devbox":
     os.environ.setdefault("STARGAZER_REGISTRY", "localhost:30000")
+    # Buildx attaches a provenance attestation by default, which turns even a
+    # one-platform push into an index; an arm64 node finds no arm64 entry in
+    # it and refuses the pull. A plain image pulls and runs under emulation.
+    os.environ.setdefault("FLYTE_DOCKER_BUILD_EXTRA_ARGS", "--provenance=false")
+
+# Every Stargazer image is built for x86_64 only, the architecture Union runs.
+# GATK's GenomicsDB ships an x86_64-only native library, so an arm64 build
+# can't joint-call; on an Apple-silicon devbox these pods run emulated.
+IMAGE_PLATFORM = ("linux/amd64",)
 
 _log_dir = Path.home() / ".stargazer" / "logs"
 _log_dir.mkdir(parents=True, exist_ok=True)
@@ -147,6 +159,13 @@ def log_execution() -> str:
     return execution_id
 
 
+# Both task images install the stargazer package itself, not only its
+# dependencies. A task pod resolves the tasks it calls as installed modules
+# (`stargazer.tasks…`), so without the package a workflow's child tasks can't
+# import, wherever the run was submitted from. The project's files feed the
+# image hash, so a source change builds a new image; .dockerignore keeps docs,
+# tests and git history out of it.
+
 # scRNA-seq task environment for scanpy-based single-cell analysis.
 # Lean image: the project's `bio` extra on top of the Flyte debian base —
 # scanpy plus what its steps import lazily (scikit-image for scrublet's
@@ -159,9 +178,14 @@ scrna_env = flyte.TaskEnvironment(
         flyte.Image.from_debian_base(
             name="stargazer-scrna",
             registry=os.environ.get("STARGAZER_REGISTRY"),
+            platform=IMAGE_PLATFORM,
         )
         .with_apt_packages("ca-certificates")
-        .with_uv_project(PROJECT_ROOT / "pyproject.toml", extra_args="--extra bio")
+        .with_uv_project(
+            PROJECT_ROOT / "pyproject.toml",
+            extra_args="--extra bio",
+            project_install_mode="install_project",
+        )
     ),
     resources=flyte.Resources(memory=("2Gi", "6Gi")),
     env_vars=STARGAZER_ENV_VARS,
@@ -169,9 +193,8 @@ scrna_env = flyte.TaskEnvironment(
 )
 
 # GATK/alignment task environment for GATK, BWA, and samtools tools.
-# Multi-arch Debian base with micromamba layered on. gatk4, samtools, bwa,
-# and bwa-mem2 all come from bioconda (which publishes native linux-aarch64
-# and linux-64 builds). Conda env lives at /opt/conda; binaries symlinked
+# Debian base with micromamba layered on. gatk4, samtools, bwa, and bwa-mem2
+# all come from bioconda. Conda env lives at /opt/conda; binaries symlinked
 # onto PATH so tasks invoke them directly.
 gatk_env = flyte.TaskEnvironment(
     name="gatk",
@@ -180,15 +203,13 @@ gatk_env = flyte.TaskEnvironment(
         flyte.Image.from_debian_base(
             name="stargazer-gatk",
             registry=os.environ.get("STARGAZER_REGISTRY"),
-            platform=("linux/amd64", "linux/arm64"),
+            platform=IMAGE_PLATFORM,
         )
         .with_apt_packages("ca-certificates", "curl", "bzip2")
         .with_commands(
             [
-                # Install micromamba (arch-detected) into /usr/local/bin.
-                'arch=$(uname -m); case "$arch" in x86_64) marc=linux-64;; '
-                "aarch64|arm64) marc=linux-aarch64;; esac; "
-                "curl -Ls https://micro.mamba.pm/api/micromamba/${marc}/latest "
+                # Install micromamba into /usr/local/bin.
+                "curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest "
                 "| tar -xj -C /usr/local/bin --strip-components=1 bin/micromamba",
                 # Create the conda env at /opt/conda with the bioinformatics tools.
                 "/usr/local/bin/micromamba create -p /opt/conda -y "
@@ -196,15 +217,19 @@ gatk_env = flyte.TaskEnvironment(
                 "&& /usr/local/bin/micromamba clean -a -y",
                 # Expose the conda binaries on the default PATH. java is the JVM
                 # bundled by the gatk4 conda package; gatk's wrapper script
-                # subprocess-calls it by name so it must be on PATH.
+                # subprocess-calls it by name so it must be on PATH. bwa-mem2
+                # is a launcher that runs a CPU-specific sibling (bwa-mem2.avx2,
+                # …) from its own directory, so every variant is linked.
                 "ln -s /opt/conda/bin/gatk /usr/local/bin/gatk "
                 "&& ln -s /opt/conda/bin/java /usr/local/bin/java "
                 "&& ln -s /opt/conda/bin/samtools /usr/local/bin/samtools "
                 "&& ln -s /opt/conda/bin/bwa /usr/local/bin/bwa "
-                "&& ln -s /opt/conda/bin/bwa-mem2 /usr/local/bin/bwa-mem2",
+                "&& ln -s /opt/conda/bin/bwa-mem2* /usr/local/bin/",
             ]
         )
-        .with_uv_project(PROJECT_ROOT / "pyproject.toml")
+        .with_uv_project(
+            PROJECT_ROOT / "pyproject.toml", project_install_mode="install_project"
+        )
     ),
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,

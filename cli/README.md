@@ -40,7 +40,7 @@ other keys are that type's fields.
 - `--update-config`: after each upload, fill that file's empty entry in the
   `CIDS` dict of `--config-path` with its CID
 - `--config-path PATH`: the Python file holding `CIDS` (default:
-  `tests/utils/test_pinata.py`)
+  `tests/pinata/test_client.py`)
 
 **Requirements:** `PINATA_JWT` set to a Pinata API key, from the
 [Pinata dashboard](https://app.pinata.cloud/):
@@ -67,7 +67,7 @@ Upload Summary: 1/1 files uploaded
 
 ### Adding a test fixture's CID
 
-`tests/utils/test_pinata.py` keeps the CIDs Pinata assigned to the fixture
+`tests/pinata/test_client.py` keeps the CIDs Pinata assigned to the fixture
 files. To add one, put an empty entry in its `CIDS` dict
 (`"new_fixture.fa": "",`), then upload with `--update-config`:
 
@@ -111,3 +111,25 @@ It prints the dashboard's URL. What each setting is for, and how to send runs'
 assets to it:
 [`.opencode/reference/devbox_workarounds.md`](../.opencode/reference/devbox_workarounds.md)
 → Devbox dashboard.
+
+## docker_task_tests.py
+
+Runs the tasks test tier: `tests/tasks`, each domain's tests in the image
+its tasks run in (`IMAGES` in the script): `gatk/` and `general/` in
+`gatk_env`'s, which carries gatk, bwa, bwa-mem2 and samtools, and `scrna/` in
+`scrna_env`'s. This builds each image into your local docker as a task pod
+gets it (x86_64 like Union, emulated on Apple silicon; never pushed) and runs
+pytest in it against the stargazer the image installs. Only `tests/` and
+`pyproject.toml` are mounted, so a source change builds the images again
+first. Needs docker, not the devbox.
+
+```bash
+uv run --all-extras python cli/docker_task_tests.py [paths or -k EXPR]
+```
+
+With no arguments it runs every test under `tests/tasks`; paths or `-k` pick
+a subset. The tests are collected in your venv, since one image can't import
+another domain's test modules, and their IDs passed to pytest in each
+container. It exits 0 when every image's run passes, otherwise with the
+first failing run's pytest exit code.
+

@@ -2,8 +2,6 @@
 Tests for combine_gvcfs task.
 """
 
-import shutil
-
 import pytest
 from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
 
@@ -39,9 +37,6 @@ def make_gvcf(sample_id: str) -> Variants:
 @pytest.mark.asyncio
 async def test_combine_gvcfs_merges_samples(fixtures_db):
     """Test that combine_gvcfs merges multiple GVCFs."""
-    if shutil.which("gatk") is None:
-        pytest.skip("gatk not available in environment")
-
     sample_ids = ["NA12829", "NA12891", "NA12892"]
     gvcfs = [make_gvcf(sid) for sid in sample_ids]
     ref = make_ref()
@@ -85,9 +80,6 @@ async def test_combine_gvcfs_rejects_vcf_input():
 @pytest.mark.asyncio
 async def test_combine_gvcfs_single_sample(fixtures_db):
     """Test that combine_gvcfs works with a single sample (edge case)."""
-    if shutil.which("gatk") is None:
-        pytest.skip("gatk not available in environment")
-
     sample_id = "NA12829"
     gvcf = make_gvcf(sample_id)
     ref = make_ref()

@@ -3,7 +3,7 @@
 Upload files to Pinata's public network with keyvalue metadata.
 
 Anyone can read what this uploads. With --update-config it also fills the
-file's empty entry in the CIDS dict of tests/utils/test_pinata.py.
+file's empty entry in the CIDS dict of tests/pinata/test_client.py.
 """
 
 import argparse
@@ -90,7 +90,7 @@ Examples:
   # Upload with key=value metadata
   %(prog)s results.vcf -m asset=variants -m sample_id=NA12829
 
-  # Upload a test fixture and fill its CIDS entry in tests/utils/test_pinata.py
+  # Upload a test fixture and fill its CIDS entry in tests/pinata/test_client.py
   %(prog)s tests/fixtures/general/GRCh38_TP53.fa -m asset=reference --update-config
 
   # Upload several files with the same metadata
@@ -129,8 +129,8 @@ Examples:
     parser.add_argument(
         "--config-path",
         type=Path,
-        default=Path(__file__).parent.parent / "tests" / "utils" / "test_pinata.py",
-        help="Python file holding the CIDS dict (default: tests/utils/test_pinata.py)",
+        default=Path(__file__).parent.parent / "tests" / "pinata" / "test_client.py",
+        help="Python file holding the CIDS dict (default: tests/pinata/test_client.py)",
     )
 
     args = parser.parse_args()

@@ -2,8 +2,6 @@
 Tests for merge_bam_alignment task.
 """
 
-import shutil
-
 import pytest
 from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
 
@@ -14,9 +12,6 @@ from stargazer.tasks.gatk.merge_bam_alignment import merge_bam_alignment
 @pytest.mark.asyncio
 async def test_merge_bam_alignment_merges_bams(fixtures_db):
     """Test that merge_bam_alignment creates a merged BAM."""
-    if shutil.which("gatk") is None:
-        pytest.skip("gatk not available in environment")
-
     sample_id = "NA12829_TP53_merge"
 
     aligned_bam = Alignment(
@@ -52,7 +47,10 @@ async def test_merge_bam_alignment_merges_bams(fixtures_db):
     assert merged.sorted == "coordinate"
     assert merged.tool == "gatk_merge_bam_alignment"
     assert merged.path is not None
-    assert (await merged.fetch()).exists()
+    bam = await merged.fetch()
+    assert bam.exists()
+    # Downstream tools read the index from beside the BAM.
+    assert (bam.parent / "NA12829_TP53_merge_merged.bai").exists()
 
 
 @pytest.mark.asyncio

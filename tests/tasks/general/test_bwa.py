@@ -2,7 +2,6 @@
 Tests for BWA tasks.
 """
 
-import shutil
 from pathlib import Path
 
 import pytest
@@ -15,9 +14,6 @@ from stargazer.tasks.general.bwa import bwa_index
 @pytest.mark.asyncio
 async def test_bwa_index(fixtures_db):
     """Test bwa index creates all index files (.amb, .ann, .bwt, .pac, .sa)."""
-    if shutil.which("bwa") is None:
-        pytest.skip("bwa not available in environment")
-
     ref = Reference(path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
 
     fixtures_db()  # checkout: switch to isolated work dir
@@ -43,9 +39,6 @@ async def test_bwa_index(fixtures_db):
 @pytest.mark.asyncio
 async def test_bwa_index_missing_file():
     """Test that bwa_index raises error when reference file is missing."""
-    if shutil.which("bwa") is None:
-        pytest.skip("bwa not available in environment")
-
     ref = Reference(path=Path("/nonexistent/path/ref.fasta"), build="GRCh38")
 
     with pytest.raises((FileNotFoundError, RuntimeError)):

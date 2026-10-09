@@ -1,9 +1,33 @@
+# Everything an image doesn't need. Every file left in the context feeds the
+# hash of the images that install the project (the task images, the
+# dashboard), so anything listed here (docs, tests, git history, a pytest
+# cache, the Flyte CLI cache, .env) would otherwise rebuild them on every
+# change. A denylist, not an allowlist: Flyte matches these patterns relative
+# to each folder a layer copies (`with_source_folder(src)` walks `src/`), so a
+# leading `*` would drop that folder's contents.
 scratch/
 __pycache__/
 __marimo__/
 *.egg-info
 .venv/
 .ruff_cache
+.pytest_cache
+.cache
+.DS_Store
+.git
+.github
+.codex
+.opencode
+.claude/skills
+.claude/worktrees
+.claude/settings.local.json
+docs
+site
+tests
+cli
+AGENTS.md
+zensical.toml
+.pre-commit-config.yaml
 # Local-only state: credentials and the Flyte CLI cache (which changes every
 # run and would otherwise change every image hash built from this context).
 .env

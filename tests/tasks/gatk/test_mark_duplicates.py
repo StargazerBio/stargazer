@@ -2,8 +2,6 @@
 Tests for mark_duplicates task.
 """
 
-import shutil
-
 import pytest
 from conftest import GATK_FIXTURES_DIR
 
@@ -14,9 +12,6 @@ from stargazer.tasks.gatk.mark_duplicates import mark_duplicates
 @pytest.mark.asyncio
 async def test_mark_duplicates_marks_duplicates(fixtures_db):
     """Test that mark_duplicates creates a marked BAM."""
-    if shutil.which("gatk") is None:
-        pytest.skip("gatk not available in environment")
-
     sample_id = "NA12829_TP53_merged"
 
     alignment = Alignment(
@@ -36,7 +31,10 @@ async def test_mark_duplicates_marks_duplicates(fixtures_db):
     assert marked.duplicates_marked is True
     assert marked.tool == "gatk_mark_duplicates"
     assert marked.path is not None
-    assert (await marked.fetch()).exists()
+    bam = await marked.fetch()
+    assert bam.exists()
+    # Downstream tools read the index from beside the BAM.
+    assert (bam.parent / "NA12829_TP53_merged_marked_duplicates.bai").exists()
 
 
 @pytest.mark.asyncio

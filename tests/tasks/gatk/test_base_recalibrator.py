@@ -2,8 +2,6 @@
 Tests for base_recalibrator task.
 """
 
-import shutil
-
 import pytest
 from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
 
@@ -16,9 +14,6 @@ KNOWN_SITES_VCF = "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf"
 @pytest.mark.asyncio
 async def test_base_recalibrator_creates_report(fixtures_db):
     """Test that base_recalibrator returns a BQSRReport."""
-    if shutil.which("gatk") is None:
-        pytest.skip("gatk not available in environment")
-
     sample_id = "NA12829_TP53_markdup"
 
     alignment = Alignment(

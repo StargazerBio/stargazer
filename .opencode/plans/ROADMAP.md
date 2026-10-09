@@ -75,9 +75,30 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    visitor's subject. Those scripts run on the dashboard and likely on
    notebook pages too, where they can read whatever the page shows. Ask
    Union whether apps can opt out.
+- **Old dashboard revisions keep running after a redeploy.** Each deploy
+   makes a new Knative revision, and the old one keeps its pod for up to an
+   hour (`autoscaling.knative.dev/window: 1h`): three were running at once on
+   the devbox after three deploys (measured 2026-10-08). If each pod's
+   Litestream replicates its own copy of the index to the same bucket path,
+   that breaks Litestream's one-writer rule, and a restore could come back
+   from a stale copy (inferred; the restart test still found every row).
+   Applies to `upgrade` on Union too. The devbox tests deploy once per
+   session, so they add revisions quickly.
+- **Small gaps found while testing on the devbox (2026-10-09).**
+   - `gatk_env` sets no `resources=`, which AGENTS.md requires of every
+     TaskEnvironment for the devbox's ~7.5 GiB node.
+   - `apply_bqsr` stores the recalibrated BAM but not its index, unlike
+     `mark_duplicates` and `sort_sam`. The germline workflow still finishes
+     on the devbox, so a later step may be indexing it again (inferred).
+   - `docs/architecture/configuration.md` → Building locally says the Flyte
+     images set no `registry=`; they take `STARGAZER_REGISTRY`, which the
+     devbox sets to its own registry.
+   - `tests/helpers.py` is imported nowhere.
+   - `tests/unit/test_devbox_dashboard.py` isn't `ruff format`ted on main.
 - **Notebooks on the devbox.** The devbox dashboard and asset storage work
-   (`cli/devbox_dashboard.py`, a stand-in user), but launching a notebook
-   from that dashboard hasn't been driven yet.
+   (`cli/devbox_dashboard.py`, a stand-in user), and a tutorial launched in
+   run mode from that dashboard starts and serves marimo (2026-10-08). Edit
+   mode, workspace saving and the in-notebook terminal haven't been driven.
 - **Union console handoff (per-user project access).** Delivered by the
    per-user dashboards' onboarding (users get `contributor` on their own
    project); what remains is the dashboard's link out to the console.
@@ -137,6 +158,7 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
 
 ## Complete
 
+- ✅ Test tiers, and the germline workflow on the devbox (2026-10-08): each top-level directory under `tests/` belongs to exactly one tier, and its tests carry that tier's marker. `unit` (assets, notebooks, unit, utils) is a bare run, and pre-commit runs it on every commit. `tasks` runs every task test in the image its task runs in (`cli/docker_task_tests.py`): the GATK and alignment tests in `gatk_env`'s, which carries the tools so no one installs them (the tests that call them used to skip wherever the tools were missing, which was everywhere), and the scRNA ones in `scrna_env`'s. `pinata` holds the tests that call the real Pinata API. `devbox` tests deploy the dashboard, store and find assets across pods, and run `germline_short_variant_discovery` end to end on the devbox; the `verify-stargazer` devbox recipes drive them. A test never skips: outside its tier it's deselected, inside it a missing tool or service fails. Every Stargazer image is now x86_64-only, as on Union, because GATK's GenomicsDB has no arm64 build; on an Apple-silicon devbox those pods run emulated. Getting the workflow through on the devbox fixed six things. Task pods couldn't import `stargazer`, so the task images now install it. The devbox had no `PINATA_JWT` secret, so every task pod was refused; `cli/devbox-setup.sh` creates it. Picard's BAM index (`<name>.bai`) was never stored. Joint calling read contigs from a path it hadn't fetched, and now defaults to every contig. `bwa-mem2` couldn't find its CPU-specific binaries on x86_64, which likely broke it on Union too. And joint calling needed x86_64. Verified: unit 393 passed in 8s; tasks 52 passed, 37 in `gatk_env`'s image and 15 in `scrna_env`'s, in 2m34s including both image builds; devbox 6 passed in 2m55s, with the germline run joint-calling the cohort; one read-only pinata test passed.
 - ✅ Devbox dashboard and asset storage (2026-10-08): `cli/devbox_dashboard.py` deploys one dashboard on the devbox for a stand-in user (`SG_STAND_IN_SUBJECT`, never honored on Union), storing under `s3://flyte-data/stargazer`, and holds the storage port-forward open while it uploads. The Litestream launcher now takes an S3-compatible store's endpoint and keys from Flyte's `FLYTE_AWS_*`. Verified with the `verify-stargazer` devbox recipe: one pod stored three files, a second found and read them all back, and the index came back whole after two dashboard restarts.
 - ✅ Per-user dashboards (2026-10-06): the shared admin is replaced by one dashboard per user, in their own readable project (`u-<handle>`), serving only its owner. An org admin runs `stargazer-users onboard` to invite or find the user, create the project, grant `contributor` on it alone, and deploy the dashboard at a stable subdomain; `upgrade` is the release, `offboard` stops apps, removes access and archives. Union's app gate needs project view, so this keeps every user's console to their own project, and no privileged credential is deployed. Verified on the tenant end to end. Still open: whether an invited user's first sign-in arrives with the subject `User.create` returned (needs a real second address). [`26_per_user_dashboard.md`](./26_per_user_dashboard.md)
 - ✅ One login: Union auth + workspace state on object storage (2026-10-06): Union's GitHub SSO is the only login; the app tier no longer talks to GitHub (no OAuth App, fork, GitHub App or session cookie). Workspace notebooks and own snapshots live on object storage keyed by the Union subject; notebook pods hydrate at launch, save every few seconds and at scale-to-zero, and admit only their owner. Verified on the tenant end to end. One finding is still open: the admin's in-cluster identity is refused project creation on Union, so each user's `u-<subject>` project has to be created by an org admin until project creation moves out of the app. [`25_workspace_state_object_storage.md`](./25_workspace_state_object_storage.md)

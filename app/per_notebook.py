@@ -59,7 +59,7 @@ from flyteidl2.common import identifier_pb2, list_pb2
 
 from app import config
 from app.notebook_meta import NotebookResources
-from stargazer.config import PROJECT_ROOT, STARGAZER_ENV_VARS
+from stargazer.config import IMAGE_PLATFORM, PROJECT_ROOT, STARGAZER_ENV_VARS
 
 # Bake the proxy as a TOP-LEVEL module (not under `app/`) because Flyte's
 # loaded_modules code bundle ships an `app/` package into the pod's cwd
@@ -86,16 +86,14 @@ notebook_app_img_recipe = (
     flyte.Image.from_debian_base(
         name="notebook-app",
         registry=os.environ.get("STARGAZER_REGISTRY"),
-        platform=("linux/amd64", "linux/arm64"),
+        platform=IMAGE_PLATFORM,
     )
     .with_apt_packages("ca-certificates", "curl", "git", "bzip2")
     .with_commands(
         [
             # micromamba + bioinformatics tools (same recipe as gatk_env).
             # Reachable by subprocess from inside each notebook's sandbox venv.
-            'arch=$(uname -m); case "$arch" in x86_64) marc=linux-64;; '
-            "aarch64|arm64) marc=linux-aarch64;; esac; "
-            "curl -Ls https://micro.mamba.pm/api/micromamba/${marc}/latest "
+            "curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest "
             "| tar -xj -C /usr/local/bin --strip-components=1 bin/micromamba",
             "/usr/local/bin/micromamba create -p /opt/conda -y "
             "-c bioconda -c conda-forge gatk4 samtools bwa bwa-mem2 "
@@ -104,7 +102,8 @@ notebook_app_img_recipe = (
             "&& ln -s /opt/conda/bin/java /usr/local/bin/java "
             "&& ln -s /opt/conda/bin/samtools /usr/local/bin/samtools "
             "&& ln -s /opt/conda/bin/bwa /usr/local/bin/bwa "
-            "&& ln -s /opt/conda/bin/bwa-mem2 /usr/local/bin/bwa-mem2",
+            # bwa-mem2 runs a CPU-specific sibling from its own directory.
+            "&& ln -s /opt/conda/bin/bwa-mem2* /usr/local/bin/",
             # uv — used by `marimo --sandbox` to build per-notebook venvs.
             "curl -LsSf https://astral.sh/uv/install.sh | sh "
             "&& install -m 755 /root/.local/bin/uv /usr/local/bin/uv "

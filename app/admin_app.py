@@ -92,6 +92,7 @@ from app.per_notebook import (
 )
 from app.templates import templates
 from stargazer.config import (
+    IMAGE_PLATFORM,
     PROJECT_ROOT,
     STARGAZER_ENV_VARS,
     logger,
@@ -136,17 +137,15 @@ app_env = flyte.app.AppEnvironment(
         flyte.Image.from_debian_base(
             name="dashboard",
             registry=os.environ.get("STARGAZER_REGISTRY"),
-            platform=("linux/amd64", "linux/arm64"),
+            platform=IMAGE_PLATFORM,
         )
         .with_apt_packages("ca-certificates", "curl")
         .with_commands(
             [
                 # Litestream keeps the asset index durable in the bucket
-                # (app.dashboard_launch). The .deb matches the build arch.
-                'arch=$(uname -m); case "$arch" in x86_64) a=x86_64;; '
-                "aarch64|arm64) a=arm64;; esac; "
+                # (app.dashboard_launch).
                 "curl -fsSL -o /tmp/litestream.deb "
-                f"https://github.com/benbjohnson/litestream/releases/download/v{_LITESTREAM}/litestream-{_LITESTREAM}-linux-$a.deb "
+                f"https://github.com/benbjohnson/litestream/releases/download/v{_LITESTREAM}/litestream-{_LITESTREAM}-linux-x86_64.deb "
                 "&& dpkg -i /tmp/litestream.deb && rm /tmp/litestream.deb "
                 "&& litestream version",
             ]

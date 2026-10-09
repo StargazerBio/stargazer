@@ -69,7 +69,6 @@ async def germline_short_variant_discovery(
         )
     )
 
-    # 4. GenomicsDBImport + GenotypeGVCFs — joint calling
-    return await joint_call_gvcfs(
-        gvcfs=gvcfs, ref=ref, intervals=ref.contigs, cohort_id=cohort_id
-    )
+    # 4. GenomicsDBImport + GenotypeGVCFs — joint calling over every contig.
+    # The task reads them from the reference where it's already fetched.
+    return await joint_call_gvcfs(gvcfs=gvcfs, ref=ref, cohort_id=cohort_id)
