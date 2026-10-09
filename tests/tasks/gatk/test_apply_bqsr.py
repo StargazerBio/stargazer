@@ -9,7 +9,6 @@ from stargazer.assets import Alignment, BQSRReport, Reference
 from stargazer.tasks.gatk.apply_bqsr import apply_bqsr
 
 
-@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_apply_bqsr_recalibrates_bam(fixtures_db):
     """Test that apply_bqsr creates a recalibrated BAM."""

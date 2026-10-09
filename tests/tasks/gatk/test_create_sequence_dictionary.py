@@ -9,7 +9,6 @@ from stargazer.assets import Reference, SequenceDict
 from stargazer.tasks.gatk.create_sequence_dictionary import create_sequence_dictionary
 
 
-@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_create_sequence_dictionary_creates_dict(fixtures_db):
     """Test create_sequence_dictionary creates .dict file."""

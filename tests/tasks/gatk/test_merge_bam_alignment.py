@@ -9,7 +9,6 @@ from stargazer.assets import Alignment, Reference
 from stargazer.tasks.gatk.merge_bam_alignment import merge_bam_alignment
 
 
-@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_merge_bam_alignment_merges_bams(fixtures_db):
     """Test that merge_bam_alignment creates a merged BAM."""

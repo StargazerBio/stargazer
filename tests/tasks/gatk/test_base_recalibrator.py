@@ -11,7 +11,6 @@ from stargazer.tasks.gatk.base_recalibrator import base_recalibrator
 KNOWN_SITES_VCF = "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf"
 
 
-@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_base_recalibrator_creates_report(fixtures_db):
     """Test that base_recalibrator returns a BQSRReport."""

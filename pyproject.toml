@@ -61,16 +61,17 @@ python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
 asyncio_mode = "auto"
-# A bare run is the unit tier: everything that runs in this venv. The other
-# tiers are opt-in by marker (tests/TESTING_GUIDE.md); a `-m` on the command
-# line replaces this one. Pinata tests call the real API (uploads up to
-# ~100 MB). --strict-markers makes a misspelled marker an error rather than a
-# test that silently lands in the wrong tier.
-addopts = ["--strict-markers", "-m", "not tools and not devbox and not pinata"]
+# Each top-level directory under tests/ is in exactly one tier, and its tests
+# carry that tier's marker (`TIERS` in tests/conftest.py). A bare run is the
+# unit tier; a `-m` on the command line replaces this one to pick another
+# (tests/TESTING_GUIDE.md). --strict-markers makes an unregistered marker,
+# such as a typo in `TIERS`, an error.
+addopts = ["--strict-markers", "-m", "unit"]
 markers = [
-    "tools: needs gatk_env's command-line tools; runs in its image via cli/docker_task_tests.py",
-    "devbox: needs the local devbox; run with `uv run --all-extras pytest -m devbox`",
-    "pinata: calls the real Pinata API with tests/.secrets/pinata_jwt; opt-in with -m pinata",
+    "unit: tests/{assets,notebooks,unit,utils}; this venv, on every commit (pre-commit)",
+    "tasks: tests/tasks; each task's image, via cli/docker_task_tests.py",
+    "devbox: tests/devbox; the local devbox, with -m devbox",
+    "pinata: tests/pinata; the real Pinata API (uploads up to ~100 MB), with -m pinata",
 ]
 filterwarnings = [
     # Ignore Pydantic deprecation warnings from flyte package (third-party)

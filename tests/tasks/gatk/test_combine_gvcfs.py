@@ -34,7 +34,6 @@ def make_gvcf(sample_id: str) -> Variants:
     )
 
 
-@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_combine_gvcfs_merges_samples(fixtures_db):
     """Test that combine_gvcfs merges multiple GVCFs."""
@@ -78,7 +77,6 @@ async def test_combine_gvcfs_rejects_vcf_input():
         )
 
 
-@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_combine_gvcfs_single_sample(fixtures_db):
     """Test that combine_gvcfs works with a single sample (edge case)."""

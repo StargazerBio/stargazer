@@ -9,7 +9,6 @@ from stargazer.assets import Alignment
 from stargazer.tasks.gatk.mark_duplicates import mark_duplicates
 
 
-@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_mark_duplicates_marks_duplicates(fixtures_db):
     """Test that mark_duplicates creates a marked BAM."""

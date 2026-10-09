@@ -14,8 +14,6 @@ import pytest
 
 from . import pod_tasks
 
-pytestmark = pytest.mark.devbox
-
 N = 3
 
 

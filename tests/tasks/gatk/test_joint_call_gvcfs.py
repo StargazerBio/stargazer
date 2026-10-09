@@ -9,7 +9,6 @@ from stargazer.assets import Reference, Variants
 from stargazer.tasks.gatk.joint_call_gvcfs import joint_call_gvcfs
 
 
-@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_joint_call_gvcfs_defaults_to_every_contig(fixtures_db):
     """With no intervals, joint calling covers every contig in the reference."""

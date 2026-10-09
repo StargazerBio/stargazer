@@ -1,9 +1,6 @@
 """The dashboard deploys on the devbox and serves the stand-in user."""
 
 import httpx
-import pytest
-
-pytestmark = pytest.mark.devbox
 
 
 def test_dashboard_serves_the_stand_in_user(dashboard):

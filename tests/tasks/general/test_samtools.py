@@ -11,7 +11,6 @@ from stargazer.assets import Reference, ReferenceIndex
 from stargazer.tasks.general.samtools import samtools_faidx
 
 
-@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_samtools_faidx(fixtures_db):
     """Test samtools faidx creates .fai index file."""
@@ -29,7 +28,6 @@ async def test_samtools_faidx(fixtures_db):
     assert result.path.name.endswith(".fai")
 
 
-@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_samtools_faidx_idempotent(fixtures_db):
     """Test that samtools_faidx is idempotent (doesn't fail if .fai already exists)."""

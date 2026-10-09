@@ -9,7 +9,6 @@ from stargazer.assets import Alignment
 from stargazer.tasks.gatk.sort_sam import sort_sam
 
 
-@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_sort_sam_sorts_bam(fixtures_db):
     """Test that sort_sam creates a sorted BAM."""

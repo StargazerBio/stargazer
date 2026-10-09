@@ -45,21 +45,21 @@ The devbox tests (`uv run --all-extras pytest -m devbox`, see [Running Tests](#r
 
 ## Running Tests
 
-Tests come in tiers, picked by pytest marker. The unit tier runs on every commit through pre-commit; run the others when your change reaches them.
+Each top-level directory under `tests/` belongs to one tier, and each tier has a pytest marker. The unit tier runs on every commit through pre-commit; run the others when your change reaches them.
 
 ```bash
 uv run --all-extras pytest                            # unit: this venv
-uv run --all-extras python cli/docker_task_tests.py   # tools: in the GATK task image
+uv run --all-extras python cli/docker_task_tests.py   # tasks: in each task's image
 uv run --all-extras pytest -m devbox                  # devbox: the local devbox
 uv run --all-extras pytest -m pinata                  # the real Pinata API
 ```
 
-- **Unit** is everything that runs on Python alone. Every test gets its own empty store, index and cache under its temp directory, so nothing touches `~/.stargazer`, and runs with no `PINATA_JWT`. Tests that query the fixture files use a store seeded once per session (`tests/fixtures/seed.py`).
-- **Tools** (`tools`) covers the tasks that wrap gatk, bwa, bwa-mem2 or samtools. Those tools live in the task image, not on your machine. The runner builds that image as a pod gets it, x86_64 like Union (emulated on Apple silicon), and runs the tests in it. A source change rebuilds the image first. Pass paths or `-k` to run a subset, such as `tests/tasks/gatk/test_sort_sam.py`.
-- **Devbox** (`devbox`) is anything that needs a cluster: deploying the dashboard, workflows across pods, the devbox's store and index. It deploys the dashboard itself; the devbox has to be up with `cli/devbox-setup.sh` applied. Add `-rP` to see each run's URL.
-- **Pinata** (`pinata`) calls the real Pinata API with the key in `tests/.secrets/pinata_jwt`, and fails without it.
+- **Unit** (`tests/assets`, `notebooks`, `unit`, `utils`) is the cheap tests that run on Python alone. Every test gets its own empty store, index and cache under its temp directory, so nothing touches `~/.stargazer`, and runs with no `PINATA_JWT`. Tests that query the fixture files use a store seeded once per session (`tests/fixtures/seed.py`).
+- **Tasks** (`tests/tasks`) runs each task's tests in the image the task runs in, so the GATK and alignment tools never need to be on your machine. Run it when you add or change a task. The runner builds those images as a pod gets them, x86_64 like Union (emulated on Apple silicon), and runs the tests in them. A source change rebuilds the images first. Pass paths or `-k` to run a subset, such as `tests/tasks/gatk/test_sort_sam.py`.
+- **Devbox** (`tests/devbox`) is anything that needs a cluster: deploying the dashboard, workflows across pods, the devbox's store and index. It deploys the dashboard itself; the devbox has to be up with `cli/devbox-setup.sh` applied. Add `-rP` to see each run's URL.
+- **Pinata** (`tests/pinata`) calls the real Pinata API with the key in `tests/.secrets/pinata_jwt`, and fails without it.
 
-Outside its tier a marked test is deselected, never skipped, and inside it a missing tool or service fails the run. More in [`tests/TESTING_GUIDE.md`](https://github.com/StargazerBio/stargazer/blob/main/tests/TESTING_GUIDE.md).
+Outside its tier a test is deselected, never skipped, and inside it a missing tool or service fails the run. A new directory under `tests/` needs a tier in `TIERS` in `tests/conftest.py`. More in [`tests/TESTING_GUIDE.md`](https://github.com/StargazerBio/stargazer/blob/main/tests/TESTING_GUIDE.md).
 
 ## Code Style
 

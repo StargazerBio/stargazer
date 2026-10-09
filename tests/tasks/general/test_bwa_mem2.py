@@ -9,7 +9,6 @@ from stargazer.assets import Reference
 from stargazer.tasks.general.bwa_mem2 import bwa_mem2_index
 
 
-@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_bwa_mem2_index(fixtures_db):
     """bwa-mem2 index writes its five index files, stored as assets."""

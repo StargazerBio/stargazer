@@ -18,8 +18,6 @@ from stargazer.workflows import germline_short_variant_discovery
 
 from . import pod_tasks
 
-pytestmark = pytest.mark.devbox
-
 FIXTURES = PROJECT_ROOT / "tests" / "fixtures" / "general"
 
 

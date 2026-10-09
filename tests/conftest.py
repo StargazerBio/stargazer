@@ -1,10 +1,12 @@
 """Pytest configuration for Flyte v2 tests.
 
+Every top-level directory under tests/ belongs to exactly one tier, and its
+tests carry that tier's marker (`TIERS`). A bare run selects the unit tier
+(`addopts` in pyproject.toml); `-m tasks`, `-m devbox` or `-m pinata` selects
+another. tests/TESTING_GUIDE.md → Test Tiers has where each one runs.
+
 PINATA_JWT is stripped before any stargazer imports, so storage runs without
-the public tier. Tests marked @pytest.mark.pinata get the JWT injected from
-tests/.secrets/pinata_jwt at runtime. Like the `tools` and `devbox` tiers,
-they're deselected by default (`addopts` in pyproject.toml); `uv run pytest -m
-pinata` runs them.
+the public tier; the pinata tier's conftest sets it back for its own tests.
 
 Every test runs against its own empty store, index and cache under tmp_path
 (`isolated_storage`, autouse), so nothing reads or writes ~/.stargazer.
@@ -36,6 +38,31 @@ GENERAL_FIXTURES_DIR = FIXTURES_DIR / "general"
 GATK_FIXTURES_DIR = FIXTURES_DIR / "gatk"
 SCRNA_FIXTURES_DIR = FIXTURES_DIR / "scrna"
 SECRETS_DIR = Path(__file__).parent / ".secrets"
+TESTS_DIR = Path(__file__).parent
+
+# The tier each top-level directory under tests/ belongs to. Its name is the
+# marker that selects it.
+TIERS = {
+    "assets": "unit",
+    "notebooks": "unit",
+    "unit": "unit",
+    "utils": "unit",
+    "tasks": "tasks",
+    "devbox": "devbox",
+    "pinata": "pinata",
+}
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(items):
+    """Mark every test with its directory's tier, before `-m` selects by it."""
+    for item in items:
+        top = item.path.relative_to(TESTS_DIR).parts[0]
+        if top not in TIERS:
+            raise pytest.UsageError(
+                f"tests/{top} isn't in a tier: add it to TIERS in tests/conftest.py"
+            )
+        item.add_marker(TIERS[top])
 
 
 def make_client(root: Path) -> StorageClient:
@@ -69,29 +96,6 @@ def seeded_client(tmp_path_factory) -> StorageClient:
     client = make_client(tmp_path_factory.mktemp("fixtures_store"))
     asyncio.run(seed(client))
     return client
-
-
-def pytest_runtest_setup(item):
-    """Inject PINATA_JWT for tests marked @pytest.mark.pinata.
-
-    Loads the JWT from tests/.secrets/pinata_jwt. A run that selected
-    these tests without a JWT fails rather than skipping, so it can't pass
-    by testing nothing.
-    """
-    if item.get_closest_marker("pinata"):
-        jwt_file = SECRETS_DIR / "pinata_jwt"
-        if not jwt_file.exists():
-            pytest.fail(f"Pinata JWT not found — put your token in {jwt_file}")
-        jwt = jwt_file.read_text().strip()
-        if not jwt:
-            pytest.fail(f"Pinata JWT file is empty: {jwt_file}")
-        os.environ["PINATA_JWT"] = jwt
-
-
-def pytest_runtest_teardown(item, nextitem):
-    """Remove PINATA_JWT after pinata-marked tests."""
-    if item.get_closest_marker("pinata"):
-        os.environ.pop("PINATA_JWT", None)
 
 
 @pytest.fixture

@@ -11,7 +11,6 @@ from stargazer.assets import AlignerIndex, Reference
 from stargazer.tasks.general.bwa import bwa_index
 
 
-@pytest.mark.tools
 @pytest.mark.asyncio
 async def test_bwa_index(fixtures_db):
     """Test bwa index creates all index files (.amb, .ann, .bwt, .pac, .sa)."""
