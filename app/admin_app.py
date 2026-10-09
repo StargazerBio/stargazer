@@ -464,6 +464,7 @@ async def dashboard(request: Request, user: CurrentUser):
             ],
             "snapshots": snapshots,
             "workspace": workspace,
+            "version": config.VERSION,
         },
     )
 

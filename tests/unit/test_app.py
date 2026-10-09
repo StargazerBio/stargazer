@@ -195,6 +195,13 @@ def test_dashboard_greets_the_user_without_github(client):
     assert "Enable workspace saving" not in resp.text
 
 
+def test_dashboard_shows_its_release_version(client, monkeypatch):
+    """The version the dashboard was deployed from is on the page, for debugging."""
+    monkeypatch.setattr(config, "VERSION", "18fbabe-dirty")
+    _as(client)
+    assert "18fbabe-dirty" in client.get("/").text
+
+
 def test_dashboard_lists_only_the_users_notebooks(client):
     """Each user sees their own workspace and snapshots, never another's."""
     _put(ALICE, "qc-run.py")

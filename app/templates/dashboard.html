@@ -119,6 +119,9 @@
     </section>
 
     <footer class="dash-footer">
+        {% if version %}
+        <span class="dash-version" title="Dashboard version">{{ version }}</span>
+        {% endif %}
         <button
             id="cleanup-btn"
             class="icon-fab cleanup-fab"

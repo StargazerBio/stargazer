@@ -498,7 +498,17 @@
            (it used to be absolutely positioned and clipped them). */
         .dash-footer {
             display: flex;
+            align-items: center;
             justify-content: flex-end;
+        }
+        /* The deployed version, pushed to the footer's left; quiet, since
+           it's only there to match a bug report to a deploy. */
+        .dash-version {
+            margin-right: auto;
+            font-family: var(--mono);
+            font-size: 0.72rem;
+            color: var(--text-dim);
+            opacity: 0.7;
         }
         .cleanup-fab {
             width: 3rem;

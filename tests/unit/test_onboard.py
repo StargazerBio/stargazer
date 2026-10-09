@@ -7,6 +7,8 @@ calls through. Every call is appended to one log so tests can assert order.
 Deploying the dashboard is faked at `app.onboard.deploy_dashboard`.
 """
 
+import os
+import subprocess
 import sys
 from types import SimpleNamespace
 
@@ -290,14 +292,51 @@ def test_upgrade_redeploys_every_active_stargazer_dashboard(union):
     assert sorted(urls) == ["https://u-bob.apps.example", "https://u-jane.apps.example"]
 
 
-def test_upgrade_refuses_while_any_user_has_runs_going(union):
-    """A redeploy can lose index writes, so nothing deploys while runs are going."""
+def test_upgrade_deploys_idle_users_and_comes_back_for_busy_ones(union, monkeypatch):
+    """One user's runs hold up only their own dashboard, until the runs finish."""
+    union.add_project("u-bob", BOB)
+    union.add_project("u-jane", ALICE)
+    union.runs["u-bob"] = ["a1b2c3"]
+
+    def sleep(seconds):
+        union.log.append(("sleep", seconds))
+        if sum(entry[0] == "sleep" for entry in union.log) == 2:
+            union.runs["u-bob"] = []  # Bob's run finishes during the second wait
+
+    monkeypatch.setattr(onboard.time, "sleep", sleep)
+    urls = onboard.upgrade()
+    assert union.writes() == [
+        ("deploy", "u-jane", ALICE),
+        ("sleep", 60),
+        ("sleep", 60),
+        ("deploy", "u-bob", BOB),
+    ]
+    assert urls == ["https://u-jane.apps.example", "https://u-bob.apps.example"]
+
+
+def test_upgrade_checks_each_user_just_before_their_deploy(union, monkeypatch):
+    """A run started while an earlier dashboard deploys still holds up its owner's."""
     union.add_project("u-jane", ALICE)
     union.add_project("u-bob", BOB)
-    union.runs["u-bob"] = ["a1b2c3"]
-    with pytest.raises(RuntimeError, match=r"u-bob.*a1b2c3"):
-        onboard.upgrade()
-    assert union.writes() == []
+    deploy = onboard.deploy_dashboard
+
+    def deploy_while_bob_starts_a_run(project, subject):
+        if project == "u-jane":
+            union.runs["u-bob"] = ["r1"]
+        return deploy(project, subject)
+
+    def sleep(seconds):
+        union.log.append(("sleep", seconds))
+        union.runs["u-bob"] = []
+
+    monkeypatch.setattr(onboard, "deploy_dashboard", deploy_while_bob_starts_a_run)
+    monkeypatch.setattr(onboard.time, "sleep", sleep)
+    onboard.upgrade()
+    assert union.writes() == [
+        ("deploy", "u-jane", ALICE),
+        ("sleep", 60),
+        ("deploy", "u-bob", BOB),
+    ]
 
 
 def test_onboard_rerun_refuses_while_the_user_has_runs_going(union):
@@ -431,6 +470,58 @@ def test_dashboard_deploy_carries_the_asset_store_and_index(monkeypatch):
     assert served["env_vars"]["STARGAZER_STORE_ROOT"] == "s3://bucket/stargazer"
     assert served["env_vars"]["STARGAZER_INDEX_URL"] == "~/.stargazer/index.db"
     assert served["env_vars"]["STARGAZER_OWNER"] == ALICE
+
+
+def test_dashboard_deploy_bakes_the_release_version(monkeypatch):
+    """Each dashboard carries the version it was deployed from, for its page."""
+    served = {}
+
+    def fake_servecontext(**ctx):
+        def serve(env):
+            served.update(env_vars=dict(env.env_vars))
+            return SimpleNamespace(endpoint="https://u-jane.apps.example")
+
+        return SimpleNamespace(serve=serve)
+
+    monkeypatch.setattr(onboard.flyte, "with_servecontext", fake_servecontext)
+    monkeypatch.setattr(onboard, "_notebook_image", lambda: "reg/notebook-app:h1")
+    monkeypatch.setattr(onboard, "get_init_config", lambda: SimpleNamespace(org=None))
+    monkeypatch.setattr(onboard, "release_version", lambda: "18fbabe-dirty")
+    onboard.deploy_dashboard("u-jane", ALICE)
+    assert served["env_vars"]["STARGAZER_VERSION"] == "18fbabe-dirty"
+
+
+@pytest.fixture
+def bare_git_env(monkeypatch):
+    """No inherited `GIT_*` variables: a pre-commit hook's would point at this repo."""
+    for name in [n for n in os.environ if n.startswith("GIT_")]:
+        monkeypatch.delenv(name)
+
+
+def test_release_version_is_the_checkout_commit(tmp_path, bare_git_env):
+    """The deployer's commit, marked `-dirty` when tracked files have changed."""
+
+    def git(*args):
+        return subprocess.run(
+            ["git", "-C", str(tmp_path), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    git("init", "-q")
+    (tmp_path / "notes.txt").write_text("one")
+    git("add", "notes.txt")
+    git("-c", "user.name=t", "-c", "user.email=t@example.org", "commit", "-qm", "c")
+    sha = git("rev-parse", "--short", "HEAD")
+    assert onboard.release_version(tmp_path) == sha
+    (tmp_path / "notes.txt").write_text("two")
+    assert onboard.release_version(tmp_path) == f"{sha}-dirty"
+
+
+def test_release_version_outside_a_checkout_is_unknown(tmp_path, bare_git_env):
+    """Deploying from something that isn't a git checkout still deploys."""
+    assert onboard.release_version(tmp_path) == "unknown"
 
 
 def test_dashboard_deploy_waits_out_a_stale_watch_failure(monkeypatch):
