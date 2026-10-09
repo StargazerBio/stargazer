@@ -31,12 +31,10 @@ async def _run(
     Raises:
         RuntimeError: If the command exits with a non-zero return code
     """
-    # Convert all command arguments to strings
     str_cmd = [str(arg) for arg in cmd]
 
     logger.info(f"Running: {shlex.join(str_cmd)}")
 
-    # Run the subprocess
     process = await asyncio.create_subprocess_exec(
         *str_cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -46,12 +44,10 @@ async def _run(
 
     stdout, stderr = await process.communicate()
 
-    # Check return code and raise error if failed
     if process.returncode != 0:
         stdout_str = stdout.decode("utf-8").strip()
         stderr_str = stderr.decode("utf-8").strip()
 
-        # Build error message with available output
         error_parts = [f"Command {str_cmd[0]} failed with code {process.returncode}:"]
         if stderr_str:
             error_parts.append(f"stderr:\n{stderr_str}")

@@ -62,7 +62,6 @@ async def qc_filter(
         scrublet_kwargs["batch_key"] = batch_key
     sc.pp.scrublet(ad, **scrublet_kwargs)
 
-    # Filter by mitochondrial percentage and predicted doublets
     ad = ad[ad.obs["pct_counts_mt"] < max_pct_mt]
     ad = ad[~ad.obs["predicted_doublet"]]
 

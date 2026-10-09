@@ -71,7 +71,7 @@ async def haplotype_caller(
         source_samples=alignment.sample_id,
     )
 
-    # Upload implicit index file produced by GATK
+    # GATK writes the GVCF's index alongside it without being asked.
     idx_path = output_dir / f"{output_gvcf.name}.idx"
     if idx_path.exists():
         vidx = VariantsIndex()

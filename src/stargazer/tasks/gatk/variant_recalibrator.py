@@ -25,7 +25,7 @@ async def variant_recalibrator(
     """
     Build a VQSR recalibration model using GATK VariantRecalibrator.
 
-    Each KnownSites in ``resources`` must carry the following keyvalues:
+    Each KnownSites in ``resources`` sets these fields:
         resource_name: e.g. "hapmap", "omni", "1000G", "dbsnp", "mills"
         known:         "true" or "false"
         training:      "true" or "false"
@@ -39,7 +39,8 @@ async def variant_recalibrator(
         mode: Variant type to recalibrate — "SNP" or "INDEL"
 
     Returns:
-        VQSRModel asset (recal file) with tranches_path stored in keyvalues
+        VQSRModel asset (the recal file), with the tranches file's local
+        path in `tranches_path`
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360035531612-Variant-Quality-Score-Recalibration-VQSR

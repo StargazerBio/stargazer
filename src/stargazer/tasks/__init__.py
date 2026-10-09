@@ -6,8 +6,6 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 from stargazer.tasks.gatk.apply_bqsr import apply_bqsr
 from stargazer.tasks.gatk.apply_vqsr import apply_vqsr
-
-# GATK tasks
 from stargazer.tasks.gatk.base_recalibrator import base_recalibrator
 from stargazer.tasks.gatk.combine_gvcfs import combine_gvcfs
 from stargazer.tasks.gatk.create_sequence_dictionary import create_sequence_dictionary
@@ -32,17 +30,12 @@ __all__ = [
     "bwa_mem2_mem",
     "combine_gvcfs",
     "create_sequence_dictionary",
-    # GVCF processing
     "haplotype_caller",
-    # BQSR (Base Quality Score Recalibration)
     "index_feature_file",
     "joint_call_gvcfs",
     "mark_duplicates",
     "merge_bam_alignment",
-    # Reference indexing
     "samtools_faidx",
-    # Data preprocessing (GATK)
     "sort_sam",
-    # VQSR filtering
     "variant_recalibrator",
 ]
