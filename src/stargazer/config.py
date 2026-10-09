@@ -217,12 +217,14 @@ gatk_env = flyte.TaskEnvironment(
                 "&& /usr/local/bin/micromamba clean -a -y",
                 # Expose the conda binaries on the default PATH. java is the JVM
                 # bundled by the gatk4 conda package; gatk's wrapper script
-                # subprocess-calls it by name so it must be on PATH.
+                # subprocess-calls it by name so it must be on PATH. bwa-mem2
+                # is a launcher that runs a CPU-specific sibling (bwa-mem2.avx2,
+                # …) from its own directory, so every variant is linked.
                 "ln -s /opt/conda/bin/gatk /usr/local/bin/gatk "
                 "&& ln -s /opt/conda/bin/java /usr/local/bin/java "
                 "&& ln -s /opt/conda/bin/samtools /usr/local/bin/samtools "
                 "&& ln -s /opt/conda/bin/bwa /usr/local/bin/bwa "
-                "&& ln -s /opt/conda/bin/bwa-mem2 /usr/local/bin/bwa-mem2",
+                "&& ln -s /opt/conda/bin/bwa-mem2* /usr/local/bin/",
             ]
         )
         .with_uv_project(

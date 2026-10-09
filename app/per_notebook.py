@@ -102,7 +102,8 @@ notebook_app_img_recipe = (
             "&& ln -s /opt/conda/bin/java /usr/local/bin/java "
             "&& ln -s /opt/conda/bin/samtools /usr/local/bin/samtools "
             "&& ln -s /opt/conda/bin/bwa /usr/local/bin/bwa "
-            "&& ln -s /opt/conda/bin/bwa-mem2 /usr/local/bin/bwa-mem2",
+            # bwa-mem2 runs a CPU-specific sibling from its own directory.
+            "&& ln -s /opt/conda/bin/bwa-mem2* /usr/local/bin/",
             # uv — used by `marimo --sandbox` to build per-notebook venvs.
             "curl -LsSf https://astral.sh/uv/install.sh | sh "
             "&& install -m 755 /root/.local/bin/uv /usr/local/bin/uv "
