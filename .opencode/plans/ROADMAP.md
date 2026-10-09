@@ -90,6 +90,26 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    - `apply_bqsr` stores the recalibrated BAM but not its index, unlike
      `mark_duplicates` and `sort_sam`. The germline workflow still finishes
      on the devbox, so a later step may be indexing it again (inferred).
+- **Code bugs found in the docs correctness sweep (2026-10-09).** Each
+   changes stored outputs or behavior, so each wants its own branch.
+   - `Asset.fetch()` pulls more than companions: any asset recording
+     `<key>_cid` comes along, so `Reference.fetch()` downloads every
+     `Alignment` made against it (`reference_cid`), and every task that
+     fetches the reference after alignment pays for them (measured against
+     an isolated store). Related to "Make `Asset.fetch()` cheaper".
+   - `normalize` copies `X` into `layers["counts"]` after `normalize_total`,
+     so the layer holds normalized counts (every row sums to ~498 on the
+     fixture), while its docstring, and `find_markers`, which tests on that
+     layer, say raw counts (measured).
+   - `variant_recalibrator` records the tranches file only as a path in its
+     own pod (`VQSRModel.tranches_path`) and never stores it, so
+     `apply_vqsr` in another pod can't read it (inferred from the code; no
+     test runs the two in separate pods).
+   - `haplotype_caller` sets `source_samples` to a string, not a list; it
+     round-trips as a string, so `len()` counts characters (measured: 7 for
+     `"NA12829"`).
+   - The scRNA tasks aren't exported from `stargazer.tasks`, so `list_tasks`
+     and the catalog omit them, and `run_task` can't run them.
 - **Notebooks on the devbox.** The devbox dashboard and asset storage work
    (`cli/devbox_dashboard.py`, a stand-in user), and a tutorial launched in
    run mode from that dashboard starts and serves marimo (2026-10-08). Edit
