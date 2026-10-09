@@ -90,13 +90,18 @@ Upcoming work is ordered — the **next feature is at the top**. Items are unnum
    - `apply_bqsr` stores the recalibrated BAM but not its index, unlike
      `mark_duplicates` and `sort_sam`. The germline workflow still finishes
      on the devbox, so a later step may be indexing it again (inferred).
-   - `docs/architecture/configuration.md` → Building locally says the Flyte
-     images set no `registry=`; they take `STARGAZER_REGISTRY`, which the
-     devbox sets to its own registry.
 - **Notebooks on the devbox.** The devbox dashboard and asset storage work
    (`cli/devbox_dashboard.py`, a stand-in user), and a tutorial launched in
    run mode from that dashboard starts and serves marimo (2026-10-08). Edit
    mode, workspace saving and the in-notebook terminal haven't been driven.
+- **Local-to-cluster storage.** A run submitted from this machine with the
+   default local store and index has nowhere shared to write: those
+   defaults aren't forwarded into task pods (`_stargazer_env_vars` in
+   `config.py`), since a pod can't reach them. Today a remote run needs
+   `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` exported to a store and
+   index pods can reach, as in the devbox recipe in
+   `docs/guides/contributing.md`. Inputs uploaded to the local store before
+   the switch point at paths no pod can read.
 - **Union console handoff (per-user project access).** Delivered by the
    per-user dashboards' onboarding (users get `contributor` on their own
    project); what remains is the dashboard's link out to the console.

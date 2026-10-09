@@ -141,11 +141,8 @@ class StorageClient:
 
         Sets `asset.cid` and `asset.path` (a File at the stored location) and
         seeds the local cache. Identical bytes already in the store aren't
-        transferred again.
-
-        Raises:
-            Whatever the store or the index raises; a row that doesn't land
-            fails the upload.
+        transferred again. Whatever the store or the index raises propagates:
+        a row that doesn't land fails the upload.
         """
         path = Path(path)
         cid = await asyncio.to_thread(compute_cid, path)

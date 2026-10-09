@@ -1,5 +1,5 @@
 """
-### SQLite asset index.
+### The asset index: a SQLite file locally, the user's dashboard over HTTP.
 
 The metadata half of asset storage: one row per asset, keyed by its CID, with
 where the bytes live (`uri`), the original filename, and the asset's

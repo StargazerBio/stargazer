@@ -5,8 +5,9 @@ Sets environment variable defaults at import time. Consumers read
 os.environ directly rather than importing named values from this module.
 
 Also the source of truth for the lean per-task Flyte environments
-(`scrna_env`, `gatk_env`). The user-facing AppEnvironment lives in
-`infra/app.py` alongside the FastAPI application it deploys.
+(`scrna_env`, `gatk_env`). The app tier's AppEnvironments live in `app/`
+(`app.admin_app.app_env`, `app.per_notebook`), next to the FastAPI code they
+deploy.
 
 Rules:
 - PINATA_JWT: No default — absence means no public tier (Pinata) at all.
@@ -166,7 +167,6 @@ def log_execution() -> str:
 # image hash, so a source change builds a new image; .dockerignore keeps docs,
 # tests and git history out of it.
 
-# scRNA-seq task environment for scanpy-based single-cell analysis.
 # Lean image: the project's `bio` extra on top of the Flyte debian base —
 # scanpy plus what its steps import lazily (scikit-image for scrublet's
 # automatic threshold, igraph for Leiden). Memory-hungry at runtime because
@@ -192,7 +192,6 @@ scrna_env = flyte.TaskEnvironment(
     secrets=STARGAZER_SECRETS,
 )
 
-# GATK/alignment task environment for GATK, BWA, and samtools tools.
 # Debian base with micromamba layered on. gatk4, samtools, bwa, and bwa-mem2
 # all come from bioconda. Conda env lives at /opt/conda; binaries symlinked
 # onto PATH so tasks invoke them directly.
@@ -208,16 +207,14 @@ gatk_env = flyte.TaskEnvironment(
         .with_apt_packages("ca-certificates", "curl", "bzip2")
         .with_commands(
             [
-                # Install micromamba into /usr/local/bin.
                 "curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest "
                 "| tar -xj -C /usr/local/bin --strip-components=1 bin/micromamba",
-                # Create the conda env at /opt/conda with the bioinformatics tools.
                 "/usr/local/bin/micromamba create -p /opt/conda -y "
                 "-c bioconda -c conda-forge gatk4 samtools bwa bwa-mem2 "
                 "&& /usr/local/bin/micromamba clean -a -y",
-                # Expose the conda binaries on the default PATH. java is the JVM
-                # bundled by the gatk4 conda package; gatk's wrapper script
-                # subprocess-calls it by name so it must be on PATH. bwa-mem2
+                # java is the JVM bundled by the gatk4 conda package; gatk's
+                # wrapper script subprocess-calls it by name so it must be on
+                # PATH. bwa-mem2
                 # is a launcher that runs a CPU-specific sibling (bwa-mem2.avx2,
                 # …) from its own directory, so every variant is linked.
                 "ln -s /opt/conda/bin/gatk /usr/local/bin/gatk "

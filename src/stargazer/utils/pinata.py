@@ -77,9 +77,9 @@ class PinataClient:
 
     Usage:
         client = PinataClient()
-        comp = Asset(keyvalues={"type": "alignment"})
+        comp = Asset(keyvalues={"asset": "alignment", "sample_id": "NA12878"})
         await client.upload(comp, Path("data.bam"))  # sets comp.cid
-        files = await client.query({"type": "alignment", "sample": "NA12878"})
+        files = await client.query({"asset": "alignment", "sample_id": "NA12878"})
         await client.delete(comp)
     """
 
