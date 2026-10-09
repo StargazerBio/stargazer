@@ -35,7 +35,10 @@ async def test_sort_sam_sorts_bam(fixtures_db):
     assert sorted_bam.sorted == "coordinate"
     assert sorted_bam.tool == "gatk_sort_sam"
     assert sorted_bam.path is not None
-    assert (await sorted_bam.fetch()).exists()
+    bam = await sorted_bam.fetch()
+    assert bam.exists()
+    # Downstream tools read the index from beside the BAM.
+    assert (bam.parent / "NA12829_TP53_merged_sorted_coordinate.bai").exists()
 
 
 @pytest.mark.asyncio

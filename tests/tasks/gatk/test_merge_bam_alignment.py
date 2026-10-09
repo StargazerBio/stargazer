@@ -52,7 +52,10 @@ async def test_merge_bam_alignment_merges_bams(fixtures_db):
     assert merged.sorted == "coordinate"
     assert merged.tool == "gatk_merge_bam_alignment"
     assert merged.path is not None
-    assert (await merged.fetch()).exists()
+    bam = await merged.fetch()
+    assert bam.exists()
+    # Downstream tools read the index from beside the BAM.
+    assert (bam.parent / "NA12829_TP53_merge_merged.bai").exists()
 
 
 @pytest.mark.asyncio

@@ -68,14 +68,16 @@ async def mark_duplicates(alignment: Alignment) -> Alignment:
         tool="gatk_mark_duplicates",
     )
 
-    bam_index = output_dir / f"{output_bam.name}.bai"
-    if bam_index.exists():
-        idx = AlignmentIndex()
-        await idx.update(
-            bam_index,
-            sample_id=alignment.sample_id,
-            alignment_cid=marked_bam.cid,
-        )
+    # Picard names the index <name>.bai, not <name>.bam.bai.
+    bam_index = output_bam.with_suffix(".bai")
+    if not bam_index.exists():
+        raise FileNotFoundError(f"--CREATE_INDEX did not create {bam_index}")
+    idx = AlignmentIndex()
+    await idx.update(
+        bam_index,
+        sample_id=alignment.sample_id,
+        alignment_cid=marked_bam.cid,
+    )
 
     if metrics_file.exists():
         metrics = DuplicateMetrics()

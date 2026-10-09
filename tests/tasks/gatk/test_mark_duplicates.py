@@ -36,7 +36,10 @@ async def test_mark_duplicates_marks_duplicates(fixtures_db):
     assert marked.duplicates_marked is True
     assert marked.tool == "gatk_mark_duplicates"
     assert marked.path is not None
-    assert (await marked.fetch()).exists()
+    bam = await marked.fetch()
+    assert bam.exists()
+    # Downstream tools read the index from beside the BAM.
+    assert (bam.parent / "NA12829_TP53_merged_marked_duplicates.bai").exists()
 
 
 @pytest.mark.asyncio

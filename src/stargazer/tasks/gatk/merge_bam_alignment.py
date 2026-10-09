@@ -88,14 +88,16 @@ async def merge_bam_alignment(
         tool="gatk_merge_bam_alignment",
     )
 
-    bam_index = output_dir / f"{output_bam.name}.bai"
-    if bam_index.exists():
-        idx = AlignmentIndex()
-        await idx.update(
-            bam_index,
-            sample_id=aligned_bam.sample_id,
-            alignment_cid=merged_bam.cid,
-        )
+    # Picard names the index <name>.bai, not <name>.bam.bai.
+    bam_index = output_bam.with_suffix(".bai")
+    if not bam_index.exists():
+        raise FileNotFoundError(f"--CREATE_INDEX did not create {bam_index}")
+    idx = AlignmentIndex()
+    await idx.update(
+        bam_index,
+        sample_id=aligned_bam.sample_id,
+        alignment_cid=merged_bam.cid,
+    )
 
     logger.info(merged_bam.to_dict())
     return merged_bam
