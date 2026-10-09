@@ -18,9 +18,9 @@ Write comprehensive but focused tests for Flyte v2 tasks and workflows following
 
 1. **Test Before Implementation**: Write tests first to validate behavior
 2. **Small and Focused**: Each test should verify one specific behavior
-3. **Use Real Tools**: Generate test assets using actual bioinformatics tools
+3. **Use Real Tools**: Task tests run the real tool in the task's image; nothing is mocked
 4. **Clear Assertions**: Make test failures informative
-5. **Test Isolation**: Each test should be independent
+5. **Test Isolation**: Each test gets its own empty store; no test depends on another
 
 ## Project Testing Strategy
 
@@ -35,268 +35,96 @@ Assert observable behavior against literal expected values. If a test would stil
 
 ## Test Organization
 
+Every top-level directory under `tests/` is in exactly one tier (`TIERS` in `tests/conftest.py`); `tests/TESTING_GUIDE.md` has the details.
+
 ```
 tests/
-├── __init__.py
-├── conftest.py              # Shared fixtures (Flyte init, Pinata JWT, fixture paths)
-├── helpers.py               # Shared test helper functions
-├── fixtures/                # Test fixtures organized by domain
-│   ├── gatk/                # GATK-specific test data
-│   ├── general/             # General bioinformatics test data
-│   ├── scrna/               # scRNA-seq test data
-│   └── stargazer_local.json # Local storage fixture DB
-├── unit/                    # Unit tests
-│   ├── __init__.py
-│   ├── test_asset.py
-│   ├── test_marshal.py
-│   └── ...
-└── tasks/                   # Task-level tests (mirrors src/stargazer/tasks/)
-    ├── gatk/
-    ├── general/
-    └── scrna/
+├── conftest.py      # Flyte init, no PINATA_JWT, an empty store per test, the seeded fixture store
+├── TESTING_GUIDE.md
+├── fixtures/        # Test data by domain (gatk/, general/, scrna/), plus seed.py
+├── assets/          # unit: asset types, assemble()
+├── notebooks/       # unit: every notebook imports and parses
+├── unit/            # unit: app tier, registry, MCP marshalling, bundles, Asset
+├── utils/           # unit: storage, index, CID, Pinata client (no API calls), query
+├── tasks/           # tasks: one directory per task domain, run in the task's image
+│   ├── gatk/
+│   ├── general/
+│   └── scrna/
+├── devbox/          # devbox: dashboard, asset storage across pods, the germline workflow
+└── pinata/          # pinata: the real Pinata API
 ```
 
-## Unit Test Template
+## Task Test Template
 
 ```python
-# tests/unit/test_{tool}_tasks.py
-"""
-Unit tests for {tool} tasks.
-"""
+# tests/tasks/{domain}/test_{tool}.py
+"""Tests for the {task_name} task."""
 
-import pytest
 from pathlib import Path
 
-from stargazer.tasks.{tool} import {task_name}
+import pytest
+from conftest import GENERAL_FIXTURES_DIR
+
 from stargazer.assets import {InputType}, {OutputType}
+from stargazer.tasks.{domain}.{tool} import {task_name}
 
 
-class Test{TaskName}:
-    """Tests for {task_name} task."""
-    
-    @pytest.fixture
-    def sample_input(self, tmp_path: Path):
-        """Create sample input data for testing."""
-        # Generate or load test data
-        input_file = tmp_path / "input.txt"
-        input_file.write_text("sample data")
-        return {InputType}(path=input_file)
-    
-    async def test_{task_name}_basic_functionality(self, sample_input):
-        """Test that {task_name} produces expected outputs."""
-        result = await {task_name}(sample_input)
-        
-        assert isinstance(result, {OutputType})
-        assert result.some_field is not None
-        # Add specific assertions
-    
-    async def test_{task_name}_handles_empty_input(self):
-        """Test that {task_name} handles empty input gracefully."""
-        empty_input = {InputType}(...)
-        
-        with pytest.raises(ValueError, match="No files to process"):
-            await {task_name}(empty_input)
-    
-    async def test_{task_name}_validates_input(self):
-        """Test that {task_name} validates input properly."""
-        invalid_input = {InputType}(path=Path("/nonexistent/file"))
-        
-        with pytest.raises(FileNotFoundError):
-            await {task_name}(invalid_input)
-    
-    async def test_{task_name}_creates_expected_files(
-        self,
-        sample_input,
-        tmp_path: Path
-    ):
-        """Test that {task_name} creates all expected output files."""
-        result = await {task_name}(sample_input)
-        
-        # Verify expected files exist
-        expected_files = ["output1.txt", "output2.txt"]
-        for filename in expected_files:
-            assert (tmp_path / filename).exists()
+@pytest.mark.asyncio
+async def test_{task_name}_stores_its_output(fixtures_db):
+    """{task_name} stores a {OutputType} linked to its input."""
+    input_asset = {InputType}(path=GENERAL_FIXTURES_DIR / "{fixture_file}", sample_id="S1")
+
+    fixtures_db()  # outputs go to an empty per-test store
+
+    result = await {task_name}(input_asset)
+
+    assert isinstance(result, {OutputType})
+    assert (result.sample_id, result.tool) == ("S1", "{tool}")
+    assert (await result.fetch()).exists()
+
+
+@pytest.mark.asyncio
+async def test_{task_name}_missing_input_fails():
+    """A missing input file fails loudly."""
+    with pytest.raises((FileNotFoundError, RuntimeError)):
+        await {task_name}({InputType}(path=Path("/nonexistent/file")))
 ```
 
-## Integration Test Template
+Inputs are assets built from fixture files by `path`; `fetch()` uses them in place. `fixtures_db` points storage at the seeded fixture store until you call it, so a test can `assemble()` real records first. Task tests run in the task's image:
 
-```python
-# tests/tasks/{domain}/test_{pipeline}_workflow.py
-"""
-Integration tests for {pipeline} workflow.
-"""
-
-import pytest
-from pathlib import Path
-
-from stargazer.workflows.{pipeline} import {workflow_name}
-from stargazer.assets import {InputType}
-
-
-class Test{WorkflowName}:
-    """Integration tests for {workflow_name} workflow."""
-    
-    @pytest.fixture
-    def real_reference(self, test_assets: Path):
-        """Load a real reference genome for testing."""
-        return test_assets / "GRCh38_chr22_1Mb.fa"
-    
-    @pytest.fixture
-    def real_fastq(self, test_assets: Path):
-        """Load real FASTQ files for testing."""
-        return test_assets / "sample_R1.fastq.gz"
-    
-    @pytest.mark.slow
-    async def test_{workflow_name}_end_to_end(
-        self,
-        real_reference,
-        real_fastq
-    ):
-        """Test complete {workflow_name} pipeline with real data."""
-        input_data = {InputType}(
-            reference=real_reference,
-            fastq=real_fastq
-        )
-        
-        result = await {workflow_name}(input_data)
-        
-        # Verify final outputs
-        assert result.output_file.exists()
-        assert result.output_file.stat().st_size > 0
-        
-        # Verify output content/format
-        # Add specific validation for bioinformatics outputs
-    
-    @pytest.mark.slow
-    async def test_{workflow_name}_produces_valid_output_format(
-        self,
-        real_reference,
-        real_fastq
-    ):
-        """Test that workflow produces correctly formatted outputs."""
-        input_data = {InputType}(
-            reference=real_reference,
-            fastq=real_fastq
-        )
-        
-        result = await {workflow_name}(input_data)
-        
-        # Validate file format (e.g., BAM, VCF)
-        # Use appropriate validation tools
+```bash
+uv run --all-extras python cli/docker_task_tests.py tests/tasks/{domain}/test_{tool}.py
 ```
 
-## Fixture Patterns
+## Workflow Tests
 
-### Common Fixtures (conftest.py)
+A workflow is tested where its tasks run. GATK workflows need a cluster, so they're devbox-tier: `tests/devbox/test_germline.py` seeds inputs from a pod with `devbox_run`, runs the workflow, and checks its output from another pod. Code that runs in the pods lives in `tests/devbox/pod_tasks.py` and imports only what the task image carries.
 
-```python
-# tests/conftest.py — see the actual conftest.py for current fixtures
-import pytest
-from pathlib import Path
+## Unit Tests
 
-FIXTURES_DIR = Path(__file__).parent / "fixtures"
-GATK_FIXTURES_DIR = FIXTURES_DIR / "gatk"
-GENERAL_FIXTURES_DIR = FIXTURES_DIR / "general"
-SCRNA_FIXTURES_DIR = FIXTURES_DIR / "scrna"
-```
+Tests of plain Python (assets, storage, the app tier, the registry) go in the unit-tier directory for their package and need no tools. App routes are tested with FastAPI's `TestClient`; swap module attributes (`_pinata_client`, `config.*`) with `monkeypatch` rather than patching the environment.
 
 ## Test Asset Generation
 
-When tests need real bioinformatics files:
+When a test needs a real bioinformatics file, generate it with the tool in the task's image, never on the dev machine, and commit it under `tests/fixtures/<domain>/`:
 
-```python
-@pytest.fixture(scope="session")
-def bwa_indexed_reference(test_assets: Path, tmp_path_factory):
-    """Generate BWA index for test reference."""
-    ref_path = test_assets / "small_genome.fa"
-    tmp_dir = tmp_path_factory.mktemp("bwa_index")
-
-    # Copy reference to temp dir
-    import shutil
-
-    test_ref = tmp_dir / "reference.fa"
-    shutil.copy(ref_path, test_ref)
-
-    # Generate index
-    import subprocess
-
-    subprocess.run(["bwa", "index", str(test_ref)], check=True)
-
-    return test_ref
+```bash
+docker run --rm --platform linux/amd64 -v "$PWD/tests/fixtures/general:/data" <gatk image> \
+  samtools faidx /data/GRCh38_TP53.fa
 ```
 
-## Test Categories
-
-### Unit Tests (Fast)
-- Test individual task logic
-- Use minimal test data
-- Mock external dependencies where appropriate
-- Should run in < 1 second per test
-
-### Integration Tests (Slow)
-- Test complete workflows
-- Use real bioinformatics tools
-- Use realistic (but small) datasets
-- Mark with `@pytest.mark.slow`
-- May take several seconds or minutes
+`uv run --all-extras python cli/docker_task_tests.py` prints the image it builds. Add a stored copy, with its metadata and `*_cid` links, to `tests/fixtures/seed.py` when tests need to query for it.
 
 ## Pytest Configuration
 
-```python
-# pytest.ini or pyproject.toml
-[tool.pytest.ini_options]
-markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-    "requires_gpu: marks tests that require GPU",
-]
-asyncio_mode = "auto"
-testpaths = ["tests"]
-```
+`pyproject.toml` sets `asyncio_mode = "auto"`, `--strict-markers`, and `-m unit` as the default selection. The only markers are the four tiers (`unit`, `tasks`, `devbox`, `pinata`), applied by directory; an unregistered marker such as `slow` is an error.
 
 ## Assertions Guidelines
 
-1. **Be Specific**: Assert exact values when possible
+1. **Be Specific**: Assert exact values — fields, file names, record counts
 2. **Check Types**: Verify return types match expectations
-3. **Validate Files**: Check file existence, size, format
-4. **Error Messages**: Use descriptive assertion messages
-
-```python
-# Good
-assert result.alignment_file.exists(), "Alignment file was not created"
-assert result.alignment_file.suffix == ".bam", "Expected BAM format"
-
-# Better - use pytest helpers
-assert result.alignment_file.exists()
-assert result.alignment_file.suffix == ".bam"
-```
-
-## Testing Async Code
-
-```python
-# Async tests automatically handled by pytest-asyncio
-async def test_async_task():
-    result = await my_async_task(input_data)
-    assert result is not None
-```
-
-## Test Data Strategy
-
-1. **Small Test Files**: Use minimal data for unit tests
-   - TP53 assets
-   
-2. **Real Tools**: Generate test assets using actual tools:
-   ```python
-   subprocess.run(["samtools", "faidx", str(ref_file)], check=True)
-   ```
-   or directly via
-   ```bash
-   samtools faidx ${REF_FILE}
-   ```
-
-3. **Fixtures for Reuse**: Share common test data via fixtures
-
-4. **Assets Directory**: Store pre-generated test files in `tests/fixtures/`
+3. **Validate Files**: `fetch()` the output and check it exists and has the content you expect
+4. **Never a None-pass**: if the test would still pass when the code returns `None`, rewrite it
 
 ## What to Test
 
@@ -322,27 +150,14 @@ async def test_async_task():
 ## Running Tests
 
 ```bash
-# All tests
-pytest
-
-# Unit tests only (fast)
-pytest tests/unit/
-
-# Task tests
-pytest tests/tasks/
-
-# Skip slow tests
-pytest -m "not slow"
-
-# Run specific test
-pytest tests/unit/test_bwa_tasks.py::TestBwaIndex::test_creates_index_files
-
-# Verbose output
-pytest -v
-
-# Show print statements
-pytest -s
+uv run --all-extras pytest                                  # unit tier (also pre-commit)
+uv run --all-extras python cli/docker_task_tests.py         # tasks tier, in each task's image
+uv run --all-extras python cli/docker_task_tests.py -k bwa  # a subset of it
+uv run --all-extras pytest -m devbox                        # devbox tier
+uv run --all-extras pytest -m pinata                        # the real Pinata API
 ```
+
+`pytest tests/tasks/` on its own selects nothing: the default `-m unit` deselects that tier.
 
 ## Style Requirements
 
@@ -357,8 +172,8 @@ pytest -s
 When you write tests:
 1. Explain what behavior you're testing
 2. Note any test assets needed
-3. Highlight if tests need real tools (bwa, samtools, etc.)
-4. Suggest which tests should be run first (unit vs integration)
+3. Name the tier each test is in, and the command that runs it
+4. Report the run: that each new test failed for the expected reason, then passed
 5. Indicate expected test run time
 
 ## Don't
@@ -366,5 +181,6 @@ When you write tests:
 - Don't write overly complex tests
 - Don't test implementation details
 - Don't skip input validation tests
-- Don't forget to mark slow tests with `@pytest.mark.slow`
+- Don't skip a test for a missing tool or service — it fails inside its tier
+- Don't add markers; the tier comes from the directory
 - Don't use relative imports - use `from stargazer.{module}`

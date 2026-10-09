@@ -108,7 +108,7 @@ Every module in `src/` carries a `spec:` line at the bottom of its docstring poi
    - A type's fields, keyvalues, or provenance links
    - A task's inputs, outputs, or tool invocation
    - A workflow's pipeline steps or assembly logic
-   - A storage client's interface or mode resolution
+   - A storage client's interface or where it stores things
    - The MCP server's tools, resources, or registry behaviour
 
 ### When writing new code

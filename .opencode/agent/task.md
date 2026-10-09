@@ -32,18 +32,21 @@ When implementing a task:
    - Look at existing tasks in `src/stargazer/tasks/` for established patterns
 
 2. **Define Types**:
-   - Create or update dataclasses in `src/stargazer/assets/`
-   - Use descriptive names (e.g., `Alignments`, `Variants`)
+   - Create or update `Asset` subclasses in `src/stargazer/assets/`, every field with a default
+   - Use descriptive names (e.g., `Alignment`, `Variants`)
    - Import Flyte I/O types from `flyte.io` (NOT flytekit!)
 
 3. **Implement Task**:
-   - Place in appropriate module in `src/stargazer/tasks/`
-   - Use naming pattern: `{action}_{tool}` (e.g., `align_with_bwa`, `sort_bam`)
-   - Use `@env.task` decorator with resource requests
+   - Place in the domain subdirectory of `src/stargazer/tasks/` (`gatk/`, `general/`, `scrna/`), one file per tool
+   - Use naming pattern: `{action}_{tool}` or the tool's own verb (e.g. `bwa_mem`, `sort_sam`, `haplotype_caller`)
+   - Decorate with the `TaskEnvironment` whose image carries the tool (`gatk_env` or `scrna_env` in `config.py`); resources are set there, not per task
+   - Check the tool is on that env's image (`with_apt_packages`, `with_commands`, or the bioconda block); add it and say so if it isn't
    - Follow async/await patterns
-   - Use pathlib.Path for filesystem operations, convert to str only at subprocess boundary
+   - Use pathlib.Path for filesystem operations; `_run` converts arguments to str at the subprocess boundary
+   - Export the task from `src/stargazer/tasks/__init__.py` (`__all__`), which the MCP registry and the catalog read
 
 4. **Document**:
+   - Module docstring: a `###` heading first, a `spec: [docs/architecture/tasks.md](../architecture/tasks.md)` line last
    - Include comprehensive docstring explaining purpose
    - Document all parameters and return values
    - Include reference URLs for the tool
@@ -52,74 +55,77 @@ When implementing a task:
 ## Task Template
 
 ```python
-# src/stargazer/tasks/{tool}.py
+# src/stargazer/tasks/{domain}/{tool}.py
 """
-{Tool} tasks for {purpose}.
+### {Tool} task for Stargazer.
+
+{What the tool does, in a sentence.}
+
+spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-from datetime import datetime
-from pathlib import Path
-
+import stargazer.utils.storage as _storage
 from stargazer.assets import {InputType}, {OutputType}
-from stargazer.config import gatk_env  # or scrna_env for scRNA tasks
+from stargazer.config import gatk_env, logger  # or scrna_env for scRNA tasks
 from stargazer.utils import _run
 
 
-@gatk_env.task  # resources are set on the TaskEnvironment in config.py
+@gatk_env.task
 async def {action}_{tool}(input_data: {InputType}) -> {OutputType}:
     """
     {Brief description of what this task does}.
-    
+
     {Detailed explanation of the operation}
-    
+
     Args:
         input_data: {Description of input}
-    
+
     Returns:
         {Description of output}
-    
+
     Reference:
         {URL to tool documentation}
     """
-    # Fetch inputs (downloads from Pinata if not cached locally)
-    await input_data.fetch()
+    logger.info(input_data.to_dict())
+    input_path = await input_data.fetch()  # local path, companions beside it
 
-    # Prepare command (convert Path to str at subprocess boundary)
-    cmd = ["{tool}", "arg1", "arg2", str(input_data.path)]
+    output_dir = _storage.default_client.local_dir
+    output_path = output_dir / f"{input_data.sample_id}_{tool}.{ext}"
+    await _run(["{tool}", "-I", input_path, "-O", output_path], cwd=output_dir)
+    if not output_path.exists():
+        raise FileNotFoundError(f"{tool} did not create {output_path}")
 
-    # Run command
-    stdout, stderr = await _run(cmd, cwd=str(input_data.path.parent))
-
-    # Package outputs with provenance
-    output = {OutputType}(
+    output = {OutputType}()
+    await output.update(
+        output_path,
         sample_id=input_data.sample_id,
         tool="{tool}",
+        {input_key}_cid=input_data.cid,
     )
-
+    logger.info(output.to_dict())
     return output
 ```
+
+`update()` stores the file and sets `cid` and `path`; a task that returns an asset it never updated returns nothing anyone can fetch. Name outputs after the sample: samples fanned out in one process share `local_dir`.
 
 ## Key Imports
 
 ```python
-import flyte                    # Main SDK
-
+import stargazer.utils.storage as _storage   # default_client.local_dir for outputs
 from stargazer.assets import {YourTypes}
-from stargazer.config import gatk_env  # or scrna_env — TaskEnvironment defined in config.py
-from stargazer.utils import _run       # Subprocess helper
+from stargazer.config import gatk_env, logger  # or scrna_env
+from stargazer.utils import _run               # Subprocess helper
 ```
 
-## Resource Guidelines
+## Resources
 
-- **Lightweight tasks** (sorting, indexing): `cpu: "2", mem: "8Gi"`
-- **Medium tasks** (alignment, variant calling): `cpu: "4-8", mem: "16-32Gi"`
-- **Heavy tasks** (GPU tools like DeepVariant): `cpu: "8", mem: "32Gi", gpu: "1"`
+Resources live on the `TaskEnvironment` in `config.py`, shared by every task on it. The devbox node has about 7.5 GiB in all (`.opencode/reference/devbox_workarounds.md`), so a task's limit has to fit beside its workflow's parent task.
 
 ## File Organization
 
-- **Tool-based modules**: `bwa.py`, `samtools.py`, `deepvariant.py`
-- **Multiple related tasks** can share a module
-- **One file per bioinformatics tool** or functional domain
+- **Domain subdirectories**: `gatk/`, `general/`, `scrna/`
+- **One file per bioinformatics tool**, e.g. `general/bwa.py`, `gatk/sort_sam.py`
+- **Multiple related tasks** can share a module (`bwa_index` and `bwa_mem`)
 
 ## Style Requirements
 
