@@ -14,7 +14,7 @@ from stargazer.assets.asset import Asset
 class R1(Asset):
     """R1 (forward) FASTQ read file asset.
 
-    Carries mate_cid pointing to the paired R2 asset's CID (None for single-end).
+    Carries mate_cid pointing to the paired R2 asset's CID (empty for single-end).
     """
 
     _asset_key: ClassVar[str] = "r1"
@@ -27,7 +27,7 @@ class R1(Asset):
 class R2(Asset):
     """R2 (reverse) FASTQ read file asset.
 
-    Carries mate_cid pointing to the paired R1 asset's CID (None for single-end).
+    Carries mate_cid pointing to the paired R1 asset's CID (empty for single-end).
     """
 
     _asset_key: ClassVar[str] = "r2"

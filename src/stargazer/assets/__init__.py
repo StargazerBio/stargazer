@@ -112,32 +112,24 @@ def build_asset(keyvalues: dict[str, str]) -> Asset:
 
 
 __all__ = [
-    # Registry + helpers
     "ASSET_REGISTRY",
-    # Read assets
     "R1",
     "R2",
     "AlignerIndex",
-    # Alignment assets
     "Alignment",
     "AlignmentIndex",
-    # scRNA-seq assets
     "AnnData",
-    # Base
     "Asset",
     "BQSRReport",
     "DuplicateMetrics",
     "KnownSites",
     "KnownSitesIndex",
-    # Reference assets
     "Reference",
     "ReferenceIndex",
     "SequenceDict",
     "VQSRModel",
-    # Variants assets
     "Variants",
     "VariantsIndex",
-    # Query
     "assemble",
     "build_asset",
     "specialize",

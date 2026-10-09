@@ -26,7 +26,7 @@ class Variants(Asset):
 
 @dataclass
 class VariantsIndex(Asset):
-    """VCF index (.tbi) file asset.
+    """VCF index file asset (.idx, or .tbi for a bgzipped VCF).
 
     Carries variants_cid linking to the Variants file it indexes.
     """
@@ -38,9 +38,10 @@ class VariantsIndex(Asset):
 
 @dataclass
 class KnownSites(Asset):
-    """Known variant sites VCF used for BQSR.
+    """Known variant sites VCF: BQSR known sites, or a VQSR training resource.
 
-    Standalone asset — carries build and source fields, no container needed.
+    `resource_name`, `known`, `training`, `truth` and `prior` are the VQSR
+    resource arguments (`"true"`/`"false"` strings and a numeric prior).
     """
 
     _asset_key: ClassVar[str] = "known_sites"
@@ -67,10 +68,11 @@ class KnownSitesIndex(Asset):
 
 @dataclass
 class VQSRModel(Asset):
-    """VQSR recalibration model (.recal file + tranches path).
+    """VQSR recalibration model: the .recal file, plus where its tranches went.
 
-    Produced by VariantRecalibrator. The recal file is the primary path;
-    the companion tranches file path is stored in keyvalues["tranches_path"].
+    Produced by VariantRecalibrator. The recal file is the stored asset;
+    `tranches_path` records where the tranches file was written in the pod
+    that produced it, and the tranches file itself isn't stored.
     """
 
     _asset_key: ClassVar[str] = "vqsr_model"
