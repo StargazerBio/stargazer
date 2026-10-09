@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "stargazer"
 version = "0.1.0"
-description = "Bioinformatics workflow orchestration system combining IPFS storage with Flyte v2"
+description = "Bioinformatics workflow orchestration on Flyte v2, with assets identified by their IPFS CID"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
