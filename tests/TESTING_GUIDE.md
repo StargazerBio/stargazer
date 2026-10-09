@@ -2,7 +2,7 @@
 
 ## Summary
 
-This guide explains how to test Flyte v2 tasks with pytest, based on the working implementation in this project.
+How Stargazer's tests are organized and how a Flyte v2 task is tested here: which tier a test belongs to, how it gets an isolated store, and how it calls a task.
 
 ## Test Tiers
 
@@ -22,171 +22,59 @@ Every top-level directory under `tests/` belongs to exactly one tier, and its te
 
 A test never skips for a missing tool or service. Outside its tier it's deselected; inside it, a missing tool or an unreachable devbox fails the test, so a run can't pass by testing nothing. Running a workflow locally, outside the tests, needs its tools on your own PATH; nothing here requires them.
 
-## The Problem
+## Isolation (`tests/conftest.py`)
 
-When testing Flyte v2 tasks, you may encounter:
-```
-ValueError: Raw data path has not been set in the context.
-```
+Three things hold for every test, so none of them is set up per test:
 
-This happens when using Flyte IO operations like `Dir.from_local()` without proper context initialization.
+- **Flyte is initialized once.** A session-scoped autouse fixture calls `flyte.init_from_config()`.
+- **No public tier.** `PINATA_JWT` is stripped before anything imports `stargazer`, so no storage client can reach Pinata. The pinata tier's own conftest sets it back from `tests/.secrets/pinata_jwt` for each of its tests.
+- **An empty store per test.** `isolated_storage` (autouse) points `stargazer.utils.storage.default_client` at a `StorageClient` whose store, index and cache live under the test's `tmp_path`, and unsets `STARGAZER_OWNER`. Nothing reads or writes `~/.stargazer`. The devbox tier replaces this fixture with a no-op: its tests store on the devbox.
 
-## The Solution
+## Calling a Task
 
-### 1. Global Flyte Initialization (`tests/conftest.py`)
-
-Create a session-scoped fixture that initializes Flyte once for all tests:
+A task test calls the task directly and awaits it, which runs the function in this process and returns its value:
 
 ```python
 import pytest
-import flyte
+from conftest import GENERAL_FIXTURES_DIR
 
-
-@pytest.fixture(scope="session", autouse=True)
-def init_flyte_context():
-    """Initialize Flyte context for all tests."""
-    flyte.init_from_config()
-    yield
-```
-
-This fixture:
-- Runs once per test session (`scope="session"`)
-- Runs automatically for all tests (`autouse=True`)
-- Initializes Flyte from `.flyte/config.yaml`
-
-### 2. Simple Tasks (scratch/test_hello_world.py)
-
-For tasks with simple parameters (strings, ints, etc.), use `local_flyte.run()`:
-
-```python
-import pytest
-import flyte
-from hello_world import greet
-
-
-@pytest.fixture(scope="module")
-def local_flyte():
-    """Return a local run context for executing tasks."""
-    return flyte.with_runcontext(mode="local")
-
-
-def test_hello_world_basic(local_flyte):
-    """Test basic hello world functionality."""
-    result = local_flyte.run(greet, name="World")
-    result.wait()
-
-    # Access output using _outputs attribute
-    output = result._outputs
-    assert output == "Hello, World!"
-```
-
-**Key points:**
-- Use `local_flyte.run(task, **kwargs)` to execute tasks
-- Call `.wait()` to wait for completion
-- Access results via `._outputs` attribute
-
-### 3. Tasks with Custom Types (tests/test_samtools.py)
-
-For tasks with custom types, call tasks directly and use simple Path objects:
-
-```python
-import pytest
-from pathlib import Path
-from stargazer.assets import Reference
-from stargazer.tasks.samtools import samtools_faidx
+from stargazer.assets import Reference, ReferenceIndex
+from stargazer.tasks.general.samtools import samtools_faidx
 
 
 @pytest.mark.asyncio
-async def test_samtools_faidx():
-    """Test samtools faidx creates .fai index file."""
-    # Create a Reference with a local Path (no Flyte Dir needed!)
-    ref = Reference(
-        ref_name="GRCh38_chr21.fasta",
-        dir=tmpdir_path,  # Just use Path directly
-    )
+async def test_samtools_faidx(fixtures_db):
+    """samtools faidx stores a .fai index of the reference."""
+    ref = Reference(path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
 
-    # Call task directly (not via local_flyte.run)
+    fixtures_db()  # task outputs go to an empty store
+
     result = await samtools_faidx(ref)
 
-    # Result is the actual return value, not a Run object
-    assert isinstance(result, Reference)
-    assert Path(result.dir) == tmpdir_path
+    assert isinstance(result, ReferenceIndex)
+    assert (result.tool, result.build) == ("samtools_faidx", "GRCh38")
+    assert result.path.name.endswith(".fai")
+    assert (await result.fetch()).exists()
 ```
 
-**Key points:**
-- Use `@pytest.mark.asyncio` for async tasks
-- Create custom types with simple Path objects - no `Dir.from_local()` needed!
-- Call tasks directly with `await task(**kwargs)` to bypass serialization
-- Result is the actual return value, not a Run object
+- **Inputs come from fixture files.** An asset built with a local `path` and no CID is used in place by `fetch()`, so the fixture never has to be stored first. The fixture directories are `GENERAL_FIXTURES_DIR`, `GATK_FIXTURES_DIR` and `SCRNA_FIXTURES_DIR` in `conftest.py`.
+- **Outputs go through real storage.** `update()` stores them in the test's store and index, so a test can `fetch()` them back, or `assemble()` for them.
+- **`asyncio_mode = "auto"`** is set in `pyproject.toml`; the `@pytest.mark.asyncio` marker is optional.
 
-## Why Two Different Patterns?
+## The Seeded Fixture Store (`fixtures_db`)
 
-### Pattern 1: `local_flyte.run()` (for simple types)
-- **Pros:** Tests the full Flyte execution pipeline including serialization
-- **Cons:** Requires Flyte TypeTransformers for custom types
-- **Use when:** Testing tasks with primitive types (str, int, bool, etc.)
+Some tests need inputs as stored records with real CIDs and companion links: an alignment whose index comes along on `fetch()`, a reference found by `assemble()`. `seeded_client` loads every fixture file into one store once per session (`tests/fixtures/seed.py`, with the metadata and `*_cid` links the task tests query for).
 
-### Pattern 2: Direct `await task()` call (for complex types)
-- **Pros:** Works with any types, simpler for unit tests
-- **Cons:** Bypasses Flyte's serialization layer
-- **Use when:** Testing tasks with custom types that don't have TypeTransformers
+`fixtures_db` is two-phase. Requesting it points the default client at the seeded store, so the test can query it and build its inputs. Calling the function it returns (the checkout) switches to an empty per-test store, so the task's outputs never land in the shared seeded one.
 
-## Common Issues
+## Running Through Flyte
 
-### Issue: "TypeError: Error converting custom type"
-**Solution:** Call task directly instead of using `local_flyte.run()`:
-```python
-# Instead of:
-# result = local_flyte.run(task, arg=custom_obj)
+Calling a task directly skips Flyte's serialization of its inputs and outputs. To test that path, run the task through Flyte: `flyte.with_runcontext(mode="local").run(task, **inputs)` runs it in this process; `flyte.run(...)` submits it wherever `flyte.init_from_config()` points. Either returns a run; `.wait()` for it, and `.outputs()` is a tuple of the task's outputs, so a single output is `.outputs()[0]`. The devbox tier's `devbox_run` fixture (`tests/devbox/conftest.py`) submits this way with the devbox's storage settings, and raises when the run failed.
 
-# Do:
-result = await task(arg=custom_obj)
-```
+## Writing a Good Test
 
-### Tip: Design custom types for easy testing
-**Best practice:** Design custom types to accept `Dir | Path` and default to Path:
-```python
-from pathlib import Path
-from flyte.io import Dir
-import tempfile
-from dataclasses import dataclass, field
-
-
-@dataclass
-class CustomType:
-    name: str
-    dir: Dir | Path = field(default_factory=lambda: Path(tempfile.mkdtemp()))
-
-    def get_path(self) -> Path:
-        """Handle both Dir and Path."""
-        if isinstance(self.dir, Dir):
-            return Path(self.dir.download_sync())
-        return Path(self.dir)
-```
-
-This makes testing trivial - just pass a Path!
-
-## File Structure
-
-```
-project/
-├── .flyte/
-│   └── config.yaml           # Flyte configuration
-├── tests/
-│   ├── conftest.py           # Global Flyte initialization
-│   └── test_samtools.py      # Complex type tests (direct calls)
-└── scratch/
-    ├── hello_world.py        # Simple task example
-    └── test_hello_world.py   # Simple type tests (local_flyte.run)
-```
-
-## Best Practices
-
-1. **Always call `flyte.init_from_config()`** in a session-scoped fixture
-2. **For simple types:** Use `local_flyte.run()` to test full execution pipeline
-3. **For custom types:** Call tasks directly to avoid serialization issues
-4. **Design custom types** to accept `Dir | Path` with Path as default
-5. **Use `@pytest.mark.asyncio`** for async tasks
-6. **Access simple task results** via `result._outputs`
-7. **Access direct call results** as the return value itself
-8. **Keep tests simple** - use Path instead of Dir when possible
+1. **Assert literal values.** Check the output's fields and its file, not only its type. A test that would still pass if the task returned `None` tests nothing.
+2. **Confirm it fails first,** for the reason you expect (missing behavior), not an import error or a broken fixture.
+3. **Use the fixture files,** and generate a new fixture in the task's image (`docker run --platform linux/amd64 <image> ...`) when it needs a bioinformatics tool, rather than installing the tool.
+4. **Call the checkout before the task** in a `fixtures_db` test, so outputs never touch the shared seeded store.
+5. **Fail, don't skip.** A missing tool, key or service inside its tier fails the test.
