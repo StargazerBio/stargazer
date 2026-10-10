@@ -1,8 +1,9 @@
 ---
 title: Tickets on the planning branch
-status: doing
+status: review
 priority: normal
 created: 2026-10-09
+pr: 20
 ---
 
 The roadmap and numbered plans become one ticket per file on the `planning` branch, checked
