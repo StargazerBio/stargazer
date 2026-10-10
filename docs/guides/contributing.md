@@ -101,7 +101,7 @@ Every change goes through a pull request — nothing is committed directly to `m
 
     Say what changed and why, how you verified it, and anything you deferred.
 
-4. A maintainer reviews the PR and merges it. Address review feedback with further commits on the same branch. Once it's merged, remove the worktree with `git worktree remove .claude/worktrees/scrna-oom`.
+4. A maintainer reviews the PR and merges it. Address review feedback with further commits on the same branch. Once it's merged, remove the worktree with `git worktree remove .claude/worktrees/scrna-oom`, and `git pull` in your main checkout to keep its `main` current.
 
 ## Building Images
 

@@ -17,7 +17,7 @@
 - Commit on the branch as the work progresses; no need to ask first. Never force-push `main`
 - When the change is done (tests pass, verified on its real surface), push the branch and open a PR against `main` with `gh pr create`. The description says what changed and why, the verification evidence, and anything deferred
 - The PR is where human review happens. Never merge a PR yourself — the user reviews and merges it. Review feedback is addressed with further commits on the same branch
-- Once the PR is merged, remove its worktree (`git worktree remove .claude/worktrees/<slug>`) and delete the branch
+- Once the PR is merged, remove its worktree (`git worktree remove .claude/worktrees/<slug>`), delete the branch, and `git pull` in the main checkout. New worktrees branch from `origin/main` and don't need it, but sessions started in the main checkout read this file and the skills from it
 
 **Positioning**
 - The marimo notebook is Stargazer's primary user surface for both experimentation (`marimo edit`) and reproducible production (`marimo run`) — it's the most approachable entry point, so default new feature designs to the notebook surface (marimo, `mo.ui`) over CLI or other entry points. The SDK (`src/stargazer/tasks/`, `src/stargazer/workflows/`) is a first-class user surface too: authoring workflows in an IDE by importing SDK tasks directly is a fully supported use case, not a maintainer-only path.
