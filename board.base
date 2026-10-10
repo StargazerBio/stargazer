@@ -1,0 +1,38 @@
+filters:
+  and:
+    - file.hasProperty("status")
+formulas:
+  rank: 'if(note.priority == "high", 1, if(note.priority == "normal", 2, 3))'
+views:
+  - type: kanban
+    name: Board
+    groupBy:
+      property: note.status
+      direction: ASC
+    groupOrder:
+      - backlog
+      - next
+      - doing
+      - review
+      - done
+    order:
+      - note.title
+      - note.priority
+    sort:
+      - property: formula.rank
+        direction: ASC
+      - property: note.created
+        direction: ASC
+  - type: table
+    name: All tickets
+    order:
+      - note.title
+      - note.status
+      - note.priority
+      - note.created
+      - file.name
+    sort:
+      - property: note.status
+        direction: ASC
+      - property: formula.rank
+        direction: ASC
