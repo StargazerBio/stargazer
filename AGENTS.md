@@ -38,7 +38,7 @@
 - When adding a task that wraps a new CLI tool, check the `TaskEnvironment` it is decorated against in `src/stargazer/config.py` and confirm the tool is layered onto that env's `flyte.Image` (via `with_apt_packages`, `with_commands`, or the bioconda block in `_BIOCONDA_INSTALL`). If it is missing, add it and notify the user.
 - When defining a new `TaskEnvironment` in `src/stargazer/config.py`, always call `.with_uv_project(PROJECT_ROOT / "pyproject.toml")` on its image so the stargazer package and its pip deps end up installed, and set explicit `resources=` (e.g. `flyte.Resources(memory=("2Gi", "6Gi"))`). The devbox node has a hard ~7.5 GiB memory budget — see `.opencode/reference/devbox_workarounds.md`.
 - **CRITICAL** Do not consider backwards compatibility unless explicitly requested!
-- **Keep development minutiae out of user-facing surfaces.** App UI strings/pages, user guides, and the README describe behavior in product terms — a limit, what a control does, what an error means. Do **not** leak implementation detail into them: internal vendor/service names, env vars, workaround mechanisms, ticket/plan references, or "X limit, not ours" rationalizations. (E.g. an upload cap reads "100 MB", not "100 MB — a Pinata limit; larger needs TUS".) That rationale lives in code comments, `.opencode/` references, and plans — and architecture docs under `docs/architecture/` may name internals since they're the technical spec, not a product surface.
+- **Keep development minutiae out of user-facing surfaces.** App UI strings/pages, user guides, and the README describe behavior in product terms — a limit, what a control does, what an error means. Do **not** leak implementation detail into them: internal vendor/service names, env vars, workaround mechanisms, ticket/plan references, or "X limit, not ours" rationalizations. (E.g. an upload cap reads "100 MB", not "100 MB — a Pinata limit; larger needs TUS".) That rationale lives in code comments, `.opencode/` references, and tickets — and architecture docs under `docs/architecture/` may name internals since they're the technical spec, not a product surface.
 - Run `uv run ruff check --fix . && uv run ruff format .` after every set of changes to satisfy the pre-commit. This only holds because the ruff version is pinned in **two** places that must match: `rev:` in `.pre-commit-config.yaml` (pre-commit builds its own isolated env) and the `ruff` pin in `pyproject.toml`'s dev group. Bump them together — when they drifted across 0.14→0.16, ruff's *default* rule set went from 59 rules to 413 and the two gates silently enforced different things. Deliberate rule exceptions live in `[tool.ruff.lint]` in `pyproject.toml`, each with a comment saying why.
 - Prefer bounded version ranges (`>=X,<Y`) over open-ended ones for anything whose API you import. Two breakages this project has actually hit came from unbounded pins walking across a major: `ruff` (rule-set change) and `mcp` (1.x→2.0 renamed `FastMCP`/`mcp.server.fastmcp` to `MCPServer`/`mcp.server`).
 
@@ -50,7 +50,7 @@ The `.opencode/agent/` directory contains specialized agent definitions for [Ope
 
 | Agent | File | Purpose |
 |-------|------|---------|
-| **Architecture** | `architecture.md` | Designs feature plans in `.opencode/plans/` and maintains docs in `docs/` |
+| **Architecture** | `architecture.md` | Designs features as tickets in `planning/` and maintains docs in `docs/` |
 | **Task** | `task.md` | Implements individual Flyte v2 tasks for bioinformatics tools |
 | **Test** | `test.md` | Writes tests following the TDD approach; the reference for test tiers, isolation and fixtures |
 | **Workflow** | `workflow.md` | Composes Flyte v2 tasks into end-to-end pipelines |
@@ -118,7 +118,7 @@ The `spec:` line is **module-level only** — class and function docstrings do n
 
 100% docstring coverage is enforced by the `docstr-coverage` pre-commit hook.
 
-## Specs, Plans and Reference Materials
+## Specs, Tickets and Reference Materials
 
 - **`.opencode/reference/flyte_v2_docs.md`** - Official Flyte v2 documentation
 - **`.opencode/reference/sdk_examples_concise.md`** - Flyte SDK v2 examples
@@ -130,16 +130,20 @@ The `spec:` line is **module-level only** — class and function docstrings do n
   - No code in architecture docs - these are high-level references supported by docstrings in the actual functions
   - Guides are the only docs that contain code examples
   - **Every doc must be reachable from the `nav` in `zensical.toml`.** The nav is hand-maintained, so a new `docs/**/*.md` is invisible (built but unlinked) until you add it. Whenever you add, rename, move, or delete a doc, update `nav` to match, then verify nothing is orphaned: every file under `find docs -name '*.md'` must appear in `zensical.toml`'s `nav` (mkdocstrings-target files like `reference/api.md` included). A new architecture/notebook subpackage also needs an `__init__.py` with the `###` heading + `spec:` line, or the docs build fails to collect it.
-- **`.opencode/plans/ROADMAP.md`** - The single priority-ordered list of upcoming work (next feature at the top) and a Complete section. This is where known gaps, deferred work, and "open issues" belong — **not** scattered across `docs/`. When you defer something or surface a production gap while working, add it here rather than leaving an "Open Issues" section in an architecture doc. Individual `NN_*.md` plans link up from their roadmap entry; mark items ✅ and move them to Complete as they ship.
-- **`.opencode/plans/`** - Step by step instructions for building new features and fixing bugs
-  - Only place outside src where code snippets are allowed
-  - Keep track of progress and check off completed work as you go
-  - **Prefix every new plan file with the next sequential two-digit integer** so the landing order is visible at a glance and sorts correctly in `ls`: `15_initial_thing.md`, `16_next_thing.md`, `17_followup.md`. Pick the next number by looking at the highest existing prefix across both the top level AND `archive/` (archive is numbered chronologically, top-level continues from where it left off). Unslotted ideas go in `.opencode/brainstorm/` (below), not here.
-- **`.opencode/brainstorm/`** - Unslotted ideas, moonshots, and exploratory design that are not on the roadmap. **Gitignored and local only** — nothing here is committed or pushed, so it is the place for drafts that should not become public history.
-  - Files are unnumbered and free-form; they don't follow plan conventions or need to stay in sync with the code
-  - Never link to a brainstorm file from anything tracked (`docs/`, ROADMAP, plans, code comments) — the link would dangle for everyone else
+- **`planning/`** - Tickets, one markdown file per piece of work, on the `planning` branch. That branch shares no history with `main` and is never merged into anything. It is checked out exactly once, as a worktree at the main checkout's `planning/` (gitignored on `main`), and every session and the Obsidian board use that one copy, so a ticket edit is visible everywhere as soon as it's saved. From any worktree it's `$MAIN/planning`, with `MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")`. A fresh clone sets it up from the main checkout with `git fetch origin planning && git worktree add planning planning`.
+  - **What's a ticket:** each is named after its slug, which is also its branch's slug (`planning/scrna-oom.md` ↔ `fix/scrna-oom`). Known gaps, deferred work and "open issues" are tickets, **not** notes scattered across `docs/`: when you defer something or surface a production gap while working, write a ticket rather than leaving an "Open Issues" section in an architecture doc. A sub-item that will ship in its own PR is its own ticket. Unslotted ideas go in `.opencode/brainstorm/` (below), not here.
+  - **Frontmatter:** `title` (plain text, no markdown), `status` (`backlog`, `next`, `doing`, `review` or `done`), `priority` (`high`, `normal` or `low`), `created` (`YYYY-MM-DD`). Add `blocked_by` (a list of slugs) or `pr` only when a ticket needs them. Obsidian rewrites the whole block when a card is dragged, so write it the way Obsidian would: no comments, lists one item per line. The `planning` branch's pre-commit checks this.
+  - **Body:** what and why first. A small ticket is a paragraph; a big one carries the full plan, with pieces as checkboxes ticked as the work lands, and the verification evidence. Tickets are the only place outside `src/` where code snippets are allowed.
+  - **Lifecycle:** `doing` when you cut the change's worktree; `review` and `pr: <number>` when its PR opens; after it merges, `done` and an `## Outcome` section (what shipped, how it was verified, what's left), in the same step that removes the worktree. Done tickets stay in place.
+  - **Committing:** ticket edits never ride in a code PR. Commit them on `planning` as you make them, naming only your own files, since other sessions share the checkout: `git -C "$MAIN/planning" commit -m "<what changed>" -- <files>`, then `git -C "$MAIN/planning" pull --rebase && git -C "$MAIN/planning" push`.
+  - **Referencing:** files on `main` mention a ticket by slug (ticket `internal-address-auth`), never by path, since `main` can't link into another branch.
+  - **Board:** `board.base` is a kanban grouped by `status`; open `$MAIN/planning` as an Obsidian vault to see it. From a shell, `grep -l '^status: next' "$MAIN"/planning/*.md`.
+  - **`archive/`** is frozen history from before tickets: the numbered plans `01`–`27`, and `COMPLETE.md`, the old roadmap's Complete list.
+- **`.opencode/brainstorm/`** - Unslotted ideas, moonshots, and exploratory design that are not tickets yet. **Gitignored and local only** — nothing here is committed or pushed, so it is the place for drafts that should not become public history.
+  - Files are unnumbered and free-form; they don't follow ticket conventions or need to stay in sync with the code
+  - Never link to a brainstorm file from anything tracked (`docs/`, tickets, code comments) — the link would dangle for everyone else
   - Read it for context when asked about future direction, but don't treat it as a spec or a commitment
-  - **Promoting** an idea: write a fresh numbered plan in `.opencode/plans/` (next `NN_` prefix) and add a ROADMAP entry. Copy in what survives rather than moving the brainstorm file, and leave the brainstorm file in place
+  - **Promoting** an idea: write a ticket in `planning/`. Copy in what survives rather than moving the brainstorm file, and leave the brainstorm file in place
 
 ## Project Structure
 
@@ -178,6 +182,7 @@ The project follows this structure:
   - `reference/` - API reference (catalog of tasks and types)
 - `.opencode/reference/` - Agent-facing reference materials (Flyte docs, tool refs)
 - `.opencode/brainstorm/` - Gitignored, local-only unslotted ideas and moonshots
+- `planning/` - Gitignored on `main`: the `planning` branch's worktree, holding the tickets and the Obsidian board
 - `.claude/skills/` - Agent workflow skills (see Agent Skills above)
 - `scratch/` - Scratch materials
 
