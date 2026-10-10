@@ -27,7 +27,7 @@ Do not ask the user to reproduce. Ask only with a specific reason the surface is
 
 List the candidate causes. Take the check that rules out the most candidates at once, get runtime evidence (a log line, a printed value, a run), and eliminate. Repeat until one survives. When program state is unclear, add temporary logging and read it as the code runs. Don't guess.
 
-Before settling on a cause, check the history: `git log -S '<symbol>'` and `.opencode/plans/archive/` often say why the code is shaped the way it is.
+Before settling on a cause, check the history: `git log -S '<symbol>'` and the tickets in `$MAIN/planning` (with its `archive/`) often say why the code is shaped the way it is.
 
 Confirm the surviving mechanism with evidence before writing the fix. "The error went away" is not a mechanism.
 
