@@ -1,8 +1,9 @@
 ---
 title: A worktree for every change
-status: doing
+status: review
 priority: normal
 created: 2026-10-09
+pr: 19
 ---
 
 Every change gets its own worktree under `.claude/worktrees/`, on a branch cut from
