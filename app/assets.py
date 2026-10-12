@@ -40,7 +40,7 @@ router = APIRouter()
 
 # Pinata's plain multipart POST — the only thing a signed URL accepts from
 # a fetch() upload — is capped at 100MB; larger files require the TUS
-# resumable endpoint (ROADMAP: TUS support). Mirroring the cap into the
+# resumable endpoint (ticket tus-browser-uploads). Mirroring the cap into the
 # signed URL turns an opaque mid-upload failure into a mint-time error the
 # form can explain.
 MAX_UPLOAD_BYTES = 100 * 1024**2

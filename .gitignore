@@ -192,5 +192,8 @@ src/stargazer/notebooks/**/__marimo__/
 .opencode/reference/stargazer_flyte_v1/
 
 # Unslotted, not-yet-planned ideas (moonshots, economics). Local only; promote
-# to a numbered plan in .opencode/plans/ when the work is activated.
+# to a ticket in planning/ when the work is activated.
 .opencode/brainstorm/
+
+# The planning branch's worktree: tickets live there, never on main.
+/planning/

@@ -22,8 +22,7 @@ happens where assets are created; rows here carry the reserved `_owner` key
 and bundle metadata that `build_asset()` rightly rejects from users.
 
 The in-cluster address skips Union's login, so these routes read no identity
-headers. That gap is tracked on the ROADMAP ("App internal addresses skip
-Union's login").
+headers. That gap is the ticket internal-address-auth.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
