@@ -178,10 +178,10 @@ Thumbs.db
 !.claude/settings.json
 !.claude/skills/
 *.local.*
-wt/
 
-# Test secrets (JWT tokens, API keys)
-tests/.secrets/
+# Test secrets (JWT tokens, API keys). No trailing slash, so a worktree's
+# symlink to the main checkout's copy is ignored too.
+tests/.secrets
 
 # Marimo cache
 src/stargazer/notebooks/**/__marimo__/

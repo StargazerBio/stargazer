@@ -75,14 +75,23 @@ Ruff is pinned twice — `rev:` in `.pre-commit-config.yaml` and the `ruff` entr
 
 Every change goes through a pull request — nothing is committed directly to `main`.
 
-1. Cut a branch from an up-to-date `main`, named after the change in short kebab-case:
+1. Make a worktree for the change, on a branch cut from an up-to-date `main` and named after the change in short kebab-case. Worktrees live under `.claude/worktrees/`, which is gitignored, and your main checkout stays on `main`:
 
     ```bash
-    git switch main && git pull
-    git switch -c fix/scrna-oom
+    git fetch origin
+    git worktree add --no-track .claude/worktrees/scrna-oom -b fix/scrna-oom origin/main
+    cd .claude/worktrees/scrna-oom
     ```
 
-2. Commit as you go. Keep the branch to one change; an unrelated fix gets its own branch.
+    `uv run` gives the worktree its own venv, but it starts without your Flyte configs and test secrets. Link the ones the change needs from the main checkout: the Flyte configs for anything that runs on the devbox or Union, the Pinata key for the pinata tier:
+
+    ```bash
+    MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
+    mkdir -p .flyte && ln -s "$MAIN"/.flyte/{config,union}.yaml .flyte/
+    ln -s "$MAIN/tests/.secrets" tests/.secrets
+    ```
+
+2. Commit as you go. Keep the worktree to one change; an unrelated fix gets its own.
 3. When tests pass and the change works on its real surface, push and open a PR against `main`:
 
     ```bash
@@ -92,7 +101,7 @@ Every change goes through a pull request — nothing is committed directly to `m
 
     Say what changed and why, how you verified it, and anything you deferred.
 
-4. A maintainer reviews the PR and merges it. Address review feedback with further commits on the same branch.
+4. A maintainer reviews the PR and merges it. Address review feedback with further commits on the same branch. Once it's merged, remove the worktree with `git worktree remove .claude/worktrees/scrna-oom`, and `git pull` in your main checkout to keep its `main` current.
 
 ## Building Images
 
