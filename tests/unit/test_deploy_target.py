@@ -4,6 +4,7 @@ Import-time defaults are checked in a fresh interpreter, since both config
 modules resolve the environment once at import.
 """
 
+import base64
 import os
 import subprocess
 import sys
@@ -83,6 +84,27 @@ def test_app_config_per_target():
     """Each target picks its own Flyte config file."""
     assert _fresh(_APP) == "devbox config.yaml"
     assert _fresh(_APP, STARGAZER_TARGET="union") == "union union.yaml"
+
+
+# An API key in Flyte's format (base64 of endpoint:client-id:secret:org), for
+# a tenant that's never contacted: init only records it.
+_FAKE_API_KEY = base64.b64encode(b"tenant.example.com:ci:secret:org").decode()
+_INIT = (
+    "from app.init import init; from flyte._initialize import get_init_config; "
+    "init(); c = get_init_config(); print(c.image_builder, c.project)"
+)
+
+
+def test_api_key_deployer_builds_in_the_default_project_remotely():
+    """A deployer with only an API key builds Union's images remotely, in flytesnacks.
+
+    The key carries no config file, which is where the deployer's builder and
+    project otherwise come from.
+    """
+    assert (
+        _fresh(_INIT, STARGAZER_TARGET="union", FLYTE_API_KEY=_FAKE_API_KEY)
+        == "remote flytesnacks"
+    )
 
 
 def test_notebook_pod_gets_configured_domain(monkeypatch):

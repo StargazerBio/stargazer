@@ -7,7 +7,10 @@ Selects the right init path for the runtime context:
   builds the right client. Mirrors what the `fserve` binary itself does
   before spawning the app subprocess — needed because uvicorn runs in a
   separate process and does not inherit fserve's Python-side client init.
-- per-user notebook with `FLYTE_API_KEY` → `flyte.init_from_api_key()`
+- an API key in `FLYTE_API_KEY` (a deployer running `stargazer-users` with
+  one, or a notebook given one) → `flyte.init_from_api_key()`, with what the
+  config file would otherwise supply: the remote image builder on Union, and
+  `app.config`'s project and domain
 - local dev / deployer shell → `flyte.init_from_config()`, reading the
   target's config file (`app.config.FLYTE_CONFIG`) when one is passed
 
@@ -18,6 +21,7 @@ import os
 
 import flyte
 
+from app import config
 from stargazer.config import logger
 
 
@@ -29,10 +33,14 @@ def init(path_or_config=None, **kwargs):
     """
     if os.environ.get("FLYTE_API_KEY"):
         logger.info("Flyte init: api-key path (FLYTE_API_KEY)")
+        # An API key carries no config file, so nothing else says Union's images
+        # come from its remote builder (the local default needs a registry the
+        # deployer can push to), or names the project image builds run in.
+        kwargs.setdefault(
+            "image_builder", "remote" if config.TARGET == "union" else "local"
+        )
         flyte.init_from_api_key(
-            project=os.environ.get("FLYTE_PROJECT"),
-            domain=os.environ.get("FLYTE_DOMAIN", "development"),
-            **kwargs,
+            project=config.FLYTE_PROJECT, domain=config.FLYTE_DOMAIN, **kwargs
         )
     elif os.environ.get("_U_EP_OVERRIDE"):
         logger.info("Flyte init: in-cluster path (_U_EP_OVERRIDE)")

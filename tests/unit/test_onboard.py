@@ -431,7 +431,10 @@ def test_dashboard_deploy_keeps_the_env_resolvable(monkeypatch):
     assert onboard.deploy_dashboard("u-jane", ALICE) == "https://u-jane.apps.example"
     env = served["env"]
     assert env._caller_frame.filename.endswith("app/admin_app.py")
-    assert served["ctx"] == {"project": "u-jane", "domain": "development"}
+    assert (served["ctx"]["project"], served["ctx"]["domain"]) == (
+        "u-jane",
+        "development",
+    )
     assert served["domain"].subdomain == "u-jane"
     assert {
         k: served["env_vars"][k]
@@ -489,6 +492,26 @@ def test_dashboard_deploy_bakes_the_release_version(monkeypatch):
     monkeypatch.setattr(onboard, "release_version", lambda: "18fbabe-dirty")
     onboard.deploy_dashboard("u-jane", ALICE)
     assert served["env_vars"]["STARGAZER_VERSION"] == "18fbabe-dirty"
+
+
+def test_dashboard_deploy_is_versioned_with_the_release(monkeypatch):
+    """The deploy's version is the commit it came from, so the console shows it."""
+    contexts = []
+
+    def fake_servecontext(**ctx):
+        contexts.append(ctx)
+        return SimpleNamespace(
+            serve=lambda env: SimpleNamespace(endpoint="https://u-jane.apps.example")
+        )
+
+    monkeypatch.setattr(onboard.flyte, "with_servecontext", fake_servecontext)
+    monkeypatch.setattr(onboard, "_notebook_image", lambda: "reg/notebook-app:h1")
+    monkeypatch.setattr(onboard, "get_init_config", lambda: SimpleNamespace(org=None))
+    monkeypatch.setattr(onboard, "release_version", lambda: "18fbabe")
+    onboard.deploy_dashboard("u-jane", ALICE)
+    assert contexts == [
+        {"project": "u-jane", "domain": "development", "version": "18fbabe"}
+    ]
 
 
 @pytest.fixture
