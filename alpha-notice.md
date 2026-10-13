@@ -1,6 +1,6 @@
 ---
 title: Alpha notice against uploading sensitive data
-status: review
+status: done
 priority: high
 created: 2026-10-13
 pr: 21
@@ -27,3 +27,14 @@ version.
       control), since the footer changed after the first by-eye check:
       deployed on the devbox, checked 2026-10-13
 - [x] PR #21
+
+## Outcome
+
+Merged in #21 (2026-10-13). The dashboard footer (version, notice, cleanup
+control) and the asset page's upload form carry the notice, and
+`docs/architecture/app.md` says storage isn't isolated yet. Verified by the two
+unit tests, which fail without the notice, and by eye on a devbox deploy of the
+dashboard. The upload form's copy can't be seen on a deployed dashboard until
+the page leaves Pinata ([asset-manager-on-index](asset-manager-on-index.md));
+hardening the isolation itself is
+[per-user-storage-isolation](per-user-storage-isolation.md).
