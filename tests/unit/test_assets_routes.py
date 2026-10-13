@@ -403,6 +403,16 @@ class TestPage:
         assert 'USERNAME = "octocat"' in html
         assert "AUTHED = true" in html
 
+    def test_upload_form_warns_against_sensitive_data(self, fake_pinata, client):
+        """Isolation between users is soft for now, so the upload form says so."""
+        _auth(client)
+        html = client.get("/assets").text
+        assert 'id="up-submit"' in html
+        assert (
+            "Stargazer is alpha software. Don't upload sensitive data, such as "
+            "identifiable patient data." in html
+        )
+
     def test_anonymous_gets_public_only(self, fake_pinata, client):
         resp = client.get("/assets")
         assert resp.status_code == 200
