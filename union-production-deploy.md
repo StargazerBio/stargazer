@@ -1,6 +1,6 @@
 ---
 title: Union production deploy
-status: review
+status: done
 priority: high
 created: 2026-10-04
 pr: 23
@@ -37,3 +37,16 @@ GHCR workaround is gone. Remaining:
       remote builder, and the dashboard went from revision 165 to 174, still
       0a7a16a with `FLYTE_ORG` baked. The app record doesn't name who updated
       it, so that the key made the deploy is inferred from the config-free run.
+
+## Outcome
+
+Merged in #23 (2026-10-13, `2e67bef`). Each dashboard deploy is versioned
+with the deployer's commit, and `stargazer-users upgrade` runs under an API
+key in `FLYTE_API_KEY`. Deploys stay on `serve`.
+
+Verified on the tenant 2026-10-13, as recorded above: a branch upgrade under
+the admin login, then one under the `stargazer-upgrade` key from a fresh
+clone.
+
+Left: running `upgrade` from a GitHub Action. It was decided against for now
+(2026-10-13).
