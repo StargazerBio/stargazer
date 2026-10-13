@@ -20,6 +20,6 @@ GHCR workaround is gone. Remaining:
       confirming Union injects app secrets at all.
 - [ ] **`flyte.deploy` with commit-SHA versions** in place of `flyte.serve`
       for `stargazer-users upgrade`, run from CI with an org-admin API key.
-- [ ] **Resource ceilings.** Notebook resources are honored as-authored. Cap
-      them with `flyte edit settings --domain production` (`task_resource.max.*`),
-      after checking that the cap applies to apps and not only tasks.
+- [ ] **Resource ceilings**: [resource-ceilings](resource-ceilings.md).
+      `task_resource.max.*` caps runs but not apps (measured 2026-10-13), so
+      the dashboard caps notebook pods itself.
