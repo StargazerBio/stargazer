@@ -90,6 +90,7 @@ app = ["templates/*.html"]
 dev = [
     "mkdocstrings[python]>=1.0.3",
     "pre-commit>=4.5.0",
+    "pydeps>=3,<4",
     "pytest>=9.0.1",
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=4.1.0",
@@ -102,8 +103,21 @@ dev = [
 
 # Rule selection is ruff's default for the pinned version (see the ruff pin in
 # [dependency-groups] and the matching rev in .pre-commit-config.yaml — bump
-# them together). Only deliberate, reviewed exceptions are listed below.
+# them together), plus the banned-api rule that enforces the import layers.
+# Only deliberate, reviewed exceptions are listed below.
+[tool.ruff]
+# Ruff's defaults for these, but pinned here so they resolve against the repo
+# root. Left unset, each nested ruff.toml (the import layers) resolves them
+# against its own directory: a cache in every layer, and first-party code
+# looked for under it.
+src = [".", "src"]
+cache-dir = ".ruff_cache"
+
 [tool.ruff.lint]
+# The bans themselves live in nested ruff.toml files, one per layer; the rules
+# are in src/stargazer/ruff.toml. Here the ban list is empty, so outside src/
+# the rule does nothing.
+extend-select = ["TID251"]
 ignore = [
     # Graceful degradation is the app tier's design: a failed GitHub call, pod
     # probe, or teardown must never take a request down, so handlers catch
@@ -135,3 +149,17 @@ ignore = [
 # Task bodies are async for Flyte's benefit but do genuinely blocking local
 # file I/O on the pod's own disk.
 "src/stargazer/tasks/**" = ["ASYNC230"]
+
+# Defaults for every pydeps run from the repo root, cli/diagrams.sh's included.
+[tool.pydeps]
+no_show = true
+# Arrows point from importer to imported, as in the docs/architecture diagrams.
+reverse = true
+only = ["stargazer", "app"]
+# Drawing one module, pydeps stops at modules 2 imports away. 0 lifts the limit,
+# so the diagram shows everything the module reaches.
+max_bacon = 0
+# `from stargazer.assets import Alignment` sends pydeps looking for a module
+# named Alignment, and on a case-insensitive filesystem (macOS) it finds
+# alignment.py and draws it twice. No module here is capitalized.
+exclude = ["*.[A-Z]*"]

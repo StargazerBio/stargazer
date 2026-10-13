@@ -12,6 +12,8 @@ flowchart TD
     MCP --> WF --> T --> A
 ```
 
+The layers are enforced on imports: a module imports from its own layer or the ones below it, never above, and the lint run on every commit rejects an import that breaks this. In code, bottom up: storage (`assets`, `utils`), `tasks`, `workflows`, then the surfaces over them (the MCP server with its `registry`, and the notebooks). The app tier (`app/`) sits above the whole SDK, which never imports it.
+
 ## Asset System
 
 Every file is an `Asset` — a dataclass with a content identifier, where its stored bytes live (a `flyte.io.File`), and typed metadata stored as flat keyvalues. Subclasses like `Reference`, `Alignment`, and `Variants` add typed fields with automatic coercion to/from the string-valued keyvalue store.

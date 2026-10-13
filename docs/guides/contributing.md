@@ -71,6 +71,27 @@ Pre-commit runs `ruff` (lint and format) and `docstr-coverage` (a docstring on e
 
 Ruff is pinned twice — `rev:` in `.pre-commit-config.yaml` and the `ruff` entry in `pyproject.toml`'s dev group — because pre-commit runs hooks in its own isolated environment rather than your project venv. **Bump both together**, or `uv run ruff check` and the commit hook will enforce different rule sets. Rule exceptions live in `[tool.ruff.lint]` in `pyproject.toml`, each annotated with the reason; if a rule is fighting a deliberate pattern (a blind `except` used for graceful degradation, a bare expression that is how a marimo cell renders), add it there rather than contorting the code.
 
+### Import Layers
+
+Ruff also enforces the [architecture's layers](../architecture/overview.md): a module imports from its own layer or the ones below it, never above. Each layer's directory has a `ruff.toml` that bans the layers above it, and the rules are written out in `src/stargazer/ruff.toml`. A task that imports a workflow fails lint:
+
+```
+TID251 `stargazer.workflows` is banned: Workflows are above tasks (layers: src/stargazer/ruff.toml)
+```
+
+A nested `ruff.toml`'s ban list replaces its parent's rather than adding to it, so a new layer directory lists every ban that applies to it.
+
+### Import Diagrams
+
+To see how the modules depend on each other, draw the import graph. It needs graphviz (`brew install graphviz`, or `apt install graphviz`):
+
+```bash
+cli/diagrams.sh                            # the SDK by package and by module, and the app tier
+cli/diagrams.sh src/stargazer/server.py    # one module and everything it imports
+```
+
+The SVGs land in `diagrams/`, which is gitignored: draw them when you need them rather than committing them. Open them in a browser to zoom.
+
 ## Submitting Changes
 
 Every change goes through a pull request — nothing is committed directly to `main`.
