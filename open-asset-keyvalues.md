@@ -171,46 +171,79 @@ Rewritten after measuring the cap (see Decisions): 9, not 10, and uploads only.
 
 ### 6. Asset page upload form (`app/templates/assets.html`)
 
-- [ ] A registered type's upload form gets the same **+ Add field** key/value
+- [x] A registered type's upload form gets the same **+ Add field** key/value
   rows the custom form has, below the typed fields. Move the `kv-rows` block
   out of `custom-editor` so both modes share it, and have `collectKeyvalues()`
   merge the rows into the typed result, rejecting reserved keys and keys that
   are already declared fields.
-- [ ] The edit form already allows adding keys and shows every key. Check only
+- [x] The edit form already allows adding keys and shows every key. Check only
   that saving an extra key on a typed record now succeeds.
-- [ ] UI text in product terms ("Extra fields are stored as text"), with no
+- [x] UI text in product terms ("Extra fields are stored as text"), with no
   implementation detail. A public upload over the cap shows step 5's error.
 
 ### 7. Verify on the real surfaces
 
-- [ ] **Across pods (devbox).** In `tests/devbox/pod_tasks.py`, one task stores an
+- [x] **Across pods (devbox).** In `tests/devbox/pod_tasks.py`, one task stores an
   `R1` with an extra key and returns it. A second task takes it as an input,
   which round-trips it through Flyte's type engine, and also finds it with
   `assemble(lane=...)`. Both copies must be `R1` with the extra key intact. Add
   the test to `tests/devbox/test_asset_storage.py` and a sub-feature line to
   `.claude/skills/verify-stargazer/features/devbox-asset-storage.md`. Run with
   the `verify-stargazer` skill.
-- [ ] **MCP.** `upload_file` with `asset=alignment, lane=3`, then `query_files`
+- [x] **MCP.** `upload_file` with `asset=alignment, lane=3`, then `query_files`
   with `lane=3`: the record comes back with `lane`.
 - [x] **Pinata.** Step 5's `-m pinata` tests pass (11 passed, 2026-10-13).
-- [ ] **Asset page over the cap.** A public upload with too many fields shows
+- [x] **Asset page over the cap.** A public upload with too many fields shows
   step 5's message, and nothing is stored.
-- [ ] **Asset page.** Upload a typed asset with one extra field through the form,
+- [x] **Asset page.** Upload a typed asset with one extra field through the form,
   and see it in the detail view (needs the page running with storage
   configured; say so in the PR if it can't be driven).
-- [ ] Full unit tier passes: `uv run --all-extras pytest`. `ruff --fix`.
+- [x] Full unit tier passes: `uv run --all-extras pytest`. `ruff --fix`.
 
 ### 8. Docs
 
-- [ ] `docs/architecture/types.md`: the `keyvalues` row in the base-class table,
+- [x] `docs/architecture/types.md`: the `keyvalues` row in the base-class table,
   the `__setattr__` paragraph (attributes are still strict, keyvalues aren't),
   **Catchall** (bare `Asset` is for unregistered kinds, not for extra fields),
   **Validation: `build_asset()`** (no unknown-keys check), **Specialization**.
-- [ ] `docs/architecture/app.md` and `.opencode/reference/architecture/app_internals.md`:
+- [x] `docs/architecture/app.md` and `.opencode/reference/architecture/app_internals.md`:
   the asset page's upload form.
-- [ ] `docs/guides/` and the assets tutorial notebook: grep for anything that
+- [x] `docs/guides/` and the assets tutorial notebook: grep for anything that
   says a typed asset rejects extra keys, or shows the escape hatch for that.
-- [ ] Close this ticket: `status: done` and an Outcome section.
+- [ ] Close this ticket after the PR merges: `status: done` and an Outcome section.
+
+## Verification (2026-10-13)
+
+- **Unit tier:** `uv run --all-extras pytest`, 410 passed. Each new or flipped
+  test was run first against the code without the change and failed on the
+  missing behavior.
+- **Pinata tier:** `pytest -m pinata tests/pinata`, 11 passed, including the
+  9-key upload and the refused 10-key upload.
+- **Devbox:** `pytest -m devbox -rP tests/devbox/test_dashboard.py
+  tests/devbox/test_asset_storage.py`, 5 passed in 94 s.
+  `test_extra_keyvalue_travels_between_pods` ran `lane_round_trip`: the
+  handed-in `R1` had `keyvalues == {"lane": …}`, and the one `assemble()`
+  found had the same plus `_owner: devbox-user`.
+- **MCP**, driven over stdio against an isolated store: `upload_file` with
+  `asset=alignment, sample_id=S1, lane=3` returned a typed alignment (no
+  generic-asset note) with `lane: "3"`, and `query_files({"lane": "3"})`
+  returned it. The same drive against `main` failed `upload_file`
+  (`is_error=True`), and the query came back empty.
+- **Asset page**, run locally (`uvicorn app.admin_app:asgi_app` with
+  `SG_STAND_IN_SUBJECT` and the Pinata key) and driven in Chrome on the
+  Private tab:
+  - An `r1` with five extra rows showed "Upload failed: An upload can carry
+    at most 9 metadata fields, counting the asset type and owner; this one
+    has 10." `/assets/sign` returned 400, and nothing was stored.
+  - An `r1` with `lane=3` uploaded, and the detail view showed `lane 3`
+    beside the declared fields.
+  - From the edit form, adding `flowcell=X` saved. The Pinata record then
+    held `asset, sample_id, mate_cid, sequencing_platform, lane, flowcell,
+    _owner`.
+  - The test file was deleted afterwards.
+- **The cap message changed while driving the page.** It said "Public
+  assets", but the page's Private tab hits the same limit, so it now says
+  "An upload".
 
 ## Deferred
 
