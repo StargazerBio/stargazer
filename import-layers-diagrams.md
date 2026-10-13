@@ -23,7 +23,8 @@ module files, it draws each with everything it imports instead. Generated on dem
 committed.
 
 - [x] Nested `ruff.toml` bans, `TID251` enabled in `pyproject.toml`
-- [x] `pydeps` dev dependency, `[tool.pydeps]` defaults, `cli/diagrams.sh`, `diagrams/` gitignored
+- [x] `pydeps` dependency, `[tool.pydeps]` defaults, `cli/diagrams.sh`, `diagrams/` gitignored
+- [x] No system Graphviz: pydeps writes dot, pygraphviz (wheels bundle Graphviz) renders; both in a `diagrams` group the script installs, not `dev`, which ships in images (ticket `slim-image-dev-deps`)
 - [x] Docs: overview layering, contributing guide, `cli/README.md`, AGENTS.md
 
 ## Verification
@@ -36,6 +37,10 @@ committed.
   the whole repo, and `--show-settings` for files under the nested configs
   differs only in TID251 and the ban lists.
 - `ruff analyze graph`: 0 layer violations, indirect paths included.
+- With Homebrew's graphviz unlinked (no `dot` on PATH), `cli/diagrams.sh` drew
+  every diagram with pygraphviz's bundled Graphviz 14.1.5, same node and edge
+  counts as the system-`dot` run. `uv export --extra bio` lists neither pydeps
+  nor pygraphviz, so images don't get them.
 - `cli/diagrams.sh`: sdk.svg 11 packages, sdk-modules.svg 55 modules, app.svg
   29 nodes incl. the SDK modules app/ reaches; per-module runs include the
   module's own node and everything it reaches.
