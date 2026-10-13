@@ -49,8 +49,15 @@ The test project was put back that way (diffed against the dump taken before).
 - [x] Docs: `app_internals.md` (the domain setting, in Deploy Settings),
       `docs/architecture/app.md`, the `notebook_meta`/`per_notebook`
       docstrings that said "no ceiling", the blank seed's docstring.
-- [ ] Verified on the tenant: a notebook asking for more than the ceiling
-      launches with 4 CPU / 16Gi.
+- [x] Verified on the tenant, 2026-10-13, as the test account on `u-pryce`'s
+      dashboard deployed from 3d7af27 (footer shows it). Notebook
+      `ceiling-probe` was saved with `cpu = 64`, `memory = "64Gi"` through the
+      previous dashboard, which stored it as-is. On the new one its tile read
+      4 / 16, the settings inputs carried `max="4"` / `max="16"`, and `/launch`
+      deployed `nb-ceiling-probe-edit` with requests CPU `4`, MEMORY `16Gi`
+      (its app spec, read as the admin). Saving 64 / 64 through the new
+      settings route returned and stored 4 / 16. The pod was stopped
+      afterwards; the notebook is still in the test account's workspace.
 
 ## Not covered
 
