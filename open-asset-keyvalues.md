@@ -65,24 +65,28 @@ The bare `Asset` stays the place for kinds of file nobody has registered yet.
   so the two never overlap. If code puts a declared field or `asset` into
   `keyvalues` by hand, `to_keyvalues()` raises `ValueError` naming the
   attribute to set instead, rather than one silently winning.
-- **Public assets are capped at Pinata's 10 keyvalues.** Pinata stores at most
-  10 keyvalue pairs per file (stated by the user, 2026-10-09). `_owner` is
-  always stamped, so a public asset has 9 keys for `asset`, its declared fields
-  and any extras. The user's own index (SQLite, keyvalues stored as JSON text)
-  has no such cap, so extras are limited only when a file goes to Pinata.
-  Stargazer checks the count before calling Pinata, so the error is ours and
-  clear rather than whatever Pinata does past the cap. Room left for extras on
+- **New public files are capped at Pinata's 9 keyvalues.** Measured
+  2026-10-13 against the real API (the user had said 10 on 2026-10-09):
+  Pinata stores a new file with 9 keyvalues and refuses 10, `_owner`
+  included. A plain upload gets a 400; a signed upload URL mints fine and
+  the browser upload then fails with `"Failed to parse keyvalues as JSON"`.
+  A metadata update has no cap: a merge reached 12 keys and all 12 were
+  stored. So Stargazer checks the count on the two upload paths only, before
+  sending anything, and doesn't invent a limit on updates that Pinata
+  doesn't have. The user's own index (SQLite, keyvalues stored as JSON text)
+  has no cap. `_owner` is always stamped, so a new public file has 8 keys
+  for `asset`, its declared fields and any extras. Room left for extras on
   the public tier, per type:
 
   | Extras allowed on public | Types |
   |---|---|
-  | 0 | `Alignment` (8 declared fields: already at the cap) |
-  | 1 | `Variants`, `KnownSites` |
-  | 2 | `AnnData` |
-  | 3 | `VQSRModel` |
-  | 5 | `R1`, `R2`, `ReferenceIndex`, `SequenceDict`, `AlignerIndex`, `BQSRReport`, `DuplicateMetrics` |
-  | 6 | `AlignmentIndex`, `VariantsIndex` |
-  | 7 | `Reference`, `KnownSitesIndex` |
+  | none: can't be uploaded at all | `Alignment` (8 declared fields, so 10 keys with `asset` and `_owner`). Already broken on `main`, before this change: ticket `alignment-over-pinata-cap` |
+  | 0 | `Variants`, `KnownSites` |
+  | 1 | `AnnData` |
+  | 2 | `VQSRModel` |
+  | 4 | `R1`, `R2`, `ReferenceIndex`, `SequenceDict`, `AlignerIndex`, `BQSRReport`, `DuplicateMetrics` |
+  | 5 | `AlignmentIndex`, `VariantsIndex` |
+  | 6 | `Reference`, `KnownSitesIndex` |
 
 - **The reserved `_` namespace is unchanged.** `build_asset()` still rejects
   `_`-prefixed keys. `_owner` is stamped onto the stored dict after
@@ -95,77 +99,75 @@ fails for the expected reason before implementing.
 
 ### 1. Round-trip extras on typed assets (`src/stargazer/assets/asset.py`)
 
-- [ ] Tests in `tests/unit/test_asset.py`:
+- [x] Tests in `tests/unit/test_asset.py`:
   - `Alignment.from_keyvalues({"asset": "alignment", "sample_id": "S1", "lane": "3"})`
     has `sample_id == "S1"` and `keyvalues == {"lane": "3"}`.
-  - That asset's `to_keyvalues()` equals the input dict exactly.
+  - That asset's `to_keyvalues()` equals the input dict exactly. (Only for a
+    full record: `to_keyvalues()` writes every declared field, so the test
+    input carries all of them, as every stored record does.)
   - An `Alignment` with `duplicates_marked=True` and `keyvalues={"lane": "3"}`
     gives `{"asset": "alignment", ..., "duplicates_marked": "true", "lane": "3"}`.
   - `keyvalues={"sample_id": "X"}` or `{"asset": "x"}` on an `Alignment` makes
     `to_keyvalues()` raise `ValueError`.
-- [ ] `from_keyvalues()`: on a typed class, every key that isn't declared or
+- [x] `from_keyvalues()`: on a typed class, every key that isn't declared or
   `asset` goes into `keyvalues`.
-- [ ] `to_keyvalues()`: on a typed class, start from `self.keyvalues`, raise on
+- [x] `to_keyvalues()`: on a typed class, start from `self.keyvalues`, raise on
   overlap with declared fields or `asset`, then write `asset` and the declared
   fields.
-- [ ] Docstrings: the `keyvalues` attribute on `Asset` (now "extra keys" on typed
+- [x] Docstrings: the `keyvalues` attribute on `Asset` (now "extra keys" on typed
   subclasses), `to_keyvalues()`, `from_keyvalues()`.
 
 ### 2. Keep extras through `specialize()` (`src/stargazer/assets/__init__.py`)
 
-- [ ] Replace `test_unknown_keyvalues_dropped_on_specialize` with one asserting
+- [x] Replace `test_unknown_keyvalues_dropped_on_specialize` with one asserting
   the result is an `Alignment` with `keyvalues == {"custom_field": "custom_value"}`.
-- [ ] No code change is expected beyond step 1. The fallback to a bare `Asset`
+- [x] No code change is expected beyond step 1. The fallback to a bare `Asset`
   on an unparseable declared value stays as it is.
 
 ### 3. Accept extras at upload and edit (`build_asset()`)
 
-- [ ] Flip `tests/unit/test_assets_page.py::test_registered_key_unknown_field_raises`
+- [x] Flip `tests/unit/test_assets_page.py::test_registered_key_unknown_field_raises`
   and the `"Unknown keys"` case in `tests/unit/test_assets_routes.py` (the
   `flowcell` upload): an undeclared key on a registered type now succeeds and is
   stored, and the route's response `keyvalues` contain it.
-- [ ] `test_registered_key_malformed_value_raises` stays as it is: a declared
+- [x] `test_registered_key_malformed_value_raises` stays as it is: a declared
   non-`str` field that doesn't parse still raises.
-- [ ] `build_asset()`: drop the unknown-keys check. `from_keyvalues()` now
+- [x] `build_asset()`: drop the unknown-keys check. `from_keyvalues()` now
   carries those keys.
-- [ ] Docstrings: `build_asset()`, and the MCP `upload_file` / `update_file`
+- [x] Docstrings: `build_asset()`, and the MCP `upload_file` / `update_file`
   tools in `src/stargazer/server.py` (an LLM reads these to decide how to call
   them: say registered types accept extra keys as strings).
 
 ### 4. Store and query through storage
 
-- [ ] Test in `tests/utils/test_storage.py` (isolated store): an `R1` with
+- [x] Test in `tests/utils/test_storage.py` (isolated store): an `R1` with
   `keyvalues["lane"] = "3"`, stored with `update()`. `assemble(asset="r1", lane="3")`
   returns exactly one asset, which is an `R1` with `keyvalues == {"lane": "3"}`.
   Expected to pass after step 1. The point is to prove the whole path to the
   index and back.
 
-### 5. Enforce Pinata's 10-key cap (`src/stargazer/utils/pinata.py`)
+### 5. Check Pinata's 9-key cap on upload (`src/stargazer/utils/pinata.py`)
 
-- [ ] Unit test in `tests/utils/test_pinata.py` (that file makes no API calls,
-  and nothing fakes `PinataClient`'s HTTP): the count helper passes a dict of
-  exactly 10 keys and raises `ValueError` on 11, naming both numbers.
-- [ ] Pinata-tier tests in `tests/pinata/test_client.py` (`-m pinata`, real API):
-  - `upload()` of an `R1` with five extra keys succeeds and reads back with all
-    10 keys.
-  - `upload()` of an `Alignment` with one extra key raises the helper's
+Rewritten after measuring the cap (see Decisions): 9, not 10, and uploads only.
+
+- [x] Unit test in `tests/utils/test_pinata.py`: `_check_keyvalue_count()`
+  passes 9 keys and raises `ValueError` on 10, naming both numbers.
+- [x] Pinata-tier tests in `tests/pinata/test_client.py` (`-m pinata`, real API):
+  - `upload()` of an `R1` with four extra keys succeeds and reads back with
+    all 9 keys.
+  - `upload()` of an `R1` with five extra keys raises the helper's
     `ValueError`, and nothing is stored.
-  - `update_metadata()` that would take a record past 10 keys raises, and the
-    record is unchanged. Pinata merges, so the total of existing and new keys
-    is what counts.
-- [ ] The asset-route tests in `tests/unit/test_assets_routes.py` replace
-  `PinataClient` with a fake, so they can't see the check. Cover the page's
-  400 by driving it in step 7 instead.
-- [ ] One helper that checks a stamped keyvalues dict against `MAX_KEYVALUES = 10`,
-  called from all three write paths after `_stamp_owner()`. For
-  `update_metadata()`, count the union of the existing record's keys and the
-  patch. It already looks the file up by CID first; check whether that response
-  carries the current keyvalues before adding a second call.
-- [ ] The asset page's `/assets/sign` and `/assets/update` turn that `ValueError`
-  into a 400 with the message, like `build_asset()` errors today. Message in
-  product terms, e.g. "Public assets can carry at most 9 fields; this one
-  has 11."
-- [ ] Docstrings on the three methods name the cap.
+  - Dropped: the `update_metadata()` test. Pinata doesn't cap updates.
+- [x] The route tests' fake `PinataClient` runs the real check in
+  `create_signed_upload_url()`, so `tests/unit/test_assets_routes.py` covers
+  the page's 400. Two sign tests used an `Alignment`, which the check now
+  refuses (ticket `alignment-over-pinata-cap`); they sign an `R1` instead.
+- [x] `MAX_KEYVALUES = 9`, checked in `upload()` after `_stamp_owner()` and in
+  `create_signed_upload_url()`.
+- [x] `/assets/sign` turns the `ValueError` into a 400: "Public assets can
+  carry at most 9 metadata fields, counting the asset type and owner; this
+  one has 10."
+- [x] Docstrings on both methods name the cap.
 
 ### 6. Asset page upload form (`app/templates/assets.html`)
 
@@ -190,8 +192,7 @@ fails for the expected reason before implementing.
   the `verify-stargazer` skill.
 - [ ] **MCP.** `upload_file` with `asset=alignment, lane=3`, then `query_files`
   with `lane=3`: the record comes back with `lane`.
-- [ ] **Pinata.** Step 5's `-m pinata` tests pass. Optionally, send 11 keys
-  straight to Pinata to answer the open question below.
+- [x] **Pinata.** Step 5's `-m pinata` tests pass (11 passed, 2026-10-13).
 - [ ] **Asset page over the cap.** A public upload with too many fields shows
   step 5's message, and nothing is stored.
 - [ ] **Asset page.** Upload a typed asset with one extra field through the form,
@@ -228,6 +229,6 @@ fails for the expected reason before implementing.
 
 ## Open questions
 
-- What Pinata does past 10 keyvalues (rejects, or keeps some and drops the
-  rest) is unchecked. Step 5 makes it moot for our own writes by checking
-  first.
+- ~~What Pinata does past 10 keyvalues.~~ Answered 2026-10-13 by sending
+  files straight to the API: the cap is 9, and past it a new file is refused
+  (see Decisions). Nothing is truncated.
