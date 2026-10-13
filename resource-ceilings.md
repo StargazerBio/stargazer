@@ -14,7 +14,8 @@ case per user during the alpha. Split out of
 
 ## What Union's setting covers (measured 2026-10-13)
 
-Probe: a task and an app in `u-387300641116005877`/development, each asking
+Probe: a task and an app in `u-387300641116005877`/development (the test
+account's archived first project; runs and apps still work in it), each asking
 for 2 CPU / 2Gi, reporting their cgroup `cpu.max` and `memory.max`. Then a
 project-scoped `task_resource.max.cpu: 1`, `task_resource.max.memory: 1Gi`,
 and the same again.
@@ -34,16 +35,20 @@ The test project was put back that way (diffed against the dump taken before).
 
 ## Pieces
 
-- [ ] The dashboard clamps notebook resources to the ceiling: header values
-      on launch, create and settings forms. An unreadable memory quantity
-      falls back to the default, since it can't be checked against the cap.
-- [ ] The create and settings forms' number inputs carry the ceiling as `max`.
-- [ ] `task_resource.max.cpu: 4`, `task_resource.max.memory: 16Gi` on the
-      tenant's development domain; probe task asking for more comes back
-      clamped.
-- [ ] Docs: `app_internals.md` (the domain setting and its values),
+- [x] The dashboard clamps notebook resources to the ceiling
+      (`app.notebook_meta.MAX_RESOURCES`): header values on launch, and the
+      create and settings forms. Memory is compared by size whatever its unit;
+      an unreadable quantity falls back to the default, since it can't be
+      checked against the cap. `feat/resource-ceilings` 3d7af27, unit tests.
+- [x] The settings form's number inputs carry the ceiling as `max`.
+- [x] `task_resource.max.cpu: "4"`, `task_resource.max.memory: "16Gi"` on the
+      tenant's development domain, set 2026-10-13 (the domain had no
+      overrides before). Probe task asking for 6 CPU / 20Gi in
+      `u-387300641116005877` got `cpu.max 400000 100000`, `memory.max
+      17179869184`: 4 CPU / 16 GiB (run `uskdlqp49vfpt2dltbc5`).
+- [x] Docs: `app_internals.md` (the domain setting, in Deploy Settings),
       `docs/architecture/app.md`, the `notebook_meta`/`per_notebook`
-      docstrings that say "no ceiling".
+      docstrings that said "no ceiling", the blank seed's docstring.
 - [ ] Verified on the tenant: a notebook asking for more than the ceiling
       launches with 4 CPU / 16Gi.
 
