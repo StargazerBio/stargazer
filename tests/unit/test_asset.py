@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from stargazer.assets.alignment import Alignment
 from stargazer.assets.asset import Asset
 
@@ -81,20 +83,46 @@ class TestBareAssetKeyvalues:
         assert restored.cid == original.cid
         assert restored.path == original.path
 
-    def test_typed_subclass_ignores_keyvalues_field(self):
-        """Typed assets serialize declared fields only; the inherited
-        keyvalues dict never appears in their storage format."""
-        alignment = Alignment(sample_id="NA12878")
-        kv = alignment.to_keyvalues()
-        assert "keyvalues" not in kv
-        assert kv["asset"] == "alignment"
 
-    def test_typed_from_keyvalues_ignores_keyvalues_key(self):
-        restored = Alignment.from_keyvalues(
-            {"asset": "alignment", "sample_id": "S1", "keyvalues": "{}"}
+STORED_ALIGNMENT = {
+    "asset": "alignment",
+    "sample_id": "S1",
+    "format": "",
+    "sorted": "",
+    "duplicates_marked": "true",
+    "bqsr_applied": "false",
+    "tool": "",
+    "reference_cid": "",
+    "r1_cid": "",
+    "lane": "3",
+}
+
+
+class TestTypedExtras:
+    """Typed assets keep undeclared keys as string extras in `keyvalues`."""
+
+    def test_from_keyvalues_splits_declared_and_extra(self):
+        aln = Alignment.from_keyvalues(STORED_ALIGNMENT)
+        assert (aln.sample_id, aln.duplicates_marked) == ("S1", True)
+        assert aln.keyvalues == {"lane": "3"}
+
+    def test_round_trip_is_exact(self):
+        assert (
+            Alignment.from_keyvalues(STORED_ALIGNMENT).to_keyvalues()
+            == STORED_ALIGNMENT
         )
-        assert restored.sample_id == "S1"
-        assert restored.keyvalues == {}
+
+    def test_to_keyvalues_writes_extras_beside_declared_fields(self):
+        aln = Alignment(sample_id="S1", duplicates_marked=True, keyvalues={"lane": "3"})
+        assert aln.to_keyvalues() == STORED_ALIGNMENT
+
+    def test_declared_field_in_extras_raises(self):
+        with pytest.raises(ValueError, match="sample_id"):
+            Alignment(keyvalues={"sample_id": "X"}).to_keyvalues()
+
+    def test_asset_key_in_extras_raises(self):
+        with pytest.raises(ValueError, match="asset"):
+            Alignment(keyvalues={"asset": "x"}).to_keyvalues()
 
 
 class TestAssetDefaults:
