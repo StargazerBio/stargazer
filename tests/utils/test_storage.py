@@ -7,7 +7,7 @@ from flyte.io import File
 from flyte.types import TypeEngine
 
 import stargazer.utils.storage as storage_mod
-from stargazer.assets import Alignment, Reference, ReferenceIndex
+from stargazer.assets import R1, Alignment, Reference, ReferenceIndex, assemble
 from stargazer.utils.cid import compute_cid
 from stargazer.utils.index import SqliteIndex
 from stargazer.utils.storage import StorageClient
@@ -69,6 +69,21 @@ async def test_upload_stamps_owner(client, tmp_path, monkeypatch):
     assert "/users/387300641116005877/assets/" in aln.path.path
     [row] = await client.index.query({"asset": "alignment"})
     assert row["keyvalues"]["_owner"] == "387300641116005877"
+
+
+@pytest.mark.asyncio
+async def test_extra_keyvalue_round_trips_through_the_index(client, tmp_path):
+    """A typed asset's extra key is stored, matched by assemble, and returned."""
+    fq = _write(tmp_path / "work" / "s1_R1.fastq", b"@r\nACGT\n+\nIIII\n")
+    r1 = R1()
+    r1.keyvalues["lane"] = "3"
+    await r1.update(fq, sample_id="S1")
+
+    [found] = await assemble(asset="r1", lane="3")
+
+    assert type(found) is R1
+    assert (found.cid, found.sample_id) == (r1.cid, "S1")
+    assert found.keyvalues == {"lane": "3"}
 
 
 @pytest.mark.asyncio
