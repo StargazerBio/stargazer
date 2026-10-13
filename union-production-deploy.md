@@ -1,8 +1,9 @@
 ---
 title: Union production deploy
-status: doing
+status: review
 priority: high
 created: 2026-10-04
+pr: 23
 ---
 
 Tenant: `stargazerbio.us-west-2.unionai.cloud`.
