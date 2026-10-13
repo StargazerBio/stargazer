@@ -1,8 +1,9 @@
 ---
 title: Alpha notice against uploading sensitive data
-status: doing
+status: review
 priority: high
 created: 2026-10-13
+pr: 21
 ---
 
 Users' storage isn't isolated yet: every project on the tenant runs as one IAM
@@ -22,6 +23,7 @@ version.
       and `assets.html`'s upload form; `docs/architecture/app.md` updated
 - [x] Tests in `tests/unit/test_app.py` and `tests/unit/test_assets_routes.py`
       fail with the notice emptied and pass with it; unit tier 400 passed
-- [ ] Check the footer by eye on a dashboard (version, notice, cleanup
-      control), since the footer changed after the first by-eye check
-- [ ] PR
+- [x] Check the footer by eye on a dashboard (version, notice, cleanup
+      control), since the footer changed after the first by-eye check:
+      deployed on the devbox, checked 2026-10-13
+- [x] PR #21
