@@ -1,6 +1,6 @@
 ---
 title: Union production deploy
-status: next
+status: doing
 priority: high
 created: 2026-10-04
 ---
@@ -13,10 +13,5 @@ notebook image (#3). Union fixed the remote builder's unpullable (Nydus)
 images on 2026-10-06, so deploys are back on the remote builder and the
 GHCR workaround is gone. Remaining:
 
-- [ ] **Union-native app secrets.** Dashboards carry no secret today (the
-      asset manager is off for that reason). When the asset manager returns, a
-      Pinata key can't be baked into `env_vars`, where the owner sees it. Move to
-      `flyte create secret` plus `secrets=[flyte.Secret(...)]`, after
-      confirming Union injects app secrets at all.
 - [ ] **`flyte.deploy` with commit-SHA versions** in place of `flyte.serve`
       for `stargazer-users upgrade`, run from CI with an org-admin API key.
