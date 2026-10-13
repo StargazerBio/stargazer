@@ -140,8 +140,8 @@ first failing run's pytest exit code.
 
 Draws import graphs with [pydeps](https://github.com/thebjorn/pydeps) into
 `diagrams/`, which is gitignored. Draw them when you need them; don't commit
-them. Needs graphviz's `dot` (`brew install graphviz`, or
-`apt install graphviz`).
+them. It installs the `diagrams` dependency group as it runs: pydeps, and
+pygraphviz, whose wheels bundle Graphviz, so nothing is installed outside uv.
 
 ```bash
 cli/diagrams.sh                                         # the standard set
@@ -155,4 +155,5 @@ imports, directly or not, as `diagrams/<module>.svg`
 (`diagrams/stargazer.server.svg`). It takes files rather than directories,
 because pydeps given a subpackage draws the whole package around it. Arrows
 point from importer to imported. The options every diagram shares are under
-`[tool.pydeps]` in `pyproject.toml`. Each diagram takes 20–30 seconds.
+`[tool.pydeps]` in `pyproject.toml`. The standard set takes about a minute
+with every extra installed.

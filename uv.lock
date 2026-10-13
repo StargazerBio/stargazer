@@ -3115,6 +3115,29 @@ wheels = [
 ]
 
 [[package]]
+name = "pygraphviz"
+version = "2.0.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/01/f7/a82e7f47573168960ce7e2a6c937a084a14d58599fe2a48ea3cde8ca555b/pygraphviz-2.0.3.tar.gz", hash = "sha256:e46818608638959ceabec66a36d2efc1d60b790a845f29705e403feecc7ee0c0", size = 82969, upload-time = "2026-10-01T17:14:04.075Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/51/b4/5a7ba19a5799b3a48aebd7c607f59406962c32bcdfeba1c922e9929e6bcd/pygraphviz-2.0.3-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:fe903241e1c5ac8648ec5c50b7da91eff60876e211c51009c2f8a1f74695ce13", size = 1412496, upload-time = "2026-10-01T17:13:37.851Z" },
+    { url = "https://files.pythonhosted.org/packages/11/d7/d53ee53ce47ac314881f8c82ebe590fc6218b38c9afed4f828a7f1b65c7b/pygraphviz-2.0.3-cp313-cp313-macosx_11_0_x86_64.whl", hash = "sha256:016c038494fdd06fa1c82f60878b8c0db44028d4e149c4a8e5a432c8697b1183", size = 1585146, upload-time = "2026-10-01T17:13:39.637Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/09/dc90465d48fe15b236753e0974bf010857d1556cc0de7f5396ba80f144b8/pygraphviz-2.0.3-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:3849ecc617f7a6610a2e76bd99461932093666ba3f14b50aec651c1f6d0bc400", size = 5154943, upload-time = "2026-10-01T17:13:41.153Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/7a/855c62199d7daa2499088e372abc03e90f9f7ee384f0d7001ed6d11fa360/pygraphviz-2.0.3-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:f829d99bcff0317fdfb149bf878d0dd2637507d2befe2cb5eb66e6f6b329b898", size = 5501721, upload-time = "2026-10-01T17:13:42.857Z" },
+    { url = "https://files.pythonhosted.org/packages/2f/18/5296fdc3275ecd742501e0383c9016b48c457ba3165f0ea5881af5975c90/pygraphviz-2.0.3-cp313-cp313-win_amd64.whl", hash = "sha256:b73b3efd02ac46a0b44671c47709e03207bedac78afac06139a70f6093991a0b", size = 6971103, upload-time = "2026-10-01T17:13:44.634Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/09/74630d9f4e279ab8a105255b9c8b503181c0b552fad95f2a096ce5285552/pygraphviz-2.0.3-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:84e01f6abaddc163defa2c56c4211966370d66ac94f00541a72caf5ba2bcc6bd", size = 1412520, upload-time = "2026-10-01T17:13:46.375Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/fc/99138c9f1c9b43313e15ec7ebdac2ebe70ed8d6c44d339db2018a13c63b4/pygraphviz-2.0.3-cp314-cp314-macosx_11_0_x86_64.whl", hash = "sha256:9a2f9ae31f6dc5033345a17f2d68db7a37641c87da475bd7e25662b9ac5593ee", size = 1585149, upload-time = "2026-10-01T17:13:48.134Z" },
+    { url = "https://files.pythonhosted.org/packages/91/ac/dc3c8ee261010d5b78213146c35e5f5eb11ed4fa1f07d68fe1f2c7f6a3a7/pygraphviz-2.0.3-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:bafeb8186da499b945017fd26776ed9dc39e2efcdfe09edae06f5a307e3873eb", size = 5154375, upload-time = "2026-10-01T17:13:49.849Z" },
+    { url = "https://files.pythonhosted.org/packages/40/25/ed3e0ace7b9045d53be959d7138fa55971c94e3fbd5823be5640f85e715f/pygraphviz-2.0.3-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:c83851acd4e5638087bf1d2fca420c8a2393d117fe0619dba8cf92fdd780b860", size = 5501232, upload-time = "2026-10-01T17:13:52.064Z" },
+    { url = "https://files.pythonhosted.org/packages/49/10/2aeb033e6dd9a385b1b54fcd5c77ad6812268126dde86dbd93b2c427e7c3/pygraphviz-2.0.3-cp314-cp314-win_amd64.whl", hash = "sha256:b0a764665b52922d95d829d7a5dc922a248e1b3b317eed6593d46ccdc4eadc11", size = 7195968, upload-time = "2026-10-01T17:13:53.771Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/62/9aa31b39b546c00660b8aef984e9cf27c3e7be5c39730618b36f2426c09f/pygraphviz-2.0.3-cp315-cp315-macosx_11_0_arm64.whl", hash = "sha256:ae7f2375b3adc3537adf921d97e537a97c350e647b78e2ffaf1a35bd0f8c0222", size = 1412495, upload-time = "2026-10-01T17:13:55.363Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/4a/f06347cfdf76f7495ea32e9a3062cdb7f9a0d780c998b97658b8c097b6f9/pygraphviz-2.0.3-cp315-cp315-macosx_11_0_x86_64.whl", hash = "sha256:16cb4be3ae995921ed0401f8cd05c7b80780c5ccc465f8cec74d9c41f00b16f2", size = 1585150, upload-time = "2026-10-01T17:13:57.235Z" },
+    { url = "https://files.pythonhosted.org/packages/26/31/8e6608c8e6ada4d3416201010d0bae3f6556d26055892ab2fce024449d94/pygraphviz-2.0.3-cp315-cp315-manylinux_2_28_aarch64.whl", hash = "sha256:f11086e1a6f003bf09a2bb86f7b8b5e13c2a743c84df8ef0f93eb201f32efbb3", size = 5154905, upload-time = "2026-10-01T17:13:59.058Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/cb/d3454844ff55147bb6f2d4c1ec53acf7a42eedd5c3dffecd0f3d9978ad44/pygraphviz-2.0.3-cp315-cp315-manylinux_2_28_x86_64.whl", hash = "sha256:54e538064f5d8f66b1f871fbbbe25d7b2963ac66e949a093040716672c4a26e1", size = 5500956, upload-time = "2026-10-01T17:14:00.693Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/33/c4f9747052fe338d0e8fcc3d5b8e0f148e6c377387b38f24b4c13c7c03ca/pygraphviz-2.0.3-cp315-cp315-win_amd64.whl", hash = "sha256:21fa2e479ff88f3b62310bdc288b70e2883e3ae754b6e916fb217a5383306310", size = 7195968, upload-time = "2026-10-01T17:14:02.457Z" },
+]
+
+[[package]]
 name = "pyjwt"
 version = "2.15.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3974,12 +3997,15 @@ notebook = [
 dev = [
     { name = "mkdocstrings", extra = ["python"] },
     { name = "pre-commit" },
-    { name = "pydeps" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
     { name = "zensical" },
+]
+diagrams = [
+    { name = "pydeps" },
+    { name = "pygraphviz" },
 ]
 
 [package.metadata]
@@ -4018,12 +4044,15 @@ provides-extras = ["bio", "notebook", "mcp", "landing", "docs", "app", "all"]
 dev = [
     { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0.3" },
     { name = "pre-commit", specifier = ">=4.5.0" },
-    { name = "pydeps", specifier = ">=3,<4" },
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "pytest-asyncio", specifier = ">=1.3.0" },
     { name = "pytest-cov", specifier = ">=4.1.0" },
     { name = "ruff", specifier = ">=0.16.10,<0.17" },
     { name = "zensical", specifier = ">=0.0.24" },
+]
+diagrams = [
+    { name = "pydeps", specifier = ">=3,<4" },
+    { name = "pygraphviz", specifier = ">=2,<3" },
 ]
 
 [[package]]

@@ -83,7 +83,7 @@ A nested `ruff.toml`'s ban list replaces its parent's rather than adding to it, 
 
 ### Import Diagrams
 
-To see how the modules depend on each other, draw the import graph. It needs graphviz (`brew install graphviz`, or `apt install graphviz`):
+To see how the modules depend on each other, draw the import graph. The script installs what it needs, Graphviz included, through uv:
 
 ```bash
 cli/diagrams.sh                            # the SDK by package and by module, and the app tier

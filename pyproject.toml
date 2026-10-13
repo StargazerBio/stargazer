@@ -90,7 +90,6 @@ app = ["templates/*.html"]
 dev = [
     "mkdocstrings[python]>=1.0.3",
     "pre-commit>=4.5.0",
-    "pydeps>=3,<4",
     "pytest>=9.0.1",
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=4.1.0",
@@ -99,6 +98,13 @@ dev = [
     # differed from the pinned hook's. Bump both together.
     "ruff>=0.16.10,<0.17",
     "zensical>=0.0.24",
+]
+# cli/diagrams.sh installs this group when it runs. It isn't in `dev` because
+# image builds sync the default groups. pygraphviz's wheels bundle Graphviz,
+# so drawing needs nothing installed outside uv.
+diagrams = [
+    "pydeps>=3,<4",
+    "pygraphviz>=2,<3",
 ]
 
 # Rule selection is ruff's default for the pinned version (see the ruff pin in
