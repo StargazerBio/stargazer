@@ -1,6 +1,6 @@
 ---
 title: Extra keyvalues on typed assets
-status: review
+status: done
 priority: high
 created: 2026-10-09
 pr: 25
@@ -211,7 +211,34 @@ Rewritten after measuring the cap (see Decisions): 9, not 10, and uploads only.
   the asset page's upload form.
 - [x] `docs/guides/` and the assets tutorial notebook: grep for anything that
   says a typed asset rejects extra keys, or shows the escape hatch for that.
-- [ ] Close this ticket after the PR merges: `status: done` and an Outcome section.
+- [x] Close this ticket after the PR merges: `status: done` and an Outcome section.
+
+## Outcome
+
+Merged in #25 (2026-10-13, `7f11457`).
+
+**What shipped:**
+- Typed assets keep undeclared keys as string extras in `keyvalues`, through
+  `build_asset()` (MCP and the asset page), `specialize()`, the index,
+  `assemble()` and Flyte task handoffs. Attributes and `update()` kwargs
+  stay strict.
+- Uploads to Pinata check its keyvalue cap first: 9, `_owner` included,
+  measured against the real API. Metadata updates aren't capped by Pinata
+  and aren't checked.
+- The asset page's typed upload form takes extra fields.
+- Docs: `types.md` (Extra keys), `configuration.md` (the cap), `app.md`,
+  `mcp-server.md`, `app_internals.md`, and the verify-stargazer devbox
+  feature map (`devbox-typed-extras`).
+
+**How it was verified:** the unit, Pinata and devbox tiers, MCP over stdio,
+and the asset page in Chrome. Details are under Verification below.
+
+**What's left:**
+- Ticket `alignment-over-pinata-cap`: no `Alignment` can be uploaded to
+  Pinata. That was already true on `main`; it now fails with a clear message.
+- The Deferred items below.
+- An asset found with `assemble()` carries `_owner` among its extras. This
+  was flagged in the PR and merged as is.
 
 ## Verification (2026-10-13)
 
