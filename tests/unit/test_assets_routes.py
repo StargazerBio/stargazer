@@ -232,6 +232,19 @@ class TestSign:
         assert call["keyvalues"]["lanes"] == "4"
         assert call["keyvalues"]["_owner"] == "octocat"
 
+    def test_registered_key_signs_extra_field(self, fake_pinata, client):
+        _auth(client)
+        resp = client.post(
+            "/assets/sign",
+            json={
+                "filename": "x.bam",
+                "keyvalues": {"asset": "alignment", "flowcell": "X"},
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["keyvalues"]["flowcell"] == "X"
+        assert fake_pinata.sign_calls[0]["keyvalues"]["flowcell"] == "X"
+
     def test_validation_errors_are_400(self, fake_pinata, client):
         _auth(client)
         no_asset = client.post(
@@ -239,16 +252,6 @@ class TestSign:
         )
         assert no_asset.status_code == 400
         assert "asset" in no_asset.json()["detail"]
-
-        unknown = client.post(
-            "/assets/sign",
-            json={
-                "filename": "x.bam",
-                "keyvalues": {"asset": "alignment", "flowcell": "X"},
-            },
-        )
-        assert unknown.status_code == 400
-        assert "Unknown keys" in unknown.json()["detail"]
 
         reserved = client.post(
             "/assets/sign",

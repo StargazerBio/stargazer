@@ -96,10 +96,12 @@ async def upload_file(path: str, keyvalues: dict[str, str]) -> dict:
     """Upload a file with metadata key-value pairs.
 
     keyvalues must include "asset". Registered asset keys (e.g.
-    asset=reference) validate strictly against their declared fields;
-    unregistered keys are stored as generic assets with the keyvalues
-    verbatim. Reserved system keys (underscore-prefixed, e.g. _owner) are
-    stamped automatically and must not be supplied.
+    asset=reference) check their declared fields' values, and keep any other
+    key you supply (e.g. lane=3) as an extra text field on the typed asset,
+    so tasks that take that type can still use the file. Unregistered keys
+    are stored as generic assets with the keyvalues verbatim. Reserved
+    system keys (underscore-prefixed, e.g. _owner) are stamped automatically
+    and must not be supplied.
 
     When displaying results, always show a table with the CID and all keyvalues.
     """
@@ -139,8 +141,9 @@ async def update_file(cid: str, keyvalues: dict[str, str]) -> dict:
     keyvalues is a patch: the supplied keys are added or overwritten, keys
     you omit are preserved (Pinata merge — there is no key removal). It must
     include "asset"; the patch validates through the same rules as upload
-    (registered keys check their declared fields; reserved underscore keys
-    like _owner are stamped automatically and must not be supplied).
+    (registered keys check their declared fields' values and accept extra
+    keys as text; reserved underscore keys like _owner are stamped
+    automatically and must not be supplied).
 
     When displaying results, always show a table with the CID and all keyvalues.
     """

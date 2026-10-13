@@ -4,8 +4,6 @@
 spec: [docs/architecture/types.md](../architecture/types.md)
 """
 
-import dataclasses
-
 from flyte.io import File
 
 from stargazer.assets.alignment import (
@@ -14,7 +12,7 @@ from stargazer.assets.alignment import (
     BQSRReport,
     DuplicateMetrics,
 )
-from stargazer.assets.asset import _BASE_FIELDS, Asset, assemble
+from stargazer.assets.asset import Asset, assemble
 from stargazer.assets.reads import R1, R2
 from stargazer.assets.reference import (
     AlignerIndex,
@@ -72,19 +70,20 @@ def build_asset(keyvalues: dict[str, str]) -> Asset:
     """Construct an Asset from keyvalues, typed when the key is registered.
 
     The single validation choke point shared by the MCP server and the
-    asset-manager page: registered asset keys validate strictly against
-    their dataclass schema; unregistered keys are first-class and construct
-    a bare Asset carrying the keyvalues verbatim (the catchall — shape
-    enforcement begins only once a class registers that key).
+    asset-manager page. A registered asset key builds its class: declared
+    fields are parsed to their types, and any other key is kept as a
+    string extra in ``keyvalues``. An unregistered key is first-class and
+    constructs a bare Asset carrying the keyvalues verbatim (the catchall
+    for kinds of file no class describes yet).
 
     Raises:
         ValueError: when ``keyvalues["asset"]`` is missing; when any key is
             underscore-prefixed (reserved system namespace — keys like
             ``_owner`` are stamped automatically at the storage layer, so
             callers must drop them); or when the asset key is registered and
-            keyvalues contain undeclared fields or values that don't
-            json-parse (strict at upload, vs. ``specialize()`` which
-            degrades gracefully at query time).
+            a declared non-``str`` field doesn't json-parse (strict at
+            upload, vs. ``specialize()`` which degrades gracefully at query
+            time).
     """
     asset_key = keyvalues.get("asset")
     if not asset_key:
@@ -102,12 +101,6 @@ def build_asset(keyvalues: dict[str, str]) -> Asset:
     cls = ASSET_REGISTRY.get(asset_key)
     if cls is None:
         return Asset(keyvalues=dict(keyvalues))
-    declared = {f.name for f in dataclasses.fields(cls)} - _BASE_FIELDS
-    unknown = sorted(set(keyvalues) - declared - {"asset"})
-    if unknown:
-        raise ValueError(
-            f"Unknown keys for {asset_key!r}: {unknown}. Allowed: {sorted(declared)}"
-        )
     return cls.from_keyvalues(keyvalues)
 
 
