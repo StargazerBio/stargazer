@@ -74,6 +74,15 @@ chunked-first (no resume yet) with a 10 GiB/file ceiling — itself a Pinata
 limit, not an IPFS one (IPFS chunks files into a DAG with no inherent size
 cap).
 
+**A new Pinata file holds at most 9 keyvalues, `_owner` included.** Pinata
+refuses more on both upload paths, so `upload()` and
+`create_signed_upload_url()` check the count first and raise before anything
+is sent: a plain POST would ship the whole file to get a 400, and a signed
+URL would mint fine and then fail in the browser. Metadata updates aren't
+capped by Pinata and aren't checked. The limit bounds how many
+[extra keys](types.md#extra-keys) a typed asset can carry on the public tier;
+the user's own index has no such cap.
+
 `query(keyvalues, network=)` queries one network, the public one unless
 told otherwise; each record carries the network it was found on.
 

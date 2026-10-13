@@ -110,7 +110,10 @@ PUTs bytes straight to Pinata. Because Pinata bakes the filename and
 keyvalues into the URL at mint time, the uploader can supply bytes only —
 never metadata the server didn't validate. Validation is the *same*
 `build_asset()` choke point the MCP server uses, so the page and the SDK
-agree on what a valid upload is. Downloads redirect the same way: bytes go
+agree on what a valid upload is. **A registered type's form takes extra
+fields** below its declared ones, stored as text on the typed asset (see
+[Types → Extra keys](types.md#extra-keys)); an upload with more fields than
+a Pinata file holds is refused before the URL is minted. Downloads redirect the same way: bytes go
 browser↔Pinata, not through the pod.
 
 **Ownership is server-stamped attribution, not enforcement.** Every hosted
