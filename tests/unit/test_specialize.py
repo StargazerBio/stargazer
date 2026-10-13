@@ -136,8 +136,8 @@ class TestSpecialize:
             "sample_count": "three",
         }
 
-    def test_unknown_keyvalues_dropped_on_specialize(self):
-        """Undeclared keyvalues are silently dropped during specialization."""
+    def test_undeclared_keyvalues_kept_as_extras(self):
+        """A key the class doesn't declare stays on the typed asset."""
         result = specialize(
             record(
                 "Qm123",
@@ -146,5 +146,6 @@ class TestSpecialize:
                 custom_field="custom_value",
             )
         )
+        assert type(result) is Alignment
         assert result.sample_id == "NA12878"
-        assert not hasattr(result, "custom_field")
+        assert result.keyvalues == {"custom_field": "custom_value"}

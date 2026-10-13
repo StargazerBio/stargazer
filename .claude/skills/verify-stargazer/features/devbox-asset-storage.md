@@ -8,6 +8,7 @@ Task pods on the local devbox store files as assets and find them again from oth
 - `devbox-store-index` stores files from one pod and indexes them through the dashboard.
 - `devbox-assemble-fetch` finds those files from a second pod with `assemble()` and reads them back with `fetch()`.
 - `devbox-index-durable` restores the index after the dashboard pod restarts.
+- `devbox-typed-extras` keeps a typed asset's extra keyvalues (an `R1` tagged `lane`) through a task handoff and an `assemble()` from another pod.
 
 ## How to get to it (user POV)
 
@@ -26,10 +27,11 @@ Preconditions:
 
 Steps:
 
-- **Run the tests.** Run `uv run --all-extras pytest -m devbox -rP tests/devbox/test_dashboard.py tests/devbox/test_asset_storage.py`. Four tests pass and it exits `0`:
+- **Run the tests.** Run `uv run --all-extras pytest -m devbox -rP tests/devbox/test_dashboard.py tests/devbox/test_asset_storage.py`. Five tests pass and it exits `0`:
   - `test_dashboard_serves_the_stand_in_user` covers `devbox-dashboard`: the deployed dashboard answers `200` and shows `devbox-user`.
   - `test_read_back_from_another_pod` covers `devbox-store-index` and `devbox-assemble-fetch`: one pod stores three files under a fresh tag, a second finds them with `assemble()` and reads each back.
   - `test_indexed_by_the_dashboard`: one index row per file, at `s3://flyte-data/stargazer/users/devbox-user/assets/<cid>/<name>`, with `_owner` `devbox-user`.
+  - `test_extra_keyvalue_travels_between_pods` covers `devbox-typed-extras`: one pod stores an `R1` with an extra `lane` key and returns it, and the next pod gets it as an input and also finds it with `assemble(lane=...)`. Both copies are `R1`s carrying `lane`; the found one also carries the stamped `_owner`.
   - `test_index_survives_a_dashboard_restart` covers `devbox-index-durable`: it deletes the dashboard's pod, waits for `/health`, and gets the same rows back.
 - **Proof.** Keep the pytest output. `-rP` prints each run's URL.
 

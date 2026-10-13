@@ -31,13 +31,21 @@ There is no separate "storage primitive" layer. `Asset` is both the typed schema
 |-------|------|---------|
 | `cid` | `str` | IPFS CID of the file, computed locally from its bytes |
 | `path` | `flyte.io.File \| None` | Where the stored file lives (set by `update()`); assigning a local `Path` wraps it in a File |
-| `keyvalues` | `dict[str, str]` | Free-form metadata — **bare `Asset` only** (see Catchall below) |
+| `keyvalues` | `dict[str, str]` | On a typed subclass, the **extra keys** its class doesn't declare (see [Extra keys](#extra-keys)); on a bare `Asset`, all of its metadata (see Catchall below) |
 
 ### Subclass Declaration
 
 Subclasses declare `_asset_key` — a unique string identifying the asset kind — plus ordinary typed dataclass fields with defaults (e.g. `Alignment` declares `sample_id`, `duplicates_marked`, `bqsr_applied`). See [Writing a Task](../guides/writing-a-task.md) for a worked declaration. Subclasses auto-register in `Asset._registry` (via `__init_subclass__`), which maps `_asset_key` strings to their class. Registration is import-driven and per-process: a class defined in user code registers the moment its module imports, so `assemble()` returns it in any process that imports it.
 
-`__setattr__` **enforces** the declared schema on typed subclasses — assigning a field the dataclass doesn't declare raises `AttributeError`, catching metadata typos at write time. On a bare `Asset` (no `_asset_key`) it passes through.
+`__setattr__` **enforces** the declared schema on typed subclasses — assigning a field the dataclass doesn't declare raises `AttributeError`, catching metadata typos in task code at write time. On a bare `Asset` (no `_asset_key`) it passes through. Attributes are strict; `keyvalues` is not: a key the class doesn't declare goes in `keyvalues` explicitly.
+
+### Extra keys
+
+**A typed asset can carry keyvalues its class doesn't declare**, as strings in `keyvalues`. An `Alignment` tagged `lane=3` stays an `Alignment`, so every task that takes one can still be handed it, and `assemble(lane="3")` finds it. Declared fields keep their types and their checks; extras have no type to check, so they're stored and returned exactly as given. If a class later declares that key, the stored value is parsed into the field on the next query, the same way bare records type-promote.
+
+A key is either a declared field or an extra, never both: `from_keyvalues()` splits a record so the two can't overlap, and `to_keyvalues()` raises if code puts `asset` or a declared field into `keyvalues` by hand. A record read back from storage carries its stamped `_owner` among the extras, as a bare `Asset` does.
+
+Extras ride along wherever the asset goes: between tasks (Flyte serializes the dataclass, `keyvalues` included), into the index, and back through `assemble()`. A task that builds a new asset from an input copies only the fields it sets, so an input's extras don't pass to its outputs. The user's own index stores any number of extras; a file uploaded to the public tier is limited by [Pinata's keyvalue cap](configuration.md#pinata-upload-paths).
 
 ### Serialization
 
@@ -46,15 +54,15 @@ Subclasses declare `_asset_key` — a unique string identifying the asset kind �
 - `str` fields pass through unchanged.
 - All other types round-trip via `json.dumps` / `json.loads` (`bool` → `"true"`, `int` → `"12"`, `list` → JSON array).
 
-`from_keyvalues()` raises on a non-`str` value that doesn't parse; callers that must tolerate malformed records catch it (see [Specialization](#specialization)).
+A typed asset's extra keys are written beside its declared fields. `from_keyvalues()` raises on a declared non-`str` value that doesn't parse; callers that must tolerate malformed records catch it (see [Specialization](#specialization)).
 
 ### Catchall: bare `Asset`
 
-A bare `Asset` (no `_asset_key`) carries a free-form `keyvalues` dict, serialized **verbatim** (the `asset` key lives inside it). This is the escape hatch for uploading a file whose asset key has no registered class yet — only the `asset` key is required, no field schema is enforced. When a user later defines a matching `Asset` subclass, those records type-promote on the next query. Typed subclasses ignore the inherited `keyvalues` field entirely; it's part of `_BASE_FIELDS`.
+A bare `Asset` (no `_asset_key`) carries a free-form `keyvalues` dict, serialized **verbatim** (the `asset` key lives inside it). **It is for kinds of file no class describes yet**, not for adding fields to a kind that has one: an extra field goes on the typed asset (see [Extra keys](#extra-keys)). Only the `asset` key is required, and no field schema is enforced. When a user later defines a matching `Asset` subclass, those records type-promote on the next query.
 
 ### Validation: `build_asset()`
 
-`build_asset(keyvalues)` (`assets/__init__.py`) is the single validation choke point shared by the MCP server (`upload_file`, `update_file`) and the admin asset page (`/assets/sign` uploads and `/assets/update` metadata edits). It requires an `asset` key, rejects reserved `_`-prefixed keys (stamped automatically — see Ownership), validates registered keys strictly against their dataclass, and builds a bare `Asset` for unregistered keys. One place decides typed-vs-generic so the page and the SDK never drift.
+`build_asset(keyvalues)` (`assets/__init__.py`) is the single validation choke point shared by the MCP server (`upload_file`, `update_file`) and the admin asset page (`/assets/sign` uploads and `/assets/update` metadata edits). It requires an `asset` key, rejects reserved `_`-prefixed keys (stamped automatically — see Ownership), builds a registered key's class (declared fields must parse to their types; any other key becomes an extra), and builds a bare `Asset` for unregistered keys. One place decides typed-vs-generic so the page and the SDK never drift.
 
 ### Ownership (`_owner`)
 
@@ -91,7 +99,7 @@ Workflows filter the returned list with `isinstance` to pick out the types they 
 
 ## Specialization
 
-`specialize(record)` in `assets/__init__.py` converts a raw storage record to its registered subclass by looking up `keyvalues["asset"]` in `Asset._registry`. It is **graceful at query time** (the mirror of `build_asset()` being strict at write time): an unregistered key, or a record whose values don't parse against the registered class, falls back to a bare `Asset` carrying the keyvalues verbatim rather than raising — so one malformed legacy record can't crash a whole `assemble()`.
+`specialize(record)` in `assets/__init__.py` converts a raw storage record to its registered subclass by looking up `keyvalues["asset"]` in `Asset._registry`. Keys the class doesn't declare come back as its extras. It is **graceful at query time** (the mirror of `build_asset()` being strict at write time): an unregistered key, or a record whose declared values don't parse against the registered class, falls back to a bare `Asset` carrying the keyvalues verbatim rather than raising — so one malformed legacy record can't crash a whole `assemble()`.
 
 ## Storage Layer
 

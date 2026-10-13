@@ -2,9 +2,11 @@
 
 Files stored from one pod are found and read back from another, indexed by
 the dashboard under the stand-in user's folder of the devbox bucket, and
-still indexed after the dashboard's pod restarts.
+still indexed after the dashboard's pod restarts. A typed asset's extra keys
+travel with it between pods.
 """
 
+import json
 import subprocess
 import time
 import uuid
@@ -52,6 +54,21 @@ def test_indexed_by_the_dashboard(tag, dashboard):
             f"{row['cid']}/{row['name']}"
         )
         assert row["keyvalues"]["_owner"] == "devbox-user"
+
+
+def test_extra_keyvalue_travels_between_pods(dashboard, devbox_run):
+    """An R1's extra key survives a task handoff and an `assemble()` from another pod."""
+    lane = uuid.uuid4().hex[:8]
+    handed, found = json.loads(
+        devbox_run(pod_tasks.lane_round_trip, lane=lane).outputs()[0]
+    )
+    assert handed["cid"] == found["cid"]
+    assert (handed["type"], handed["keyvalues"]) == ("R1", {"lane": lane})
+    # The stored row carries the stamped owner, and a found asset keeps it.
+    assert (found["type"], found["keyvalues"]) == (
+        "R1",
+        {"lane": lane, "_owner": "devbox-user"},
+    )
 
 
 def test_index_survives_a_dashboard_restart(tag, dashboard):

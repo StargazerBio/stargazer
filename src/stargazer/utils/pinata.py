@@ -33,6 +33,11 @@ from stargazer.assets.asset import Asset
 TUS_THRESHOLD_BYTES = 100 * 1024**2
 TUS_CHUNK_BYTES = 48 * 1024**2
 
+# Pinata refuses a new file with more keyvalues than this, `_owner` included
+# (measured 2026-10-13: 9 stored, 10 rejected, on plain and signed uploads).
+# A metadata update has no such limit, so only uploads are checked.
+MAX_KEYVALUES = 9
+
 
 def _tus_metadata(filename: str, network: str, keyvalues: dict[str, str]) -> str:
     """Encode TUS ``Upload-Metadata``: comma-joined ``key b64(value)`` pairs.
@@ -61,6 +66,20 @@ def _stamp_owner(kv: dict[str, str]) -> dict[str, str]:
     if owner:
         kv["_owner"] = owner
     return kv
+
+
+def _check_keyvalue_count(kv: dict[str, str]) -> None:
+    """Raise unless `kv` fits on a new Pinata file (``MAX_KEYVALUES`` keys).
+
+    Checked before anything is sent: a plain upload past the cap would ship
+    the whole file to get a 400, and a signed URL past it mints fine and
+    then fails in the browser with an unrelated-looking parse error.
+    """
+    if len(kv) > MAX_KEYVALUES:
+        raise ValueError(
+            f"An upload can carry at most {MAX_KEYVALUES} metadata fields, "
+            f"counting the asset type and owner; this one has {len(kv)}."
+        )
 
 
 class PinataClient:
@@ -174,7 +193,12 @@ class PinataClient:
 
         Returns:
             The signed upload URL
+
+        Raises:
+            ValueError: when ``keyvalues`` has more than ``MAX_KEYVALUES``
+                keys, before any request is made
         """
+        _check_keyvalue_count(keyvalues)
         payload: dict = {
             "date": int(time.time()),
             "expires": expires,
@@ -209,9 +233,14 @@ class PinataClient:
             component: Asset whose keyvalues describe the file
             path: The local file to upload
             network: "public" or "private"
+
+        Raises:
+            ValueError: when the stamped keyvalues have more than
+                ``MAX_KEYVALUES`` keys, before any bytes are sent
         """
         path = Path(path)
         kv = _stamp_owner(component.to_keyvalues())
+        _check_keyvalue_count(kv)
         if path.stat().st_size > TUS_THRESHOLD_BYTES:
             await self._upload_tus(component, path, kv, network)
         else:

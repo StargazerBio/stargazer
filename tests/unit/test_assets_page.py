@@ -1,9 +1,10 @@
 """Tests for build_asset() and _owner stamping (plan 20, piece 1).
 
 build_asset() is the single validation choke point shared by the MCP
-server and the asset-manager page: strict for registered asset keys,
-bare-Asset pass-through for unregistered keys, reserved system keys
-(underscore-prefixed) rejected everywhere.
+server and the asset-manager page: registered asset keys check their
+declared fields and keep any other key as an extra, unregistered keys
+pass through as a bare Asset, reserved system keys (underscore-prefixed)
+are rejected everywhere.
 """
 
 import pytest
@@ -28,9 +29,11 @@ class TestBuildAsset:
         assert asset.sample_id == "S1"
         assert asset.duplicates_marked is True
 
-    def test_registered_key_unknown_field_raises(self):
-        with pytest.raises(ValueError, match="Unknown keys"):
-            build_asset({"asset": "alignment", "flowcell": "X"})
+    def test_registered_key_keeps_extra_field(self):
+        asset = build_asset({"asset": "alignment", "sample_id": "S1", "flowcell": "X"})
+        assert type(asset) is Alignment
+        assert asset.sample_id == "S1"
+        assert asset.keyvalues == {"flowcell": "X"}
 
     def test_registered_key_malformed_value_raises(self):
         """Strict at upload: a non-str field that doesn't json-parse is a

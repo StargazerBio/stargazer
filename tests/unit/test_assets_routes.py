@@ -5,7 +5,8 @@ gate (tested in `test_app.py`) sits in front of these routes there, and is
 not what's under test here. Identity comes from the `X-User-Subject`
 header Union's auth layer sets on every request. The Pinata client is swapped for a fake via the
 `app.assets._pinata_client` module attribute — sign returns a canned URL,
-query returns canned records, and both capture their call args.
+query returns canned records, and both capture their call args. Sign runs
+the real client's keyvalue-count check, which happens before any request.
 
 Auth model: public-network browsing (schema, public list, public download)
 is anonymous — public bytes are world-readable on IPFS anyway, and the
@@ -19,6 +20,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.assets import router
+from stargazer.utils.pinata import _check_keyvalue_count
 
 JWT = "test-pinata-jwt"
 
@@ -53,6 +55,7 @@ class FakePinata:
     async def create_signed_upload_url(
         self, filename, keyvalues, network, max_file_size=None
     ):
+        _check_keyvalue_count(keyvalues)
         self.sign_calls.append(
             {
                 "filename": filename,
@@ -201,17 +204,17 @@ class TestSign:
         resp = client.post(
             "/assets/sign",
             json={
-                "filename": "x.bam",
-                "keyvalues": {"asset": "alignment", "sample_id": "S1"},
+                "filename": "r1.fq",
+                "keyvalues": {"asset": "r1", "sample_id": "S1"},
             },
         )
         assert resp.status_code == 200
         body = resp.json()
         assert body["url"] == "https://uploads.example/signed"
         assert body["keyvalues"]["_owner"] == "octocat"
-        assert body["keyvalues"]["asset"] == "alignment"
+        assert body["keyvalues"]["asset"] == "r1"
         call = fake_pinata.sign_calls[0]
-        assert call["filename"] == "x.bam"
+        assert call["filename"] == "r1.fq"
         assert call["network"] == "private"
         assert call["keyvalues"]["_owner"] == "octocat"
         assert call["max_file_size"] is not None
@@ -232,6 +235,34 @@ class TestSign:
         assert call["keyvalues"]["lanes"] == "4"
         assert call["keyvalues"]["_owner"] == "octocat"
 
+    def test_registered_key_signs_extra_field(self, fake_pinata, client):
+        _auth(client)
+        resp = client.post(
+            "/assets/sign",
+            json={
+                "filename": "r1.fq",
+                "keyvalues": {"asset": "r1", "flowcell": "X"},
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["keyvalues"]["flowcell"] == "X"
+        assert fake_pinata.sign_calls[0]["keyvalues"]["flowcell"] == "X"
+
+    def test_too_many_fields_is_400(self, fake_pinata, client):
+        """Nine keys fit; the stamped owner makes this R1's tenth."""
+        _auth(client)
+        extras = {f"x{i}": "v" for i in range(5)}
+        resp = client.post(
+            "/assets/sign",
+            json={"filename": "r1.fq", "keyvalues": {"asset": "r1", **extras}},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == (
+            "An upload can carry at most 9 metadata fields, counting the "
+            "asset type and owner; this one has 10."
+        )
+        assert fake_pinata.sign_calls == []
+
     def test_validation_errors_are_400(self, fake_pinata, client):
         _auth(client)
         no_asset = client.post(
@@ -239,16 +270,6 @@ class TestSign:
         )
         assert no_asset.status_code == 400
         assert "asset" in no_asset.json()["detail"]
-
-        unknown = client.post(
-            "/assets/sign",
-            json={
-                "filename": "x.bam",
-                "keyvalues": {"asset": "alignment", "flowcell": "X"},
-            },
-        )
-        assert unknown.status_code == 400
-        assert "Unknown keys" in unknown.json()["detail"]
 
         reserved = client.post(
             "/assets/sign",

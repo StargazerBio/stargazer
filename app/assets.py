@@ -181,7 +181,8 @@ async def assets_sign(request: Request):
     `build_asset()` is the same choke point the MCP server uses; the
     user's subject is stamped as `_owner` after validation, so the minted
     URL carries exactly the validated + stamped keyvalues and the browser
-    supplies bytes only.
+    supplies bytes only. More keyvalues than a Pinata file holds is a 400
+    here, at mint time, rather than a failed upload in the browser.
     """
     _require_pinata()
     user = _require_user(request)
@@ -202,12 +203,15 @@ async def assets_sign(request: Request):
 
     keyvalues = asset.to_keyvalues()
     keyvalues["_owner"] = user.subject
-    url = await _pinata().create_signed_upload_url(
-        filename=filename,
-        keyvalues=keyvalues,
-        network=network,
-        max_file_size=MAX_UPLOAD_BYTES,
-    )
+    try:
+        url = await _pinata().create_signed_upload_url(
+            filename=filename,
+            keyvalues=keyvalues,
+            network=network,
+            max_file_size=MAX_UPLOAD_BYTES,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return {"url": url, "keyvalues": keyvalues}
 
 

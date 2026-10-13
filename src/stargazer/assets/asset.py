@@ -40,11 +40,11 @@ class Asset:
             or a URI string wraps it in a File, so an asset can be built from
             a local file that was never uploaded; `fetch()` then uses that
             file in place.
-        keyvalues: Free-form metadata for *bare* Asset instances — the
-            catchall for records whose asset key has no registered class
-            in this process. Serialized verbatim (the ``asset`` key lives
-            inside the dict). Typed subclasses ignore this field entirely;
-            they serialize their declared fields instead.
+        keyvalues: On a bare Asset, all of its metadata, serialized
+            verbatim (the ``asset`` key lives inside the dict): the catchall
+            for kinds of file with no registered class in this process. On
+            a typed subclass, the extra keys its class doesn't declare,
+            kept as strings and written beside the declared fields.
 
     Subclasses declare typed fields as normal dataclass attributes:
 
@@ -57,7 +57,10 @@ class Asset:
     Fields are plain Python attributes. ``to_keyvalues()`` serializes them to
     ``dict[str, str]`` at storage boundaries; ``from_keyvalues()`` reconstructs
     from storage. ``str`` fields pass through directly; all other types use
-    ``json.dumps`` / ``json.loads``.
+    ``json.dumps`` / ``json.loads``. Attributes are strict (assigning an
+    undeclared one raises); extra keys go in ``keyvalues`` instead:
+
+        aln.keyvalues["lane"] = "3"
     """
 
     _registry: ClassVar[dict[str, type["Asset"]]] = {}
@@ -91,19 +94,33 @@ class Asset:
         """Serialize to storage format.
 
         str fields pass through as-is; all other types are serialized with
-        json.dumps. Bare Asset instances return a copy of their keyvalues
-        dict verbatim — a copy so callers (e.g. ``_owner`` stamping at the
-        storage layer) can mutate the result without touching the Asset.
+        json.dumps. A typed asset's extra keys are written beside its
+        declared fields. Bare Asset instances return their keyvalues
+        verbatim. The result is always a copy, so callers (e.g. ``_owner``
+        stamping at the storage layer) can mutate it without touching the
+        Asset.
+
+        Raises:
+            ValueError: when a typed asset's ``keyvalues`` holds ``asset``
+                or one of its declared fields, which are set as attributes
         """
         if not self._asset_key:
             return dict(self.keyvalues)
+        declared = [
+            f.name for f in dataclasses.fields(self) if f.name not in _BASE_FIELDS
+        ]
+        clash = sorted(set(self.keyvalues) & {"asset", *declared})
+        if clash:
+            raise ValueError(
+                f"{type(self).__name__}.keyvalues holds {clash}, which "
+                f"{type(self).__name__} sets itself: assign the attribute instead"
+            )
         hints = get_type_hints(type(self))
         result: dict[str, str] = {"asset": self._asset_key}
-        for f in dataclasses.fields(self):
-            if f.name in _BASE_FIELDS:
-                continue
-            val = getattr(self, f.name)
-            result[f.name] = val if hints.get(f.name) is str else json.dumps(val)
+        for name in declared:
+            val = getattr(self, name)
+            result[name] = val if hints.get(name) is str else json.dumps(val)
+        result.update(self.keyvalues)
         return result
 
     @classmethod
@@ -115,20 +132,21 @@ class Asset:
         str fields are assigned directly; all other types are deserialized
         with json.loads (raising ``json.JSONDecodeError`` on values that
         don't parse — callers that must tolerate malformed records catch it,
-        see ``specialize()``). Bare Asset receives the keyvalues verbatim.
+        see ``specialize()``). On a typed class, every key that isn't
+        ``asset`` or a declared field becomes an extra in ``keyvalues``.
+        Bare Asset receives the keyvalues verbatim.
         """
         if not cls._asset_key:
             return cls(cid=cid, path=path, keyvalues=dict(kv))
         hints = get_type_hints(cls)
-        kwargs = {}
-        for f in dataclasses.fields(cls):
-            if f.name in _BASE_FIELDS:
-                continue
-            if f.name in kv:
-                kwargs[f.name] = (
-                    kv[f.name] if hints.get(f.name) is str else json.loads(kv[f.name])
-                )
-        return cls(cid=cid, path=path, **kwargs)
+        declared = {f.name for f in dataclasses.fields(cls)} - _BASE_FIELDS
+        kwargs = {
+            name: value if hints.get(name) is str else json.loads(value)
+            for name, value in kv.items()
+            if name in declared
+        }
+        extras = {k: v for k, v in kv.items() if k not in declared and k != "asset"}
+        return cls(cid=cid, path=path, keyvalues=extras, **kwargs)
 
     def to_dict(self) -> dict:
         """Serialize to a JSON-friendly dict: the file's location and name."""
