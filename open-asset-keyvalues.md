@@ -1,8 +1,9 @@
 ---
 title: Extra keyvalues on typed assets
-status: doing
+status: review
 priority: high
 created: 2026-10-09
+pr: 25
 ---
 
 Let a typed asset carry keyvalues its class doesn't declare. Declared fields
