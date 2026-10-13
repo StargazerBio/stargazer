@@ -1,8 +1,9 @@
 ---
 title: Import layer rules and on-demand import diagrams
-status: doing
+status: review
 priority: normal
 created: 2026-10-13
+pr: 26
 ---
 
 Two ways to see and keep the shape of the code, so its code paths are easier
