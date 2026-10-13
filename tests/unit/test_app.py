@@ -215,6 +215,15 @@ def test_dashboard_lists_only_the_users_notebooks(client):
     assert "bobs-secret.py" not in html
 
 
+def test_dashboard_warns_against_sensitive_data(client):
+    """Isolation between users is soft for now, so the dashboard says so."""
+    _as(client)
+    assert (
+        "Stargazer is alpha software. Don't upload sensitive data, such as "
+        "identifiable patient data." in client.get("/").text
+    )
+
+
 def test_dashboard_without_store_says_saving_is_unavailable(client, monkeypatch):
     """A deploy with no store renders a plain notice instead of the create tile."""
     monkeypatch.setattr(config, "WORKSPACE_ROOT", "")
