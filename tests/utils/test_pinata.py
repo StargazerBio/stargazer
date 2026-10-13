@@ -5,7 +5,9 @@ The ones that do are in tests/pinata/.
 
 import base64
 
-from stargazer.utils.pinata import _tus_metadata
+import pytest
+
+from stargazer.utils.pinata import _check_keyvalue_count, _tus_metadata
 
 
 def test_tus_metadata_encoding():
@@ -17,3 +19,12 @@ def test_tus_metadata_encoding():
     assert base64.b64decode(pairs["filename"]).decode() == "x.bam"
     assert base64.b64decode(pairs["network"]).decode() == "private"
     assert base64.b64decode(pairs["keyvalues"]).decode() == '{"asset": "alignment"}'
+
+
+def test_keyvalue_count_allows_nine():
+    _check_keyvalue_count({f"k{i}": "v" for i in range(9)})
+
+
+def test_keyvalue_count_rejects_ten_naming_both_numbers():
+    with pytest.raises(ValueError, match=r"at most 9 .* has 10"):
+        _check_keyvalue_count({f"k{i}": "v" for i in range(10)})

@@ -7,9 +7,12 @@ To populate expected CIDs for test files, run:
     uv run python cli/upload_to_pinata.py tests/fixtures/general/FILE -m asset=reference --update-config
 """
 
+import uuid
+
 import pytest
 from conftest import FIXTURES_DIR
 
+from stargazer.assets import R1
 from stargazer.assets.asset import Asset
 from stargazer.utils.cid import compute_cid
 from stargazer.utils.pinata import PinataClient
@@ -223,3 +226,48 @@ async def test_query():
     assert found[0]["cid"] == expected_cid, (
         f"CID mismatch: expected {expected_cid}, got {found[0]['cid']}"
     )
+
+
+def _unique_file(tmp_path, tag: str):
+    """A small file with bytes no other run has uploaded, and the tag in them.
+
+    Fresh bytes give a fresh CID, so Pinata can't hand back an older record.
+    """
+    path = tmp_path / f"{tag}.txt"
+    path.write_text(f"stargazer keyvalue cap {tag}\n")
+    return path
+
+
+@pytest.mark.asyncio
+async def test_upload_at_the_keyvalue_cap(tmp_path, monkeypatch):
+    """An R1 with four extras stamps to exactly 9 keys, and all 9 come back."""
+    monkeypatch.setenv("STARGAZER_OWNER", "integration-test")
+    tag = uuid.uuid4().hex
+    client = PinataClient()
+    extras = {"probe": tag, "x0": "v", "x1": "v", "x2": "v"}
+    r1 = R1(sample_id="S1", keyvalues=extras)
+
+    await client.upload(r1, _unique_file(tmp_path, tag))
+
+    try:
+        [rec] = await client.query({"probe": tag})
+        assert rec["keyvalues"] == {**r1.to_keyvalues(), "_owner": "integration-test"}
+        assert len(rec["keyvalues"]) == 9
+    finally:
+        await client.delete(Asset(cid=r1.cid))
+
+
+@pytest.mark.asyncio
+async def test_upload_over_the_keyvalue_cap_stores_nothing(tmp_path, monkeypatch):
+    """One key past the cap is refused before anything is sent."""
+    monkeypatch.setenv("STARGAZER_OWNER", "integration-test")
+    tag = uuid.uuid4().hex
+    client = PinataClient()
+    extras = {"probe": tag, "x0": "v", "x1": "v", "x2": "v", "x3": "v"}
+    r1 = R1(sample_id="S1", keyvalues=extras)
+
+    with pytest.raises(ValueError, match="at most 9 .* has 10"):
+        await client.upload(r1, _unique_file(tmp_path, tag))
+
+    assert r1.cid == ""
+    assert await client.query({"probe": tag}) == []
