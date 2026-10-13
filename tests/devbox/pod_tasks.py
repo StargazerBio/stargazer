@@ -49,6 +49,39 @@ async def consume(tag: str) -> list[str]:
     return sorted([(await a.fetch()).read_text() for a in found])
 
 
+@env.task
+async def store_lane_r1(lane: str) -> R1:
+    """Store an R1 carrying an extra `lane` key; return it."""
+    path = Path(default_client.local_dir) / f"lane_{lane}.fq"
+    path.write_text(f"@{lane}\nACGT\n+\nIIII\n")
+    r1 = R1(sample_id=lane)
+    r1.keyvalues["lane"] = lane
+    await r1.update(path)
+    return r1
+
+
+def _describe(asset: Asset) -> dict:
+    """What the extras test compares: the class, the file and the extra keys."""
+    return {
+        "type": type(asset).__name__,
+        "cid": asset.cid,
+        "keyvalues": asset.keyvalues,
+    }
+
+
+@env.task
+async def describe_lane_r1s(handed: R1, lane: str) -> str:
+    """Describe the R1 handed in, then each R1 `assemble(lane=...)` finds, as JSON."""
+    found = await assemble(asset="r1", lane=lane)
+    return json.dumps([_describe(a) for a in [handed, *found]])
+
+
+@env.task
+async def lane_round_trip(lane: str) -> str:
+    """Store an R1 with an extra key in one pod and inspect it from another."""
+    return await describe_lane_r1s(await store_lane_r1(lane), lane)
+
+
 async def _local_copy(file: File, name: str) -> Path:
     """Download `file` into the cache directory under its original name."""
     dest = Path(default_client.local_dir) / name

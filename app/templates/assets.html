@@ -259,8 +259,8 @@
    (author rule wins regardless of specificity), leaving the custom editor
    visible even when hidden — so make [hidden] explicit. */
 .custom-editor[hidden], .typed-fields[hidden] { display: none; }
-/* Custom mode gets its own dashed framing so the strictness asymmetry reads
-   as a different contract, not an arbitrary quirk. */
+/* Custom mode gets its own dashed framing: an unregistered key has no
+   declared fields, so the record is only what the rows below say. */
 .custom-editor {
     border: 1px dashed var(--accent-line);
     border-radius: 8px;
@@ -276,6 +276,7 @@
     border-radius: 6px;
     padding: 0.4rem 0.6rem;
 }
+.extra-fields { display: flex; flex-direction: column; gap: 0.6rem; }
 .kv-row { display: flex; gap: 0.5rem; align-items: center; }
 .kv-row input { flex: 1; }
 .kv-row button { background: transparent; border: 1px solid var(--border); color: var(--text-dim); border-radius: 6px; cursor: pointer; padding: 0.3rem 0.55rem; }
@@ -387,6 +388,12 @@
                     Asset key (required)
                     <input type="text" id="custom-key" placeholder="e.g. sample_sheet" />
                 </label>
+            </div>
+
+            <div class="extra-fields">
+                <p class="upload-note" id="extra-note">
+                    Extra fields are stored as text.
+                </p>
                 <div id="kv-rows"></div>
                 <div><button type="button" class="btn btn-muted" id="add-kv">+ Add field</button></div>
             </div>
@@ -957,6 +964,7 @@ function renderTypedFields() {
     const key = sel.value;
     const custom = key === "__custom__";
     $("custom-editor").hidden = !custom;
+    $("extra-note").hidden = custom;
     const wrap = $("typed-fields");
     wrap.hidden = custom;
     wrap.innerHTML = "";
@@ -1004,22 +1012,30 @@ if (kvRows) kvRows.addEventListener("click", (e) => {
 
 const RESERVED = new Set(["asset", "cid", "name"]);
 
+// Free-form rows, shared by both modes: the whole record for a custom
+// asset, extra keys beside the declared fields for a registered type.
+function addExtraRows(kv, declared) {
+    for (const row of $("kv-rows").querySelectorAll(".kv-row")) {
+        const k = row.querySelector(".kv-k").value.trim();
+        const v = row.querySelector(".kv-v").value;
+        if (!k) continue;
+        if (RESERVED.has(k) || k.startsWith("_")) {
+            throw new Error(`"${k}" is reserved and can't be set here`);
+        }
+        if (declared.has(k)) {
+            throw new Error(`"${k}" is one of this type's fields; fill it in above`);
+        }
+        kv[k] = v;
+    }
+    return kv;
+}
+
 function collectKeyvalues() {
     const sel = $("up-type");
     if (sel.value === "__custom__") {
         const key = $("custom-key").value.trim();
         if (!key) throw new Error("custom asset key is required");
-        const kv = { asset: key };
-        for (const row of $("kv-rows").querySelectorAll(".kv-row")) {
-            const k = row.querySelector(".kv-k").value.trim();
-            const v = row.querySelector(".kv-v").value;
-            if (!k) continue;
-            if (RESERVED.has(k) || k.startsWith("_")) {
-                throw new Error(`"${k}" is reserved and can't be set here`);
-            }
-            kv[k] = v;
-        }
-        return kv;
+        return addExtraRows({ asset: key }, new Set());
     }
     const kv = { asset: sel.value };
     for (const input of $("typed-fields").querySelectorAll("[data-field]")) {
@@ -1032,7 +1048,8 @@ function collectKeyvalues() {
             kv[name] = input.value;
         }
     }
-    return kv;
+    const declared = new Set((state.schema[sel.value] || []).map((f) => f.name));
+    return addExtraRows(kv, declared);
 }
 
 async function doUpload() {

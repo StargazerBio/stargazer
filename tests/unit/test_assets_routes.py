@@ -258,7 +258,7 @@ class TestSign:
         )
         assert resp.status_code == 400
         assert resp.json()["detail"] == (
-            "Public assets can carry at most 9 metadata fields, counting the "
+            "An upload can carry at most 9 metadata fields, counting the "
             "asset type and owner; this one has 10."
         )
         assert fake_pinata.sign_calls == []

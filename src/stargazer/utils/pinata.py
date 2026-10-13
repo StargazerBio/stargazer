@@ -77,7 +77,7 @@ def _check_keyvalue_count(kv: dict[str, str]) -> None:
     """
     if len(kv) > MAX_KEYVALUES:
         raise ValueError(
-            f"Public assets can carry at most {MAX_KEYVALUES} metadata fields, "
+            f"An upload can carry at most {MAX_KEYVALUES} metadata fields, "
             f"counting the asset type and owner; this one has {len(kv)}."
         )
 
