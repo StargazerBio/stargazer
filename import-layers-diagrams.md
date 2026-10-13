@@ -19,7 +19,7 @@ indirect path through a module in between.
 
 **pydeps diagrams.** `cli/diagrams.sh` draws import graphs into a gitignored
 `diagrams/`: the SDK by package, the SDK by module, and the app tier. Given
-paths, it draws one diagram per path instead. Generated on demand, never
+module files, it draws each with everything it imports instead. Generated on demand, never
 committed.
 
 - [x] Nested `ruff.toml` bans, `TID251` enabled in `pyproject.toml`
