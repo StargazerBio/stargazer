@@ -45,7 +45,10 @@ def test_deploys_the_dashboard_for_a_stand_in_on_the_devbox_store(monkeypatch):
     monkeypatch.setattr(devbox_dashboard, "storage_port_forward", fake_forward)
     assert devbox_dashboard.deploy() == "http://dashboard.devbox.example:30081"
     assert steps == ["open", "served", "closed"]
-    assert served["ctx"] == {"project": "flytesnacks", "domain": "development"}
+    assert (served["ctx"]["project"], served["ctx"]["domain"]) == (
+        "flytesnacks",
+        "development",
+    )
     assert {
         k: served["env_vars"][k]
         for k in (

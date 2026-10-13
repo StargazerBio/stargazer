@@ -27,12 +27,14 @@ A redeploy waits for the user's runs to finish (`active_runs`): the
 dashboard holds their asset index, and a write that lands on the outgoing
 version is lost. Onboarding refuses while the user has runs going; `upgrade`
 goes one user at a time and comes back around for busy users until every
-dashboard is redeployed. Each dashboard carries the commit it was deployed
-from (`release_version`) and shows it on its page.
+dashboard is redeployed. Each dashboard is deployed under the commit it came
+from (`release_version`) as its version, and shows it on its page.
 
 The control-plane classes are module attributes so tests can swap in fakes.
 
-Usage (deploy settings exported; see `app_internals.md` → Deploy Settings):
+Usage (deploy settings exported; see `app_internals.md` → Deploy Settings).
+`upgrade` also runs under an API key in `FLYTE_API_KEY` instead of the
+admin's login:
     stargazer-users onboard --email jane@uni.edu --first-name Jane --last-name Doe
     stargazer-users upgrade
     stargazer-users offboard --email jane@uni.edu
@@ -217,13 +219,13 @@ def _notebook_image() -> str:
 
 
 def release_version(root: Path = PROJECT_ROOT) -> str:
-    """The commit the deployer's checkout is at, shown on the dashboard's page.
+    """The commit the deployer's checkout is at: the dashboard's deploy version.
 
     `git describe --always --dirty`: the short hash (tag-relative once the
     repo has tags), with `-dirty` when tracked files have uncommitted changes,
     since a deploy ships the working tree, not the commit. Read at each
-    deploy, so it names what that deploy shipped. `unknown` outside a git
-    checkout.
+    deploy, so it names what that deploy shipped, on the dashboard's page and
+    in the console. `unknown` outside a git checkout.
     """
     try:
         result = subprocess.run(
@@ -244,9 +246,12 @@ def deploy_dashboard(
 
     Same app definition for every user: only the project, the owner and the
     subdomain differ. Images are content-hashed, so a release builds each
-    once and every user's dashboard runs the same build. `extra_env` is
-    applied last.
+    once and every user's dashboard runs the same build. The deploy is
+    versioned with `release_version()`, which the dashboard also shows on its
+    page; redeploying under a version the app already has still updates it.
+    `extra_env` is applied last.
     """
+    version = release_version()
     env_vars = {
         **_BASE_ENV_VARS,
         "FLYTE_PROJECT": project,
@@ -254,7 +259,7 @@ def deploy_dashboard(
         "STARGAZER_OWNER": owner_subject,
         "STARGAZER_NOTEBOOK_IMAGE": _notebook_image(),
         "STARGAZER_INDEX_URL": _DASHBOARD_INDEX,
-        "STARGAZER_VERSION": release_version(),
+        "STARGAZER_VERSION": version,
     }
     # Assets live under the same root as the workspace notebooks.
     env_vars.pop("STARGAZER_STORE_ROOT", None)
@@ -275,7 +280,9 @@ def deploy_dashboard(
     env = app_env
     env.env_vars = env_vars
     env.domain = flyte.app.Domain(subdomain=project)
-    ctx = flyte.with_servecontext(project=project, domain=config.FLYTE_DOMAIN)
+    ctx = flyte.with_servecontext(
+        project=project, domain=config.FLYTE_DOMAIN, version=version
+    )
     # The serve watch can report failure on a redeploy that does succeed: it
     # trips on an older failed revision while the new one is still starting
     # (seen on the tenant, and devbox_workarounds.md). Trust the app's own

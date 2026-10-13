@@ -201,7 +201,7 @@ The same `init()` (`app/init.py`) works locally and in-cluster:
 
 | Context | Signal (checked in this order) | Call |
 |---------|--------|------|
-| API-key context | `FLYTE_API_KEY` set | `flyte.init_from_api_key(...)` |
+| API-key context | `FLYTE_API_KEY` set | `flyte.init_from_api_key(...)`, with `app.config`'s project and domain, and the remote image builder on Union: a key carries no config file to supply them |
 | In-cluster app pod | `_U_EP_OVERRIDE` set | `flyte.init_in_cluster(org=FLYTE_ORG, project=…, domain=…)` |
 | Local dev / deployer | neither set | `flyte.init_from_config()` |
 
@@ -243,7 +243,9 @@ No secret is required to deploy. The org admin's shell, when running `stargazer-
 | `STARGAZER_STORE_REGION` | the bucket's region, for Litestream, when the pod has no `AWS_REGION` | Litestream looks it up, which the tenant's role refuses |
 | `PINATA_GATEWAY` | the account's dedicated gateway (`https://<name>.mypinata.cloud`) for public downloads; rides into every dashboard, notebook pod and run | public gateways (`dweb.link`), which answer 429 under repeated large downloads |
 
-Per dashboard, onboarding bakes in `FLYTE_PROJECT`, `SG_OWNER_SUBJECT` and `STARGAZER_OWNER`, the deployer's org as `FLYTE_ORG`, the notebook image URI as `STARGAZER_NOTEBOOK_IMAGE`, `STARGAZER_STORE_ROOT` (the workspace root), the dashboard's own index path as `STARGAZER_INDEX_URL`, and the deployer's commit as `STARGAZER_VERSION` (`git describe --always --dirty`, `unknown` outside a checkout), which the dashboard shows in its footer. The admin's CLI identity must be an org admin (it creates projects, policies and assignments).
+Per dashboard, onboarding bakes in `FLYTE_PROJECT`, `SG_OWNER_SUBJECT` and `STARGAZER_OWNER`, the deployer's org as `FLYTE_ORG`, the notebook image URI as `STARGAZER_NOTEBOOK_IMAGE`, `STARGAZER_STORE_ROOT` (the workspace root), the dashboard's own index path as `STARGAZER_INDEX_URL`, and the deployer's commit as `STARGAZER_VERSION` (`git describe --always --dirty`, `unknown` outside a checkout), which the dashboard shows in its footer. The same commit is the deploy's version (`with_servecontext(version=…)`, which reaches the pod as `fserve --version`), so the console shows what each dashboard runs. A version is a label, not a key: redeploying under one the app already has, with a changed spec, still makes a new revision (measured 2026-10-13). Deploys stay on `serve` rather than `flyte.deploy`, which takes its project from init (each dashboard is in its user's project) and doesn't wait for the app to come up.
+
+`onboard` and `offboard` need an org admin's identity (they create projects, policies and assignments). `upgrade` only lists projects and runs, builds images and deploys apps, so it can also run under an API key: export `FLYTE_API_KEY` (from `flyte create api-key`) along with the settings above, and `init` skips the config file. Image builds then run in `FLYTE_PROJECT`, `flytesnacks` unless it's set.
 
 ## Known Gaps
 
