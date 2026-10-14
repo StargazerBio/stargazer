@@ -197,3 +197,6 @@ src/stargazer/notebooks/**/__marimo__/
 
 # The planning branch's worktree: tickets live there, never on main.
 /planning/
+
+# Import graphs drawn on demand by cli/diagrams.sh. Redraw them, don't commit them.
+/diagrams/
