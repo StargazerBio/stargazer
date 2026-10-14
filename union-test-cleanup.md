@@ -1,8 +1,9 @@
 ---
 title: Tear down Union test deploys by hand
-status: doing
+status: review
 priority: normal
 created: 2026-10-13
+pr: 27
 ---
 
 Apps and runs that testing starts on the Union tenant get stopped by hand as soon as their
