@@ -1,6 +1,6 @@
 ---
 title: Import layer rules and on-demand import diagrams
-status: review
+status: done
 priority: normal
 created: 2026-10-13
 pr: 26
@@ -49,3 +49,16 @@ committed.
 Known gap: the modules at the package root (`config`, `marshal`) and
 `bundles/` are only held to staying out of `app/`, since `registry` and
 `server` share their directory and banned-api can't be scoped per file.
+
+## Outcome
+
+Shipped in PR #26 (merged 2026-10-14). Every layer directory under
+`src/stargazer/` has a `ruff.toml` banning the layers above it, with the rules
+written out in `src/stargazer/ruff.toml`. `cli/diagrams.sh` draws the SDK by
+package and by module, the app tier, or given modules, into a gitignored
+`diagrams/`, using only what uv installs. Verified as above: TID251 fires at
+every boundary, it changes nothing else in lint output, and existing code has
+no violations. Diagrams drew with no system Graphviz, and the unit tier passed
+(410) after the rebase onto `main`.
+
+Left: the root-module gap above, and ticket `slim-image-dev-deps`.
