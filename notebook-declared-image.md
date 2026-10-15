@@ -143,8 +143,8 @@ were live.
       …:notebook-app-167c1aea…` (the deployed image), `PROBE-MAIN: Image`.
       Stop and Run from the tile started no build and served the same image.
 - [x] Torn down: every app in `u-pryce` stopped, no live runs in `u-pryce`
-      or `flytesnacks`. The test dashboard was last deployed from `caab5a6`'s
-      parent `9da05dc` and is stopped.
+      or `flytesnacks`. The test dashboard runs `9da05dc`
+      and is stopped.
 
 ## Deferred
 
