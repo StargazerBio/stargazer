@@ -116,7 +116,7 @@ This is a feature — it prevents untested code from silently ending up in produ
 A notebook's environment has two halves, and each has its own home:
 
 - **Python packages** go in the notebook's PEP 723 header. They install into the notebook's own environment when it starts, with no image to rebuild, so this is where iteration stays fast.
-- **System tools** (apt packages, bioconda tools, command-line binaries) go in the image the notebook runs on. A notebook declares that image in its setup block as `main_img`: a `flyte.Image` built on `notebook_base`, the standard notebook image, using any of the SDK's `Image` methods that don't copy in local files. It's the same API a production `TaskEnvironment` uses, so an environment proven in a notebook carries over to a task as-is.
+- **System tools** (apt packages, bioconda tools, command-line binaries) go in the image the notebook runs on. A notebook declares that image in its setup block as `main_img`: a `flyte.Image` built on `notebook_base`, the standard notebook image, using any of the SDK's `Image` methods that don't copy in local files. It's the same API a production `TaskEnvironment` uses, so an environment proven in a notebook carries over to a task as-is. Notebooks created from the template start with one to edit.
 
 At launch the declared image is built if it isn't already, and the notebook is served on it. An unchanged image is reused, so only the first launch after a change waits for a build. A change takes effect the next time the notebook launches. If the image can't be built, the launch fails with the reason instead of opening the notebook without its tools.
 

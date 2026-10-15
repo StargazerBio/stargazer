@@ -1,6 +1,6 @@
 # Notebook-declared images on Union
 
-A workspace notebook that sets `main_img` in its setup block launches on that image. The first launch after a change waits while Union's remote builder builds it (the tile spins), then the notebook opens with the declared tools on its PATH. A relaunch reuses the built image. This runs on the Union tenant as the test account, because only Union has an image builder.
+A workspace notebook that sets `main_img` in its setup block launches on that image. The workspace template declares one (`bcftools`), so a notebook created from it exercises the whole path. The first launch after a change waits while Union's remote builder builds the image (the tile spins), then the notebook opens with the declared tools on its PATH. A relaunch reuses the built image. This runs on the Union tenant as the test account, because only Union has an image builder.
 
 ## Sub-features
 
@@ -10,11 +10,12 @@ A workspace notebook that sets `main_img` in its setup block launches on that im
 
 ## How to get to it (user POV)
 
-- Open the dashboard, open a workspace notebook in Edit, add `main_img = notebook_base.with_apt_packages("<package>")` to its setup block (after `from stargazer.notebooks import notebook_base`), stop it and launch it again.
+- On the dashboard, create a notebook from the **Template** and launch it. Its section 0 shows where `bcftools` resolves.
+- Or open any workspace notebook in Edit, add `main_img = notebook_base.with_apt_packages("<package>")` to its setup block (after `from stargazer.notebooks import notebook_base`), stop it and launch it again.
 
 ## Driving it
 
-Driven through the test account's dashboard in Chrome (Claude in Chrome), with two helper scripts for setup and checks.
+Driven through the test account's dashboard in Chrome (Claude in Chrome), with a helper script for deploying, checking and tearing down.
 
 Preconditions:
 
@@ -25,16 +26,16 @@ Preconditions:
 Steps:
 
 - **Deploy.** `STARGAZER_WORKSPACE_ROOT=s3://union-us-west-2-stargazerbio/stargazer STARGAZER_STORE_REGION=us-west-2 uv run --all-extras python .claude/skills/verify-stargazer/scripts/union_dashboard.py deploy` redeploys only the test account's dashboard from the checkout and prints its URL.
-- **Seed.** `uv run python .claude/skills/verify-stargazer/scripts/union_seed_notebook.py <package>` writes `main-img-probe.py` (tile "main_img probe") into the test account's workspace, declaring that apt package. Pick one not built on this base before (`tabix` and `jq` have been); any change to the notebook image also forces a build.
-- **Launch.** On the dashboard, click **Run** on the "main_img probe" tile by its coordinates. It spins through the build and the deploy (63 s for one apt package), then shows **Open: Run Mode** and **Stop**. Open it: the page reads `PROBE-TOOL: /usr/bin/<package> …`, `PROBE-BASE: <the deployed …:notebook-app-<hash>>` and `PROBE-MAIN: Image`. This covers `main-img-build` and `main-img-kernel`.
-- **Check.** `uv run --all-extras python .claude/skills/verify-stargazer/scripts/union_dashboard.py check nb-main-img-probe-run`: the served image is `…:notebook-custom-<hash>`, the pod's `STARGAZER_NOTEBOOK_IMAGE` is the deployed `…:notebook-app-<hash>`, and the newest run is a succeeded `build-image`.
+- **Create.** In the dashboard's create tile, type a name not used before (an existing one is refused), choose **Template**, and click **Create**. A tile for it appears in Workspace.
+- **Launch.** Click **Run** on that tile by its coordinates. On the first launch of a template notebook since the last deploy, it spins through the build and the deploy (about a minute for one apt package), then shows **Open: Run Mode** and **Stop**. Open it: section 0 reads `bcftools → /usr/bin/bcftools`. This covers `main-img-build`.
+- **Check.** `uv run --all-extras python .claude/skills/verify-stargazer/scripts/union_dashboard.py check nb-<slug>-run`: the served image is `…:notebook-custom-<hash>`, the pod's `STARGAZER_NOTEBOOK_IMAGE` is the deployed `…:notebook-app-<hash>`, and the newest run is a succeeded `build-image` (or no new run, when another notebook already built the same declaration on this base). This covers `main-img-kernel` together with section 0 rendering at all, since the setup block imports `notebook_base`.
 - **Reuse.** Click **Stop**, then **Run** again. `check` shows the same served image and no new `build-image` run. This covers `main-img-reuse`.
-- **Teardown.** `uv run --all-extras python .claude/skills/verify-stargazer/scripts/union_dashboard.py teardown` stops the probe app and the dashboard and prints `live runs: []`.
-- **Proof.** Keep the notebook's page text from the launch and the `check` output from the launch and the reuse.
+- **Teardown.** `uv run --all-extras python .claude/skills/verify-stargazer/scripts/union_dashboard.py teardown` stops the notebook's app and the dashboard and prints `live runs: []`.
+- **Proof.** Keep section 0's text from the launch and the `check` output from the launch and the reuse. The created notebook stays in the test account's workspace; delete it from its tile if you want it gone.
 
 ## Gotchas
 
 - `stargazer-users upgrade` redeploys every user's dashboard. Use `union_dashboard.py deploy`, which deploys only the test account's.
 - Clicking tile buttons by element reference (`ref_…`) can fail to submit; click by coordinates from a screenshot.
 - A failed launch raises a browser alert, which blocks Claude in Chrome. Cover the failure cases with `tests/unit/test_notebook_image.py` and `tests/unit/test_app.py`, or call `/launch` with `fetch` from the dashboard page and read the JSON.
-- The seed runs in a task pod because the workspace bucket may not be writable with your own AWS access. Its task module imports only `flyte`, since the pod loads it from a bare Flyte image.
+- A workspace notebook is a copy of the template at creation, so a template change needs a newly created notebook to show up.

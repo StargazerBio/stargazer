@@ -11,8 +11,8 @@
 ### Workspace template — barebones notebook skeleton.
 
 A choose-your-own-adventure scaffold for authoring your own notebook from
-scratch: ingest a file, define an asset for it, process it with a task,
-and fan that task out in a workflow. Each section is a TODO-style
+scratch: pick the image it runs on, ingest a file, define an asset for it,
+process it with a task, and fan that task out in a workflow. Each section is a TODO-style
 template — pair with `assets.py` and `tasks.py` for the
 why and the deeper patterns.
 
@@ -23,6 +23,15 @@ import marimo
 
 __generated_with = "0.21.1"
 app = marimo.App(width="medium")
+
+with app.setup:
+    import shutil
+
+    from stargazer.notebooks import notebook_base
+
+    # TODO: the image this notebook runs on. System tools go here, Python
+    # packages in the script header above.
+    main_img = notebook_base.with_apt_packages("bcftools")
 
 
 @app.cell
@@ -43,7 +52,8 @@ def _():
         """
         # Bring Your Own Data — Skeleton
 
-        Five fillable sections: **asset → upload → task → workflow → run**.
+        Six fillable sections: **image → asset → upload → task → workflow →
+        run**.
         Defaults work as-is (your file round-trips through a no-op
         pipeline). Replace the TODOs to make it do real work.
 
@@ -52,6 +62,24 @@ def _():
         """
     )
     return ClassVar, Path, asyncio, dataclass, flyte, mo, tempfile
+
+
+@app.cell
+def _(mo):
+    """Section 0 — the notebook's own image."""
+    mo.md(
+        f"""
+        ## 0. Image
+
+        `main_img` in the setup block is the image this notebook runs on.
+        Add system tools to it (apt packages, or `with_commands` for
+        bioconda tools) and they're there the next time you launch the
+        notebook. Python packages go in the script header instead and
+        install when it starts.
+
+        `bcftools` → `{shutil.which("bcftools") or "not installed here"}`
+        """
+    )
 
 
 @app.cell

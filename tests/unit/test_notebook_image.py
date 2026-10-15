@@ -4,6 +4,7 @@ import pytest
 
 from app import config
 from app.notebook_image import MainImgError, evaluate_main_img, extract_main_img
+from app.notebooks import seed_source
 from stargazer.notebooks import notebook_image_base
 
 
@@ -65,6 +66,13 @@ def test_extract_ignores_main_img_inside_a_cell():
 def test_extract_of_unparseable_source_is_none():
     """A notebook mid-edit with a syntax error launches on the default image."""
     assert extract_main_img("with app.setup:\n    main_img = (\n") is None
+
+
+def test_template_declares_an_image_on_notebook_base(union):
+    """Notebooks created from the template start with a working `main_img`."""
+    expr = extract_main_img(seed_source("template"))
+    assert expr == "notebook_base.with_apt_packages('bcftools')"
+    assert evaluate_main_img(expr).base_image == config.NOTEBOOK_IMAGE
 
 
 # ---------------------------------------------------------------------------
