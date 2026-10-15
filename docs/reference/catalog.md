@@ -36,7 +36,7 @@
 | Asset Key | Class | Module | Fields |
 |-----------|-------|--------|--------|
 | `aligner_index` | `AlignerIndex` | `assets/reference.py` | `aligner`, `build`, `reference_cid` |
-| `alignment` | `Alignment` | `assets/alignment.py` | `bqsr_applied`, `duplicates_marked`, `format`, `r1_cid`, `reference_cid`, `sample_id`, `sorted`, `tool` |
+| `alignment` | `Alignment` | `assets/alignment.py` | `bqsr_applied`, `duplicates_marked`, `r1_cid`, `reference_cid`, `sample_id`, `sorted`, `tool` |
 | `alignment_index` | `AlignmentIndex` | `assets/alignment.py` | `alignment_cid`, `sample_id` |
 | `anndata` | `AnnData` | `assets/scrna.py` | `n_obs`, `n_vars`, `organism`, `sample_id`, `source_cid`, `stage` |
 | `bqsr_report` | `BQSRReport` | `assets/alignment.py` | `alignment_cid`, `sample_id`, `tool` |

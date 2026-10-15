@@ -15,11 +15,12 @@ class Alignment(Asset):
     """BAM/CRAM alignment file asset.
 
     Carries reference_cid and r1_cid for provenance (PROV entity derivation).
+    The format is the file name's extension. Fields are kept to what fits a
+    new public file's 9 metadata keys with the asset type and owner.
     """
 
     _asset_key: ClassVar[str] = "alignment"
     sample_id: str = ""
-    format: str = ""
     sorted: str = ""
     duplicates_marked: bool = False
     bqsr_applied: bool = False

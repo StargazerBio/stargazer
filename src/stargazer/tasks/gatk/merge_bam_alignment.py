@@ -81,7 +81,6 @@ async def merge_bam_alignment(
     await merged_bam.update(
         output_bam,
         sample_id=aligned_bam.sample_id,
-        format="bam",
         sorted="coordinate",
         duplicates_marked=aligned_bam.duplicates_marked,
         bqsr_applied=aligned_bam.bqsr_applied,

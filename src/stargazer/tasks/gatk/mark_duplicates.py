@@ -61,7 +61,6 @@ async def mark_duplicates(alignment: Alignment) -> Alignment:
     await marked_bam.update(
         output_bam,
         sample_id=alignment.sample_id,
-        format="bam",
         sorted="coordinate",
         duplicates_marked=True,
         bqsr_applied=alignment.bqsr_applied,

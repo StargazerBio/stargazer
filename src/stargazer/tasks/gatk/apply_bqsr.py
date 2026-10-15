@@ -68,7 +68,6 @@ async def apply_bqsr(
     await recal_bam.update(
         output_bam,
         sample_id=alignment.sample_id,
-        format="bam",
         sorted="coordinate",
         duplicates_marked=alignment.duplicates_marked,
         bqsr_applied=True,

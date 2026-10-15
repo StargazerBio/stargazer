@@ -17,7 +17,6 @@ async def test_mark_duplicates_marks_duplicates(fixtures_db):
     alignment = Alignment(
         path=GATK_FIXTURES_DIR / "NA12829_TP53_merged.bam",
         sample_id=sample_id,
-        format="bam",
         sorted="coordinate",
         tool="gatk_merge_bam_alignment",
     )

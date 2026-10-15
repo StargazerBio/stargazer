@@ -72,7 +72,6 @@ async def test_alignment_update_components():
     await bam.update(
         bam_fixture,
         sample_id="NA12829",
-        format="bam",
         sorted="coordinate",
         duplicates_marked=True,
     )

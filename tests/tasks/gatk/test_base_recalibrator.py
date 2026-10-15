@@ -19,7 +19,6 @@ async def test_base_recalibrator_creates_report(fixtures_db):
     alignment = Alignment(
         path=GATK_FIXTURES_DIR / "NA12829_TP53_markdup.bam",
         sample_id=sample_id,
-        format="bam",
         sorted="coordinate",
         duplicates_marked=True,
         tool="gatk_mark_duplicates",

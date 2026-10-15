@@ -152,7 +152,6 @@ async def bwa_mem(
     await bam.update(
         output_bam,
         sample_id=sample_id,
-        format="bam",
         duplicates_marked=False,
         bqsr_applied=False,
         reference_cid=ref.cid,

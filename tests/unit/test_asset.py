@@ -87,7 +87,6 @@ class TestBareAssetKeyvalues:
 STORED_ALIGNMENT = {
     "asset": "alignment",
     "sample_id": "S1",
-    "format": "",
     "sorted": "",
     "duplicates_marked": "true",
     "bqsr_applied": "false",

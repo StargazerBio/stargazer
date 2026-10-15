@@ -17,7 +17,6 @@ async def test_sort_sam_sorts_bam(fixtures_db):
     alignment = Alignment(
         path=GATK_FIXTURES_DIR / "NA12829_TP53_merged.bam",
         sample_id=sample_id,
-        format="bam",
         tool="bwa_mem",
     )
 
