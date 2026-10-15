@@ -1,12 +1,28 @@
 ---
 title: Small gaps found while testing on the devbox
-status: doing
+status: review
 priority: high
 created: 2026-10-09
+pr: 34
 ---
 
-- [ ] `gatk_env` sets no `resources=`, which AGENTS.md requires of every
+- [x] `gatk_env` sets no `resources=`, which AGENTS.md requires of every
       TaskEnvironment for the devbox's ~7.5 GiB node.
-- [ ] `apply_bqsr` stores the recalibrated BAM but not its index, unlike
+- [x] `apply_bqsr` stores the recalibrated BAM but not its index, unlike
       `mark_duplicates` and `sort_sam`. The germline workflow still finishes
       on the devbox, so a later step may be indexing it again (inferred).
+
+## Verification
+
+Branch `fix/devbox-small-gaps`, measured 2026-10-14.
+
+- `apply_bqsr` now stores `<name>.bai` as an `AlignmentIndex`. Its test finds
+  none before the fix and one after. The ticket's guess was wrong: the
+  germline workflow finishes because it runs no BQSR without known sites,
+  not because a later step re-indexes.
+- `gatk_env` requests 1Gi with a 6Gi limit. Before, its pods got the
+  platform default (256Mi/512Mi). 1Gi rather than 2Gi because the germline
+  workflow holds three `gatk_env` pods at once, and the devbox node has
+  ~5.8GiB of requests free beside the cluster and the dashboard.
+- Tasks tier 37 + 15 passed. Devbox germline passes; all 11 of its pods ran
+  at 1Gi/6Gi.
