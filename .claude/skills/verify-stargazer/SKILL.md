@@ -82,3 +82,5 @@ This removes the run's asset store, which holds hundreds of MB per scRNA run. It
 | `scripts/doctor.sh` | Read-only health check. Exit 1 on a blocking failure |
 | `scripts/seed_scrna.py` | Seeds the run's store and index with the `scrna_demo` raw samples |
 | `scripts/check_anndata.py [stage ...]` | Checks AnnData assets against their files. Exit 1 on a mismatch or a sample missing from a stage |
+| `scripts/union_dashboard.py deploy\|check <app>\|teardown` | Redeploys, inspects or stops the Union test account's dashboard and its apps |
+| `scripts/union_seed_notebook.py <package>` | Writes a notebook declaring `main_img` into the Union test account's workspace |
