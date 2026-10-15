@@ -1,8 +1,9 @@
 ---
 title: The scrna_demo bundle is labeled mouse but holds human data
-status: doing
+status: review
 priority: normal
 created: 2026-10-14
+pr: 33
 ---
 
 `src/stargazer/bundles/scrna_demo.yaml` describes the files as "mouse brain
@@ -24,3 +25,21 @@ actually is (likely a PBMC sample; the tutorials' text may describe it as
 brain).
 
 Found while verifying ticket `normalize-counts-layer`.
+
+## Verification
+
+Branch `fix/scrna-demo-organism`. The data is human bone marrow mononuclear
+cells from two healthy donors (10x Multiome gene expression, the openproblems
+NeurIPS 2021 benchmark; the `s1d1`/`s1d3` samples of scanpy's clustering
+tutorial). Measured 2026-10-14, isolated store seeded from the bundle,
+`qc_filter` on `s1d1` with its raw asset's organism:
+
+- `main` (`mouse`): 0 MT genes flagged, max 0.00% MT, 8,506 cells kept.
+- Branch (`human`): 13 flagged, max 19.98%, 6,307 kept.
+- The scRNA pipeline notebook exports with exit 0 and all 14 checks `ok`. Its
+  page shows organism `human` 24 times, where the old bundle's showed `mouse`.
+- Pinata's public metadata for both files updated to `organism: human`
+  (merge; other keys unchanged), read back by a `bundle=scrna_demo` query.
+- The catalog hook now runs on bundle YAML; it skipped the relabel before.
+
+Deferred: ticket `qc-filter-organism-from-asset`.
