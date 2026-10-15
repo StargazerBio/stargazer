@@ -1,6 +1,6 @@
 ---
 title: Read-only Artifacts projection of selected outputs
-status: backlog
+status: maybe
 priority: normal
 created: 2026-10-06
 ---

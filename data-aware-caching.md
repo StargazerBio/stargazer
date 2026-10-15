@@ -1,6 +1,6 @@
 ---
 title: Data-aware caching
-status: backlog
+status: maybe
 priority: low
 created: 2026-05-19
 ---

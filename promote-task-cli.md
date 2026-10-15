@@ -1,6 +1,6 @@
 ---
 title: stargazer promote-task CLI
-status: backlog
+status: maybe
 priority: low
 created: 2026-06-10
 ---
