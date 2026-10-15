@@ -21,8 +21,8 @@ GitHub integration. It has three jobs:
 3. **Launch broker.** `POST /launch` builds a per-notebook AppEnvironment via
    `app.per_notebook.per_notebook_env(...)`, owned by the same user, serves
    it into the dashboard's project, and returns its URL. A notebook that
-   declares its own image (`main_img`) is served on it once
-   `app.notebook_image` has built it. The dashboard never
+   declares its own image (`main_img`, `app.notebook_image`) is served on
+   it, which builds it first. The dashboard never
    calls a notebook pod: the pod hydrates and saves its own workspace and
    shows its own starting page while it warms up.
 
@@ -53,6 +53,7 @@ from pathlib import Path
 
 import flyte
 import flyte.app
+import flyte.errors
 from fastapi import FastAPI, Form, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -65,7 +66,7 @@ from app.assets import router as assets_router
 from app.identity import CurrentUser, User
 from app.index_api import router as index_router
 from app.init import init
-from app.notebook_image import extract_main_img, launch_image
+from app.notebook_image import MainImgError, evaluate_main_img, extract_main_img
 from app.notebook_meta import (
     DEFAULT_RESOURCES,
     NotebookResources,
@@ -844,10 +845,10 @@ async def launch(
     until the notebook is ready, so the URL is returned as soon as the app is
     admitted.
 
-    A notebook that declares its own image is served on it once it's built.
-    Until then the answer is 202 `{"building": true}` and the dashboard asks
-    again; a failed build is a 422 with the error, never a pod on the wrong
-    image.
+    A notebook that declares its own image is served on it, and `serve`
+    builds it first when it isn't built yet, so the first launch after a
+    change waits for the build. An image that won't evaluate or build is a
+    422 with the reason, never a pod on the wrong image.
     """
     if mode not in ("edit", "run"):
         return JSONResponse({"error": f"invalid mode: {mode}"}, status_code=400)
@@ -869,12 +870,10 @@ async def launch(
     notebook_path, resources, main_img = target
     image = None
     if main_img is not None:
-        built = await launch_image(main_img)
-        if built is None:
-            return JSONResponse({"building": True}, status_code=202)
-        if built.error:
-            return JSONResponse({"error": built.error}, status_code=422)
-        image = built.uri
+        try:
+            image = evaluate_main_img(main_img)
+        except MainImgError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=422)
 
     project = config.FLYTE_PROJECT
     env = per_notebook_env(
@@ -906,6 +905,14 @@ async def launch(
             project=project, domain=config.FLYTE_DOMAIN
         ).serve.aio(env)
         endpoint = deployment.endpoint
+    except flyte.errors.ImageBuildError as exc:
+        # Before the watch recovery below, which would hand back the app as it
+        # was last served: on its old image.
+        logger.error(f"main_img build failed for {slug!r}: {exc}")
+        return JSONResponse(
+            {"error": f"This notebook's image failed to build: {exc}"},
+            status_code=422,
+        )
     except Exception as exc:
         logger.warning(f"serve watch unconfirmed for {slug!r}/{mode!r}: {exc}")
         try:

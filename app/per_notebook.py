@@ -4,7 +4,7 @@
 Defines the `notebook-app` programmatic `flyte.Image` every per-notebook
 Knative pod runs on, and `per_notebook_env(...)` — the AppEnvironment
 factory the dashboard's `/launch` handler invokes. A notebook that declares
-its own `main_img` runs on that image instead, built on this one
+its own `main_img` runs on that image instead, layered on this one
 (`app.notebook_image`).
 
 The image layers, on top of the Flyte debian base:
@@ -180,7 +180,7 @@ def per_notebook_env(
     admin_url: str,
     index_url: str,
     resources: NotebookResources | None = None,
-    image: str | None = None,
+    image: flyte.Image | None = None,
 ) -> flyte.app.AppEnvironment:
     """Build a per-notebook AppEnvironment for one (slug, mode) launch.
 
@@ -205,10 +205,10 @@ def per_notebook_env(
     notebooks — the env falls back to the legacy `("2Gi", "6Gi")`
     request/limit, which the memory-heavy scRNA notebook depends on.
 
-    `image` is the built URI of the notebook's own `main_img`, or None to run
-    on the deployed notebook image. The pod's `STARGAZER_NOTEBOOK_IMAGE` is
-    always the deployed image, since that's what the kernel's `notebook_base`
-    builds on.
+    `image` is the notebook's own `main_img`, which `serve` builds before it
+    deploys, or None to run on the deployed notebook image. The pod's
+    `STARGAZER_NOTEBOOK_IMAGE` is always the deployed image, since that's what
+    the kernel's `notebook_base` builds on.
     """
     if not config.NOTEBOOK_IMAGE:
         raise RuntimeError(
@@ -225,7 +225,7 @@ def per_notebook_env(
         description=f"Per-notebook app: {slug} ({mode})",
         # `from_base` marks the URI as prebuilt, so serving skips any build or
         # existence check and just hands the URI to Flyte.
-        image=flyte.Image.from_base(image or config.NOTEBOOK_IMAGE),
+        image=image or flyte.Image.from_base(config.NOTEBOOK_IMAGE),
         # `exec` is load-bearing, not cosmetic. Flyte's `fserve` (PID 1) runs
         # these args via `Popen(" ".join(args), shell=True)` and, on the Knative
         # SIGTERM at scale-to-zero, forwards the signal to that single direct
