@@ -181,8 +181,8 @@ Asset-manager routes are a separate router (`app/assets.py`, `include_router`ed 
 | `GET /assets` | none | Render `assets.html` (anonymous, local runs only → public tab only) |
 | `GET /assets/schema` | none | `{asset_key: [{name,type,default}]}` from `ASSET_REGISTRY` (minus `_BASE_FIELDS`) for the dynamic form |
 | `GET /assets/list?<kv>&network=` | public: none / private: signed in | Public served from a TTL cache (filters in-memory); private forces `_owner == user's subject` server-side (fail closed) |
-| `POST /assets/sign` | signed in | `build_asset()` validate → stamp `_owner` → mint Pinata signed upload URL (filename + keyvalues + `MAX_UPLOAD_BYTES` baked in) → `{url, keyvalues}`. More than `MAX_KEYVALUES` (9) stamped keys is a 400 here, since Pinata would mint the URL and then fail the browser's upload |
-| `POST /assets/update` | signed in + **owner** | Fail-closed ownership (record's `_owner` must equal the user's subject, read fresh) → `build_asset()` validate patch → re-stamp `_owner` → `PinataClient.update_metadata()` merge → updated record |
+| `POST /assets/sign` | signed in | `build_asset()` validate → stamp `_owner` → mint Pinata signed upload URL (filename + keyvalues + `MAX_UPLOAD_BYTES` baked in) → `{url, keyvalues}`. More than `MAX_KEYVALUES` (9) stamped keys, or a key or value over `MAX_KEYVALUE_CHARS` (250), is a 400 here, since Pinata would mint the URL and then fail the browser's upload |
+| `POST /assets/update` | signed in + **owner** | Fail-closed ownership (record's `_owner` must equal the user's subject, read fresh) → `build_asset()` validate patch → re-stamp `_owner` → `PinataClient.update_metadata()` merge → updated record. A key or value over `MAX_KEYVALUE_CHARS` (250) is a 400, raised before the PUT, which would otherwise answer 256+ with a bare "malformed" 400 |
 | `GET /assets/download/{cid}?network=` | public: none / private: signed in | 302 redirect; public → `PINATA_GATEWAY` for everyone; private → signed URL |
 
 ## Asset Manager (mechanics)

@@ -83,6 +83,14 @@ capped by Pinata and aren't checked. The limit bounds how many
 [extra keys](types.md#extra-keys) a typed asset can carry on the public tier;
 the user's own index has no such cap.
 
+**Each Pinata key and value is at most 250 characters.** A new file refuses
+251; an update allows 255 and answers 256 with a 400 that doesn't say why.
+`upload()`, `create_signed_upload_url()` and `update_metadata()` hold every
+key and value to 250 and raise before anything is sent, so whatever can be
+edited onto a record could also be uploaded with it. A list stored as one
+value reaches it first: a cohort's `source_samples` passes 250 characters at
+about 20 sample IDs. The user's own index has no such limit.
+
 `query(keyvalues, network=)` queries one network, the public one unless
 told otherwise; each record carries the network it was found on.
 

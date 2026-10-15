@@ -221,7 +221,8 @@ async def assets_update(request: Request):
     even though the Pinata JWT is shared. Validation reuses `build_asset()`,
     `_owner` is re-stamped after it, and Pinata merges the patch onto the
     existing keyvalues (the CID and bytes are untouched, so provenance edges
-    survive). SDK/MCP edits stay unenforced by design (shared JWT).
+    survive). A key or value past Pinata's length limit is a 400, raised
+    before the request. SDK/MCP edits stay unenforced by design (shared JWT).
     """
     _require_pinata()
     user = _require_user(request)
@@ -250,7 +251,10 @@ async def assets_update(request: Request):
 
     patch = dict(body.get("keyvalues") or {})
     patch["_owner"] = user.subject
-    return await _pinata().update_metadata(cid, patch, network=network)
+    try:
+        return await _pinata().update_metadata(cid, patch, network=network)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/assets/download/{cid}")
