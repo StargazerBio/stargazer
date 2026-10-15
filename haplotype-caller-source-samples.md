@@ -1,6 +1,6 @@
 ---
 title: haplotype_caller stores source_samples as a string
-status: backlog
+status: doing
 priority: high
 created: 2026-10-09
 ---
