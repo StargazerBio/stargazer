@@ -81,14 +81,27 @@ download and snapshot.
 
 ## Piece 0 — Verify a pod can build
 
-- [ ] From a task pod on Union (same org key as app pods), `flyte.build()` a
+- [x] From a task pod on Union (same org key as app pods), `flyte.build()` a
       clone of the current notebook image with one apt package; confirm it
       returns a registry-qualified URI.
-- [ ] Build it again; confirm the second call is an existence hit, not a
+- [x] Build it again; confirm the second call is an existence hit, not a
       rebuild.
-- [ ] Run a task on the built URI; confirm nodes pull it and the package is
+- [x] Run a task on the built URI; confirm nodes pull it and the package is
       on PATH.
-- [ ] Tear down per AGENTS.md.
+- [x] Tear down per AGENTS.md.
+
+Measured 2026-10-14 in `u-pryce`. Run `ulgqkhjcs8422ffhs7vk` spawned two
+fresh child processes, each `flyte.init_in_cluster()` then `flyte.build()` of
+`from_base(<notebook-app-a2a77154…>).clone(name="nb-image-probe",
+extendable=True).with_apt_packages("bcftools")`. The first built in 65.7 s
+(build run `u8lszpczr275rgbj4lpl`, in `u-pryce`) and returned
+`791359099513.dkr.ecr.us-west-2.amazonaws.com/union/stargazerbio:nb-image-probe-b78be645…`;
+the second was an existence hit in 0.5 s with the same URI and no run.
+`image.uri` was `nb-image-probe:b78be645…`, so the served URI must be the
+build result. Run `udzpwpqlkrf24676ggbz`'s pod pulled the built image (a probe
+bug failed it after start); the rerun on it printed `/usr/bin/bcftools`,
+`bcftools 1.16`. Afterwards every app in `u-pryce` was stopped and no runs
+were live.
 
 ## Piece 1 — `notebook_base` in the kernel
 
