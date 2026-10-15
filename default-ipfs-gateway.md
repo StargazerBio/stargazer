@@ -1,6 +1,6 @@
 ---
 title: The default IPFS gateway no longer serves files
-status: backlog
+status: doing
 priority: high
 created: 2026-10-09
 ---
