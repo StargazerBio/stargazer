@@ -7,7 +7,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 import stargazer.utils.storage as _storage
-from stargazer.assets import Alignment, BQSRReport, Reference
+from stargazer.assets import Alignment, AlignmentIndex, BQSRReport, Reference
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
 
@@ -27,7 +27,8 @@ async def apply_bqsr(
         bqsr_report: Recalibration table from base_recalibrator
 
     Returns:
-        Alignment asset with recalibrated BAM file
+        Alignment asset with recalibrated BAM file; its index is stored as an
+        AlignmentIndex
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037055712-ApplyBQSR
@@ -74,6 +75,17 @@ async def apply_bqsr(
         bqsr_applied=True,
         tool="gatk_apply_bqsr",
         reference_cid=ref.cid,
+    )
+
+    # GATK indexes its BAM output by default, naming it <name>.bai.
+    bam_index = output_bam.with_suffix(".bai")
+    if not bam_index.exists():
+        raise FileNotFoundError(f"ApplyBQSR did not create {bam_index}")
+    idx = AlignmentIndex()
+    await idx.update(
+        bam_index,
+        sample_id=alignment.sample_id,
+        alignment_cid=recal_bam.cid,
     )
 
     logger.info(recal_bam.to_dict())
