@@ -10,6 +10,7 @@ views:
       property: note.status
       direction: ASC
     groupOrder:
+      - maybe
       - backlog
       - next
       - doing

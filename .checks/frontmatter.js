@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const YAML = require("yaml");
 
-const STATUSES = ["backlog", "next", "doing", "review", "done"];
+const STATUSES = ["maybe", "backlog", "next", "doing", "review", "done"];
 const PRIORITIES = ["high", "normal", "low"];
 const problems = [];
 
