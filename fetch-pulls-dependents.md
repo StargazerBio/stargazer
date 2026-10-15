@@ -30,14 +30,14 @@ Decided 2026-10-15: the field name carries the meaning instead.
 
 - [x] Companions opt in with `_companion = True`, and `fetch()` asks only
   for those (fc2e220).
-- [ ] The six companion types link their parent with one shared field,
+- [x] The six companion types link their parent with one shared field,
   `companion_of`, and the `_companion` flag goes. `fetch()` asks for
   `companion_of=<cid>`: one exact-match filter, so one index call and one
   Pinata call, as on `main`. The "made from" fields (`reference_cid`,
   `r1_cid`, `alignment_cid` on outputs, `variants_cid`, `source_cid`) keep
-  their names and stay provenance only.
-- [ ] Refuse a Pinata upload whose keys or values run past 250 characters
-  before anything is sent, beside the 9-key check. Measured 2026-10-15 with
+  their names and stay provenance only (988ff94).
+- [x] Refuse a Pinata upload whose keys or values run past 250 characters
+  before anything is sent, beside the 9-key check (2a7283f). Measured 2026-10-15 with
   probe uploads (all deleted): 250 accepted, 251 refused with `Metadata
   "keyvalues" keys and values must be less than 250 characters.` A cohort's
   `source_samples` list crosses it at about 20 sample IDs (arithmetic).
@@ -52,10 +52,10 @@ were weighed and left out.
 Fixtures seeded into an isolated store, Pinata replaced by a counting stub,
 one `fetch()` of each type (2026-10-15):
 
-| | `main` | branch at 55f43a2 |
-|---|---|---|
-| index queries | 1 | 1 |
-| Pinata queries | 1 | 6 |
+| | `main` | branch at 55f43a2 | branch at 988ff94 |
+|---|---|---|---|
+| index queries | 1 | 1 | 1 |
+| Pinata queries | 1 | 6 | 1 |
 
 The same for reference, alignment, r1, variants and known_sites.
 
@@ -74,3 +74,31 @@ asks only for those.
   37 + 15 pass; the Assets and Tasks tutorials export with exit 0.
 - AnnData was never affected: its outputs record `source_cid`, not
   `anndata_cid`.
+
+## Verification: companion_of and the length check
+
+Measured 2026-10-15 on `fix/fetch-pulls-dependents`, rebased on `main` at
+4c07685.
+
+- Fixtures seeded into an isolated store, each input fetched into a fresh
+  cache: the TP53 reference brings its 7 index and dictionary files and no
+  BAMs; the duplicate-marked BAM brings only its `.bai`; each VCF its `.idx`.
+  `main` still brings 5 BAMs with the reference, and the BQSR table and
+  duplicate metrics with the marked BAM.
+- New tests failed first for the expected reasons: no `companion_of` field,
+  an untyped companion left behind, six public queries per fetch; for the
+  length check, no raise, a request sent (401), and a 200 from the route.
+  All pass after. Unit tier 454 passed.
+- Tasks tier: scrna 16 passed; gatk and general 37 passed, 1 failed:
+  `test_haplotype_caller` passes the removed `Alignment.format`, broken on
+  `main` too (ticket `haplotype-caller-test-format`).
+- Devbox: `tests/devbox/test_germline.py` 2 passed (2m29s), every step in its
+  own pod with the Pinata tier on. The dashboard's index holds the run's
+  reference, aligner, alignment and variants indexes under `companion_of`;
+  10 `variants_index` rows from earlier runs keep `variants_cid`.
+- The Assets and Tasks tutorials export headless with exit 0 and render the
+  new text.
+- Dashboard graph: `relKeys()` and `relLabel()` run in node on sample
+  metadata return `companion_of` as "companion of" and `reference_cid` as
+  "reference". Not seen in a browser: the graph lists Pinata records, and
+  the public network holds no companions.
