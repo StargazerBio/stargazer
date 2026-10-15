@@ -25,6 +25,7 @@ from app.admin_app import (
     app_env,
     asgi_app,
 )
+from app.notebook_image import ImageResult
 from app.notebook_meta import parse_notebook_name, parse_notebook_resources
 
 ALICE = "387300641116005877"
@@ -547,6 +548,87 @@ def test_launch_public_snapshot_uses_the_image_path(client, served, public_snaps
     assert served["kwargs"]["notebook_path"] == (
         f"{notebooks.IMAGE_WORKDIR}/src/stargazer/notebooks/snapshots/published_qc.py"
     )
+
+
+IMG_SRC = (
+    "import marimo\n"
+    "app = marimo.App()\n"
+    "with app.setup:\n"
+    "    from stargazer.notebooks import notebook_base\n"
+    "    main_img = notebook_base.with_apt_packages('bcftools')\n"
+)
+
+
+@pytest.fixture
+def image_builds(monkeypatch):
+    """Stand in for `launch_image`: answers from a queue, records what it got."""
+    seen: list[str] = []
+    answers: list = []
+
+    async def fake_launch_image(expr):
+        seen.append(expr)
+        return answers.pop(0)
+
+    monkeypatch.setattr("app.admin_app.launch_image", fake_launch_image)
+    return seen, answers
+
+
+def test_launch_without_main_img_serves_the_deployed_image(
+    client, served, image_builds
+):
+    """A notebook that declares no image never touches the builder."""
+    seen, _ = image_builds
+    _put(ALICE, "qc-run.py")
+    _as(client)
+    assert _launch(client, "qc-run", "workspace").status_code == 200
+    assert served["kwargs"]["image"] is None
+    assert seen == []
+
+
+def test_launch_answers_building_while_the_image_builds(client, served, image_builds):
+    """While the declared image builds, the dashboard is told to ask again."""
+    seen, answers = image_builds
+    answers.append(None)
+    _put(ALICE, "qc-run.py", IMG_SRC)
+    _as(client)
+    resp = _launch(client, "qc-run", "workspace")
+    assert resp.status_code == 202
+    assert resp.json() == {"building": True}
+    assert seen == ["notebook_base.with_apt_packages('bcftools')"]
+    assert "kwargs" not in served
+
+
+def test_launch_serves_the_built_image(client, served, image_builds):
+    """Once built, the notebook is served on the declared image."""
+    _, answers = image_builds
+    answers.append(ImageResult(uri="reg.example/stargazerbio:notebook-custom-1"))
+    _put(ALICE, "qc-run.py", IMG_SRC)
+    _as(client)
+    resp = _launch(client, "qc-run", "workspace")
+    assert resp.json() == {"url": "https://nb.example"}
+    assert served["kwargs"]["image"] == "reg.example/stargazerbio:notebook-custom-1"
+
+
+def test_launch_refuses_when_the_image_fails(client, served, image_builds):
+    """A failed build is a launch error, not a pod quietly missing its tools."""
+    _, answers = image_builds
+    answers.append(ImageResult(error="Image build failed"))
+    _put(ALICE, "qc-run.py", IMG_SRC)
+    _as(client)
+    resp = _launch(client, "qc-run", "workspace")
+    assert resp.status_code == 422
+    assert resp.json() == {"error": "Image build failed"}
+    assert "kwargs" not in served
+
+
+def test_launch_own_snapshot_builds_its_declared_image(client, served, image_builds):
+    """A snapshot keeps the image its notebook declared."""
+    _, answers = image_builds
+    answers.append(ImageResult(uri="reg.example/stargazerbio:notebook-custom-1"))
+    _put(ALICE, "frozen.py", IMG_SRC, snapshot=True)
+    _as(client)
+    assert _launch(client, "frozen", "snapshots", mode="run").status_code == 200
+    assert served["kwargs"]["image"] == "reg.example/stargazerbio:notebook-custom-1"
 
 
 # ---------------------------------------------------------------------------

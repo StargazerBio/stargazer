@@ -83,3 +83,15 @@ def test_notebook_dirs_are_flat_hydration_targets():
     """Workspace and own snapshots hydrate into fixed, flat pod dirs."""
     assert WORKSPACE_NOTEBOOK_DIR == "/workspace"
     assert SNAPSHOT_NOTEBOOK_DIR == "/snapshots"
+
+
+def test_pod_serves_a_built_image_when_given_one():
+    """A notebook that declares its own image runs on the built URI."""
+    built = "reg.example/union/stargazerbio:notebook-custom-abc"
+    assert _env(image=built).image.uri == built
+
+
+def test_pod_env_names_the_deployed_image_even_on_a_built_one():
+    """The kernel's `notebook_base` is the deployed image, never the built one."""
+    env = _env(image="reg.example/union/stargazerbio:notebook-custom-abc")
+    assert env.env_vars["STARGAZER_NOTEBOOK_IMAGE"] == "test.example/notebook-app:unit"

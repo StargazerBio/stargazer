@@ -63,6 +63,7 @@ from app.assets import router as assets_router
 from app.identity import CurrentUser, User
 from app.index_api import router as index_router
 from app.init import init
+from app.notebook_image import extract_main_img, launch_image
 from app.notebook_meta import (
     DEFAULT_RESOURCES,
     NotebookResources,
@@ -788,13 +789,15 @@ _SECTIONS = ("tutorials", "workflows", "workspace", "snapshots", "public-snapsho
 
 async def _launch_target(
     user: User, slug: str, section: str
-) -> tuple[str, NotebookResources | None] | None:
-    """Resolve a launch to `(notebook_path, resources)`, or None if unknown.
+) -> tuple[str, NotebookResources | None, str | None] | None:
+    """Resolve a launch to `(notebook_path, resources, main_img)`, or None if unknown.
 
     Store-backed notebooks (workspace, own snapshots) and shipped public
     snapshots declare resources in their `[tool.stargazer]` header; a missing
     or unreadable header falls back to the defaults. Tutorials and workflows
-    keep the env's legacy defaults (`resources=None`).
+    keep the env's legacy defaults (`resources=None`). Store-backed notebooks
+    can also declare their own image (`main_img`, the expression to build);
+    every other section runs on the deployed notebook image.
     """
     if section in ("workspace", "snapshots"):
         if section == "workspace":
@@ -806,17 +809,22 @@ async def _launch_target(
         except Exception as exc:
             logger.warning(f"Resource read failed for {section} {slug!r}: {exc}")
             source = None
-        resources = parse_notebook_resources(source) if source else DEFAULT_RESOURCES
-        return f"{notebook_dir}/{slug}.py", resources
+        if not source:
+            return f"{notebook_dir}/{slug}.py", DEFAULT_RESOURCES, None
+        return (
+            f"{notebook_dir}/{slug}.py",
+            parse_notebook_resources(source),
+            extract_main_img(source),
+        )
     if section == "public-snapshots":
         snap = public_snapshot(slug)
         if snap is None:
             return None
-        return snap.path_in_image, parse_notebook_resources(snap.source())
+        return snap.path_in_image, parse_notebook_resources(snap.source()), None
     nb: Notebook | None = by_slug(slug)
     if nb is None or nb.section != section:
         return None
-    return nb.path_in_image, None
+    return nb.path_in_image, None, None
 
 
 @asgi_app.post("/launch")
@@ -833,6 +841,11 @@ async def launch(
     user, hydrates and saves its own workspace, and shows a starting page
     until the notebook is ready, so the URL is returned as soon as the app is
     admitted.
+
+    A notebook that declares its own image is served on it once it's built.
+    Until then the answer is 202 `{"building": true}` and the dashboard asks
+    again; a failed build is a 422 with the error, never a pod on the wrong
+    image.
     """
     if mode not in ("edit", "run"):
         return JSONResponse({"error": f"invalid mode: {mode}"}, status_code=400)
@@ -851,7 +864,15 @@ async def launch(
     target = await _launch_target(user, slug, section)
     if target is None:
         return JSONResponse({"error": f"unknown notebook: {slug}"}, status_code=404)
-    notebook_path, resources = target
+    notebook_path, resources, main_img = target
+    image = None
+    if main_img is not None:
+        built = await launch_image(main_img)
+        if built is None:
+            return JSONResponse({"building": True}, status_code=202)
+        if built.error:
+            return JSONResponse({"error": built.error}, status_code=422)
+        image = built.uri
 
     project = config.FLYTE_PROJECT
     env = per_notebook_env(
@@ -862,6 +883,7 @@ async def launch(
         admin_url=str(request.base_url).rstrip("/"),
         index_url=_index_url(),
         resources=resources,
+        image=image,
     )
     env.env_vars["FLYTE_PROJECT"] = project
     # App pods aren't given the org (task pods get `_U_ORG_NAME`); pass ours on

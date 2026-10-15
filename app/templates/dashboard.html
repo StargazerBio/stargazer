@@ -243,7 +243,9 @@
         openBtn.style.pointerEvents = "none";
         openBtn.textContent = "Starting…";
         try {
-            const url = await requestLaunch(new FormData(form));
+            const url = await requestLaunch(new FormData(form), () => {
+                openBtn.textContent = "Building environment…";
+            });
             if (win) win.location = url;
             else window.open(url, "_blank", "noopener");
         } catch (err) {
@@ -292,10 +294,22 @@
         }
     }
 
-    // POST /launch with the given FormData and return the per-notebook URL,
-    // throwing with a useful message on any non-JSON / error response.
-    // Shared by the tile Edit/Run buttons and the create-and-open flow.
-    async function requestLaunch(formData) {
+    // Launch a notebook with the given FormData and return its URL. Shared by
+    // the tile Edit/Run buttons and the create-and-open flow. While a
+    // notebook's own image builds, /launch answers `building`: call
+    // `onBuilding` and ask again until it returns a URL or an error.
+    async function requestLaunch(formData, onBuilding) {
+        for (;;) {
+            const payload = await postLaunch(formData);
+            if (!payload.building) return payload.url;
+            if (onBuilding) onBuilding();
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+    }
+
+    // POST /launch once and return its JSON body, throwing with a useful
+    // message on any non-JSON / error response.
+    async function postLaunch(formData) {
         const resp = await fetch("/launch", {
             method: "POST",
             body: formData,
@@ -327,7 +341,7 @@
                     (payload.error || rawBody),
             );
         }
-        return payload.url;
+        return payload;
     }
 
     // Run the launch flow for one tile: spinner → /launch → Open+Stop.
@@ -339,7 +353,10 @@
         button.disabled = true;
         button.innerHTML = '<span class="spinner-inline"></span>';
         try {
-            const url = await requestLaunch(new FormData(form));
+            const url = await requestLaunch(new FormData(form), () => {
+                button.innerHTML =
+                    '<span class="spinner-inline"></span> Building environment…';
+            });
             button.disabled = false;
             button.textContent = originalLabel;
             showLaunched(row, form, url, true);
