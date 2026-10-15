@@ -17,14 +17,12 @@ async def test_merge_bam_alignment_merges_bams(fixtures_db):
     aligned_bam = Alignment(
         path=GATK_FIXTURES_DIR / "NA12829_TP53_bwa_aligned.bam",
         sample_id=sample_id,
-        format="bam",
         tool="bwa_mem",
     )
 
     unmapped_bam = Alignment(
         path=GATK_FIXTURES_DIR / "NA12829_TP53_unmapped.bam",
         sample_id=sample_id,
-        format="bam",
         sorted="queryname",
         tool="picard",
     )

@@ -64,7 +64,6 @@ async def sort_sam(
     await sorted_bam.update(
         output_bam,
         sample_id=alignment.sample_id,
-        format="bam",
         sorted=sort_order,
         duplicates_marked=alignment.duplicates_marked,
         bqsr_applied=alignment.bqsr_applied,

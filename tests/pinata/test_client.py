@@ -12,7 +12,7 @@ import uuid
 import pytest
 from conftest import FIXTURES_DIR
 
-from stargazer.assets import R1
+from stargazer.assets import R1, Alignment
 from stargazer.assets.asset import Asset
 from stargazer.utils.cid import compute_cid
 from stargazer.utils.pinata import PinataClient
@@ -271,3 +271,29 @@ async def test_upload_over_the_keyvalue_cap_stores_nothing(tmp_path, monkeypatch
 
     assert r1.cid == ""
     assert await client.query({"probe": tag}) == []
+
+
+@pytest.mark.asyncio
+async def test_alignment_uploads_with_every_field_and_owner(tmp_path, monkeypatch):
+    """An Alignment with all its fields set, plus _owner, fits the cap."""
+    monkeypatch.setenv("STARGAZER_OWNER", "integration-test")
+    tag = uuid.uuid4().hex
+    client = PinataClient()
+    aln = Alignment(
+        sample_id=tag,
+        sorted="coordinate",
+        duplicates_marked=True,
+        bqsr_applied=True,
+        tool="gatk_apply_bqsr",
+        reference_cid="bafyref",
+        r1_cid="bafyr1",
+    )
+
+    await client.upload(aln, _unique_file(tmp_path, tag))
+
+    try:
+        [rec] = await client.query({"sample_id": tag})
+        assert rec["keyvalues"] == {**aln.to_keyvalues(), "_owner": "integration-test"}
+        assert len(rec["keyvalues"]) == 9
+    finally:
+        await client.delete(Asset(cid=aln.cid))

@@ -90,13 +90,12 @@ async def seed(client: StorageClient) -> None:
 
     # ── Alignments ──────────────────────────────────────────────────────────
     await up(
-        Alignment(sample_id="NA12829", format="bam", r1_cid=r1_cid),
+        Alignment(sample_id="NA12829", r1_cid=r1_cid),
         GATK_DIR / "NA12829_TP53_unmapped.bam",
     )
     await up(
         Alignment(
             sample_id="NA12829",
-            format="bam",
             tool="bwa",
             reference_cid=reference_cid,
             r1_cid=r1_cid,
@@ -109,7 +108,6 @@ async def seed(client: StorageClient) -> None:
         cid = await up(
             Alignment(
                 sample_id="NA12829",
-                format="bam",
                 reference_cid=reference_cid,
                 r1_cid=r1_cid,
                 **fields,
