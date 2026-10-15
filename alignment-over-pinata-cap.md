@@ -1,6 +1,6 @@
 ---
 title: Alignment can't be uploaded to Pinata
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-13
 ---

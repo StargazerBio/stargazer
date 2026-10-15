@@ -1,8 +1,9 @@
 ---
 title: The default IPFS gateway no longer serves files
-status: doing
+status: review
 priority: high
 created: 2026-10-09
+pr: 36
 ---
 
 The default `PINATA_GATEWAY`, `https://dweb.link`, no longer serves
@@ -17,3 +18,18 @@ but anonymous downloads through it spend account bandwidth. Picking the
 default is a decision, not a one-line fix.
 
 Found in the docs correctness sweep (2026-10-09, #18).
+
+## Verification
+
+Decided 2026-10-14: default to the account's dedicated gateway
+(`https://maroon-written-fowl-769.mypinata.cloud`), for every download,
+anonymous asset-page ones included. Branch `fix/default-ipfs-gateway`.
+
+- Gateways re-measured 2026-10-15: `dweb.link` and `w3s.link` 429, `ipfs.io`
+  and `cloudflare-ipfs.com` don't connect, `4everland.io` 504,
+  `trustless-gateway.link` 521, `gateway.pinata.cloud` 200 this time. The
+  dedicated gateway served the 562 KB demo file anonymously in 1.8 s.
+- Default config (`PINATA_GATEWAY` unset), `fetch_bundle("variant_calling_demo")`:
+  429 from `dweb.link` on `main`; all three files on the branch.
+- Not done: the README quickstart's `stargazer-chat` image is pushed by
+  hand and keeps the old default until it's rebuilt.
