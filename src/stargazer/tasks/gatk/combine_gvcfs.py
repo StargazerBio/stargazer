@@ -95,7 +95,7 @@ async def combine_gvcfs(
     idx_path = output_dir / f"{output_gvcf.name}.idx"
     if idx_path.exists():
         vidx = VariantsIndex()
-        await vidx.update(idx_path, sample_id=cohort_id, variants_cid=combined_vcf.cid)
+        await vidx.update(idx_path, sample_id=cohort_id, companion_of=combined_vcf.cid)
 
     logger.info(combined_vcf.to_dict())
     return combined_vcf

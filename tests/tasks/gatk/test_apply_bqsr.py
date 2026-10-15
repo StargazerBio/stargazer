@@ -48,7 +48,7 @@ async def test_apply_bqsr_recalibrates_bam(fixtures_db):
     assert recalibrated.path is not None
     assert (await recalibrated.fetch()).exists()
 
-    (index,) = await assemble(asset="alignment_index", alignment_cid=recalibrated.cid)
+    (index,) = await assemble(asset="alignment_index", companion_of=recalibrated.cid)
     assert index.sample_id == sample_id
     assert index.path.name == "NA12829_TP53_markdup_recalibrated.bai"
 

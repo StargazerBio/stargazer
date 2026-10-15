@@ -124,7 +124,7 @@ async def test_fetch_colocates_companions(client, tmp_path, monkeypatch):
     ref = Reference()
     await ref.update(fa, build="T")
     idx = ReferenceIndex()
-    await idx.update(fai, build="T", reference_cid=ref.cid)
+    await idx.update(fai, build="T", companion_of=ref.cid)
 
     monkeypatch.setattr(storage_mod, "default_client", _client(tmp_path, cache="c2"))
     local = await ref.fetch()

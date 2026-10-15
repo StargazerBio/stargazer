@@ -72,16 +72,16 @@ async def test_list_filter_matches_any(index):
 
 @pytest.mark.asyncio
 async def test_companion_lookup(index):
-    """A `<asset_key>_cid` filter returns only that parent's companions."""
+    """A `companion_of` filter returns only that parent's companions."""
     await index.upsert(_record("bafyBam", asset="alignment"))
     await index.upsert(
-        _record("bafyBai", asset="alignment_index", alignment_cid="bafyBam")
+        _record("bafyBai", asset="alignment_index", companion_of="bafyBam")
     )
     await index.upsert(
-        _record("bafyOther", asset="alignment_index", alignment_cid="bafyX")
+        _record("bafyOther", asset="alignment_index", companion_of="bafyX")
     )
 
-    rows = await index.query({"alignment_cid": "bafyBam"})
+    rows = await index.query({"companion_of": "bafyBam"})
 
     assert [r["cid"] for r in rows] == ["bafyBai"]
 

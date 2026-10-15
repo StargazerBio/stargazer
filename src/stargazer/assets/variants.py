@@ -28,13 +28,12 @@ class Variants(Asset):
 class VariantsIndex(Asset):
     """VCF index file asset (.idx, or .tbi for a bgzipped VCF).
 
-    Carries variants_cid linking to the Variants file it indexes.
+    A companion: `companion_of` is the CID of the Variants file it indexes.
     """
 
     _asset_key: ClassVar[str] = "variants_index"
-    _companion: ClassVar[bool] = True
     sample_id: str = ""
-    variants_cid: str = ""
+    companion_of: str = ""
 
 
 @dataclass
@@ -59,13 +58,11 @@ class KnownSites(Asset):
 class KnownSitesIndex(Asset):
     """VCF index (.idx) file for a KnownSites asset.
 
-    Carries known_sites_cid linking to the KnownSites VCF it indexes.
-    Fetched automatically alongside the VCF via Asset.fetch().
+    A companion: `companion_of` is the CID of the KnownSites VCF it indexes.
     """
 
     _asset_key: ClassVar[str] = "known_sites_index"
-    _companion: ClassVar[bool] = True
-    known_sites_cid: str = ""
+    companion_of: str = ""
 
 
 @dataclass

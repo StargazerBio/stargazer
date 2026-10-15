@@ -144,20 +144,36 @@ class TestAssetDefaults:
         assert Asset().to_keyvalues() == {}
 
 
+class _CountingPublic:
+    """Stands in for the public tier: records each query, holds nothing."""
+
+    def __init__(self):
+        self.queries = []
+
+    async def query(self, keyvalues, network="public"):
+        self.queries.append(dict(keyvalues))
+        return []
+
+
 class TestFetch:
-    @pytest.mark.asyncio
-    async def test_fetch_brings_companions_not_dependents(self, tmp_path):
-        """A reference's index lands beside it; an alignment made against it doesn't."""
+    @pytest.fixture
+    def ref_files(self, tmp_path):
+        """A FASTA, its .fai and a BAM, as local files."""
         fasta = tmp_path / "ref.fa"
         fasta.write_text(">chr1\nACGT\n")
         fai = tmp_path / "ref.fa.fai"
         fai.write_text("chr1\t4\t6\t4\t5\n")
         bam = tmp_path / "s1.bam"
         bam.write_bytes(b"BAM")
+        return fasta, fai, bam
 
+    @pytest.mark.asyncio
+    async def test_fetch_brings_companions_not_dependents(self, ref_files):
+        """A reference's index lands beside it; an alignment made against it doesn't."""
+        fasta, fai, bam = ref_files
         ref = Reference()
         await ref.update(fasta, build="T")
-        await ReferenceIndex().update(fai, build="T", reference_cid=ref.cid)
+        await ReferenceIndex().update(fai, build="T", companion_of=ref.cid)
         await Alignment().update(bam, sample_id="s1", reference_cid=ref.cid)
 
         local = await ref.fetch()
@@ -166,3 +182,29 @@ class TestFetch:
             "ref.fa",
             "ref.fa.fai",
         ]
+
+    @pytest.mark.asyncio
+    async def test_fetch_brings_an_untyped_companion(self, ref_files):
+        """`companion_of` alone makes a file a companion, with no class for it."""
+        fasta, fai, _ = ref_files
+        ref = Reference()
+        await ref.update(fasta, build="T")
+        await Asset(keyvalues={"asset": "my_index", "companion_of": ref.cid}).update(
+            fai
+        )
+
+        local = await ref.fetch()
+
+        assert (local.parent / "ref.fa.fai").read_text() == "chr1\t4\t6\t4\t5\n"
+
+    @pytest.mark.asyncio
+    async def test_fetch_asks_the_public_tier_once(self, ref_files, isolated_storage):
+        """One exact-match query per fetch, not one per companion type."""
+        fasta, _, _ = ref_files
+        ref = Reference()
+        await ref.update(fasta, build="T")
+        isolated_storage.public = _CountingPublic()
+
+        await ref.fetch()
+
+        assert isolated_storage.public.queries == [{"companion_of": ref.cid}]

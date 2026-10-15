@@ -6,7 +6,9 @@ computed locally; `path` is a `flyte.io.File` naming where the stored bytes
 live (the object store, or an IPFS gateway for public data), so an asset
 passed between tasks always points somewhere every pod can read.
 `fetch()` makes a local copy, with its companions beside it, and returns
-its path.
+its path. A companion is any asset whose `companion_of` keyvalue holds
+another asset's CID: an index or a sequence dictionary that tools expect
+beside the file it names.
 
 spec: [docs/architecture/types.md](../architecture/types.md)
 """
@@ -65,10 +67,6 @@ class Asset:
 
     _registry: ClassVar[dict[str, type["Asset"]]] = {}
     _asset_key: ClassVar[str] = ""
-    # True for a file tools expect beside the one it names via
-    # `{parent}_cid` (an index, a sequence dictionary); fetch() brings only
-    # these along, not every output that records the parent as a source.
-    _companion: ClassVar[bool] = False
 
     cid: str = ""
     path: File | None = None
@@ -176,23 +174,19 @@ class Asset:
     async def fetch(self) -> Path:
         """Make a local copy of this asset and its companions; return its path.
 
-        The asset lands at `<STARGAZER_LOCAL>/<cid>/<name>`, and each
-        companion that names it via ``{_asset_key}_cid`` (an asset whose class
-        sets ``_companion``, such as an index or a sequence dictionary) lands
-        in the same directory, where tools look for it. Other assets that
-        record it, such as outputs made from it, stay behind. An asset built
-        from a local file that was never uploaded is returned in place.
-        Copies already on disk are reused.
+        The asset lands at `<STARGAZER_LOCAL>/<cid>/<name>`, and every asset
+        with ``companion_of`` set to its CID (an index, a sequence
+        dictionary) lands in the same directory, where tools look for it.
+        Outputs that record it as an input under another key, such as an
+        Alignment's ``reference_cid``, stay behind. An asset built from a
+        local file that was never uploaded is returned in place. Copies
+        already on disk are reused.
         """
         import stargazer.utils.storage as _storage
 
         local = await _storage.default_client.download(self)
-        if self._asset_key and self.cid:
-            companions = await assemble(
-                asset=[key for key, cls in Asset._registry.items() if cls._companion],
-                **{f"{self._asset_key}_cid": self.cid},
-            )
-            for companion in companions:
+        if self.cid:
+            for companion in await assemble(companion_of=self.cid):
                 await _storage.default_client.download(companion, local.parent)
         return local
 

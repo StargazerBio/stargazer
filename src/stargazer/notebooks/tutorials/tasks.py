@@ -89,7 +89,7 @@ def _():
         `CohortSummary` output type. Notice `sample_sheet_cid` on the
         summary: any `CohortSummary` knows which `SampleSheet` produced
         it, so `assemble(sample_sheet_cid=sheet.cid)` finds every summary
-        of a sheet. It isn't a companion (no `_companion` flag), so
+        of a sheet. It isn't a companion (no `companion_of`), so
         `sheet.fetch()` downloads only the sheet.
         """
     )

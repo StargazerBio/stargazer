@@ -95,7 +95,7 @@ async def merge_bam_alignment(
     await idx.update(
         bam_index,
         sample_id=aligned_bam.sample_id,
-        alignment_cid=merged_bam.cid,
+        companion_of=merged_bam.cid,
     )
 
     logger.info(merged_bam.to_dict())

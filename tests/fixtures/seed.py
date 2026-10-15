@@ -45,16 +45,16 @@ async def seed(client: StorageClient) -> None:
     # ── Reference ──────────────────────────────────────────────────────────
     reference_cid = await up(Reference(build="GRCh38"), GENERAL_DIR / "GRCh38_TP53.fa")
     await up(
-        ReferenceIndex(build="GRCh38", reference_cid=reference_cid),
+        ReferenceIndex(build="GRCh38", companion_of=reference_cid),
         GENERAL_DIR / "GRCh38_TP53.fa.fai",
     )
     await up(
-        SequenceDict(build="GRCh38", reference_cid=reference_cid),
+        SequenceDict(build="GRCh38", companion_of=reference_cid),
         GENERAL_DIR / "GRCh38_TP53.dict",
     )
     for ext in ("amb", "ann", "bwt", "pac", "sa"):
         await up(
-            AlignerIndex(build="GRCh38", aligner="bwa", reference_cid=reference_cid),
+            AlignerIndex(build="GRCh38", aligner="bwa", companion_of=reference_cid),
             GENERAL_DIR / f"GRCh38_TP53.fa.{ext}",
         )
 
@@ -84,7 +84,7 @@ async def seed(client: StorageClient) -> None:
         GATK_DIR / "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf",
     )
     await up(
-        KnownSitesIndex(known_sites_cid=mills_cid),
+        KnownSitesIndex(companion_of=mills_cid),
         GATK_DIR / "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf.idx",
     )
 
@@ -114,7 +114,7 @@ async def seed(client: StorageClient) -> None:
             ),
             path,
         )
-        await up(AlignmentIndex(sample_id="NA12829", alignment_cid=cid), index)
+        await up(AlignmentIndex(sample_id="NA12829", companion_of=cid), index)
         return cid
 
     await aligned(
@@ -170,4 +170,4 @@ async def seed(client: StorageClient) -> None:
         )
         idx_path = GATK_DIR / f"{sample_id}_TP53.g.vcf.idx"
         if idx_path.exists():
-            await up(VariantsIndex(sample_id=sample_id, variants_cid=vcf_cid), idx_path)
+            await up(VariantsIndex(sample_id=sample_id, companion_of=vcf_cid), idx_path)

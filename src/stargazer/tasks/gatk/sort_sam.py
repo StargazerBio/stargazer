@@ -79,7 +79,7 @@ async def sort_sam(
         await idx.update(
             bam_index,
             sample_id=alignment.sample_id,
-            alignment_cid=sorted_bam.cid,
+            companion_of=sorted_bam.cid,
         )
 
     logger.info(sorted_bam.to_dict())

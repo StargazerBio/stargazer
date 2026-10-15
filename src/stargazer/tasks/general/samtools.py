@@ -40,7 +40,7 @@ async def samtools_faidx(ref: Reference) -> ReferenceIndex:
         fai_path,
         build=ref.build,
         tool="samtools_faidx",
-        reference_cid=ref.cid,
+        companion_of=ref.cid,
     )
 
     logger.info(faidx.to_dict())

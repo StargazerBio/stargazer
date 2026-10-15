@@ -40,7 +40,7 @@ async def index_feature_file(known_sites: KnownSites) -> KnownSitesIndex:
         raise FileNotFoundError(f"IndexFeatureFile did not create index at {idx_path}")
 
     index = KnownSitesIndex()
-    await index.update(idx_path, known_sites_cid=known_sites.cid)
+    await index.update(idx_path, companion_of=known_sites.cid)
 
     logger.info(index.to_dict())
     return index

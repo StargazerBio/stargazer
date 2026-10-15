@@ -84,7 +84,7 @@ async def apply_bqsr(
     await idx.update(
         bam_index,
         sample_id=alignment.sample_id,
-        alignment_cid=recal_bam.cid,
+        companion_of=recal_bam.cid,
     )
 
     logger.info(recal_bam.to_dict())

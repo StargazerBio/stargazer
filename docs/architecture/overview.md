@@ -18,7 +18,7 @@ The layers are enforced on imports: a module imports from its own layer or the o
 
 Every file is an `Asset` — a dataclass with a content identifier, where its stored bytes live (a `flyte.io.File`), and typed metadata stored as flat keyvalues. Subclasses like `Reference`, `Alignment`, and `Variants` add typed fields with automatic coercion to/from the string-valued keyvalue store.
 
-Assets link to related files via `{asset_key}_cid` keyvalues: an output records the input it came from, and a companion, such as an index, records its primary file. Calling `fetch()` on an asset downloads it and its companions.
+Assets link to related files by CID: an output records the input it came from in an `{asset_key}_cid` keyvalue, and a companion, such as an index, records its primary file in `companion_of`. Calling `fetch()` on an asset downloads it and its companions.
 
 See [Types](types.md) for the full asset catalog.
 

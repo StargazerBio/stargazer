@@ -33,13 +33,12 @@ class Alignment(Asset):
 class AlignmentIndex(Asset):
     """BAI/CRAI alignment index file asset.
 
-    Carries alignment_cid linking to the Alignment it indexes.
+    A companion: `companion_of` is the CID of the Alignment it indexes.
     """
 
     _asset_key: ClassVar[str] = "alignment_index"
-    _companion: ClassVar[bool] = True
     sample_id: str = ""
-    alignment_cid: str = ""
+    companion_of: str = ""
 
 
 @dataclass
