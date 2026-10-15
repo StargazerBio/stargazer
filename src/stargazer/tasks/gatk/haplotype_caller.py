@@ -68,7 +68,7 @@ async def haplotype_caller(
         variant_type="gvcf",
         build=ref.build,
         sample_count=1,
-        source_samples=alignment.sample_id,
+        source_samples=[alignment.sample_id],
     )
 
     # GATK writes the GVCF's index alongside it without being asked.
