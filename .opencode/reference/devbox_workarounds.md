@@ -145,6 +145,8 @@ The `verify-stargazer` skill's devbox recipe (`features/devbox-asset-storage.md`
 
 **Workaround:** Keep `outer-coordinator + concurrent children ≤ ~7.5 GiB`. The scRNA pipeline runs sequentially so a single child at `memory=("2Gi", "6Gi")` fits. Parallel fan-outs need smaller per-child limits.
 
+Scheduling counts requests, not limits, and a coordinator holds its request while it waits on its children. About 2 GiB is already requested by the cluster's own pods and the dashboard (2,094 Mi measured 2026-10-14), leaving ~5.8 GiB. The germline workflow holds three `gatk_env` pods at once (the workflow, `prepare_reference` or `preprocess_sample`, and the tool), so `gatk_env` requests 1 GiB: at 2 GiB the third pod wouldn't fit.
+
 ---
 
 ## `App.url` is the console URL, not the public URL

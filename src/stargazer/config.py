@@ -234,6 +234,10 @@ gatk_env = flyte.TaskEnvironment(
             PROJECT_ROOT / "pyproject.toml", project_install_mode="install_project"
         )
     ),
+    # A 1Gi request: the germline workflow holds three gatk_env pods at once
+    # (workflow, prepare_reference or preprocess_sample, the tool), and three
+    # 2Gi requests don't fit the devbox node beside the dashboard.
+    resources=flyte.Resources(memory=("1Gi", "6Gi")),
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,
 )

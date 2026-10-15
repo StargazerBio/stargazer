@@ -5,7 +5,7 @@ Tests for apply_bqsr task.
 import pytest
 from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
 
-from stargazer.assets import Alignment, BQSRReport, Reference
+from stargazer.assets import Alignment, BQSRReport, Reference, assemble
 from stargazer.tasks.gatk.apply_bqsr import apply_bqsr
 
 
@@ -48,6 +48,10 @@ async def test_apply_bqsr_recalibrates_bam(fixtures_db):
     assert recalibrated.tool == "gatk_apply_bqsr"
     assert recalibrated.path is not None
     assert (await recalibrated.fetch()).exists()
+
+    (index,) = await assemble(asset="alignment_index", alignment_cid=recalibrated.cid)
+    assert index.sample_id == sample_id
+    assert index.path.name == "NA12829_TP53_markdup_recalibrated.bai"
 
 
 @pytest.mark.asyncio
