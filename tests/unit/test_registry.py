@@ -1,39 +1,33 @@
 """Tests for the task registry."""
 
+import importlib
+import pkgutil
+
+import stargazer.tasks
 from stargazer.registry import TaskRegistry
 
 
-def test_discovery_finds_all_tasks():
-    """Registry discovers all tasks from stargazer.tasks."""
+def _defined_task_names() -> set[str]:
+    """Short names of the tasks defined in every module under stargazer.tasks."""
+    names = set()
+    for info in pkgutil.walk_packages(stargazer.tasks.__path__, "stargazer.tasks."):
+        module = importlib.import_module(info.name)
+        names |= {
+            obj.short_name
+            for obj in vars(module).values()
+            if hasattr(obj, "func") and obj.func.__module__ == info.name
+        }
+    return names
+
+
+def test_discovery_finds_every_defined_task():
+    """Every task defined under stargazer.tasks is registered, so none goes unexported."""
     reg = TaskRegistry()
     task_names = {t.name for t in reg.list_tasks(category="task")}
 
-    expected_tasks = {
-        "samtools_faidx",
-        "create_sequence_dictionary",
-        "bwa_index",
-        "bwa_mem",
-        "bwa_mem2_index",
-        "bwa_mem2_mem",
-        "sort_sam",
-        "mark_duplicates",
-        "merge_bam_alignment",
-        "base_recalibrator",
-        "apply_bqsr",
-        "haplotype_caller",
-        "combine_gvcfs",
-        "joint_call_gvcfs",
-        "variant_recalibrator",
-        "apply_vqsr",
-        "index_feature_file",
-        "qc_filter",
-        "normalize",
-        "select_features",
-        "reduce_dimensions",
-        "cluster",
-        "find_markers",
-    }
-    assert expected_tasks == task_names
+    defined = _defined_task_names()
+    assert {"bwa_mem", "qc_filter"} <= defined
+    assert defined == task_names
 
 
 def test_discovery_finds_all_workflows():

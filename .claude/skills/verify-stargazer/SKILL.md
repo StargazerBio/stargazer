@@ -82,5 +82,4 @@ This removes the run's asset store, which holds hundreds of MB per scRNA run. It
 | `scripts/doctor.sh` | Read-only health check. Exit 1 on a blocking failure |
 | `scripts/seed_scrna.py` | Seeds the run's store and index with the `scrna_demo` raw samples |
 | `scripts/check_anndata.py [stage ...]` | Checks AnnData assets against their files. Exit 1 on a mismatch or a sample missing from a stage |
-| `scripts/mcp_call.py <tool> ['<json args>']` | Calls one MCP tool over stdio, starting the server as a harness does. Exit 1 when the tool errors |
 | `scripts/union_dashboard.py deploy\|check <app>\|teardown` | Redeploys, inspects or stops the Union test account's dashboard and its apps |
