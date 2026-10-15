@@ -2,12 +2,12 @@ filters:
   and:
     - file.hasProperty("status")
 formulas:
-  rank: 'if(note.priority == "high", 1, if(note.priority == "normal", 2, 3))'
+  rank: if(note.priority == "high", 1, if(note.priority == "normal", 2, 3))
 views:
   - type: kanban
     name: Board
     groupBy:
-      property: note.status
+      property: status
       direction: ASC
     groupOrder:
       - maybe
@@ -17,23 +17,23 @@ views:
       - review
       - done
     order:
-      - note.title
-      - note.priority
+      - title
+      - priority
     sort:
       - property: formula.rank
         direction: ASC
-      - property: note.created
+      - property: created
         direction: ASC
   - type: table
     name: All tickets
     order:
-      - note.title
-      - note.status
-      - note.priority
-      - note.created
+      - title
+      - status
+      - priority
+      - created
       - file.name
     sort:
-      - property: note.status
+      - property: status
         direction: ASC
       - property: formula.rank
         direction: ASC
