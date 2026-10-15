@@ -1,6 +1,6 @@
 ---
 title: Export the scRNA tasks from stargazer.tasks
-status: backlog
+status: doing
 priority: high
 created: 2026-10-09
 ---

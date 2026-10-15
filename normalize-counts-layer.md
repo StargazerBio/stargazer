@@ -1,6 +1,6 @@
 ---
 title: normalize stores normalized counts in the counts layer
-status: backlog
+status: doing
 priority: high
 created: 2026-10-09
 ---
