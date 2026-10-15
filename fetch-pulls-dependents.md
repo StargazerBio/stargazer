@@ -23,22 +23,29 @@ Found in the docs correctness sweep (2026-10-09, #18).
 
 ## Plan
 
+The first fix (55f43a2, rebased as fc2e220) told companions apart with a
+`_companion` class flag, because `<parent>_cid` meant both "sits beside"
+(`ReferenceIndex.reference_cid`) and "made from" (`Alignment.reference_cid`).
+Decided 2026-10-15: the field name carries the meaning instead.
+
 - [x] Companions opt in with `_companion = True`, and `fetch()` asks only
-  for those (55f43a2).
-- [ ] One Pinata call per query, not one per combination of list values.
-  The first piece passes `asset=[<6 companion keys>]`, and the public tier
-  expands a list into one exact-match query per entry, so every `fetch()`
-  went from 1 Pinata call to 6.
-- [ ] `fetch()` asks only for the companion types that name this asset's
-  type (a `<key>_cid` field), and skips the lookup when none do. Fetching
-  reads, AnnData or a BQSR report then makes no round-trips at all.
-- [ ] Undecided: skip Pinata for assets the user stored themselves, asking
-  it only about assets that came from the public tier. Their companions are
-  the user's own outputs, but a user's copy of a public file (same CID)
-  would no longer pick up its public companions.
-- [ ] Undecided: memoize companion lookups per process. Needs an upload of
-  a companion to invalidate its parent's entry, since a local workflow runs
-  every task in one process.
+  for those (fc2e220).
+- [ ] The six companion types link their parent with one shared field,
+  `companion_of`, and the `_companion` flag goes. `fetch()` asks for
+  `companion_of=<cid>`: one exact-match filter, so one index call and one
+  Pinata call, as on `main`. The "made from" fields (`reference_cid`,
+  `r1_cid`, `alignment_cid` on outputs, `variants_cid`, `source_cid`) keep
+  their names and stay provenance only.
+- [ ] Refuse a Pinata upload whose keys or values run past 250 characters
+  before anything is sent, beside the 9-key check. Measured 2026-10-15 with
+  probe uploads (all deleted): 250 accepted, 251 refused with `Metadata
+  "keyvalues" keys and values must be less than 250 characters.` A cohort's
+  `source_samples` list crosses it at about 20 sample IDs (arithmetic).
+
+Not in this PR: making `fetch()` cheaper than `main`. Skipping Pinata for
+assets the user stored (a user's copy of a public file would lose its public
+companions) and memoizing lookups per process (an upload must invalidate)
+were weighed and left out.
 
 ## Round-trips per fetch()
 
