@@ -18,9 +18,10 @@ with app.setup:
 ```
 
 At `/launch` the dashboard pulls the `main_img = ...` statement out of the
-source, evaluates just that expression in a subprocess, submits the image to
-Union's remote builder, and serves the notebook on the result. A notebook
-without `main_img` launches exactly as today. Branch `feat/notebook-declared-image`.
+source, evaluates just that expression, and makes the result the notebook
+AppEnvironment's image; the SDK's `serve` builds it on Union's remote builder
+(or finds it built) before deploying. A notebook without `main_img` launches
+exactly as before. Branch `feat/notebook-declared-image`.
 
 **Why.** The notebook's environment is the user's to shape, and the SDK
 already has a whole API for it. Real Python keeps that API (every `Image`
@@ -41,24 +42,24 @@ download and snapshot.
   (loses the SDK idiom and most of the API), and evaluating in the notebook
   kernel then recording the built URI in the header (a relaunch dance plus a
   stored URI that can drift from the definition).
-- **Only the expression runs, in a subprocess.** The dashboard has `flyte`
-  and `stargazer` but not each notebook's PEP 723 deps, so it can't run the
-  whole setup block. The expression sees `flyte` and `notebook_base` only;
-  it can't reference other setup-block names. The subprocess (with a timeout)
-  keeps a hang or crash in user code from taking the dashboard down.
+- **Only the expression runs.** The dashboard has `flyte` and `stargazer` but
+  not each notebook's PEP 723 deps, so it can't run the whole setup block. The
+  expression sees `flyte` and `notebook_base` only.
 - **The image must derive from `notebook_base`.** The pod needs the proxy,
   launch script, marimo, uv and `/stargazer` from the notebook image. Checked
-  after evaluation: the result's `base_image` must be the dashboard's
-  `STARGAZER_NOTEBOOK_IMAGE`.
-- **Builds go to Union's remote builder.** Measured in the SDK source
-  (flyte 2.10.7): `flyte.build()` uploads the image spec (plus a context
-  tarball for any copied-in files) and starts `system/build-image` as a run in
-  the caller's project; the caller needs only Flyte API access, no Docker.
-  `init_in_cluster` already defaults to `image_builder="remote"`, so the
-  dashboard's init needs no change. An unchanged recipe is an existence
-  lookup (`image_service.get_image`), not a rebuild.
-- **Union only.** The devbox has no remote builder; a notebook that declares
-  `main_img` there gets a clear error at launch.
+  after evaluation: the result's `base_image` must be the deployed notebook
+  image.
+- **Let `serve` build (simplified 2026-10-14).** The first cut evaluated and
+  built in a subprocess with `flyte.build`, guarded the returned URI, kept a
+  thread-pool registry of in-flight builds, and had `/launch` answer 202
+  `building` while the tile polled. All of that reimplemented what `serve`
+  already does (`build_images`: existence check, remote build, the builder's
+  real URI). Now the evaluation runs in-process and `/launch` blocks on
+  `serve`; the tile just spins. Given up: the "Building environment…" label,
+  and dedup of a build that a reload relaunches mid-flight.
+- **Union only.** The devbox has no remote builder (the SDK would assume the
+  image exists and deploy a bare `name:tag`), so a declared image there is a
+  clear error at launch.
 
 ## SDK facts the implementation leans on
 
@@ -67,17 +68,10 @@ download and snapshot.
   extendable clone.
 - The tag hashes `base_image` plus the layers, so the same expression on the
   same base resolves to the same image.
-- The built image's real URI is the builder's fully qualified name (`fqin`,
-  with the registry host), not `image.uri` (`name:tag`, no registry). Serve
-  the URI `flyte.build()` returns.
-- **Trap:** if every existence checker raises (remote builder missing, a
-  transient API error), `ImageBuildEngine.image_exists` logs "assuming it
-  exists" and returns the bare `name:tag`. Serving that is an
-  `ImagePullBackOff`. Treat a returned URI without a registry host as a
-  failure.
-- `ImageBuildEngine.build` is `@alru_cache`d per process, so a long-lived
-  process gets a stale `wait=False` result on a second call. A fresh
-  subprocess per build sidesteps it.
+- `init_in_cluster` already defaults to `image_builder="remote"`, so the
+  dashboard's init needs no change.
+- `ImageBuildError` subclasses `RuntimeError`, so `/launch` catches it before
+  its serve-watch recovery, which would otherwise reopen the old pod.
 
 ## Piece 0 — Verify a pod can build
 
@@ -105,65 +99,58 @@ were live.
 
 ## Piece 1 — `notebook_base` in the kernel
 
-- [ ] `stargazer.notebooks.notebook_base`: `flyte.Image.from_base(<base>)
-      .clone(name=..., extendable=True)`, the base read from
-      `STARGAZER_NOTEBOOK_IMAGE`, so the setup block runs in the kernel and
-      `main_img` is a real `Image` there.
-- [ ] `per_notebook_env` passes `STARGAZER_NOTEBOOK_IMAGE` into the pod env.
-- [ ] Decide what `notebook_base` is when the env var is unset (a local
-      `marimo edit`).
+- [x] `stargazer.notebooks.notebook_base` (and `notebook_image_base(uri)`):
+      the deployed image from `STARGAZER_NOTEBOOK_IMAGE` as a named,
+      extendable clone.
+- [x] `per_notebook_env` passes `STARGAZER_NOTEBOOK_IMAGE` into the pod env,
+      always the deployed image.
+- [x] Unset (a local `marimo edit`): a `notebook-app:local` placeholder.
 
-## Piece 2 — Evaluate `main_img` (`app/notebook_image.py`)
+## Piece 2 — Find and evaluate `main_img` (`app/notebook_image.py`)
 
-- [ ] `extract_main_img(source) -> str | None`: pure `ast`. Finds the
-      `with app.setup:` block (marimo writes the setup cell there, not at
-      module level) and returns the source of the `main_img = <expr>`
-      right-hand side. Assignments inside cell functions are ignored. Never
-      raises.
-- [ ] Subprocess entry (`python -m app.notebook_image`): reads the
-      expression and base URI, evaluates with `flyte` and `notebook_base` in
-      scope, checks the base, initializes Flyte, `flyte.build(wait=True)`,
-      prints a JSON result (URI or error).
-- [ ] Tests: extraction cases (absent, present, inside cells ignored,
-      unparseable source); evaluation cases that need no network (a wrong
-      base and a raising expression both come back as errors).
+- [x] `extract_main_img`: pure `ast`, inside the `with app.setup:` block
+      only; cells ignored; never raises.
+- [x] `evaluate_main_img`: in-process `eval` with `flyte` and
+      `notebook_base`; `MainImgError` for a raising expression, a non-image,
+      a foreign base, or a non-Union target.
 
 ## Piece 3 — Launch
 
-- [ ] `per_notebook_env` takes the image URI to serve (default: the base).
-- [ ] `/launch`: no `main_img` → today's path. Otherwise one background
-      build per (base, expression), held in the dashboard process; while it
-      runs `/launch` answers `building`; on success it serves the built URI;
-      on failure it refuses with the error (no silent fallback: a pod missing
-      the tools its notebook declares is worse than a clear error).
-- [ ] Dashboard tile: "Building environment…" and re-POST `/launch` until it
-      returns a URL or an error.
+- [x] `per_notebook_env(image=...)` takes the declared `flyte.Image`.
+- [x] `/launch` evaluates, serves (which builds), and answers 422 for a
+      `MainImgError` or an `ImageBuildError`. Workspace notebooks and own
+      snapshots; shipped notebooks run on the deployed image.
 
 ## Piece 4 — Docs
 
-- [ ] `docs/architecture/notebook.md`: the boundary, in product terms. PEP
-      723 deps → the kernel venv, installed at start with no rebuild.
-      `main_img` → system level (apt, conda tools, binaries), changing it
-      rebuilds.
-- [ ] `docs/architecture/app.md` and
-      `.opencode/reference/architecture/app_internals.md`: launch can build.
-- [ ] Module docstrings (`app/per_notebook.py` says the image is shared and
-      static).
-- [ ] A guide example if a notebook guide exists; `zensical.toml` nav if any
-      doc is added.
+- [x] `docs/architecture/notebook.md` (Notebook Environment: PEP 723 deps vs
+      `main_img`), `docs/architecture/app.md`,
+      `.opencode/reference/architecture/app_internals.md`, module docstrings.
+      No new doc files.
+- [x] verify-stargazer feature `union-main-img` with
+      `scripts/union_dashboard.py` and `scripts/union_seed_notebook.py`.
 
 ## Piece 5 — Verify on Union
 
-- [ ] Deploy the test account's dashboard from the branch, create a
-      notebook declaring `main_img`, launch it: building state, then the
-      notebook opens and the declared tool runs in its terminal.
-- [ ] Relaunch: no rebuild.
-- [ ] Tear down per AGENTS.md.
+- [x] First design (`ebe1041`): the tile showed "Building environment…",
+      build run `utrpzxkpgbd8vl9vvqct` (9.2 s), served on
+      `…:notebook-custom-d5b18fe1…`, the cell found `/usr/bin/tabix`
+      (htslib 1.16); stop and relaunch started no build.
+- [x] Simplified (`9da05dc`): `/launch` for a notebook declaring `jq` took
+      63.4 s end to end with no timeout (build run `uv6vw2jtlqnd5k98w256`,
+      then the deploy), served on `…:notebook-custom-3a9899a3…`; the page
+      read `PROBE-TOOL: /usr/bin/jq jq-1.6`, `PROBE-BASE:
+      …:notebook-app-167c1aea…` (the deployed image), `PROBE-MAIN: Image`.
+      Stop and Run from the tile started no build and served the same image.
+- [x] Torn down: every app in `u-pryce` stopped, no live runs in `u-pryce`
+      or `flytesnacks`. The test dashboard was last deployed from `caab5a6`'s
+      parent `9da05dc` and is stopped.
 
 ## Deferred
 
-- Snapshots, tutorials and workflows notebooks.
+- Snapshots' image pinning (they rebuild on the current base), tutorials and
+  workflows notebooks.
 - Using `main_img` as the image for tasks defined in the notebook.
-- Reporting in-flight builds through `/launch/status` across a dashboard
-  reload (a reload loses the "building" tile; relaunching reattaches).
+- A long build (bioconda) against the dashboard's request timeout is
+  unmeasured. If one outlasts it, bring back a building state and polling.
 - `main_resources`, retiring the cpu/memory header fields.
