@@ -1,6 +1,6 @@
 ---
 title: Notebook-declared pod image (main_img)
-status: review
+status: done
 priority: low
 created: 2026-08-21
 pr: 28
@@ -171,3 +171,27 @@ were live.
   `flytesnacks`, runs `ubq794kxgkggfh7bsqfx` and `ucmqrmsdwdnxcgsmb5d4`).
   Builds measured 9.0 to 42.9 s. Baking less of `app/` would stop
   dashboard-only releases from changing the base; separate ticket if wanted.
+
+## Outcome
+
+Shipped in PR #28 (merged 2026-10-15). A workspace notebook or own snapshot
+can set `main_img` in its setup block, a `flyte.Image` built on
+`notebook_base`. `/launch` reads the expression with `ast`, evaluates it
+in-process with `flyte` and `notebook_base` in scope, and hands the image to
+`serve`, which builds it on Union's remote builder (or finds it) before
+deploying. A broken declaration or a failed build is a 422, never a pod on the
+wrong image. The workspace template declares one (bcftools) with a section 0
+showing where it resolves. The first cut's subprocess, build registry and
+building-state polling were dropped in favour of `serve`.
+
+Verified with the unit tier and on Union as the test account: notebooks
+declaring `tabix`, `jq` and the template's `bcftools` each built and opened
+with the tool on PATH; relaunching reused the image with no build; a built
+image is found org-wide, so a declaration builds once per release for
+everyone. The verify-stargazer map has the recipe (`union-main-img`).
+
+Left: a declared image rebuilds once per release because the notebook image
+bakes `src/` and `app/` (ticket `sdk-package` covers moving the notebook
+image onto a released SDK); a long bioconda build against the dashboard's
+request timeout is unmeasured; snapshot image pinning, `main_img` for tasks
+defined in the notebook, and `main_resources` remain open.
