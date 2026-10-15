@@ -1,6 +1,6 @@
 ---
 title: Task images carry the whole dev group
-status: backlog
+status: maybe
 priority: low
 created: 2026-10-13
 ---

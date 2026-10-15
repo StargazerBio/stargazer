@@ -1,6 +1,6 @@
 ---
 title: Recurring docs-sync job
-status: backlog
+status: maybe
 priority: low
 created: 2026-05-19
 ---

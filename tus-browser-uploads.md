@@ -1,6 +1,6 @@
 ---
 title: TUS resumable uploads, browser half
-status: backlog
+status: maybe
 priority: low
 created: 2026-06-10
 ---
