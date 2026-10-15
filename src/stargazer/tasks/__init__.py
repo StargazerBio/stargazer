@@ -19,6 +19,12 @@ from stargazer.tasks.gatk.variant_recalibrator import variant_recalibrator
 from stargazer.tasks.general.bwa import bwa_index, bwa_mem
 from stargazer.tasks.general.bwa_mem2 import bwa_mem2_index, bwa_mem2_mem
 from stargazer.tasks.general.samtools import samtools_faidx
+from stargazer.tasks.scrna.cluster import cluster
+from stargazer.tasks.scrna.find_markers import find_markers
+from stargazer.tasks.scrna.normalize import normalize
+from stargazer.tasks.scrna.qc_filter import qc_filter
+from stargazer.tasks.scrna.reduce_dimensions import reduce_dimensions
+from stargazer.tasks.scrna.select_features import select_features
 
 __all__ = [
     "apply_bqsr",
@@ -28,14 +34,20 @@ __all__ = [
     "bwa_mem",
     "bwa_mem2_index",
     "bwa_mem2_mem",
+    "cluster",
     "combine_gvcfs",
     "create_sequence_dictionary",
+    "find_markers",
     "haplotype_caller",
     "index_feature_file",
     "joint_call_gvcfs",
     "mark_duplicates",
     "merge_bam_alignment",
+    "normalize",
+    "qc_filter",
+    "reduce_dimensions",
     "samtools_faidx",
+    "select_features",
     "sort_sam",
     "variant_recalibrator",
 ]
