@@ -1,6 +1,6 @@
 ---
 title: Alignment can't be uploaded to Pinata
-status: review
+status: done
 priority: normal
 created: 2026-10-13
 pr: 37
@@ -48,3 +48,18 @@ measured 2026-10-15.
   keys; on the branch a pinata-tier test uploads one with every field set,
   reads back exactly 9 keys, and deletes it.
 - Unit tier 445, tasks tier 37 + 15 pass.
+
+## Outcome
+
+Shipped in PR #37 (merged 2026-10-15). `Alignment.format` is gone, so an
+`Alignment` with every field set plus `_owner` is exactly 9 keyvalues and
+uploads to Pinata. A unit test checks every SDK asset type at full width
+against the cap.
+
+Verified with that test (only `alignment` failed before, at 10; all 16 pass
+after) and a pinata-tier test that uploads an `Alignment` with every field
+set, reads back exactly 9 keys, and deletes it.
+
+Left: `variants` and `known_sites` are also at exactly 9, so neither can gain
+a declared field without losing one. Dropping `format` broke #31's new test on
+`main` until #35.

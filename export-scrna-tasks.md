@@ -1,6 +1,6 @@
 ---
 title: Export the scRNA tasks from stargazer.tasks
-status: review
+status: done
 priority: high
 created: 2026-10-09
 pr: 30
@@ -29,3 +29,18 @@ Branch `fix/export-scrna-tasks`.
   favour of the unit test.
 - `docs/reference/catalog.md` gains the six rows, matching the pre-commit
   catalog generator.
+
+## Outcome
+
+Shipped in PR #30 (merged 2026-10-15). `stargazer.tasks` exports the six
+scRNA tasks, so `list_tasks`, the catalog and `run_task` all see them. A unit
+test now walks every module under `stargazer.tasks` and requires the registry
+to hold each task defined there, in place of the hand-kept list that had the
+same gap.
+
+Verified with that test (it fails against `main`'s exports on exactly the six
+scRNA tasks), the unit tier, and through the MCP server over stdio: `run_task`
+ran `qc_filter` for `s1d1` and stored a 6307 x 21675 file matching its
+keyvalues.
+
+Left: nothing.
