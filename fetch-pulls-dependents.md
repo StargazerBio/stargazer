@@ -1,6 +1,6 @@
 ---
 title: Asset.fetch() pulls dependents and queries storage on every call
-status: doing
+status: review
 priority: high
 created: 2026-10-09
 pr: 35
@@ -41,6 +41,10 @@ Decided 2026-10-15: the field name carries the meaning instead.
   probe uploads (all deleted): 250 accepted, 251 refused with `Metadata
   "keyvalues" keys and values must be less than 250 characters.` A cohort's
   `source_samples` list crosses it at about 20 sample IDs (arithmetic).
+- [x] Drop `format="bam"` from `test_haplotype_caller.py` (5d633a5). #31
+  added it and #37 removed `Alignment.format`; merged separately, they broke
+  the tasks tier on `main` with a `TypeError`. Rolled in from
+  `haplotype-caller-test-format` on 2026-10-15.
 
 Not in this PR: making `fetch()` cheaper than `main`. Skipping Pinata for
 assets the user stored (a user's copy of a public file would lose its public
@@ -91,7 +95,7 @@ Measured 2026-10-15 on `fix/fetch-pulls-dependents`, rebased on `main` at
   All pass after. Unit tier 454 passed.
 - Tasks tier: scrna 16 passed; gatk and general 37 passed, 1 failed:
   `test_haplotype_caller` passes the removed `Alignment.format`, broken on
-  `main` too (ticket `haplotype-caller-test-format`).
+  `main` too. Fixed here (5d633a5); the test then passes in the gatk image.
 - Devbox: `tests/devbox/test_germline.py` 2 passed (2m29s), every step in its
   own pod with the Pinata tier on. The dashboard's index holds the run's
   reference, aligner, alignment and variants indexes under `companion_of`;
