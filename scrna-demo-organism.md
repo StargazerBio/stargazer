@@ -1,6 +1,6 @@
 ---
 title: The scrna_demo bundle is labeled mouse but holds human data
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-14
 ---
