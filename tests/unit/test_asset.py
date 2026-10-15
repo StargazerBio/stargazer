@@ -6,6 +6,7 @@ import pytest
 
 from stargazer.assets.alignment import Alignment
 from stargazer.assets.asset import Asset
+from stargazer.assets.reference import Reference, ReferenceIndex
 
 
 class TestAssetRoundtrip:
@@ -141,3 +142,27 @@ class TestAssetDefaults:
     def test_base_asset_to_keyvalues_empty(self):
         """Base Asset with no _asset_key returns empty dict from to_keyvalues()."""
         assert Asset().to_keyvalues() == {}
+
+
+class TestFetch:
+    @pytest.mark.asyncio
+    async def test_fetch_brings_companions_not_dependents(self, tmp_path):
+        """A reference's index lands beside it; an alignment made against it doesn't."""
+        fasta = tmp_path / "ref.fa"
+        fasta.write_text(">chr1\nACGT\n")
+        fai = tmp_path / "ref.fa.fai"
+        fai.write_text("chr1\t4\t6\t4\t5\n")
+        bam = tmp_path / "s1.bam"
+        bam.write_bytes(b"BAM")
+
+        ref = Reference()
+        await ref.update(fasta, build="T")
+        await ReferenceIndex().update(fai, build="T", reference_cid=ref.cid)
+        await Alignment().update(bam, sample_id="s1", reference_cid=ref.cid)
+
+        local = await ref.fetch()
+
+        assert sorted(p.name for p in local.parent.iterdir()) == [
+            "ref.fa",
+            "ref.fa.fai",
+        ]

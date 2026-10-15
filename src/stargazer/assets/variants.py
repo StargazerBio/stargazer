@@ -32,6 +32,7 @@ class VariantsIndex(Asset):
     """
 
     _asset_key: ClassVar[str] = "variants_index"
+    _companion: ClassVar[bool] = True
     sample_id: str = ""
     variants_cid: str = ""
 
@@ -63,6 +64,7 @@ class KnownSitesIndex(Asset):
     """
 
     _asset_key: ClassVar[str] = "known_sites_index"
+    _companion: ClassVar[bool] = True
     known_sites_cid: str = ""
 
 

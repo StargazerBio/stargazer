@@ -65,6 +65,10 @@ class Asset:
 
     _registry: ClassVar[dict[str, type["Asset"]]] = {}
     _asset_key: ClassVar[str] = ""
+    # True for a file tools expect beside the one it names via
+    # `{parent}_cid` (an index, a sequence dictionary); fetch() brings only
+    # these along, not every output that records the parent as a source.
+    _companion: ClassVar[bool] = False
 
     cid: str = ""
     path: File | None = None
@@ -172,18 +176,23 @@ class Asset:
     async def fetch(self) -> Path:
         """Make a local copy of this asset and its companions; return its path.
 
-        The asset lands at `<STARGAZER_LOCAL>/<cid>/<name>`, and every asset
-        that names it via ``{_asset_key}_cid`` (indices, dictionaries, and
-        any output that records it as a source) lands in the same directory,
-        where tools look for them. An
-        asset built from a local file that was never uploaded is returned in
-        place. Copies already on disk are reused.
+        The asset lands at `<STARGAZER_LOCAL>/<cid>/<name>`, and each
+        companion that names it via ``{_asset_key}_cid`` (an asset whose class
+        sets ``_companion``, such as an index or a sequence dictionary) lands
+        in the same directory, where tools look for it. Other assets that
+        record it, such as outputs made from it, stay behind. An asset built
+        from a local file that was never uploaded is returned in place.
+        Copies already on disk are reused.
         """
         import stargazer.utils.storage as _storage
 
         local = await _storage.default_client.download(self)
         if self._asset_key and self.cid:
-            for companion in await assemble(**{f"{self._asset_key}_cid": self.cid}):
+            companions = await assemble(
+                asset=[key for key, cls in Asset._registry.items() if cls._companion],
+                **{f"{self._asset_key}_cid": self.cid},
+            )
+            for companion in companions:
                 await _storage.default_client.download(companion, local.parent)
         return local
 

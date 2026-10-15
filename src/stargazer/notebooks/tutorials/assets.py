@@ -452,8 +452,9 @@ def _():
         FAI, BED + index. Stargazer handles this with a convention:
 
         > A companion asset stores `<parent_asset_key>_cid` pointing at
-        > the parent's CID. `parent.fetch()` queries for assets where
-        > that key matches and downloads them too.
+        > the parent's CID, and its class sets `_companion = True`.
+        > `parent.fetch()` queries for companions where that key matches
+        > and downloads them too.
 
         Real example from `src/stargazer/assets/reference.py`:
 
@@ -466,6 +467,7 @@ def _():
         @dataclass
         class ReferenceIndex(Asset):
             _asset_key: ClassVar[str] = "reference_index"
+            _companion: ClassVar[bool] = True
             build: str = ""
             tool: str = ""
             reference_cid: str = ""   # ← link back to the Reference
@@ -475,16 +477,19 @@ def _():
         does:
 
         1. Download the FASTA itself
-        2. `assemble(reference_cid=ref.cid)` to find any companions
+        2. `assemble()` for companion types with `reference_cid=ref.cid`
         3. Download every match into the same folder
         4. Return the FASTA's local path
 
         So the BAI lands next to the BAM, the FAI next to the FASTA,
         without each task having to know about the pairing.
 
-        For our `SampleSheet` we don't need a companion (it's a single
-        file), but the `CohortSummary` in the next tutorial carries
-        `sample_sheet_cid` and rides along automatically.
+        A `<parent>_cid` field without `_companion` is still a link:
+        it records which asset this one came from, and
+        `assemble(sample_sheet_cid=sheet.cid)` finds it. The
+        `CohortSummary` in the next tutorial records its `SampleSheet`
+        that way. It's an output, not a file a tool needs beside the
+        sheet, so `sheet.fetch()` leaves it behind.
         """
     )
 

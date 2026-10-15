@@ -37,6 +37,7 @@ class AlignmentIndex(Asset):
     """
 
     _asset_key: ClassVar[str] = "alignment_index"
+    _companion: ClassVar[bool] = True
     sample_id: str = ""
     alignment_cid: str = ""
 

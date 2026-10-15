@@ -51,7 +51,7 @@ flowchart TD
     L --> M("Link companions into the same directory")
 ```
 
-`fetch()` returns the local path. Companions — any asset recording `<asset_key>_cid` for this one, such as an index or dictionary — land in the same directory, where tools like GATK look for them. An asset built from a local file that was never stored is used in place. An asset known only by its CID is located through the index, then the public gateway.
+`fetch()` returns the local path. Companions — assets whose class sets `_companion` and that record `<asset_key>_cid` for this one, such as an index or dictionary — land in the same directory, where tools like GATK look for them. An asset built from a local file that was never stored is used in place. An asset known only by its CID is located through the index, then the public gateway.
 
 Gateway downloads use aiohttp directly: `flyte.io.File.download()` can't read an `https://` path.
 

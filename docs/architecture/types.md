@@ -70,7 +70,7 @@ A bare `Asset` (no `_asset_key`) carries a free-form `keyvalues` dict, serialize
 
 ### Core Methods
 
-- `fetch()` — downloads self, then queries for companions via `{_asset_key}_cid = self.cid` and downloads those into the same directory; returns the local path
+- `fetch()` — downloads self, then queries for companions (`_companion` types with `{_asset_key}_cid = self.cid`) and downloads those into the same directory; returns the local path
 - `update(path, **kwargs)` — sets the given attributes, stores the file, and sets `cid` and `path`
 - `to_dict()` / `from_dict()` — JSON serialization
 
@@ -80,14 +80,14 @@ See the [Catalog](../reference/catalog.md#asset-types) for a complete list of re
 
 ## Companion Pattern
 
-Assets link to related files via `{asset_key}_cid` keyvalues. When `fetch()` is called on an asset:
+Assets link to related files via `{asset_key}_cid` keyvalues. Some of those links are companions: files a tool expects beside their parent, such as an index or a sequence dictionary. A companion's class sets `_companion = True`. When `fetch()` is called on an asset:
 
 1. Downloads the asset itself
-2. Queries for assets where `{_asset_key}_cid` equals this asset's CID
-3. Downloads all matching companions into the same directory, so tools find an index next to its file
+2. Queries for companion assets where `{_asset_key}_cid` equals this asset's CID
+3. Downloads them into the same directory, so tools find an index next to its file
 4. Returns the asset's local path
 
-Example: `Reference(cid="bafk…").fetch()` also finds and downloads any `ReferenceIndex` with `reference_cid="bafk…"`. Any asset recording that key counts, not only indexes: an `Alignment` records `reference_cid` too, so fetching a reference also downloads every alignment made against it. A mate isn't a companion — reads link each other through `mate_cid`, which no asset key produces.
+Example: `Reference(cid="bafk…").fetch()` also finds and downloads any `ReferenceIndex`, `SequenceDict` or `AlignerIndex` with `reference_cid="bafk…"`. An `Alignment` records `reference_cid` too, but it's an output made from the reference, not a companion, so it stays behind; `assemble(reference_cid=…)` finds it. The companion types are `AlignmentIndex`, `ReferenceIndex`, `SequenceDict`, `AlignerIndex`, `VariantsIndex` and `KnownSitesIndex`. A mate isn't a companion — reads link each other through `mate_cid`, which no asset key produces.
 
 ## Assembly
 

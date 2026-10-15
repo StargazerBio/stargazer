@@ -44,6 +44,7 @@ class ReferenceIndex(Asset):
     """
 
     _asset_key: ClassVar[str] = "reference_index"
+    _companion: ClassVar[bool] = True
     build: str = ""
     tool: str = ""
     reference_cid: str = ""
@@ -54,6 +55,7 @@ class SequenceDict(Asset):
     """Sequence dictionary (.dict) file asset."""
 
     _asset_key: ClassVar[str] = "sequence_dict"
+    _companion: ClassVar[bool] = True
     build: str = ""
     tool: str = ""
     reference_cid: str = ""
@@ -64,6 +66,7 @@ class AlignerIndex(Asset):
     """Aligner index file asset (one file per index file for multi-file indices)."""
 
     _asset_key: ClassVar[str] = "aligner_index"
+    _companion: ClassVar[bool] = True
     build: str = ""
     aligner: str = ""
     reference_cid: str = ""
