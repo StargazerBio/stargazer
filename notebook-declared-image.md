@@ -127,8 +127,12 @@ were live.
       `main_img`), `docs/architecture/app.md`,
       `.opencode/reference/architecture/app_internals.md`, module docstrings.
       No new doc files.
+- [x] The workspace template declares `main_img` (bcftools) with a section
+      0 showing where it resolves: the pattern for users, and the notebook
+      the Union recipe launches (no seeding script).
 - [x] verify-stargazer feature `union-main-img` with
-      `scripts/union_dashboard.py` and `scripts/union_seed_notebook.py`.
+      `scripts/union_dashboard.py` (deploy, check, teardown of the test
+      account's dashboard only).
 
 ## Piece 5 — Verify on Union
 
@@ -142,9 +146,13 @@ were live.
       read `PROBE-TOOL: /usr/bin/jq jq-1.6`, `PROBE-BASE:
       …:notebook-app-167c1aea…` (the deployed image), `PROBE-MAIN: Image`.
       Stop and Run from the tile started no build and served the same image.
+- [x] Template (`83d4538`): created "image check" from the Template on the
+      dashboard and ran it; build run `ugcdns9t7b5x2pv5hcdm`, served on
+      `…:notebook-custom-603bea0c…`, section 0 read `bcftools →
+      /usr/bin/bcftools`. Stop and Run started no build.
 - [x] Torn down: every app in `u-pryce` stopped, no live runs in `u-pryce`
-      or `flytesnacks`. The test dashboard runs `9da05dc`
-      and is stopped.
+      or `flytesnacks`. The test dashboard runs `83d4538` and is stopped. The
+      test account's workspace keeps "main_img probe" and "image check".
 
 ## Deferred
 
@@ -154,3 +162,6 @@ were live.
 - A long build (bioconda) against the dashboard's request timeout is
   unmeasured. If one outlasts it, bring back a building state and polling.
 - `main_resources`, retiring the cpu/memory header fields.
+- Every template notebook builds an image on its first launch after each
+  release (the base changes with every deploy). Watch whether that wait is
+  acceptable for new users.
