@@ -26,6 +26,12 @@ def test_discovery_finds_all_tasks():
         "variant_recalibrator",
         "apply_vqsr",
         "index_feature_file",
+        "qc_filter",
+        "normalize",
+        "select_features",
+        "reduce_dimensions",
+        "cluster",
+        "find_markers",
     }
     assert expected_tasks == task_names
 

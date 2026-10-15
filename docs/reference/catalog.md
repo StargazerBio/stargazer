@@ -11,14 +11,20 @@
 | `bwa_mem` | Align FASTQ reads to reference genome using BWA-MEM. | `ref` (`Reference`), `r1` (`R1`), `r2` (`R2 | NoneType`), `read_group` (`dict[str, str] | NoneType`) |
 | `bwa_mem2_index` | Create BWA-MEM2 index files for a reference genome. | `ref` (`Reference`) |
 | `bwa_mem2_mem` | Align FASTQ reads to reference genome using BWA-MEM2. | `ref` (`Reference`), `r1` (`R1`), `r2` (`R2 | NoneType`), `read_group` (`dict[str, str] | NoneType`) |
+| `cluster` | Assign cells to clusters using the Leiden algorithm. | `adata` (`AnnData`), `resolution` (`float`), `key_added` (`str`) |
 | `combine_gvcfs` | Combine multiple per-sample GVCFs into a single multi-sample GVCF. | `gvcfs` (`list[Variants]`), `ref` (`Reference`), `cohort_id` (`str`) |
 | `create_sequence_dictionary` | Create a sequence dictionary (.dict file) using GATK CreateSequenceDictionary. | `ref` (`Reference`) |
+| `find_markers` | Identify marker genes for each cluster using differential expression. | `adata` (`AnnData`), `groupby` (`str`), `method` (`str`) |
 | `haplotype_caller` | Call germline variants in GVCF mode using GATK HaplotypeCaller. | `alignment` (`Alignment`), `ref` (`Reference`) |
 | `index_feature_file` | Index a VCF file using GATK IndexFeatureFile. | `known_sites` (`KnownSites`) |
 | `joint_call_gvcfs` | Consolidate GVCFs into GenomicsDB and joint-genotype in a single task. | `gvcfs` (`list[Variants]`), `ref` (`Reference`), `intervals` (`list[str] | NoneType`), `cohort_id` (`str`) |
 | `mark_duplicates` | Mark duplicate reads in a BAM file. | `alignment` (`Alignment`) |
 | `merge_bam_alignment` | Merge alignment data from aligned BAM with data in unmapped BAM. | `aligned_bam` (`Alignment`), `unmapped_bam` (`Alignment`), `ref` (`Reference`) |
+| `normalize` | Normalize counts and apply log1p transformation. | `adata` (`AnnData`) |
+| `qc_filter` | Filter low-quality cells and genes from raw scRNA-seq data. | `adata` (`AnnData`), `min_genes` (`int`), `min_cells` (`int`), `max_pct_mt` (`float`), `batch_key` (`str`), `organism` (`str`) |
+| `reduce_dimensions` | Compute PCA, k-nearest neighbor graph, and UMAP embedding. | `adata` (`AnnData`), `n_pcs` (`int`), `n_neighbors` (`int`) |
 | `samtools_faidx` | Create a FASTA index (.fai file) using samtools faidx. | `ref` (`Reference`) |
+| `select_features` | Select highly variable genes for dimensionality reduction. | `adata` (`AnnData`), `n_top_genes` (`int`), `batch_key` (`str`) |
 | `sort_sam` | Sort a SAM/BAM file. | `alignment` (`Alignment`), `sort_order` (`str`) |
 | `variant_recalibrator` | Build a VQSR recalibration model using GATK VariantRecalibrator. | `vcf` (`Variants`), `ref` (`Reference`), `resources` (`list[KnownSites]`), `mode` (`str`) |
 
