@@ -1,6 +1,6 @@
 ---
 title: The scrna_demo bundle is labeled mouse but holds human data
-status: review
+status: done
 priority: normal
 created: 2026-10-14
 pr: 33
@@ -43,3 +43,16 @@ tutorial). Measured 2026-10-14, isolated store seeded from the bundle,
 - The catalog hook now runs on bundle YAML; it skipped the relabel before.
 
 Deferred: ticket `qc-filter-organism-from-asset`.
+
+## Outcome
+
+Shipped in PR #33 (merged 2026-10-15). The `scrna_demo` bundle describes its
+data as human bone marrow mononuclear cells and labels both files
+`organism: human`, in the YAML and in Pinata's public metadata. The catalog
+hook now also runs when a bundle's YAML changes.
+
+Verified: `qc_filter` with the raw asset's organism flags 13 MT genes and
+keeps 6,307 cells (0 and 8,506 on `main`); the scRNA pipeline notebook
+exports with exit 0 and all 14 checks `ok`.
+
+Left: ticket `qc-filter-organism-from-asset`.

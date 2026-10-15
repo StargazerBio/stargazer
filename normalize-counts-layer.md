@@ -1,6 +1,6 @@
 ---
 title: normalize stores normalized counts in the counts layer
-status: review
+status: done
 priority: high
 created: 2026-10-09
 pr: 32
@@ -32,3 +32,16 @@ Branch `fix/normalize-counts-layer`. Measured 2026-10-14:
   `test_find_markers_tests_log_normalized_data` failed before (1.948 vs 1.376)
   and passes after. A second notebook drive: export exit 0, all 14 checks
   `ok`, no raw-count warnings, and each sample's markers record `layer=None`.
+
+## Outcome
+
+Shipped in PR #32 (merged 2026-10-15). `normalize` keeps the raw counts in
+`layers["counts"]`, and `find_markers` tests on the log-normalized `X`, which
+is what scanpy's `rank_genes_groups` expects.
+
+Verified with two tests that failed before and pass after, the scrna image's
+task tests, and two drives of the scRNA pipeline notebook: every
+`check_anndata.py` check `ok`, the stored `counts` layer equal to the
+`qc_filtered` matrix, and no raw-count warnings.
+
+Left: nothing.

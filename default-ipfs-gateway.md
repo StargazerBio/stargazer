@@ -1,6 +1,6 @@
 ---
 title: The default IPFS gateway no longer serves files
-status: review
+status: done
 priority: high
 created: 2026-10-09
 pr: 36
@@ -33,3 +33,17 @@ anonymous asset-page ones included. Branch `fix/default-ipfs-gateway`.
   429 from `dweb.link` on `main`; all three files on the branch.
 - Not done: the README quickstart's `stargazer-chat` image is pushed by
   hand and keeps the old default until it's rebuilt.
+
+## Outcome
+
+Shipped in PR #36 (merged 2026-10-15). `PINATA_GATEWAY` defaults to the
+account's dedicated gateway, `https://maroon-written-fowl-769.mypinata.cloud`,
+for every download, anonymous ones included.
+
+Verified: on a default config, `fetch_bundle("variant_calling_demo")` fetched
+all three files (429 from `dweb.link` on `main`); the dedicated gateway served
+the demo file anonymously in 1.8 s.
+
+Left: anonymous downloads now spend the account's gateway bandwidth. The
+README quickstart's `stargazer-chat` image keeps the old default until it's
+rebuilt: ticket `rebuild-chat-image`.

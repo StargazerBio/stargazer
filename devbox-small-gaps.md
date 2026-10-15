@@ -1,6 +1,6 @@
 ---
 title: Small gaps found while testing on the devbox
-status: review
+status: done
 priority: high
 created: 2026-10-09
 pr: 34
@@ -26,3 +26,16 @@ Branch `fix/devbox-small-gaps`, measured 2026-10-14.
   ~5.8GiB of requests free beside the cluster and the dashboard.
 - Tasks tier 37 + 15 passed. Devbox germline passes; all 11 of its pods ran
   at 1Gi/6Gi.
+
+## Outcome
+
+Shipped in PR #34 (merged 2026-10-15). `apply_bqsr` stores its BAM index as
+an `AlignmentIndex`, like `mark_duplicates` and `sort_sam`, and `gatk_env`
+requests 1Gi of memory with a 6Gi limit instead of the platform's
+256Mi/512Mi.
+
+Verified with the `apply_bqsr` test (no index before, one after), the tasks
+tier, and the devbox germline workflow, all 11 of its pods at 1Gi/6Gi.
+
+Left: the germline workflow runs no BQSR without known sites, so the stored
+index is covered by the tasks-tier test only.

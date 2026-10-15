@@ -1,6 +1,6 @@
 ---
 title: Asset.fetch() pulls dependents and queries storage on every call
-status: review
+status: done
 priority: high
 created: 2026-10-09
 pr: 35
@@ -106,3 +106,26 @@ Measured 2026-10-15 on `fix/fetch-pulls-dependents`, rebased on `main` at
   metadata return `companion_of` as "companion of" and `reference_cid` as
   "reference". Not seen in a browser: the graph lists Pinata records, and
   the public network holds no companions.
+
+## Outcome
+
+Shipped in PR #35 (merged 2026-10-15). The six companion types link their
+parent with one field, `companion_of`, and `fetch()` asks only for
+`companion_of=<cid>`. A reference no longer brings the BAMs made against it,
+and a fetch costs one index query and one Pinata query, as on `main` before.
+The "made from" fields (`reference_cid`, `r1_cid`, `alignment_cid`,
+`variants_cid`, `source_cid`) keep their names and are never followed. Pinata
+uploads, signed upload URLs and metadata edits refuse a key or value over 250
+characters before anything is sent, and the asset page's edit returns that as
+a 400. The PR also dropped `test_haplotype_caller`'s removed `format`
+argument.
+
+Verified: unit tier 454; tasks tier 38 gatk and general, 16 scrna; devbox
+germline 2 passed, with every index stored under `companion_of`; the Assets
+and Tasks tutorials export with exit 0.
+
+Left: companions stored before this change carry their old `<parent>_cid` key,
+so `fetch()` leaves them behind until their indexing step runs again (10
+`variants_index` rows on the devbox; the public network holds no companions).
+The dashboard graph's "companion of" edge was checked in node, not seen in a
+browser. Making `fetch()` cheaper than `main` was weighed and left out.
