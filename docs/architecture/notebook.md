@@ -111,6 +111,17 @@ In production, each notebook's sandbox installs the SDK from the image's own sou
 
 This is a feature — it prevents untested code from silently ending up in production. Locally a notebook imports your checkout, so contributors see SDK changes as they make them. It also means saved notebooks can't change execution: the workspace store carries notebook *sources*; the SDK they import always comes from the image.
 
+## Notebook Environment
+
+A notebook's environment has two halves, and each has its own home:
+
+- **Python packages** go in the notebook's PEP 723 header. They install into the notebook's own environment when it starts, with no image to rebuild, so this is where iteration stays fast.
+- **System tools** (apt packages, bioconda tools, command-line binaries) go in the image the notebook runs on. A notebook declares that image in its setup block as `main_img`: a `flyte.Image` built on `notebook_base`, the standard notebook image, using any of the SDK's `Image` methods that don't copy in local files. It's the same API a production `TaskEnvironment` uses, so an environment proven in a notebook carries over to a task as-is.
+
+At launch the dashboard builds the declared image and serves the notebook on it. The tile shows "Building environment…" while it builds; an unchanged image is reused, so only the first launch after a change waits. A change takes effect the next time the notebook launches. If the image can't be built, the launch fails with the reason instead of opening the notebook without its tools.
+
+The `main_img` line is evaluated on its own, so it can use `flyte` and `notebook_base` but not other names from the setup block. Building needs the hosted deployment. A user's snapshots build the image their notebook declared; tutorials and workflows run on the standard image.
+
 ## Notebook Modes
 
 How the *notebook UI* is served — orthogonal to execution context. A notebook in either mode can dispatch tasks locally or remotely.

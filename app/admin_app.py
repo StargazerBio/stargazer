@@ -20,7 +20,9 @@ GitHub integration. It has three jobs:
 
 3. **Launch broker.** `POST /launch` builds a per-notebook AppEnvironment via
    `app.per_notebook.per_notebook_env(...)`, owned by the same user, serves
-   it into the dashboard's project, and returns its URL. The dashboard never
+   it into the dashboard's project, and returns its URL. A notebook that
+   declares its own image (`main_img`) is served on it once
+   `app.notebook_image` has built it. The dashboard never
    calls a notebook pod: the pod hydrates and saves its own workspace and
    shows its own starting page while it warms up.
 
