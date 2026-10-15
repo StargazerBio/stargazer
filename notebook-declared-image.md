@@ -1,8 +1,9 @@
 ---
 title: Notebook-declared pod image (main_img)
-status: doing
+status: review
 priority: low
 created: 2026-08-21
+pr: 28
 ---
 
 A workspace notebook declares the image its own pod runs on, as a real
