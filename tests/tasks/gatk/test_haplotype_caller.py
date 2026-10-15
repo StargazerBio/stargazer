@@ -17,7 +17,6 @@ async def test_haplotype_caller_lists_its_sample(fixtures_db):
     alignment = Alignment(
         path=GATK_FIXTURES_DIR / "NA12829_TP53_recalibrated.bam",
         sample_id=sample_id,
-        format="bam",
         sorted="coordinate",
         duplicates_marked=True,
         bqsr_applied=True,
