@@ -27,8 +27,8 @@ async def normalize(adata: AnnData) -> AnnData:
     logger.info(adata.to_dict())
     ad = sc.read_h5ad(await adata.fetch())
 
-    sc.pp.normalize_total(ad)
     ad.layers["counts"] = ad.X.copy()
+    sc.pp.normalize_total(ad)
     sc.pp.log1p(ad)
 
     out_path = _storage.default_client.local_dir / f"{adata.sample_id}_normalized.h5ad"
