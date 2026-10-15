@@ -75,6 +75,8 @@ sequenceDiagram
 
 **Resources live in the notebook.** A workspace notebook's `[tool.stargazer]` header (cpu/memory) is parsed textually at launch (no code execution) and honored as-authored, with no ceiling. Image-baked notebooks carry no header and fall back to the env default.
 
+**So does the image.** A workspace notebook or own snapshot can declare the image its pod runs on as `main_img` in its setup block ([Notebooks → Notebook Environment](notebook.md#notebook-environment)). At launch the dashboard evaluates just that expression and hands the resulting image to the SDK's `serve`, which builds it on Union's remote builder in the user's own project (or finds it already built) before deploying the notebook on it. It's the one piece of notebook code the dashboard runs: the owner's, in the owner's own dashboard, which holds no secrets.
+
 **Tiles are stateful and authoritative.** On load the dashboard asks the control plane which `nb-{slug}-{mode}` apps are live and hydrates those tiles to Open/Stop; a notebook runs in edit *or* run mode, never both. Discovery is a single project-scoped deployment list, re-checked per app for authoritative status. This is read from Flyte rather than in-memory state, so it survives dashboard restarts.
 
 **The tier is lightweight by construction.** Dashboard responses are gzip-compressed, and the notebook proxy streams everything except the HTML pages it decorates, so large notebook assets never sit in proxy memory. Details in `.opencode/reference/architecture/app_internals.md`.
@@ -172,7 +174,7 @@ toggle (Graph is the default):
 The dashboard and the per-notebook pods use **different images by design**:
 
 - `app_env.image` is Flyte-built via `with_uv_project` — the dashboard is small Python with no heavy deps.
-- Per-notebook envs use the programmatically-defined `notebook-app` image. Onboarding builds it and hands each dashboard the exact build, so every notebook pod runs the image that shipped with its dashboard and the dashboard pod (no Docker daemon) never rebuilds it.
+- Per-notebook envs use the programmatically-defined `notebook-app` image. Onboarding builds it and hands each dashboard the exact build, so every notebook pod runs the image that shipped with its dashboard and the dashboard pod (no Docker daemon) never rebuilds it. A notebook that declares its own image runs on a build layered on that one, which `serve` builds on Union's remote builder; that needs only the Flyte API, no Docker.
 
 Both images are content-hashed, so a release builds each once however many users it deploys, and every user's dashboard runs the same build.
 

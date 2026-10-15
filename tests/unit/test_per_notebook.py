@@ -7,6 +7,7 @@ from app.per_notebook import (
     WORKSPACE_NOTEBOOK_DIR,
     per_notebook_env,
 )
+from stargazer.notebooks import notebook_image_base
 
 SUBJECT = "387300641116005877"
 
@@ -83,3 +84,16 @@ def test_notebook_dirs_are_flat_hydration_targets():
     """Workspace and own snapshots hydrate into fixed, flat pod dirs."""
     assert WORKSPACE_NOTEBOOK_DIR == "/workspace"
     assert SNAPSHOT_NOTEBOOK_DIR == "/snapshots"
+
+
+def test_pod_runs_the_image_a_notebook_declares():
+    """A declared image becomes the app's image, for serve to build."""
+    declared = notebook_image_base(config.NOTEBOOK_IMAGE).with_apt_packages("tabix")
+    assert _env(image=declared).image == declared
+
+
+def test_pod_env_names_the_deployed_image_even_on_a_declared_one():
+    """The kernel's `notebook_base` is the deployed image, never the declared one."""
+    declared = notebook_image_base(config.NOTEBOOK_IMAGE).with_apt_packages("tabix")
+    env = _env(image=declared)
+    assert env.env_vars["STARGAZER_NOTEBOOK_IMAGE"] == "test.example/notebook-app:unit"

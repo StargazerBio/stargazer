@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import flyte.app
+import flyte.errors
 import pytest
 from fastapi.testclient import TestClient
 
@@ -26,6 +27,7 @@ from app.admin_app import (
     asgi_app,
 )
 from app.notebook_meta import parse_notebook_name, parse_notebook_resources
+from stargazer.notebooks import notebook_image_base
 
 ALICE = "387300641116005877"
 BOB = "111111111111111111"
@@ -547,6 +549,85 @@ def test_launch_public_snapshot_uses_the_image_path(client, served, public_snaps
     assert served["kwargs"]["notebook_path"] == (
         f"{notebooks.IMAGE_WORKDIR}/src/stargazer/notebooks/snapshots/published_qc.py"
     )
+
+
+IMG_SRC = (
+    "import marimo\n"
+    "app = marimo.App()\n"
+    "with app.setup:\n"
+    "    from stargazer.notebooks import notebook_base\n"
+    "    main_img = notebook_base.with_apt_packages('bcftools')\n"
+)
+
+
+@pytest.fixture
+def union(monkeypatch):
+    """Launches aim at Union, where a notebook's own image can be built."""
+    monkeypatch.setattr(config, "TARGET", "union")
+
+
+def test_launch_without_main_img_serves_the_deployed_image(client, served):
+    """A notebook that declares no image runs on the deployed one."""
+    _put(ALICE, "qc-run.py")
+    _as(client)
+    assert _launch(client, "qc-run", "workspace").status_code == 200
+    assert served["kwargs"]["image"] is None
+
+
+def test_launch_serves_the_declared_image(client, served, union):
+    """A declared image is handed to serve, which builds it before deploying."""
+    _put(ALICE, "qc-run.py", IMG_SRC)
+    _as(client)
+    resp = _launch(client, "qc-run", "workspace")
+    assert resp.json() == {"url": "https://nb.example"}
+    assert served["kwargs"]["image"] == notebook_image_base(
+        config.NOTEBOOK_IMAGE
+    ).with_apt_packages("bcftools")
+
+
+def test_launch_own_snapshot_serves_its_declared_image(client, served, union):
+    """A snapshot keeps the image its notebook declared."""
+    _put(ALICE, "frozen.py", IMG_SRC, snapshot=True)
+    _as(client)
+    assert _launch(client, "frozen", "snapshots", mode="run").status_code == 200
+    assert served["kwargs"]["image"] == notebook_image_base(
+        config.NOTEBOOK_IMAGE
+    ).with_apt_packages("bcftools")
+
+
+def test_launch_refuses_a_broken_main_img(client, served, union):
+    """A `main_img` that doesn't evaluate is a launch error, not a default pod."""
+    _put(ALICE, "qc-run.py", IMG_SRC.replace("'bcftools'", "*TOOLS"))
+    _as(client)
+    resp = _launch(client, "qc-run", "workspace")
+    assert resp.status_code == 422
+    assert "NameError" in resp.json()["error"]
+    assert "kwargs" not in served
+
+
+def test_launch_refuses_when_the_image_fails_to_build(
+    client, served, union, monkeypatch
+):
+    """A failed build never falls back to the notebook's existing pod."""
+
+    async def failing_aio(env):
+        raise flyte.errors.ImageBuildError("Build failed in 0:01:00")
+
+    async def existing_app(**_kw):
+        return SimpleNamespace(endpoint="https://old-pod.example")
+
+    monkeypatch.setattr(
+        "flyte.with_servecontext",
+        lambda **_kw: SimpleNamespace(serve=SimpleNamespace(aio=failing_aio)),
+    )
+    monkeypatch.setattr(
+        "app.admin_app.App", SimpleNamespace(get=SimpleNamespace(aio=existing_app))
+    )
+    _put(ALICE, "qc-run.py", IMG_SRC)
+    _as(client)
+    resp = _launch(client, "qc-run", "workspace")
+    assert resp.status_code == 422
+    assert "Build failed" in resp.json()["error"]
 
 
 # ---------------------------------------------------------------------------
