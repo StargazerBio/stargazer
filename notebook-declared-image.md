@@ -162,6 +162,11 @@ were live.
 - A long build (bioconda) against the dashboard's request timeout is
   unmeasured. If one outlasts it, bring back a building state and polling.
 - `main_resources`, retiring the cpu/memory header fields.
-- Every template notebook builds an image on its first launch after each
-  release (the base changes with every deploy). Watch whether that wait is
-  acceptable for new users.
+- A declared image rebuilds once per release, because the notebook image
+  bakes `src/` and `app/` and gets a new hash whenever they change. The
+  rebuild is per distinct declaration for the whole org, not per notebook or
+  user: the existence lookup is org-wide (measured 2026-10-14, the
+  template's `notebook-custom-603bea0c…` built in `u-pryce` was found from
+  `flytesnacks`, runs `ubq794kxgkggfh7bsqfx` and `ucmqrmsdwdnxcgsmb5d4`).
+  Builds measured 9.0 to 42.9 s. Baking less of `app/` would stop
+  dashboard-only releases from changing the base; separate ticket if wanted.
