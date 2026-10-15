@@ -1,8 +1,9 @@
 ---
 title: Export the scRNA tasks from stargazer.tasks
-status: doing
+status: review
 priority: high
 created: 2026-10-09
+pr: 30
 ---
 
 The scRNA tasks aren't exported from `stargazer.tasks`, so `list_tasks`

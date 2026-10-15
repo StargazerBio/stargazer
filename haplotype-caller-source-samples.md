@@ -1,8 +1,9 @@
 ---
 title: haplotype_caller stores source_samples as a string
-status: doing
+status: review
 priority: high
 created: 2026-10-09
+pr: 31
 ---
 
 `haplotype_caller` sets `source_samples` to a string, not a list; it
