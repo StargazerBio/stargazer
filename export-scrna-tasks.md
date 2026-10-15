@@ -13,16 +13,19 @@ Found in the docs correctness sweep (2026-10-09, #18).
 
 ## Verification
 
-Branch `fix/export-scrna-tasks`. Measured 2026-10-14 against an isolated
-store seeded with `scrna_demo`, through the MCP server over stdio (a small
-client started the server the way an agent harness does):
+Branch `fix/export-scrna-tasks`.
 
-- `main`: `run_task` for `qc_filter` raises `ValueError: Unknown task`.
-- Branch: `list_tasks` lists all six scRNA tasks, and `run_task` runs
-  `qc_filter` for `s1d1` and stores `s1d1_qc_filtered.h5ad`, whose 6307 x 21675
-  matches its keyvalues.
-- The registry test failed before the fix on exactly the six names; the
-  unit tier passes (429). It now checks every task defined under
-  `stargazer.tasks` is registered (`test_discovery_finds_every_defined_task`).
+- `test_discovery_finds_every_defined_task` walks every module under
+  `stargazer.tasks` and requires the registry to hold each task defined there,
+  replacing a hand-kept list that had the same omission. Against `main`'s
+  exports it fails on exactly the six scRNA tasks; with the fix it passes. The
+  unit tier passes (429).
+- Measured 2026-10-14 through the MCP server over stdio, against an isolated
+  store seeded with `scrna_demo`: on `main`, `run_task` for `qc_filter` raises
+  `ValueError: Unknown task`. On the branch, `list_tasks` lists all six scRNA
+  tasks, and `run_task` runs `qc_filter` for `s1d1` and stores
+  `s1d1_qc_filtered.h5ad`, whose 6307 x 21675 matches its keyvalues. The MCP
+  feature and stdio client written for that run were dropped in review in
+  favour of the unit test.
 - `docs/reference/catalog.md` gains the six rows, matching the pre-commit
   catalog generator.
