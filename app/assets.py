@@ -49,10 +49,6 @@ MAX_UPLOAD_BYTES = 100 * 1024**2
 # entries cost at most one Pinata listing per TTL regardless of traffic.
 PUBLIC_CACHE_TTL = 60.0
 
-# Anonymous downloads redirect here instead of PINATA_GATEWAY, which may be
-# a dedicated (bandwidth-metered) gateway — only signed-in users spend it.
-PUBLIC_FALLBACK_GATEWAY = "https://dweb.link"
-
 # Module attributes resolved at call time so tests can swap in fakes.
 _pinata_client: PinataClient | None = None
 _public_cache: tuple[float, list[dict]] | None = None
@@ -261,18 +257,13 @@ async def assets_update(request: Request):
 async def assets_download(request: Request, cid: str):
     """Redirect to the file bytes — they never transit the dashboard pod.
 
-    Public files live on world-readable IPFS, so the redirect is anonymous,
-    but split-gateway: only signed-in users go through PINATA_GATEWAY
-    (possibly dedicated and bandwidth-metered); anonymous requests get the
-    free public gateway. Private files need a signed-in user and get a
-    short-lived signed URL.
+    Public files live on world-readable IPFS, so anyone gets a redirect to
+    PINATA_GATEWAY, signed in or not. Private files need a signed-in user and
+    get a short-lived signed URL.
     """
     network = request.query_params.get("network", "private")
     if network == "public":
-        if user_from_request(request) is not None:
-            gateway = os.environ.get("PINATA_GATEWAY", PUBLIC_FALLBACK_GATEWAY)
-        else:
-            gateway = PUBLIC_FALLBACK_GATEWAY
+        gateway = os.environ["PINATA_GATEWAY"]
         return RedirectResponse(f"{gateway}/ipfs/{cid}", status_code=302)
 
     _require_user(request)

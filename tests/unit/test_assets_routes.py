@@ -383,15 +383,14 @@ class TestDownload:
         assert resp.status_code == 302
         assert resp.headers["location"] == "https://gw.example/ipfs/bafy123"
 
-    def test_public_anonymous_redirects_to_public_gateway(
+    def test_public_anonymous_redirects_to_the_same_gateway(
         self, fake_pinata, client, monkeypatch
     ):
-        """Split-gateway policy: anonymous downloads never spend metered
-        dedicated-gateway bandwidth, whatever PINATA_GATEWAY is set to."""
+        """Anonymous downloads use PINATA_GATEWAY too: public gateways rate-limit."""
         monkeypatch.setenv("PINATA_GATEWAY", "https://gw.example")
         resp = client.get("/assets/download/bafy123", params={"network": "public"})
         assert resp.status_code == 302
-        assert resp.headers["location"] == "https://dweb.link/ipfs/bafy123"
+        assert resp.headers["location"] == "https://gw.example/ipfs/bafy123"
 
 
 class TestNotConfigured:

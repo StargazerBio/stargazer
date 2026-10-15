@@ -138,9 +138,10 @@ Private tabs mapping to Pinata's two networks:
 - **Public** needs no ownership — public-network bytes are world-readable on
   IPFS. A local run serves the public tab anonymously. The listing
   is served from a short in-process TTL cache (a semi-static mirror, not a
-  per-request proxy to the Pinata API), and anonymous downloads redirect to
-  a free public gateway so they never spend metered dedicated-gateway
-  bandwidth. `_owner` is stamped on public uploads too, as a publisher
+  per-request proxy to the Pinata API), and every download, anonymous or
+  not, redirects to `PINATA_GATEWAY`, the account's dedicated gateway, which
+  meters bandwidth. Free public gateways rate-limit full downloads, and
+  `dweb.link` no longer serves files. `_owner` is stamped on public uploads too, as a publisher
   byline. Rate limiting of the anonymous surface is deferred.
 
 **The page lives in the dashboard's box.** `assets.html` renders in the same
