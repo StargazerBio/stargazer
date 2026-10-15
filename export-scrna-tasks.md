@@ -14,14 +14,15 @@ Found in the docs correctness sweep (2026-10-09, #18).
 ## Verification
 
 Branch `fix/export-scrna-tasks`. Measured 2026-10-14 against an isolated
-store seeded with `scrna_demo`, through the MCP server over stdio
-(verify-stargazer's new `mcp-server` feature, `scripts/mcp_call.py`):
+store seeded with `scrna_demo`, through the MCP server over stdio (a small
+client started the server the way an agent harness does):
 
 - `main`: `run_task` for `qc_filter` raises `ValueError: Unknown task`.
 - Branch: `list_tasks` lists all six scRNA tasks, and `run_task` runs
   `qc_filter` for `s1d1` and stores `s1d1_qc_filtered.h5ad`, whose 6307 x 21675
   matches its keyvalues.
-- `test_discovery_finds_all_tasks` failed before the fix on exactly the six
-  names; the unit tier passes (429).
+- The registry test failed before the fix on exactly the six names; the
+  unit tier passes (429). It now checks every task defined under
+  `stargazer.tasks` is registered (`test_discovery_finds_every_defined_task`).
 - `docs/reference/catalog.md` gains the six rows, matching the pre-commit
   catalog generator.
