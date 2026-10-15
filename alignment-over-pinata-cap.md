@@ -1,8 +1,9 @@
 ---
 title: Alignment can't be uploaded to Pinata
-status: doing
+status: review
 priority: normal
 created: 2026-10-13
+pr: 37
 ---
 
 Pinata refuses a new file with more than 9 keyvalues, `_owner` included.
@@ -34,3 +35,16 @@ this one has 10." The message is clearer, but the upload still can't happen.
 - Don't stamp `_owner` as a keyvalue on Pinata, and attribute some other way.
   This touches every type and the asset page's ownership checks.
 - Ask Pinata for a higher cap. Their error message invites it.
+
+## Verification
+
+Decided 2026-10-14: drop `format`. Branch `fix/alignment-over-pinata-cap`,
+measured 2026-10-15.
+
+- A unit test checks every SDK asset type with every field plus `_owner`
+  against the cap: only `alignment` failed before (10); all 16 pass after.
+  `variants` and `known_sites` are also at exactly 9.
+- Real Pinata API: `main` refuses an `Alignment` upload with `_owner` at 10
+  keys; on the branch a pinata-tier test uploads one with every field set,
+  reads back exactly 9 keys, and deletes it.
+- Unit tier 445, tasks tier 37 + 15 pass.
