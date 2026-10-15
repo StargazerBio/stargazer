@@ -1,6 +1,6 @@
 ---
 title: Small gaps found while testing on the devbox
-status: backlog
+status: doing
 priority: high
 created: 2026-10-09
 ---
