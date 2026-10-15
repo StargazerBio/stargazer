@@ -17,11 +17,12 @@ async def find_markers(
 ) -> AnnData:
     """Identify marker genes for each cluster using differential expression.
 
-    Uses raw count data from .layers["counts"] for statistical testing.
+    Tests the log-normalized expression in .X, which scanpy's fold changes
+    assume; the raw counts in .layers["counts"] would skew them.
     Results are stored in .uns["rank_genes_groups"].
 
     Args:
-        adata: Clustered AnnData asset with .layers["counts"]
+        adata: Clustered AnnData asset with log-normalized .X
         groupby: .obs column to group cells by (cluster labels)
         method: Statistical test method ("wilcoxon", "t-test", etc.)
 
@@ -33,7 +34,7 @@ async def find_markers(
     logger.info(adata.to_dict())
     ad = sc.read_h5ad(await adata.fetch())
 
-    sc.tl.rank_genes_groups(ad, groupby=groupby, method=method, layer="counts")
+    sc.tl.rank_genes_groups(ad, groupby=groupby, method=method)
 
     out_path = _storage.default_client.local_dir / f"{adata.sample_id}_markers.h5ad"
     ad.write_h5ad(out_path)
