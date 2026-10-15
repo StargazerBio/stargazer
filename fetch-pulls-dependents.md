@@ -1,6 +1,6 @@
 ---
 title: Asset.fetch() pulls every asset that records the CID
-status: backlog
+status: doing
 priority: high
 created: 2026-10-09
 ---
