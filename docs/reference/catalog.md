@@ -56,5 +56,5 @@
 
 | Name | Description | Files |
 |------|-------------|-------|
-| `scrna_demo` | Sample scRNA-seq mouse brain data (10x Genomics) for demo workflows | 2 |
+| `scrna_demo` | Human bone marrow mononuclear cells from two healthy donors (10x Multiome gene expression) for demo workflows | 2 |
 | `variant_calling_demo` | TP53 region test fixtures (reference and paired reads) for GRCh38 | 3 |
