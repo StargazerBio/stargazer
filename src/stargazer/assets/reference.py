@@ -40,30 +40,36 @@ class Reference(Asset):
 class ReferenceIndex(Asset):
     """FASTA index (.fai) file asset.
 
-    Carries reference_cid linking back to the Reference it was built from.
+    A companion: `companion_of` is the CID of the Reference it indexes.
     """
 
     _asset_key: ClassVar[str] = "reference_index"
     build: str = ""
     tool: str = ""
-    reference_cid: str = ""
+    companion_of: str = ""
 
 
 @dataclass
 class SequenceDict(Asset):
-    """Sequence dictionary (.dict) file asset."""
+    """Sequence dictionary (.dict) file asset.
+
+    A companion: `companion_of` is the CID of the Reference it describes.
+    """
 
     _asset_key: ClassVar[str] = "sequence_dict"
     build: str = ""
     tool: str = ""
-    reference_cid: str = ""
+    companion_of: str = ""
 
 
 @dataclass
 class AlignerIndex(Asset):
-    """Aligner index file asset (one file per index file for multi-file indices)."""
+    """Aligner index file asset (one file per index file for multi-file indices).
+
+    A companion: `companion_of` is the CID of the Reference it indexes.
+    """
 
     _asset_key: ClassVar[str] = "aligner_index"
     build: str = ""
     aligner: str = ""
-    reference_cid: str = ""
+    companion_of: str = ""

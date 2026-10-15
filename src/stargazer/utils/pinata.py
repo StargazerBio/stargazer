@@ -38,6 +38,12 @@ TUS_CHUNK_BYTES = 48 * 1024**2
 # A metadata update has no such limit, so only uploads are checked.
 MAX_KEYVALUES = 9
 
+# Pinata refuses a key or value longer than this on a new file (measured
+# 2026-10-15: 250 stored, 251 refused). An update allows 255 and answers 256
+# with a bare "malformed" 400; both are held to 250, so whatever can be
+# edited onto a record could also be uploaded with it.
+MAX_KEYVALUE_CHARS = 250
+
 
 def _tus_metadata(filename: str, network: str, keyvalues: dict[str, str]) -> str:
     """Encode TUS ``Upload-Metadata``: comma-joined ``key b64(value)`` pairs.
@@ -80,6 +86,21 @@ def _check_keyvalue_count(kv: dict[str, str]) -> None:
             f"An upload can carry at most {MAX_KEYVALUES} metadata fields, "
             f"counting the asset type and owner; this one has {len(kv)}."
         )
+
+
+def _check_keyvalue_lengths(kv: dict[str, str]) -> None:
+    """Raise unless every key and value is at most ``MAX_KEYVALUE_CHARS`` long.
+
+    Checked before anything is sent, on uploads and updates alike. A list
+    stored as one value (``source_samples``) is what runs long.
+    """
+    for key, value in kv.items():
+        longest = max(len(key), len(value))
+        if longest > MAX_KEYVALUE_CHARS:
+            raise ValueError(
+                "A metadata field's name and value can each be at most "
+                f"{MAX_KEYVALUE_CHARS} characters; {key[:40]!r} has {longest}."
+            )
 
 
 class PinataClient:
@@ -196,9 +217,11 @@ class PinataClient:
 
         Raises:
             ValueError: when ``keyvalues`` has more than ``MAX_KEYVALUES``
-                keys, before any request is made
+                keys or one longer than ``MAX_KEYVALUE_CHARS``, before any
+                request is made
         """
         _check_keyvalue_count(keyvalues)
+        _check_keyvalue_lengths(keyvalues)
         payload: dict = {
             "date": int(time.time()),
             "expires": expires,
@@ -236,11 +259,13 @@ class PinataClient:
 
         Raises:
             ValueError: when the stamped keyvalues have more than
-                ``MAX_KEYVALUES`` keys, before any bytes are sent
+                ``MAX_KEYVALUES`` keys or one longer than
+                ``MAX_KEYVALUE_CHARS``, before any bytes are sent
         """
         path = Path(path)
         kv = _stamp_owner(component.to_keyvalues())
         _check_keyvalue_count(kv)
+        _check_keyvalue_lengths(kv)
         if path.stat().st_size > TUS_THRESHOLD_BYTES:
             await self._upload_tus(component, path, kv, network)
         else:
@@ -419,9 +444,12 @@ class PinataClient:
             The updated record: ``{cid, name, keyvalues, network}``
 
         Raises:
-            ValueError: when no file exists on ``network`` for ``cid``
+            ValueError: when a key or value is longer than
+                ``MAX_KEYVALUE_CHARS``, before any request is made, or when
+                no file exists on ``network`` for ``cid``
         """
         kv = _stamp_owner(dict(keyvalues))
+        _check_keyvalue_lengths(kv)
         async with aiohttp.ClientSession() as session:
             async with session.get(
                 f"{self.API_BASE}/files/{network}",

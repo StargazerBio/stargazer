@@ -26,7 +26,7 @@ async def test_alignment_fetch(fixtures_db):
     bam = specialize(bam_r)
 
     [idx_r] = await _storage_mod.default_client.query(
-        {"asset": "alignment_index", "alignment_cid": bam.cid}
+        {"asset": "alignment_index", "companion_of": bam.cid}
     )
     idx = specialize(idx_r)
 

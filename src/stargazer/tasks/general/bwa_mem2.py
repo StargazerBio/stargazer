@@ -57,7 +57,7 @@ async def bwa_mem2_index(ref: Reference) -> list[AlignerIndex]:
             index_path,
             aligner="bwa-mem2",
             build=ref.build,
-            reference_cid=ref.cid,
+            companion_of=ref.cid,
         )
         indices.append(idx)
 

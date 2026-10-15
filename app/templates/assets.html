@@ -443,11 +443,15 @@ const owner = (r) => (r.keyvalues && r.keyvalues._owner) || "shared";
 // On the public tab, flag records the signed-in user owns so they read green.
 // (Private is already all-yours, so it gets no green — that would be noise.)
 const ownedByUser = (r) => state.network === "public" && !!USERNAME && owner(r) === USERNAME;
-// Relationship keys: any keyvalue ending in _cid with a non-empty value.
-// Bare "cid" is excluded (no underscore prefix on the suffix boundary).
+// Relationship keys: companion_of, and any keyvalue ending in _cid, with a
+// non-empty value. Bare "cid" is excluded (no underscore before the suffix).
 function relKeys(kv) {
-    return Object.keys(kv || {}).filter((k) => k !== "cid" && k.endsWith("_cid") && kv[k]);
+    return Object.keys(kv || {}).filter(
+        (k) => (k === "companion_of" || (k !== "cid" && k.endsWith("_cid"))) && kv[k]
+    );
 }
+// "reference_cid" → "reference"; "companion_of" → "companion of".
+const relLabel = (k) => (k === "companion_of" ? "companion of" : k.slice(0, -4));
 
 // ---- data ----------------------------------------------------------------
 
@@ -544,7 +548,7 @@ function graphElements(records) {
         for (const k of relKeys(r.keyvalues)) {
             const tgt = r.keyvalues[k];
             if (ids.has(tgt) && tgt !== r.cid) {
-                edges.push({ data: { id: r.cid + "__" + k + "__" + tgt, source: r.cid, target: tgt, label: k.slice(0, -4) } });
+                edges.push({ data: { id: r.cid + "__" + k + "__" + tgt, source: r.cid, target: tgt, label: relLabel(k) } });
                 deg[r.cid] = (deg[r.cid] || 0) + 1;
                 deg[tgt] = (deg[tgt] || 0) + 1;
             }
@@ -790,7 +794,7 @@ function renderDetail() {
     for (const k of relKeys(kv)) {
         const target = kv[k];
         const found = state.records.find((r) => r.cid === target);
-        const label = esc(k.slice(0, -4));
+        const label = esc(relLabel(k));
         if (found) {
             links += `<span class="link-chip" data-goto="${esc(target)}">${label}: ${esc(found.name || shortCid(target))}</span>`;
         } else {

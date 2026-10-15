@@ -22,7 +22,7 @@ class MyOutput(Asset):
     alignment_cid: str = ""
 ```
 
-The `_asset_key` must be unique, and every field needs a default: the base class's fields have them, and older records may lack a newer field. The class registers itself via `__init_subclass__` when its module is imported, so import it in `src/stargazer/assets/__init__.py` and add it to `__all__`. A `<asset_key>_cid` field such as `alignment_cid` records which asset this one came from, and makes it a companion: fetching that alignment brings this file along.
+The `_asset_key` must be unique, and every field needs a default: the base class's fields have them, and older records may lack a newer field. The class registers itself via `__init_subclass__` when its module is imported, so import it in `src/stargazer/assets/__init__.py` and add it to `__all__`. A `<asset_key>_cid` field such as `alignment_cid` records which asset this one came from, and `assemble(alignment_cid=...)` finds it. If instead a tool needs this file beside its parent, as an index sits beside its BAM, give it a `companion_of: str = ""` field and set it to the parent's CID: fetching the parent then brings this file along.
 
 ## 2. Create the Task Module
 

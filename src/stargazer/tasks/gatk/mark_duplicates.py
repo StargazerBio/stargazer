@@ -75,7 +75,7 @@ async def mark_duplicates(alignment: Alignment) -> Alignment:
     await idx.update(
         bam_index,
         sample_id=alignment.sample_id,
-        alignment_cid=marked_bam.cid,
+        companion_of=marked_bam.cid,
     )
 
     if metrics_file.exists():

@@ -50,7 +50,7 @@ async def create_sequence_dictionary(ref: Reference) -> SequenceDict:
         dict_path,
         build=ref.build,
         tool="gatk_CreateSequenceDictionary",
-        reference_cid=ref.cid,
+        companion_of=ref.cid,
     )
 
     logger.info(seq_dict.to_dict())

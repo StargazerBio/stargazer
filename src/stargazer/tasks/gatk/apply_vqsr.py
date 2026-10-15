@@ -108,7 +108,7 @@ async def apply_vqsr(
     idx_path = output_dir / f"{output_vcf.name}.idx"
     if idx_path.exists():
         vidx = VariantsIndex()
-        await vidx.update(idx_path, sample_id=sample_id, variants_cid=filtered_vcf.cid)
+        await vidx.update(idx_path, sample_id=sample_id, companion_of=filtered_vcf.cid)
 
     logger.info(filtered_vcf.to_dict())
     return filtered_vcf

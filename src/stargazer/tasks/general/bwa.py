@@ -55,7 +55,7 @@ async def bwa_index(ref: Reference) -> list[AlignerIndex]:
             index_path,
             aligner="bwa",
             build=ref.build,
-            reference_cid=ref.cid,
+            companion_of=ref.cid,
         )
         indices.append(idx)
 

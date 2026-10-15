@@ -87,9 +87,10 @@ def _():
         `SampleSheet` is imported straight from the assets tutorial — the
         same registered class, no copy. Here we add a tiny
         `CohortSummary` output type. Notice `sample_sheet_cid` on the
-        summary — that's the **companion pattern** from the asset
-        tutorial in action: any `CohortSummary` knows which `SampleSheet`
-        produced it, so `sheet.fetch()` will pull the summary alongside.
+        summary: any `CohortSummary` knows which `SampleSheet` produced
+        it, so `assemble(sample_sheet_cid=sheet.cid)` finds every summary
+        of a sheet. It isn't a companion (no `companion_of`), so
+        `sheet.fetch()` downloads only the sheet.
         """
     )
 

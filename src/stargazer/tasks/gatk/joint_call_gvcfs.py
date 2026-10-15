@@ -121,7 +121,7 @@ async def joint_call_gvcfs(
     idx_path = output_dir / f"{output_vcf.name}.idx"
     if idx_path.exists():
         vidx = VariantsIndex()
-        await vidx.update(idx_path, sample_id=cohort_id, variants_cid=vcf.cid)
+        await vidx.update(idx_path, sample_id=cohort_id, companion_of=vcf.cid)
 
     logger.info(vcf.to_dict())
     return vcf

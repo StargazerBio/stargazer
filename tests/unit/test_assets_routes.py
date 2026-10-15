@@ -20,7 +20,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.assets import router
-from stargazer.utils.pinata import _check_keyvalue_count
+from stargazer.utils.pinata import _check_keyvalue_count, _check_keyvalue_lengths
 
 JWT = "test-pinata-jwt"
 
@@ -56,6 +56,7 @@ class FakePinata:
         self, filename, keyvalues, network, max_file_size=None
     ):
         _check_keyvalue_count(keyvalues)
+        _check_keyvalue_lengths(keyvalues)
         self.sign_calls.append(
             {
                 "filename": filename,
@@ -67,6 +68,7 @@ class FakePinata:
         return "https://uploads.example/signed"
 
     async def update_metadata(self, cid, keyvalues, network=None):
+        _check_keyvalue_lengths(keyvalues)
         self.update_calls.append(
             {"cid": cid, "keyvalues": dict(keyvalues), "network": network}
         )
@@ -307,6 +309,21 @@ class TestUpdate:
         # _owner re-stamped from the session, after validation.
         assert call["keyvalues"]["_owner"] == "octocat"
         assert call["keyvalues"]["sample_id"] == "S2"
+
+    def test_overlong_value_is_400(self, fake_pinata, client):
+        _auth(client, "octocat")
+        resp = self._post(
+            client,
+            cid="bafybam",
+            network="public",
+            keyvalues={"asset": "alignment", "sample_id": "S" * 251},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == (
+            "A metadata field's name and value can each be at most 250 "
+            "characters; 'sample_id' has 251."
+        )
+        assert fake_pinata.update_calls == []
 
     def test_non_owner_403(self, fake_pinata, client):
         _auth(client, "mallory")  # bafybam is owned by octocat

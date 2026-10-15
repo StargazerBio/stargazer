@@ -151,8 +151,9 @@ the asset graph is a separate foreground canvas. The browse surface offers two
 interchangeable renderings of the same listing, switched by a Graph/List
 toggle (Graph is the default):
 
-- **Graph** draws assets as nodes and their `*_cid` provenance links
-  (`reference_cid`, `mate_cid`, `alignment_cid`, …) as edges — a foreground
+- **Graph** draws assets as nodes and their links as edges: `companion_of`,
+  and the `*_cid` provenance links (`reference_cid`, `mate_cid`,
+  `alignment_cid`, …) — a foreground
   constellation echoing the background field. Hovering a node peeks its
   metadata; clicking pins a detail card with the full metadata, its linked
   assets, and a download button. It's rendered with **Cytoscape.js** (vendored,

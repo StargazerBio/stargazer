@@ -76,7 +76,7 @@ async def haplotype_caller(
     if idx_path.exists():
         vidx = VariantsIndex()
         await vidx.update(
-            idx_path, sample_id=alignment.sample_id, variants_cid=gvcf.cid
+            idx_path, sample_id=alignment.sample_id, companion_of=gvcf.cid
         )
 
     logger.info(gvcf.to_dict())

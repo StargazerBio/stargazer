@@ -54,7 +54,7 @@ class MyOutput(Asset):
 
 - Define types in src/stargazer/assets/
 - Use descriptive names (Alignment, Variants, AnnData)
-- A `<asset_key>_cid` field links an asset to the one it came from; fetching that one brings this one along
+- A `<asset_key>_cid` field links an asset to the one it came from, and `assemble(<asset_key>_cid=...)` finds it. A file a tool needs beside its parent, like an index, gets a `companion_of` field set to the parent's CID instead; fetching the parent then brings it along
 - Fields become keyvalues in storage — keep them flat strings/ints/bools
 
 ## Workflow Pattern
