@@ -183,7 +183,7 @@ Asset-manager routes are a separate router (`app/assets.py`, `include_router`ed 
 | `GET /assets/list?<kv>&network=` | public: none / private: signed in | Public served from a TTL cache (filters in-memory); private forces `_owner == user's subject` server-side (fail closed) |
 | `POST /assets/sign` | signed in | `build_asset()` validate → stamp `_owner` → mint Pinata signed upload URL (filename + keyvalues + `MAX_UPLOAD_BYTES` baked in) → `{url, keyvalues}`. More than `MAX_KEYVALUES` (9) stamped keys is a 400 here, since Pinata would mint the URL and then fail the browser's upload |
 | `POST /assets/update` | signed in + **owner** | Fail-closed ownership (record's `_owner` must equal the user's subject, read fresh) → `build_asset()` validate patch → re-stamp `_owner` → `PinataClient.update_metadata()` merge → updated record |
-| `GET /assets/download/{cid}?network=` | public: none / private: signed in | 302 redirect; split-gateway (anon public → `PUBLIC_FALLBACK_GATEWAY`, signed in → `PINATA_GATEWAY`); private → signed URL |
+| `GET /assets/download/{cid}?network=` | public: none / private: signed in | 302 redirect; public → `PINATA_GATEWAY` for everyone; private → signed URL |
 
 ## Asset Manager (mechanics)
 
@@ -253,7 +253,7 @@ No secret is required to deploy. The org admin's shell, when running `stargazer-
 | `STARGAZER_TARGET=union` | picks `.flyte/union.yaml` | the devbox is targeted |
 | `STARGAZER_WORKSPACE_ROOT` | where users' notebooks and assets live; baked into every dashboard and pod | `onboard`/`upgrade` refuse to start on Union |
 | `STARGAZER_STORE_REGION` | the bucket's region, for Litestream, when the pod has no `AWS_REGION` | Litestream looks it up, which the tenant's role refuses |
-| `PINATA_GATEWAY` | the account's dedicated gateway (`https://<name>.mypinata.cloud`) for public downloads; rides into every dashboard, notebook pod and run | public gateways (`dweb.link`), which answer 429 under repeated large downloads |
+| `PINATA_GATEWAY` | the account's dedicated gateway (`https://<name>.mypinata.cloud`) for public downloads; rides into every dashboard, notebook pod and run | the same dedicated gateway: it's the SDK's default (`config.py`) |
 
 Per dashboard, onboarding bakes in `FLYTE_PROJECT`, `SG_OWNER_SUBJECT` and `STARGAZER_OWNER`, the deployer's org as `FLYTE_ORG`, the notebook image URI as `STARGAZER_NOTEBOOK_IMAGE`, `STARGAZER_STORE_ROOT` (the workspace root), the dashboard's own index path as `STARGAZER_INDEX_URL`, and the deployer's commit as `STARGAZER_VERSION` (`git describe --always --dirty`, `unknown` outside a checkout), which the dashboard shows in its footer. The same commit is the deploy's version (`with_servecontext(version=…)`, which reaches the pod as `fserve --version`), so the console shows what each dashboard runs. A version is a label, not a key: redeploying under one the app already has, with a changed spec, still makes a new revision (measured 2026-10-13). Deploys stay on `serve` rather than `flyte.deploy`, which takes its project from init (each dashboard is in its user's project) and doesn't wait for the app to come up.
 

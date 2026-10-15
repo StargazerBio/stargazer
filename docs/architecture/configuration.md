@@ -28,7 +28,7 @@ All env var defaults are set in `config.py`. If set (even to empty string), the 
 | `STARGAZER_LOCAL` | Scratch space for task outputs, and the download cache | `~/.stargazer/local` | No |
 | `STARGAZER_OWNER` | Owner of new assets: their folder in the store, and `_owner` | None (unset → `local`) | No |
 | `PINATA_JWT` | Turns on the public tier | None (unset) | Only for public data |
-| `PINATA_GATEWAY` | IPFS gateway for public downloads | `https://dweb.link` | No |
+| `PINATA_GATEWAY` | IPFS gateway for public downloads | `https://maroon-written-fowl-769.mypinata.cloud`, the project's dedicated Pinata gateway | No |
 | `STARGAZER_TARGET` | Flyte backend for images and deploys: `devbox` or `union` | `devbox` | No |
 | `STARGAZER_REGISTRY` | Image push registry | `localhost:30000` on `devbox`; unset on `union` (the builder's own registry) | No |
 | `FLYTE_DOCKER_BUILD_EXTRA_ARGS` | Extra flags for local image builds | `--provenance=false` on `devbox` | No |

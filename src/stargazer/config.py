@@ -11,7 +11,8 @@ deploy.
 
 Rules:
 - PINATA_JWT: No default — absence means no public tier (Pinata) at all.
-- PINATA_GATEWAY: IPFS gateway for public downloads. Defaults to dweb.link.
+- PINATA_GATEWAY: IPFS gateway for public downloads. Defaults to the project's
+  dedicated Pinata gateway.
 - STARGAZER_LOCAL: Scratch space for task outputs and the download cache.
   Defaults to ~/.stargazer/local.
 - STARGAZER_STORE_ROOT: Where asset bytes are stored — a local directory or a
@@ -46,7 +47,12 @@ from loguru import logger as logger  # noqa: PLC0414
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-os.environ.setdefault("PINATA_GATEWAY", "https://dweb.link")
+# The account's dedicated gateway: public ones rate-limit full downloads, and
+# dweb.link stopped serving files on 2026-09-21. Every download through it,
+# signed in or not, counts against the account's bandwidth.
+os.environ.setdefault(
+    "PINATA_GATEWAY", "https://maroon-written-fowl-769.mypinata.cloud"
+)
 os.environ.setdefault("STARGAZER_LOCAL", str(Path.home() / ".stargazer" / "local"))
 
 # Storage locations set explicitly (a deploy, a pod's env) are forwarded into
@@ -96,7 +102,7 @@ def _stargazer_env_vars() -> dict[str, str]:
     explicitly: a pod can't use the local store or index.
     """
     env = {
-        "PINATA_GATEWAY": os.environ.get("PINATA_GATEWAY", "https://dweb.link"),
+        "PINATA_GATEWAY": os.environ["PINATA_GATEWAY"],
         "STARGAZER_TARGET": os.environ["STARGAZER_TARGET"],
         **_EXPLICIT_STORAGE,
     }
