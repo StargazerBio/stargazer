@@ -210,7 +210,7 @@ The project follows this structure:
 - **Naming Convention:** Use descriptive, action-oriented names
   - Task files: `{tool}.py` or `{function}.py` within domain subdirectories
   - Task functions: `{action}_{tool}` (e.g., `bwa_mem`, `haplotype_caller`, `sort_sam`)
-- **One Task Per Function:** Each task should do one thing well
+- **One Task Per Function:** Each task should do one thing well. A task never makes up for a missing input by doing another task's work (indexing, re-running a tool, calling another task): it raises, naming the missing input and the task that produces it. Running one task after another belongs in a workflow
 - **Use Structured I/O:** Leverage dataclasses from `assets/` for inputs/outputs
 - **Resource Specification:** Define appropriate resource requests (CPU, memory, GPU)
 
