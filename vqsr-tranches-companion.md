@@ -1,6 +1,6 @@
 ---
 title: Store the VQSR tranches file as a companion asset
-status: backlog
+status: doing
 priority: high
 created: 2026-10-09
 ---
