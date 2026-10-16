@@ -87,7 +87,7 @@ A companion is a file a tool expects beside another, such as an index or a seque
 3. Downloads them into the same directory, so tools find an index next to its file
 4. Returns the asset's local path
 
-Example: `Reference(cid="bafk…").fetch()` also finds and downloads every `ReferenceIndex`, `SequenceDict` and `AlignerIndex` with `companion_of="bafk…"`. The typed companions are `AlignmentIndex`, `ReferenceIndex`, `SequenceDict`, `AlignerIndex`, `VariantsIndex` and `KnownSitesIndex`, but any asset with `companion_of` set is one, a bare `Asset` included.
+Example: `Reference(cid="bafk…").fetch()` also finds and downloads every `ReferenceIndex`, `SequenceDict` and `AlignerIndex` with `companion_of="bafk…"`. The typed companions are `AlignmentIndex`, `ReferenceIndex`, `SequenceDict`, `AlignerIndex`, `VariantsIndex`, `KnownSitesIndex`, and a `VQSRModel`'s `VQSRModelIndex` and `VQSRTranches`, but any asset with `companion_of` set is one, a bare `Asset` included.
 
 `companion_of` is the only link `fetch()` follows. The `{asset_key}_cid` fields and `source_cid` record which input an output was made from — `reference_cid` and `r1_cid` on an `Alignment`, `alignment_cid` on a `BQSRReport`. That's provenance: `assemble(reference_cid=…)` finds every alignment made against a reference, and `fetch()` leaves them behind. Reads link their mate through `mate_cid`, which is neither.
 

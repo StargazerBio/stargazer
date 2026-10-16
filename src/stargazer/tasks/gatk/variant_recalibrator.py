@@ -7,7 +7,14 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
 import stargazer.utils.storage as _storage
-from stargazer.assets import KnownSites, Reference, Variants, VQSRModel
+from stargazer.assets import (
+    KnownSites,
+    Reference,
+    Variants,
+    VQSRModel,
+    VQSRModelIndex,
+    VQSRTranches,
+)
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
 
@@ -39,8 +46,8 @@ async def variant_recalibrator(
         mode: Variant type to recalibrate — "SNP" or "INDEL"
 
     Returns:
-        VQSRModel asset (the recal file), with the tranches file's local
-        path in `tranches_path`
+        VQSRModel asset (the recal file). Its index and the tranches file
+        are stored as its companions, so `apply_vqsr` in any pod gets them.
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360035531612-Variant-Quality-Score-Recalibration-VQSR
@@ -107,9 +114,16 @@ async def variant_recalibrator(
         output_recal,
         sample_id=sample_id,
         mode=mode,
-        tranches_path=str(output_tranches),
         build=ref.build,
         variants_cid=vcf.cid,
+    )
+    await VQSRModelIndex().update(
+        output_dir / f"{output_recal.name}.idx",
+        sample_id=sample_id,
+        companion_of=model.cid,
+    )
+    await VQSRTranches().update(
+        output_tranches, sample_id=sample_id, companion_of=model.cid
     )
 
     logger.info(model.to_dict())

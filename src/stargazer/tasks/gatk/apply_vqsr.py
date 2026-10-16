@@ -6,10 +6,14 @@ Applies VQSR recalibration to a VCF using GATK ApplyVQSR.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-from pathlib import Path
-
 import stargazer.utils.storage as _storage
-from stargazer.assets import Reference, Variants, VariantsIndex, VQSRModel
+from stargazer.assets import (
+    Reference,
+    Variants,
+    VariantsIndex,
+    VQSRModel,
+    assemble,
+)
 from stargazer.config import gatk_env, logger
 from stargazer.utils import _run
 
@@ -26,10 +30,10 @@ async def apply_vqsr(
     """
     Apply VQSR recalibration to a VCF using GATK ApplyVQSR.
 
-    The recalibration mode (SNP or INDEL) is read from `vqsr_model.mode`, and
-    the tranches file from `vqsr_model.tranches_path`. If
-    truth_sensitivity_filter_level is not provided, defaults to 99.5 for SNP
-    and 99.0 for INDEL.
+    The recalibration mode (SNP or INDEL) is read from `vqsr_model.mode`.
+    The recal file's index and the tranches file are the model's stored
+    companions. If truth_sensitivity_filter_level is not provided, defaults
+    to 99.5 for SNP and 99.0 for INDEL.
 
     Args:
         vcf: Raw (or SNP-filtered) VCF Variants asset
@@ -50,15 +54,15 @@ async def apply_vqsr(
     if mode not in ("SNP", "INDEL"):
         raise ValueError(f"VQSRModel mode must be 'SNP' or 'INDEL', got {mode!r}")
 
-    if not vqsr_model.tranches_path:
-        raise ValueError("VQSRModel is missing tranches_path")
-    tranches_path = Path(vqsr_model.tranches_path)
-
     filter_level = truth_sensitivity_filter_level or _DEFAULT_FILTER_LEVEL[mode]
 
     vcf_path = await vcf.fetch()
     ref_path = await ref.fetch()
     model_path = await vqsr_model.fetch()
+    tranches = await assemble(asset="vqsr_tranches", companion_of=vqsr_model.cid)
+    if not tranches:
+        raise ValueError(f"VQSRModel {vqsr_model.cid} has no stored tranches file")
+    tranches_path = await tranches[0].fetch()
 
     output_dir = _storage.default_client.local_dir
     sample_id = vcf.sample_id or "cohort"

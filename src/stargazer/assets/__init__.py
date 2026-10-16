@@ -27,6 +27,8 @@ from stargazer.assets.variants import (
     Variants,
     VariantsIndex,
     VQSRModel,
+    VQSRModelIndex,
+    VQSRTranches,
 )
 from stargazer.config import logger
 
@@ -121,6 +123,8 @@ __all__ = [
     "ReferenceIndex",
     "SequenceDict",
     "VQSRModel",
+    "VQSRModelIndex",
+    "VQSRTranches",
     "Variants",
     "VariantsIndex",
     "assemble",
