@@ -35,6 +35,10 @@ the app on one side, tasks and workflows in the SDK on the other.
   the user's notebooks side by side into `/workspace`. So marimo's file
   explorer still shows them all, they can still import each other, and the
   SDK's source still isn't in view.
+- **Every file in the workspace is saved, not just notebooks.** A file the
+  user writes there, from a cell or the terminal, is saved as a plain asset (a
+  blob) and comes back at the same path the next time a pod starts. Notebooks
+  are the files that also carry `asset=notebook`.
 - **A notebook is an asset type like any other:** `Notebook`, in
   `src/stargazer/assets/`.
 - **Image and resources stay in the notebook.** This ticket leaves both as
@@ -86,10 +90,19 @@ disagree.
 and keeps the CID. The header's resources and the `main_img` setup line stay
 where they are.
 
-**Identity is the filename.** A notebook is `<slug>.py`, which is the index
-row's `name` and the `nb-<slug>-<mode>` app name. A user has few notebooks, so
-finding one by slug can be a filter over `assemble(asset="notebook")`. No new
-index query is needed.
+**Identity is the path in the workspace.** Every saved file carries a
+`workspace_path` keyvalue, such as `scrna.py` or `data/counts.csv`.
+
+- **Notebooks** are the top-level `.py` files, as they are today. A notebook
+  is a `Notebook` with `workspace_path=<slug>.py`, and the slug is also the
+  `nb-<slug>-<mode>` app name.
+- **Every other file** is a bare `Asset` with only `workspace_path`.
+  `specialize()` already returns a bare `Asset` for a record with no
+  registered type.
+- **Some files aren't saved:** dotfiles, `__pycache__/`, and marimo's own
+  `__marimo__/` session caches, which it writes beside each notebook.
+- **Lookups:** a user has few files, so finding one by path can be a filter
+  over their rows. No new index query is needed.
 
 **Storage.** A notebook is stored where every asset is,
 `<store root>/users/<owner>/assets/<cid>/<slug>.py`, with its row in the
@@ -99,9 +112,9 @@ user's index. `app/workspace_store.py` goes. After that,
 the store root directly and drop the variable. Check the Litestream replica
 path first: it's `<root>/users/<subject>/index`.
 
-**Replacing a notebook** stores the new bytes and writes the new row first.
-Only then does it delete every other notebook row with that slug, and the
-files those rows point to. A save that fails partway leaves the previous
+**Replacing a file** works the same way for notebooks and blobs. It stores
+the new bytes and writes the new row first. Only then does it delete every
+other row with that `workspace_path`, and the files those rows point to. A save that fails partway leaves the previous
 version. An interrupted save leaves two rows: the listing shows the one with
 the newest `created_at`, and the next save removes the other.
 
@@ -119,8 +132,14 @@ does, so install the SDK into the proxy's environment instead of
 reimplementing it there. Each kernel runs in its own sandbox venv and won't
 see it. Check how much it adds to the image.
 
-**Hydrating.** At launch the pod fetches every notebook asset its owner has
-into `/workspace/<slug>.py`, flat, as now. `/snapshots` goes.
+**Hydrating.** At launch the pod fetches every workspace file its owner has
+to `/workspace/<workspace_path>`. Notebooks land flat at the top, as now.
+`/snapshots` goes.
+
+**Change detection has to be cheap.** Today each save pass reads and hashes
+every file in full (`_digest(path.read_bytes())` in `app/proxy.py`). That's
+fine for notebooks, but not for a multi-gigabyte blob every 5 s. Compare size
+and modification time first, and hash only the files where either changed.
 
 **Dashboard.** The Workspace section lists the user's notebook assets, with
 New (from the blank or template seed), Edit and Run, the gear, delete, and
@@ -151,7 +170,13 @@ workspace stays on the scRNA tile, where it now creates a notebook asset.
       `tests/unit/test_app.py`, and delete the snapshot tests.
 - [ ] Proxy hydrate and save through `StorageClient`, with the SDK installed
       in the proxy's environment (the recipe in `app/per_notebook.py`).
-      Rewrite the hydrate and save tests in `tests/unit/test_proxy.py`.
+      Rewrite the hydrate and save tests in `tests/unit/test_proxy.py`, and
+      add:
+  - a CSV written to `data/` → saved as a bare asset with
+    `workspace_path=data/counts.csv`, and hydrated back to the same path
+  - a file under `__marimo__/` or `__pycache__/`, or a dotfile → not saved
+  - an unchanged file whose size and modification time match → not read on
+    the next pass
 - [ ] Remove `src/stargazer/notebooks/snapshots/`, `PUBLIC_SNAPSHOTS_DIR` and
       `PublicSnapshot`, `SNAPSHOT_NOTEBOOK_DIR`, `STARGAZER_WORKSPACE_ROOT`,
       and `tests/unit/test_workspace_store.py`.
@@ -177,6 +202,8 @@ workspace stays on the scRNA tile, where it now creates a notebook asset.
     its CID
   - a description edit keeps the CID, and a resource edit replaces it
   - delete removes the row and the file
+  - a file written from the terminal into `/workspace/data/` is there after
+    the pod scales to zero and is reopened
 
   Then add a feature file for saving notebooks, and stop every app the check
   started.
@@ -186,6 +213,15 @@ workspace stays on the scRNA tile, where it now creates a notebook asset.
 - [ ] **Q1. The save interval.** Each save now means a store PUT, index writes
       through the dashboard, and a delete. Keep 5 s unless measuring a busy
       editing session shows the dashboard feeling it.
+- [ ] **Q2. Deleting a file in the pod.** Today a deletion in the pod
+      doesn't reach the store, because deleting is a dashboard action. With
+      arbitrary files, `rm data/old.csv` in the terminal would come back at
+      the next launch.
+
+      Proposal: delete the asset when a file disappears, but only one this
+      pod hydrated or saved itself. A failed hydrate (which today starts an
+      empty workspace and keeps serving) then knows of no files, so it can't
+      delete the user's store.
 
 ## Related tickets
 
