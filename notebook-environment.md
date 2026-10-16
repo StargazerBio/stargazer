@@ -87,9 +87,25 @@ carries over to tasks.
       notebooks? Not checked.
 - [ ] A notebook opened from the file explorer runs in the pod it was opened
       in, on that pod's environment. This was measured locally (ticket
-      `notebooks-as-assets`). Colab avoids it by giving each notebook its own
-      runtime. Accept it and document it, or show the pod's environment in
-      the notebook?
+      `notebooks-as-assets`).
+
+      **Colab has no in-runtime notebook picker.** Its Files panel shows the
+      runtime's own disk (`/content`), not your notebooks, which live in
+      Drive. You open a notebook through File → Open notebook, and each
+      notebook connects to its own runtime. Colab Enterprise's docs say
+      several notebooks can share a runtime, but recommend against it: the
+      notebooks split its compute and can change each other's state
+      ([docs](https://docs.cloud.google.com/colab/docs/manage-runtimes)).
+      Not checked: what clicking an `.ipynb` in the Files panel does.
+
+      **Proposal:** match Colab. The proxy refuses a kernel session for any
+      notebook other than the one the pod was launched for, and sends the
+      user to launch that notebook from the dashboard, on its own pod.
+      Importing a sibling notebook is unaffected, since it runs as code in
+      the launched notebook's kernel, not as a session. The files stay
+      visible in the explorer. Not checked: which requests marimo makes when
+      a notebook is opened from the explorer (a `?file=` page load, a
+      websocket, or both).
 
 ## Pieces (once the proposal is agreed)
 
