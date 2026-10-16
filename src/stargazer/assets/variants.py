@@ -67,16 +67,40 @@ class KnownSitesIndex(Asset):
 
 @dataclass
 class VQSRModel(Asset):
-    """VQSR recalibration model: the .recal file, plus where its tranches went.
+    """VQSR recalibration model: the .recal file VariantRecalibrator writes.
 
-    Produced by VariantRecalibrator. The recal file is the stored asset;
-    `tranches_path` records where the tranches file was written in the pod
-    that produced it, and the tranches file itself isn't stored.
+    ApplyVQSR needs two more files from the same run, stored as its
+    companions: the recal file's index (`VQSRModelIndex`) and the tranches
+    file (`VQSRTranches`).
     """
 
     _asset_key: ClassVar[str] = "vqsr_model"
     sample_id: str = ""
     mode: str = "SNP"
-    tranches_path: str = ""
     build: str = ""
     variants_cid: str = ""
+
+
+@dataclass
+class VQSRModelIndex(Asset):
+    """VCF index (.idx) for a VQSRModel's recal file.
+
+    A companion: `companion_of` is the CID of the VQSRModel it indexes.
+    """
+
+    _asset_key: ClassVar[str] = "vqsr_model_index"
+    sample_id: str = ""
+    companion_of: str = ""
+
+
+@dataclass
+class VQSRTranches(Asset):
+    """VQSR tranches file: the VQSLOD cutoff for each truth-sensitivity level.
+
+    A companion: `companion_of` is the CID of the VQSRModel it was built
+    with.
+    """
+
+    _asset_key: ClassVar[str] = "vqsr_tranches"
+    sample_id: str = ""
+    companion_of: str = ""

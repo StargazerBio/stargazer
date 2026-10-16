@@ -56,7 +56,9 @@
 | `sequence_dict` | `SequenceDict` | `assets/reference.py` | `build`, `companion_of`, `tool` |
 | `variants` | `Variants` | `assets/variants.py` | `build`, `caller`, `sample_count`, `sample_id`, `source_samples`, `variant_type`, `vqsr_mode` |
 | `variants_index` | `VariantsIndex` | `assets/variants.py` | `companion_of`, `sample_id` |
-| `vqsr_model` | `VQSRModel` | `assets/variants.py` | `build`, `mode`, `sample_id`, `tranches_path`, `variants_cid` |
+| `vqsr_model` | `VQSRModel` | `assets/variants.py` | `build`, `mode`, `sample_id`, `variants_cid` |
+| `vqsr_model_index` | `VQSRModelIndex` | `assets/variants.py` | `companion_of`, `sample_id` |
+| `vqsr_tranches` | `VQSRTranches` | `assets/variants.py` | `companion_of`, `sample_id` |
 
 ## Bundles
 
