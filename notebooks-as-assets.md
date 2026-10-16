@@ -160,6 +160,13 @@ notebook is Q1.
   - A user's notebooks sit side by side in `/workspace`, so they can import
     each other as plain modules. Inferred: marimo puts the notebook's
     directory on `sys.path`. Not checked in a pod.
+  - marimo's file explorer opens at the pod's working directory, `/workspace`.
+    So it shows all of the user's notebooks and nothing else, even when a
+    tutorial is open. The SDK at `/stargazer` and the user's snapshots in
+    `/snapshots` don't appear at the top level. Measured locally (2026-10-16)
+    with the image's marimo 0.23.6 and the pod's layout: `marimo edit` on a
+    file roots `/api/files/list_files` at the working directory. Not checked
+    in a pod.
   - A notebook asset fetched on its own has neither of these.
 - [ ] **Q2. The save interval.** Each save now means a store PUT, index writes
       through the dashboard, and a delete. Keep 5 s unless measuring a busy
