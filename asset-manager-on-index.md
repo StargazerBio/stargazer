@@ -12,11 +12,12 @@ asset is in the graph and list browser that the separate asset page has
 today, with upload, download and metadata edits. The separate `/assets` page
 and its link in the avatar menu go.
 
-This is the frame the notebook work lands in. Ticket `notebooks-as-assets`
-makes notebooks assets, and ticket `public-notebooks` adds the public ones.
-None of the three blocks the others. Whichever of this ticket and
-`notebooks-as-assets` lands second makes the browser leave out
-`asset=notebook`, since notebooks have their own section.
+This is the frame the notebook work lands in. Ticket `save-whole-workspace`
+keeps the user's notebooks as files in their workspace, and ticket
+`public-notebooks` makes a published notebook an asset. None of the three
+blocks the others. Whichever of this ticket and `public-notebooks` lands
+second makes the browser leave out `asset=notebook`, since notebooks have
+their own section.
 
 To get there, the browser's Private tab first moves off Pinata, onto the
 user's index and store. That move is the rest of this ticket.
@@ -124,7 +125,7 @@ routes switch from Pinata to those two for `network=private`;
       sections: the Graph and List views, the detail card and the upload
       panel. The routes stay under `/assets/*`. The `/assets` page and its
       link in the avatar menu go.
-- [ ] If `notebooks-as-assets` has landed, the browser leaves out
+- [ ] If `public-notebooks` has landed, the browser leaves out
       `asset=notebook` rows. Test it: a notebook row in the index → it isn't
       in the browser's listing.
 - [ ] Verify on the devbox dashboard (`cli/devbox_dashboard.py`; the

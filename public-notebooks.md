@@ -4,17 +4,21 @@ status: backlog
 priority: normal
 created: 2026-10-16
 blocked_by:
-  - notebooks-as-assets
   - publish-asset
 ---
 
-Once notebooks are assets (ticket `notebooks-as-assets`), making one public
-works like making any other asset public. A Publish button on a notebook calls
-`publish(asset)` (ticket `publish-asset`). That puts the notebook on Pinata's
-public network, with the same CID and its keyvalues. The dashboard then lists
-public notebooks next to the user's own. Opening a public notebook for editing
-saves the user's edits as their own private notebook, so the copy needs no
-separate action.
+A notebook in a user's workspace is a plain file (ticket
+`save-whole-workspace`). It becomes an asset when it's published (decided
+2026-10-17). A Publish button on a workspace notebook builds a `Notebook`
+asset from the file and calls `publish(asset)` (ticket `publish-asset`). That
+puts the notebook on Pinata's public network, with its CID and keyvalues. The
+dashboard then lists public notebooks next to the user's own. Opening a public
+notebook for editing copies it into the user's workspace, where it's saved
+like any other file.
+
+**The `Notebook` asset type** lives in `src/stargazer/assets/notebook.py`,
+with `_asset_key = "notebook"` and the fields `title` and `description`, taken
+from the notebook's header when it's published. Nothing else creates one.
 
 ## The tutorials and the scRNA notebook
 
