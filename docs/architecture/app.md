@@ -97,14 +97,19 @@ See [Configuration](configuration.md) for the storage model and `.opencode/refer
 
 ## Asset Manager
 
-The dashboard also hosts `/assets` — a browse-and-upload surface over the
-asset/metadata system, backed by Pinata directly (not the storage index). **It is off
-on hosted dashboards for now**: a user can read their own dashboard's
-deployment, so a shared asset-store key can't be baked into it, and the page
-says asset storage isn't available yet. It returns with per-user storage.
-What follows describes the surface as it works when a key is configured
-(locally, for example). Routes live in `app/assets.py`; mechanics and the
-route table are in `.opencode/reference/architecture/app_internals.md`.
+The dashboard also hosts `/assets` — a browse-and-upload surface over
+Pinata's public network, called directly (not the storage index). The
+dashboard gets the org's Pinata key as a Flyte secret: Union injects it into
+the pod and keeps only a reference in the app's spec, so the user who owns
+the dashboard can't read it there. The devbox drops app secrets, so a
+devbox dashboard says asset storage isn't available yet. Routes live in
+`app/assets.py`; mechanics and the route table are in
+`.opencode/reference/architecture/app_internals.md`.
+
+**Public only.** The key is shared across the org, and anyone who can run a
+task can reach it, so Pinata's private network would keep nothing private.
+The page has no Private tab, and every route refuses another network.
+Private assets return on the user's own index and store.
 
 **Uploads never transit the dashboard pod.** The page validates metadata and
 mints a Pinata **signed upload URL** (`POST /assets/sign`); the browser then
@@ -128,21 +133,14 @@ expected. Because the Pinata key is shared, this is attribution only — it
 drives default filtering, not access control; anyone holding the key can
 still edit or delete any record. See [Types → Ownership](types.md#ownership-_owner).
 
-**Two networks, two visibility rules.** The browse panel has Public and
-Private tabs mapping to Pinata's two networks:
-
-- **Private** fails closed — the server returns only records whose `_owner`
-  matches the signed-in user (the `_owner` filter is forced server-side, never
-  trusted from the query string). Unowned or other-owned private records are
-  invisible on the page, reachable only via SDK/MCP.
-- **Public** needs no ownership — public-network bytes are world-readable on
-  IPFS. A local run serves the public tab anonymously. The listing
-  is served from a short in-process TTL cache (a semi-static mirror, not a
-  per-request proxy to the Pinata API), and every download, anonymous or
-  not, redirects to `PINATA_GATEWAY`, the account's dedicated gateway, which
-  meters bandwidth. Free public gateways rate-limit full downloads, and
-  `dweb.link` no longer serves files. `_owner` is stamped on public uploads too, as a publisher
-  byline. Rate limiting of the anonymous surface is deferred.
+**Reading needs no ownership.** Public-network bytes are world-readable on
+IPFS, and a local run serves the page anonymously. The listing is served
+from a short in-process TTL cache (a semi-static mirror, not a per-request
+proxy to the Pinata API), and every download, anonymous or not, redirects to
+`PINATA_GATEWAY`, the account's dedicated gateway, which meters bandwidth.
+Free public gateways rate-limit full downloads, and `dweb.link` no longer
+serves files. `_owner` is stamped on uploads as a publisher byline. Rate
+limiting of the anonymous surface is deferred.
 
 **The page lives in the dashboard's box.** `assets.html` renders in the same
 glassy card as the notebook dashboard (reached from the avatar menu's
@@ -159,7 +157,7 @@ toggle (Graph is the default):
   assets, and a download button. It's rendered with **Cytoscape.js** (vendored,
   no build step), so it's interactive: scroll to zoom, drag to pan, drag a node
   to reposition it, double-click to reset, capped at 150 nodes. Links to assets
-  outside the current view (cross-network or owner-scoped-out) aren't drawn but
+  outside the current view (not in the public listing) aren't drawn but
   are listed on the card, so provenance is never hidden. On a record the signed-in user owns, the card also
   offers **Edit metadata** — an in-place fix for a mis-tagged record that
   merges the change (the CID is unchanged, so provenance edges survive). The
@@ -167,9 +165,9 @@ toggle (Graph is the default):
   via the MCP `update_file` tool.
 - **List** is the same records as a sortable table (CID, name, owner, type,
   metadata, download). The upload panel below is schema-driven — pick a
-  registered type or a bare/custom asset, fill metadata, choose the network —
-  and uploads go browser→Pinata via the signed URL, appearing optimistically
-  before Pinata's listing catches up.
+  registered type or a bare/custom asset, fill metadata — and uploads go
+  browser→Pinata via the signed URL, public, appearing optimistically before
+  Pinata's listing catches up.
 
 ## Images
 
