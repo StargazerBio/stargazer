@@ -20,18 +20,22 @@ one object per file at its path, under
 `/workspace`. While the pod runs, a background loop saves every file whose size
 or modification time changed, every `SG_SAVE_INTERVAL_SECONDS` (5 by default,
 0 for none), and deletes from the store the files deleted from `/workspace`. The `lifespan` shutdown hook
-does a final pass when the pod scales to zero. Dotfiles, `__pycache__/` and
-`__marimo__/` are never saved.
+does a final pass when the pod scales to zero. Dotfiles, `__pycache__/`,
+`__marimo__/` and files over `MAX_SAVED_BYTES` are never saved.
 
 It also injects a Quake-style dropdown terminal into marimo's HTML: every
 `text/html` response gets an xterm.js overlay (loaded from CDN) spliced in
 before `</body>`, toggled with Ctrl+` and wired to the `/__sg__/term`
-websocket below.
+websocket below. Beside it goes a banner naming any file over
+`MAX_SAVED_BYTES`, which isn't saved, with the cell that stores it as an
+asset instead.
 
 Reserved paths the proxy handles itself instead of forwarding:
 
 - `GET /__sg__/dashboard` — 302 to the owner's dashboard (`STARGAZER_ADMIN_URL`), so
   notebooks can link back with a stable relative path.
+- `GET /__sg__/save-status` — the files in `/workspace` over `MAX_SAVED_BYTES`,
+  which aren't saved; the injected banner polls it.
 - `GET /__sg__/ready` — 200 once local marimo answers, 503 while it's still
   cold-starting.
 - `WS  /__sg__/term` — PTY websocket. Spawns a login `bash` and
@@ -44,7 +48,7 @@ While marimo is still starting, a browser request gets a small self-refreshing
 Self-contained on purpose: the notebook image installs `fastapi`, `uvicorn`,
 `httpx` and `websockets` at system level next to the `flyte` SDK the base image
 already carries (used here for storage), and COPYs this file in as
-`/usr/local/lib/sg_proxy.py` (alongside `terminal_overlay.html`) — no stargazer
+`/usr/local/lib/sg_proxy.py` (alongside its two HTML fragments) — no stargazer
 or app-package install needed, and the top-level module name avoids colliding
 with Flyte's loaded_modules code bundle which ships an `app/` package into the
 pod's `/home/flyte` cwd at deploy time.
@@ -78,6 +82,10 @@ MARIMO_HTTP_PORT = 8081
 WORKSPACE_DIR = Path("/workspace")
 # Never saved: Python's bytecode caches and marimo's per-notebook session caches.
 _SKIPPED_DIRS = {"__pycache__", "__marimo__"}
+# A file over this isn't saved with the workspace: big data belongs in the asset
+# store, and the save at SIGTERM has to fit in the pod's grace period. The same
+# limit as an upload through the dashboard's asset page.
+MAX_SAVED_BYTES = 100 * 1024**2
 
 # Env keys never handed to the interactive shell. The suffix list catches future
 # secret-shaped vars without an explicit entry per name.
@@ -95,6 +103,9 @@ _STRIPPED_HEADERS = {"host", "cookie"}
 # In the notebook image it's baked next to this module (see per_notebook.py), so
 # resolving it relative to __file__ works both in-repo and in-pod.
 _TERM_INJECTION = (Path(__file__).parent / "terminal_overlay.html").read_bytes()
+# The notice naming files too big to save, spliced in the same way and baked
+# beside it.
+_SAVE_BANNER_INJECTION = (Path(__file__).parent / "save_banner.html").read_bytes()
 
 _STARTING_PAGE = """<!doctype html>
 <html><head><meta charset="utf-8"><meta http-equiv="refresh" content="2">
@@ -277,7 +288,7 @@ async def sync_once() -> list[str]:
     """Save every changed file in `/workspace`; return their relative paths.
 
     A file whose size and modification time match what was last stored isn't
-    read at all. A file deleted from `/workspace` is deleted from the store,
+    read at all, and nor is one over `MAX_SAVED_BYTES`. A file deleted from `/workspace` is deleted from the store,
     if this pod hydrated or saved it. A failed upload or delete is logged and
     retried on the next pass rather than raised.
     """
@@ -290,7 +301,7 @@ async def sync_once() -> list[str]:
     for rel, path in sorted(files.items()):
         try:
             stamp = _stamp(path)
-            if _synced.get(rel) == stamp:
+            if _synced.get(rel) == stamp or stamp[0] > MAX_SAVED_BYTES:
                 continue
             await _upload(f"{prefix}/{rel}", path.read_bytes())
         except Exception as exc:
@@ -385,6 +396,23 @@ async def dashboard_redirect() -> Response:
     """
     target = os.environ.get("STARGAZER_ADMIN_URL") or "/"
     return RedirectResponse(target, status_code=302)
+
+
+@asgi_app.get("/__sg__/save-status")
+async def save_status() -> dict:
+    """The files in `/workspace` too big to save, for the injected banner.
+
+    Read from disk on each request rather than from the last save pass, so the
+    banner works with the periodic save turned off too.
+    """
+    unsaved = []
+    if WORKSPACE_DIR.is_dir():
+        for rel, path in sorted(_workspace_files().items()):
+            with suppress(FileNotFoundError):
+                size = path.stat().st_size
+                if size > MAX_SAVED_BYTES:
+                    unsaved.append({"path": rel, "bytes": size})
+    return {"limit_bytes": MAX_SAVED_BYTES, "unsaved": unsaved}
 
 
 @asgi_app.get("/__sg__/ready")
@@ -572,7 +600,9 @@ async def http_proxy(request: Request, path: str) -> Response:
         # headers and let Starlette recompute the length.
         content = await resp.aread()
         await resp.aclose()
-        content = content.replace(b"</body>", _TERM_INJECTION + b"</body>", 1)
+        content = content.replace(
+            b"</body>", _TERM_INJECTION + _SAVE_BANNER_INJECTION + b"</body>", 1
+        )
         forbidden = _HOP_BY_HOP | {"content-encoding", "content-length"}
         out_headers = {
             k: v for k, v in resp.headers.items() if k.lower() not in forbidden

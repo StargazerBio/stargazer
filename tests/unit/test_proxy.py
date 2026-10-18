@@ -9,6 +9,7 @@ workspace hydrate/sync against a local store root through the real
 `httpx.MockTransport` installed as the proxy's shared upstream client.
 """
 
+import asyncio
 import os
 import time
 
@@ -365,6 +366,46 @@ async def test_store_files_the_pod_never_had_are_kept(pod_dirs):
     await proxy.sync_once()
 
     assert (stored / "qc.py").read_text() == "# qc\n"
+
+
+def test_file_over_the_limit_is_not_saved_and_is_reported(pod_dirs, owner_client):
+    """A file over 100 MB isn't saved, and the save status names it for the banner."""
+    workspace, stored = pod_dirs
+    workspace.mkdir()
+    (workspace / "qc.py").write_text("# qc\n")
+    assert owner_client.get("/__sg__/save-status").json() == {
+        "limit_bytes": 100 * 1024**2,
+        "unsaved": [],
+    }
+
+    big = workspace / "data" / "big.h5ad"
+    big.parent.mkdir()
+    with big.open("wb") as fh:
+        fh.truncate(100 * 1024**2 + 1)  # sparse: the test writes no data
+
+    assert asyncio.run(proxy.sync_once()) == ["qc.py"]
+    assert not (stored / "data" / "big.h5ad").exists()
+    assert owner_client.get("/__sg__/save-status").json() == {
+        "limit_bytes": 100 * 1024**2,
+        "unsaved": [{"path": "data/big.h5ad", "bytes": 100 * 1024**2 + 1}],
+    }
+
+
+def test_proxy_injects_the_save_banner_into_html(owner_client, upstream):
+    """Every marimo page gets the banner that polls the save status."""
+    upstream(
+        lambda req: httpx.Response(
+            200,
+            content=b"<html><body><div id='app'></div></body></html>",
+            headers={"content-type": "text/html; charset=utf-8"},
+        )
+    )
+
+    html = owner_client.get("/").content
+
+    assert b"sg-save-banner" in html
+    assert b"/__sg__/save-status" in html
+    assert html.index(b"sg-save-banner") < html.index(b"</body>")
 
 
 def test_shutdown_flushes_pending_edits(pod_dirs, monkeypatch):

@@ -1,0 +1,118 @@
+<!--
+  Notice for files too big to save with the workspace, spliced into every
+  marimo HTML page before the closing body tag by app/proxy.py (read into
+  `_SAVE_BANNER_INJECTION` at import), right after the terminal overlay. An
+  injected fragment, not a document. It polls the proxy's /__sg__/save-status
+  and, for each file over the limit, says it won't be kept and shows the cell
+  that stores it as an asset instead. Filenames go in as text nodes, never
+  markup. Baked next to the proxy in the notebook image via per_notebook.py's
+  with_source_file.
+-->
+<style>
+  #sg-save-banner { position: fixed; right: 16px; bottom: 16px; z-index: 2147483500;
+    max-width: min(560px, calc(100vw - 32px)); max-height: 60vh; overflow: auto;
+    padding: 12px 14px; border-radius: 8px; background: rgba(28,22,10,0.94);
+    border: 1px solid rgba(240,180,60,.55); box-shadow: 0 10px 30px rgba(0,0,0,.45);
+    color: #f3e6c8; font: 13px/1.45 system-ui, -apple-system, sans-serif; }
+  #sg-save-banner[hidden] { display: none; }
+  #sg-save-banner .sg-save-head { display: flex; align-items: center; gap: 8px;
+    font-weight: 600; margin-bottom: 6px; }
+  #sg-save-banner .sg-save-close { margin-left: auto; background: none; border: 0;
+    color: inherit; font-size: 18px; line-height: 1; cursor: pointer; opacity: .7; }
+  #sg-save-banner .sg-save-close:hover { opacity: 1; }
+  #sg-save-banner .sg-save-file + .sg-save-file { margin-top: 10px; }
+  #sg-save-banner code { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #sg-save-banner pre { margin: 6px 0 0; padding: 8px 10px; border-radius: 6px;
+    background: rgba(0,0,0,.35); overflow-x: auto; white-space: pre; }
+  #sg-save-banner .sg-save-copy { margin-top: 4px; padding: 2px 8px; border-radius: 4px;
+    border: 1px solid rgba(240,180,60,.5); background: none; color: inherit;
+    font: inherit; font-size: 12px; cursor: pointer; }
+</style>
+<script>
+(function () {
+  if (window.__sgSaveBannerInit) return; window.__sgSaveBannerInit = true;
+  var POLL_MS = 10000;
+  var banner, list, shown = '', dismissed = '';
+
+  function size(bytes) {
+    if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + ' GB';
+    return Math.round(bytes / 1e6) + ' MB';
+  }
+
+  function snippet(path) {
+    return 'from pathlib import Path\n' +
+      'from stargazer.assets import build_asset\n' +
+      'from stargazer.utils.storage import default_client\n\n' +
+      '# Set "asset" to the kind of file this is.\n' +
+      'await default_client.upload(build_asset({"asset": "data"}), ' +
+      'Path(' + JSON.stringify('/workspace/' + path) + '))';
+  }
+
+  function el(tag, cls, text) {
+    var node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function fileEntry(file, limit) {
+    var entry = el('div', 'sg-save-file');
+    var line = el('div');
+    line.appendChild(el('code', null, file.path));
+    line.appendChild(document.createTextNode(
+      ' (' + size(file.bytes) + ') is over ' + size(limit) +
+      ", so it isn't saved with your workspace and will be gone when this " +
+      'notebook stops. To keep it, store it as an asset from a cell, then ' +
+      'delete it from the workspace:'));
+    entry.appendChild(line);
+    var code = snippet(file.path);
+    entry.appendChild(el('pre', null, code));
+    var copy = el('button', 'sg-save-copy', 'Copy');
+    copy.type = 'button';
+    copy.addEventListener('click', function () {
+      navigator.clipboard.writeText(code).then(function () {
+        copy.textContent = 'Copied';
+        setTimeout(function () { copy.textContent = 'Copy'; }, 1500);
+      });
+    });
+    entry.appendChild(copy);
+    return entry;
+  }
+
+  function build() {
+    banner = el('div'); banner.id = 'sg-save-banner'; banner.hidden = true;
+    banner.setAttribute('role', 'status');
+    var head = el('div', 'sg-save-head', 'Some files won’t be saved');
+    var close = el('button', 'sg-save-close', '×');
+    close.type = 'button'; close.setAttribute('aria-label', 'Dismiss');
+    close.addEventListener('click', function () { dismissed = shown; banner.hidden = true; });
+    head.appendChild(close);
+    list = el('div');
+    banner.appendChild(head); banner.appendChild(list);
+    document.body.appendChild(banner);
+  }
+
+  function render(status) {
+    var key = status.unsaved.map(function (f) { return f.path + ':' + f.bytes; }).join('|');
+    if (!key || key === dismissed) { banner.hidden = true; return; }
+    if (key !== shown) {
+      list.replaceChildren.apply(list, status.unsaved.map(function (f) {
+        return fileEntry(f, status.limit_bytes);
+      }));
+      shown = key;
+    }
+    banner.hidden = false;
+  }
+
+  function poll() {
+    fetch('/__sg__/save-status', { headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (status) { if (status) render(status); })
+      .catch(function () {});
+  }
+
+  build();
+  poll();
+  setInterval(poll, POLL_MS);
+})();
+</script>

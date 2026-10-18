@@ -24,9 +24,10 @@ The image layers, on top of the Flyte debian base:
   importable via `PYTHONPATH=/usr/local/lib` as `sg_proxy:asgi_app`; not
   under `app/` so it doesn't get shadowed by Flyte's loaded_modules
   code bundle which lands `app/` into the pod's `/home/flyte` cwd).
-- `app/terminal_overlay.html` baked at `/usr/local/lib/terminal_overlay.html`,
-  the dropdown-terminal markup the proxy reads relative to its own `__file__`
-  and injects into marimo's HTML responses.
+- `app/terminal_overlay.html` and `app/save_banner.html` baked in
+  `/usr/local/lib/`, the dropdown terminal and the notice for files too big
+  to save, which the proxy reads relative to its own `__file__` and injects
+  into marimo's HTML responses.
 - `app/launch-notebook.sh` baked at `/usr/local/bin/launch-notebook.sh`,
   invoked by the AppEnvironment `args=[...]`.
 
@@ -143,6 +144,7 @@ notebook_app_img_recipe = (
     # own __file__) and injects into marimo's HTML. Baked into the same dir as
     # the proxy so that relative read resolves in-pod.
     .with_source_file(PROJECT_ROOT / "app" / "terminal_overlay.html", _PROXY_LIB_DIR)
+    .with_source_file(PROJECT_ROOT / "app" / "save_banner.html", _PROXY_LIB_DIR)
     .with_source_file(PROJECT_ROOT / "app" / "launch-notebook.sh", _LAUNCH_BIN)
     # Bake the stargazer source tree at `/stargazer/` so each notebook's
     # `[tool.uv.sources] stargazer = { path = "/stargazer", editable = true }`
