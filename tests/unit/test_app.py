@@ -147,6 +147,13 @@ def test_fork_routes_are_gone(client, path):
     assert client.post(path).status_code == 404
 
 
+@pytest.mark.parametrize("path", ["/workspace/snapshot", "/snapshot/delete"])
+def test_snapshot_routes_are_gone(client, path):
+    """Snapshots are gone: a notebook stays in the workspace until it's published."""
+    _as(client)
+    assert client.post(path, data={"slug": "qc-run"}).status_code == 404
+
+
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
@@ -211,6 +218,13 @@ def test_dashboard_lists_only_the_users_notebooks(client):
     assert "qc-run.py" in html
     assert "QC run" in html
     assert "bobs-secret.py" not in html
+
+
+def test_dashboard_states_the_workspace_file_limit(client):
+    """The Workspace section says which files are kept, in product terms."""
+    _as(client)
+    text = " ".join(client.get("/").text.split())
+    assert "up to 100 MB each; store bigger files as assets." in text
 
 
 def test_dashboard_warns_against_sensitive_data(client):

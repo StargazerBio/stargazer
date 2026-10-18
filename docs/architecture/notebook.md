@@ -15,42 +15,38 @@ Where *tasks* run. Notebooks call `flyte.init_from_config()` at startup; `.flyte
 
 ## Notebook Types
 
-The dashboard renders four sections, matching four directories under `src/stargazer/notebooks/`:
+The dashboard renders three sections. The first two match directories under `src/stargazer/notebooks/`:
 
 | Type | Directory | Source of truth | Mode | Purpose |
 |------|-----------|-----------------|------|---------|
 | **Tutorials** | `tutorials/` | Image-baked (upstream repo) | Edit | Learn the building blocks — a reading sequence: Assets → Tasks → Workflows → Execution |
 | **Workflows** | `workflows/` | Image-baked (upstream repo) | Edit or Run | Production pipelines, parameterized — bring your own data (e.g. the scRNA-seq pipeline) |
 | **Workspace** | — | User's workspace store | Edit or Run | The user's own notebooks — authored from scratch or a template, persisted across sessions |
-| **Snapshots** | `snapshots/` | Published: image-baked; own: workspace store | Run only | Frozen analyses — a saved notebook pinned for reproduction, never edited |
 
-Tutorials, Workflows and published Snapshots ship in the image and work for everyone. A user's own Workspace notebooks and Snapshots live in the [workspace store](app.md#core-concepts), keyed by their account, and need no setup. The tile registry for image-shipped notebooks is `app/notebooks.py`; the user's own tiles are listed from the store at render time.
+Tutorials and Workflows ship in the image and work for everyone. A user's Workspace is one folder, saved whole in the [workspace store](app.md#core-concepts), keyed by their account, with no setup: the notebooks side by side at the top, so they can import each other, plus whatever data or helper files the user keeps beside them. The tile registry for image-shipped notebooks is `app/notebooks.py`; the user's own tiles are listed from the store at render time.
 
-Tutorials and Workflows are both image-baked but differ in intent: a tutorial teaches a concept and is read once; a workflow notebook is an off-the-shelf pipeline meant to be run repeatedly against new data. Snapshots are the deliberate opposite of workflows — a single point-in-time record, frozen against *its* data and *its* image, valued precisely because it does not change.
+Tutorials and Workflows are both image-baked but differ in intent: a tutorial teaches a concept and is read once; a workflow notebook is an off-the-shelf pipeline meant to be run repeatedly against new data.
 
 ## User Archetypes
 
 Notebook types map onto a progression. Each rung uses everything below it:
 
 1. **Analyst** — runs Workflow notebooks against their own data, with the Tutorials as the reference for the building blocks. The image provides everything; parameters and uploads happen in the notebook UI.
-2. **Author** — writes their own notebooks and freezes finished analyses as Snapshots. Their work persists across sessions, and any notebook can be downloaded and contributed upstream.
+2. **Author** — writes their own notebooks. Their work persists across sessions, and any notebook can be downloaded and contributed upstream.
 3. **Contributor** — promotes notebook-grown code into the SDK: tasks into `src/stargazer/tasks/`, proven pipelines into `notebooks/workflows/`. Works against the repo natively — see [Contributing](../guides/contributing.md).
 
 Orthogonal to the ladder are **SDK-native users** (authoring workflows in an IDE by importing `stargazer` tasks directly), **agent users** (driving the MCP server from Claude Code, Cursor, etc.), and **maintainers** (curating the SDK, reviewing promotions, publishing images). The same person frequently occupies several rungs in one session — the point of the design is that moving up a rung never requires abandoning the notebook.
 
 ## Promotion Paths
 
-Work flows from experimentation toward the SDK and the public repo along three paths, all starting in a Workspace notebook:
+Work flows from experimentation toward the SDK and the public repo along two paths, both starting in a Workspace notebook. Promotion happens in the repo, not on the dashboard:
 
 ```mermaid
 flowchart LR
     W[Workspace notebook] -->|promote task| T[src/stargazer/tasks/]
-    W -->|freeze 📸| S[Snapshots]
     W -->|graduate pipeline| P[notebooks/workflows/]
-    S -.->|copy| W
     P -.->|copy| W
     T -->|PR| U[(upstream Stargazer)]
-    S -->|PR| U
     P -->|PR| U
 ```
 
@@ -64,19 +60,13 @@ Researchers define tasks directly in notebook cells using proper Flyte conventio
 
 Researchers write a working task; promotion does the mechanical extraction; PR review adds the polish. Once a promoted task needs refinement beyond what review suggests, work continues natively against the repo like any other SDK change — see [Contributing](../guides/contributing.md).
 
-### Snapshot freeze — workspace notebook → frozen record
-
-When an analysis reaches a publication-ready state, the 📸 button *moves* it out of the editable Workspace into the user's Snapshots, run-only from then on. Publishing it is a contribution: download the `.py` and add it to the repository's `notebooks/snapshots/`. Once merged it ships in the next image, appears in everyone's Snapshots section, and anyone can inspect or re-run it knowing the result is the one that was published. Mechanics in [App → Snapshots](app.md#snapshots).
-
 ### Workflow graduation — workspace notebook → Workflows section
 
 A workspace notebook that proves out a *reusable* pipeline — one others should run against new data — graduates into `notebooks/workflows/`. Graduation is the composite path: first its cell-defined tasks go through task promotion (above), so the heavy lifting lives in the tested SDK; then the notebook itself — now a thin, parameterized UI over SDK calls — is PR'd into `notebooks/workflows/` and registered as a dashboard tile in `app/notebooks.py`. It ships to everyone in the next image release. The scRNA-seq pipeline notebook is the template for what a graduated workflow looks like.
 
-Snapshot or graduate? A snapshot answers "what exactly did I run?" — frozen, run-only, valuable because it can't change. A graduated workflow answers "how does anyone run this on their data?" — parameterized, maintained, expected to evolve with the SDK.
-
 ### Copy to workspace — read-only source → editable notebook
 
-The reverse of freeze: a **Copy to workspace** button on every Workflows and Snapshots tile drops an editable copy into the Workspace, so a shipped pipeline or a frozen analysis becomes a starting point to iterate on rather than just run. The original is untouched — the copy is a fresh notebook in the user's workspace store, free to edit, re-freeze, or graduate. It takes the source's name, so if a notebook by that name already exists the copy is refused; rename the existing one and copy again. Mechanics in [App → Snapshots](app.md#snapshots) and `.opencode/reference/architecture/app_internals.md`.
+The reverse of graduation: a **Copy to workspace** button on every Workflows tile drops an editable copy into the Workspace, so a shipped pipeline becomes a starting point to iterate on rather than just run. The original is untouched — the copy is a fresh notebook in the user's workspace store, free to edit or graduate. It takes the source's name, so if a notebook by that name already exists the copy is refused; rename the existing one and copy again. Mechanics in `.opencode/reference/architecture/app_internals.md`.
 
 ## The SDK Loop
 
@@ -120,7 +110,7 @@ A notebook's environment has two halves, and each has its own home:
 
 At launch the declared image is built if it isn't already, and the notebook is served on it. An unchanged image is reused, so only the first launch after a change waits for a build. A change takes effect the next time the notebook launches. If the image can't be built, the launch fails with the reason instead of opening the notebook without its tools.
 
-The `main_img` line is evaluated on its own, so it can use `flyte` and `notebook_base` but not other names from the setup block. Building needs the hosted deployment. A user's snapshots build the image their notebook declared; tutorials and workflows run on the standard image.
+The `main_img` line is evaluated on its own, so it can use `flyte` and `notebook_base` but not other names from the setup block. Building needs the hosted deployment. Tutorials and workflows run on the standard image.
 
 ## Notebook Modes
 
@@ -129,7 +119,7 @@ How the *notebook UI* is served — orthogonal to execution context. A notebook 
 | Mode | Behavior | Used for |
 |------|----------|----------|
 | **Edit** | Full marimo editing UI | Tutorials, Workflows, Workspace authoring |
-| **Run** | Read-only app view (`--include-code`) | Snapshots (always), shareable views of any notebook |
+| **Run** | Read-only app view (`--include-code`) | Shareable views of any notebook |
 
 A notebook runs in one mode at a time — see [App → Core Concepts](app.md#core-concepts).
 
@@ -137,7 +127,6 @@ A notebook runs in one mode at a time — see [App → Core Concepts](app.md#cor
 
 - **Workspace notebooks** are created from the dashboard (blank or template seed) and live in the user's workspace store — no repo change involved.
 - **Tutorials and Workflow notebooks** ship in the image: add the `.py` file (standard marimo format, importing only `stargazer` public APIs) under `src/stargazer/notebooks/tutorials/` or `notebooks/workflows/`, register a tile in the `NOTEBOOKS` tuple in `app/notebooks.py`, and it lands when onboarding next builds the `notebook-app` image (`stargazer-users upgrade`).
-- **Published snapshots** ship in the image from `src/stargazer/notebooks/snapshots/`. They can be added by hand, but usually start as a 📸 freeze that the author downloads and contributes.
 
 ## In-Notebook AI
 
