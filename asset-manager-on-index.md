@@ -82,50 +82,69 @@ and its pod role can read and write the store (Litestream does). The page's
 routes switch from Pinata to those two for `network=private`;
 `network=public` stays on Pinata.
 
-- [ ] Tests first, in `tests/unit/test_assets_routes.py`, against a
-      `SqliteIndex` and a `file://` store in a temp dir through FastAPI's
-      `TestClient`:
-  - upload a file as the owner → listed under `network=private` with its
-    keyvalues and `_owner`
-  - download it → the same bytes
-  - update its keyvalues → the listing shows the merge
-  - a signed-in user who isn't the owner → 403 on every private route;
-    anonymous → 401
-  - no Pinata key → private routes still work, public routes 503
-- [ ] `POST /assets/upload` for private uploads: stream the request body to a
-      temp file, validate the keyvalues with `build_asset()`, stamp `_owner`,
-      `StorageClient.upload(asset, tmp)` (CID, store, index row), then delete
-      the temp file. Enforce the cap (Q1). The upload form posts here when
-      Private is picked; Public keeps the signed Pinata URL.
-- [ ] `GET /assets/list?network=private`: `index.query(params)`.
-- [ ] `GET /assets/download/{cid}?network=private`: look up the row's `uri`.
-      An `s3://` URI redirects to a presigned GET that expires in 5 minutes; a
-      local path is served with `FileResponse`.
-- [ ] `POST /assets/update` for private records: `index.merge(cid, patch)`,
+Branch `feat/asset-manager-on-index`.
+
+- [x] Tests first, in `tests/unit/test_assets_routes.py`, against a real
+      `SqliteIndex` and a temp-dir store through FastAPI's `TestClient`
+      (all twelve failed first, for the missing behavior): upload then list
+      with the stored file and the CID `compute_cid` gives; a keyvalue
+      filter; download returns the bytes; an unknown CID 404s; an update
+      merges and restamps `_owner`; bad keyvalues 400 with nothing written;
+      over the cap 413 with nothing written; another signed-in user 403 on
+      every private route; anonymous 401; private works without a Pinata
+      key while public 503s; and the page's tabs and upload choices with
+      and without a key.
+- [x] `POST /assets/upload?filename=&keyvalues=`: keyvalues checked with
+      `build_asset()` before the body is read, the body streamed to a temp
+      file (413 past `MAX_UPLOAD_BYTES`), then `StorageClient.upload` on the
+      dashboard's index, with its cache in the same temp dir so nothing
+      outlives the request. Raw body, not a multipart form.
+- [x] `GET /assets/list?network=private`: `index.query(params)`.
+- [x] `GET /assets/download/{cid}?network=private`: **streamed through the
+      dashboard** (`flyte.storage.get_stream`), not a presigned redirect.
+      One code path for a local store and the bucket, using only the read
+      the pod's role already has; presigning with the pod's credentials was
+      never tried.
+- [x] `POST /assets/update` for private records: `index.merge(cid, patch)`,
       with `_owner` restamped.
-- [ ] Owner gate on the private routes: the signed-in subject must equal
+- [x] Owner gate on the private routes: the signed-in subject must equal
       `SG_OWNER_SUBJECT`. Locally, with no owner set, allow.
-- [ ] Drop Pinata's private network from the client: `PinataClient` loses
-      `network` and `_get_signed_url`. The routes and the page already
-      refuse it (ticket `dashboard-pinata-key`), so nothing calls either.
-- [ ] The Private tab comes back, on the index and store, beside the Public
-      tab that ticket `dashboard-pinata-key` turned on for hosted
-      dashboards. The routes' `_require_public` guard gives way to the
-      private branches.
+- [x] Drop Pinata's private network from the client: `PinataClient` loses
+      `network` (every call is on `NETWORK`, "public") and
+      `_get_signed_url`. Pinata tier: 12 passed against the real API.
+- [x] The Private tab is back, the default for a signed-in user. The page
+      no longer needs a Pinata key: without one the Public tab says shared
+      data isn't available and the upload form offers Private only.
 
 ## Verify
 
-- [ ] On the test account's Union dashboard: upload a private file from the
-      asset page, list it, download it, edit its metadata, and check that
-      `assemble()` finds it from a task pod. Stop every app the check
-      started.
+- [x] On the test account's Union dashboard (2026-10-18, deployed from
+      `311c7da`):
+  - As the org admin, not the dashboard's owner: private list, download
+    and upload → 403, "Only this dashboard's owner can reach its private
+    assets."; public list → 200.
+  - In Chrome as the test account: the page opened on the Private tab and
+    listed the account's stored assets (the scRNA task outputs, earlier
+    verification notes, the 150 MB `big2.bin`). A custom `devbox_probe`
+    upload with a unique tag from the form → "Uploaded ✓", stored at
+    `.../users/387300641116005877/assets/bafkreiaawxkqbjckqcrlh5srgt6jyee37ib4qzx6lcbg5lw7dfkw7dsbyi/probe_ami-mvd9pj34_0.txt`
+    with `_owner` stamped. The download → 200 with the same bytes. A
+    metadata edit → merged, owner kept, shown in the listing.
+  - `tests/devbox/pod_tasks.consume(tag="ami-mvd9pj34")` in `u-pryce`,
+    pointed at the dashboard's in-cluster index (run
+    `u2n8wv4s5dhl8fzncf4k`) → `['ami-mvd9pj34:0']`: a task pod found the
+    file through `assemble()` and read it.
+  - Torn down: the dashboard stopped, nothing active or running in
+    `u-pryce` or `flytesnacks`. The probe file stays in the test account's
+    store.
 
 ## Docs
 
-- [ ] `docs/architecture/app.md` and
+- [x] `docs/architecture/app.md` and
       `.opencode/reference/architecture/app_internals.md`: the Private tab's
-      data path.
-- [ ] `src/stargazer/utils/pinata.py` docstrings: no private network left.
+      data path. `docs/architecture/configuration.md`: the client's
+      `network` argument is gone.
+- [x] `src/stargazer/utils/pinata.py` docstrings: no private network left.
 
 ## Follow-ups (not in this ticket)
 
