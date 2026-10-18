@@ -226,7 +226,7 @@ class StorageClient:
         mine = {r["cid"] for r in rows}
         public: dict[str, dict] = {}
         for combo in generate_query_combinations(base_query={}, filters=filters):
-            for record in await self.public.query(combo, network="public"):
+            for record in await self.public.query(combo):
                 if record["cid"] not in mine:
                     public.setdefault(record["cid"], self._public_record(record))
         return [*rows, *public.values()]
@@ -260,7 +260,7 @@ class StorageClient:
         if network == "public":
             if self.public is None:
                 raise ValueError("No PINATA_JWT: public records can't be edited")
-            return await self.public.update_metadata(cid, keyvalues, network="public")
+            return await self.public.update_metadata(cid, keyvalues)
         return await self.index.merge(cid, _stamp_owner(dict(keyvalues)))
 
 

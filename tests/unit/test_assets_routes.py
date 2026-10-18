@@ -55,39 +55,31 @@ class FakePinata:
         self.sign_calls = []
         self.update_calls = []
 
-    async def query(self, keyvalues, network=None):
-        self.query_calls.append({"keyvalues": dict(keyvalues), "network": network})
+    async def query(self, keyvalues):
+        self.query_calls.append({"keyvalues": dict(keyvalues)})
         return list(CANNED_RECORDS)
 
-    async def create_signed_upload_url(
-        self, filename, keyvalues, network, max_file_size=None
-    ):
+    async def create_signed_upload_url(self, filename, keyvalues, max_file_size=None):
         _check_keyvalue_count(keyvalues)
         _check_keyvalue_lengths(keyvalues)
         self.sign_calls.append(
             {
                 "filename": filename,
                 "keyvalues": dict(keyvalues),
-                "network": network,
                 "max_file_size": max_file_size,
             }
         )
         return "https://uploads.example/signed"
 
-    async def update_metadata(self, cid, keyvalues, network=None):
+    async def update_metadata(self, cid, keyvalues):
         _check_keyvalue_lengths(keyvalues)
-        self.update_calls.append(
-            {"cid": cid, "keyvalues": dict(keyvalues), "network": network}
-        )
+        self.update_calls.append({"cid": cid, "keyvalues": dict(keyvalues)})
         return {
             "cid": cid,
             "name": "x",
             "keyvalues": dict(keyvalues),
-            "network": network,
+            "network": "public",
         }
-
-    async def _get_signed_url(self, cid, expires=300):
-        return f"https://gw.example/signed/{cid}"
 
 
 @pytest.fixture
@@ -135,7 +127,7 @@ class TestAuth:
         resp = client.get("/assets/list")
         assert resp.status_code == 200
         assert resp.json() == CANNED_RECORDS
-        assert fake_pinata.query_calls[0]["network"] == "public"
+        assert len(fake_pinata.query_calls) == 1
 
     def test_anonymous_sign_401(self, fake_pinata, client):
         resp = client.post(
@@ -337,9 +329,7 @@ class TestPublicList:
         assert first.json() == CANNED_RECORDS
         assert second.json() == CANNED_RECORDS
         assert len(fake_pinata.query_calls) == 1
-        call = fake_pinata.query_calls[0]
-        assert call["network"] == "public"
-        assert call["keyvalues"] == {}
+        assert fake_pinata.query_calls[0]["keyvalues"] == {}
 
     def test_filters_apply_in_memory(self, fake_pinata, client):
         resp = client.get("/assets/list", params={"network": "public", "asset": "r1"})
@@ -367,7 +357,6 @@ class TestSign:
         assert body["keyvalues"]["asset"] == "r1"
         call = fake_pinata.sign_calls[0]
         assert call["filename"] == "r1.fq"
-        assert call["network"] == "public"
         assert call["keyvalues"]["_owner"] == "octocat"
         assert call["max_file_size"] is not None
 
@@ -383,7 +372,6 @@ class TestSign:
         )
         assert resp.status_code == 200
         call = fake_pinata.sign_calls[0]
-        assert call["network"] == "public"
         assert call["keyvalues"]["lanes"] == "4"
         assert call["keyvalues"]["_owner"] == "octocat"
 

@@ -140,7 +140,7 @@ async def _public_records() -> list[dict]:
     if not _fresh():
         async with _public_cache_lock:
             if not _fresh():
-                records = await _pinata().query({}, network="public")
+                records = await _pinata().query({})
                 _public_cache = (time.monotonic(), records)
     return _public_cache[1]
 
@@ -239,7 +239,6 @@ async def assets_sign(request: Request):
         url = await _pinata().create_signed_upload_url(
             filename=filename,
             keyvalues=keyvalues,
-            network="public",
             max_file_size=MAX_UPLOAD_BYTES,
         )
     except ValueError as exc:
@@ -276,7 +275,7 @@ async def assets_update(request: Request):
 
     # Fail-closed: only the owner of record may edit it. Read fresh (not the
     # public TTL cache) so a mutation never decides off stale ownership.
-    records = await _pinata().query({}, network="public")
+    records = await _pinata().query({})
     current = next((r for r in records if r["cid"] == cid), None)
     if current is None or current["keyvalues"].get("_owner") != user.subject:
         raise HTTPException(status_code=403, detail="you can only edit assets you own")
@@ -289,7 +288,7 @@ async def assets_update(request: Request):
     patch = dict(body.get("keyvalues") or {})
     patch["_owner"] = user.subject
     try:
-        return await _pinata().update_metadata(cid, patch, network="public")
+        return await _pinata().update_metadata(cid, patch)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
