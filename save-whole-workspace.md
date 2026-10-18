@@ -1,6 +1,6 @@
 ---
 title: The workspace saves every file, and snapshots go
-status: next
+status: doing
 priority: normal
 created: 2026-10-16
 ---
