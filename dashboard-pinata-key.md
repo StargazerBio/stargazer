@@ -1,6 +1,6 @@
 ---
 title: Dashboards get the Pinata key as a secret
-status: backlog
+status: doing
 priority: high
 created: 2026-10-17
 ---
