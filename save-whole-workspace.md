@@ -289,8 +289,8 @@ revision was ready fixed it. In the feature file's gotchas.
   and the public listing.
 - `top-level-notebooks`: the scRNA notebook moves to a top-level `notebooks/`
   folder, and the seeds to `app/`.
-- `asset-manager-on-index`: the dashboard as asset explorer and notebook
-  launcher, ahead of this ticket in the queue.
+- `asset-manager-on-index` and `assets-on-dashboard-home`: the dashboard as
+  asset explorer and notebook launcher.
 - `tus-browser-uploads`: uploads from the user's machine up to 10 GB, through
   the dashboard. Not needed for files already in the workspace.
 - `notebook-environment`: notebooks declare their own app environment.
