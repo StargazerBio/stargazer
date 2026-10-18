@@ -8,19 +8,25 @@ header Union's auth layer sets on every request. The Pinata client is swapped fo
 query returns canned records, and both capture their call args. Sign runs
 the real client's keyvalue-count check, which happens before any request.
 
-Auth model: the page is public-only. Browsing (schema, list, download) is
-anonymous — public bytes are world-readable on IPFS anyway, and the listing
-is served from an in-process TTL cache so the admin is a semi-static mirror,
-not an open proxy to the Pinata API. Sign minting and metadata edits require
-a signed-in user. Asking for the private network is refused: private assets
-belong in the user's own store, not on the org's shared Pinata account.
+Auth model: public browsing (schema, list, download) is anonymous — public
+bytes are world-readable on IPFS anyway, and the listing is served from an
+in-process TTL cache so the admin is a semi-static mirror, not an open proxy
+to the Pinata API. Sign minting and metadata edits require a signed-in user.
+Private assets are the dashboard owner's own index and store, tested against
+a real `SqliteIndex` and a temp-dir store: only the owner reaches them.
 """
+
+import json
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app import config, index_api
 from app.assets import router
+from stargazer.utils.cid import compute_cid
+from stargazer.utils.index import SqliteIndex
 from stargazer.utils.pinata import _check_keyvalue_count, _check_keyvalue_lengths
 
 JWT = "test-pinata-jwt"
@@ -153,51 +159,174 @@ class TestSchema:
         assert "keyvalues" not in fields
 
 
-class TestPrivateRefused:
-    """No route touches Pinata's private network: the org key is shared."""
+OWNER = "octocat"
+READS = b"@r1\nACGT\n+\nIIII\n"
 
-    REFUSED = "Only public assets are available here."
 
-    def test_list(self, fake_pinata, client):
-        _auth(client)
-        resp = client.get("/assets/list", params={"network": "private"})
-        assert resp.status_code == 400
-        assert resp.json()["detail"] == self.REFUSED
-        assert fake_pinata.query_calls == []
+@pytest.fixture
+def private_store(tmp_path, monkeypatch):
+    """The dashboard's own index and store, in a temp dir, owned by OWNER."""
+    index = SqliteIndex(tmp_path / "index.db")
+    monkeypatch.setattr(index_api, "_index", index)
+    monkeypatch.setenv("STARGAZER_STORE_ROOT", str(tmp_path / "store"))
+    monkeypatch.setenv("STARGAZER_OWNER", OWNER)
+    monkeypatch.setattr(config, "OWNER_SUBJECT", OWNER)
+    return tmp_path
 
-    def test_sign(self, fake_pinata, client):
-        _auth(client)
-        resp = client.post(
-            "/assets/sign",
-            json={
-                "filename": "x.bam",
-                "keyvalues": {"asset": "alignment"},
-                "network": "private",
-            },
-        )
-        assert resp.status_code == 400
-        assert resp.json()["detail"] == self.REFUSED
+
+def _upload(client, data=READS, filename="r1.fq", keyvalues=None):
+    """Upload `data` as a private asset through the route."""
+    keyvalues = keyvalues or {"asset": "r1", "sample_id": "S1"}
+    return client.post(
+        "/assets/upload",
+        params={"filename": filename, "keyvalues": json.dumps(keyvalues)},
+        content=data,
+    )
+
+
+def _expected_cid(tmp_path: Path, data: bytes) -> str:
+    """The CID of `data`, worked out the same way the store does."""
+    path = tmp_path / "expected"
+    path.write_bytes(data)
+    return compute_cid(path)
+
+
+class TestPrivate:
+    """The Private tab's routes on the owner's index and store."""
+
+    def test_upload_then_list(self, fake_pinata, private_store, client):
+        _auth(client, OWNER)
+        resp = _upload(client)
+        assert resp.status_code == 200
+        cid = _expected_cid(private_store, READS)
+        assert resp.json()["cid"] == cid
+
+        listed = client.get("/assets/list", params={"network": "private"}).json()
+        # A typed asset stores its declared fields, empty ones included.
+        assert [(r["cid"], r["name"], r["keyvalues"]) for r in listed] == [
+            (
+                cid,
+                "r1.fq",
+                {
+                    "asset": "r1",
+                    "sample_id": "S1",
+                    "mate_cid": "",
+                    "sequencing_platform": "",
+                    "_owner": OWNER,
+                },
+            )
+        ]
+        stored = private_store / "store" / "users" / OWNER / "assets" / cid / "r1.fq"
+        assert stored.read_bytes() == READS
         assert fake_pinata.sign_calls == []
 
-    def test_update(self, fake_pinata, client):
-        _auth(client, "octocat")
+    def test_list_filters_by_keyvalue(self, fake_pinata, private_store, client):
+        _auth(client, OWNER)
+        _upload(client)
+        _upload(client, b"other", "r2.fq", {"asset": "r2", "sample_id": "S1"})
+        listed = client.get(
+            "/assets/list", params={"network": "private", "asset": "r2"}
+        ).json()
+        assert [r["name"] for r in listed] == ["r2.fq"]
+
+    def test_download_returns_the_bytes(self, fake_pinata, private_store, client):
+        _auth(client, OWNER)
+        cid = _upload(client).json()["cid"]
+        resp = client.get(f"/assets/download/{cid}", params={"network": "private"})
+        assert resp.status_code == 200
+        assert resp.content == READS
+        assert resp.headers["content-disposition"] == 'attachment; filename="r1.fq"'
+
+    def test_download_unknown_cid_404(self, fake_pinata, private_store, client):
+        _auth(client, OWNER)
+        resp = client.get("/assets/download/bafynope", params={"network": "private"})
+        assert resp.status_code == 404
+
+    def test_update_merges_and_restamps_owner(self, fake_pinata, private_store, client):
+        _auth(client, OWNER)
+        cid = _upload(client).json()["cid"]
         resp = client.post(
             "/assets/update",
             json={
-                "cid": "bafybam",
+                "cid": cid,
                 "network": "private",
-                "keyvalues": {"asset": "alignment"},
+                "keyvalues": {"asset": "r1", "sample_id": "S2"},
             },
         )
-        assert resp.status_code == 400
-        assert resp.json()["detail"] == self.REFUSED
+        assert resp.status_code == 200
+        listed = client.get("/assets/list", params={"network": "private"}).json()
+        assert listed[0]["keyvalues"] == {
+            "asset": "r1",
+            "sample_id": "S2",
+            "mate_cid": "",
+            "sequencing_platform": "",
+            "_owner": OWNER,
+        }
         assert fake_pinata.update_calls == []
 
-    def test_download(self, fake_pinata, client):
-        _auth(client)
-        resp = client.get("/assets/download/bafy123", params={"network": "private"})
+    def test_bad_keyvalues_400_before_reading(self, fake_pinata, private_store, client):
+        _auth(client, OWNER)
+        resp = _upload(client, keyvalues={"sample_id": "S1"})
         assert resp.status_code == 400
-        assert resp.json()["detail"] == self.REFUSED
+        assert "asset" in resp.json()["detail"]
+        assert client.get("/assets/list", params={"network": "private"}).json() == []
+
+    def test_upload_over_the_cap_413(
+        self, fake_pinata, private_store, client, monkeypatch
+    ):
+        import app.assets as assets_mod
+
+        monkeypatch.setattr(assets_mod, "MAX_UPLOAD_BYTES", 10)
+        _auth(client, OWNER)
+        resp = _upload(client, b"x" * 11)
+        assert resp.status_code == 413
+        assert resp.json()["detail"] == "Uploads are capped at 10 bytes."
+        assert client.get("/assets/list", params={"network": "private"}).json() == []
+
+    def test_someone_else_gets_403(self, fake_pinata, private_store, client):
+        _auth(client, OWNER)
+        cid = _upload(client).json()["cid"]
+        _auth(client, "mallory")
+        assert _upload(client, b"theirs").status_code == 403
+        assert (
+            client.get("/assets/list", params={"network": "private"}).status_code == 403
+        )
+        assert (
+            client.get(
+                f"/assets/download/{cid}", params={"network": "private"}
+            ).status_code
+            == 403
+        )
+        resp = client.post(
+            "/assets/update",
+            json={"cid": cid, "network": "private", "keyvalues": {"asset": "r1"}},
+        )
+        assert resp.status_code == 403
+
+    def test_anonymous_gets_401(self, fake_pinata, private_store, client):
+        assert _upload(client).status_code == 401
+        assert (
+            client.get("/assets/list", params={"network": "private"}).status_code == 401
+        )
+        assert (
+            client.get(
+                "/assets/download/bafy1", params={"network": "private"}
+            ).status_code
+            == 401
+        )
+
+    def test_private_works_without_a_pinata_key(
+        self, fake_pinata, private_store, client, monkeypatch
+    ):
+        monkeypatch.delenv("PINATA_JWT", raising=False)
+        _auth(client, OWNER)
+        assert _upload(client).status_code == 200
+        assert (
+            len(client.get("/assets/list", params={"network": "private"}).json()) == 1
+        )
+        assert (
+            client.get("/assets/list", params={"network": "public"}).status_code == 503
+        )
 
 
 class TestPublicList:
@@ -443,15 +572,16 @@ class TestNotConfigured:
 class TestPage:
     """`GET /assets` renders assets.html (plan 21, piece 3)."""
 
-    def test_authed_gets_public_upload_only(self, fake_pinata, client):
+    def test_authed_gets_both_tabs_and_both_upload_choices(self, fake_pinata, client):
         _auth(client)
         resp = client.get("/assets")
         assert resp.status_code == 200
         html = resp.text
-        # The upload panel shows for a session, and only uploads publicly.
+        # The Private tab and upload panel show for a session.
+        assert 'data-network="private"' in html
         assert 'id="upload-panel"' in html
-        assert 'data-network="private"' not in html
-        assert 'value="private"' not in html
+        assert 'value="private"' in html
+        assert 'value="public"' in html
         assert "anyone on the internet" in html
         # The page knows who it's for (drives the "Mine" filter + optimistic row).
         assert 'USERNAME = "octocat"' in html
@@ -477,12 +607,16 @@ class TestPage:
         assert "/auth/login" not in html
         assert "AUTHED = false" in html
 
-    def test_not_configured_renders_notice(self, fake_pinata, client, monkeypatch):
+    def test_without_a_pinata_key_only_private_works(
+        self, fake_pinata, client, monkeypatch
+    ):
         monkeypatch.delenv("PINATA_JWT", raising=False)
         _auth(client)
         resp = client.get("/assets")
         assert resp.status_code == 200
-        assert "Asset storage isn't available yet" in resp.text
-        assert "PINATA" not in resp.text
-        # Controls/upload are suppressed without a backing store.
-        assert 'id="upload-panel"' not in resp.text
+        html = resp.text
+        assert 'data-network="private"' in html
+        assert 'id="upload-panel"' in html
+        assert 'value="public"' not in html
+        assert "Shared data isn't available on this deployment." in html
+        assert "PINATA" not in html
