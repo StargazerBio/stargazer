@@ -1,17 +1,16 @@
 """
-### Workspace store — users' notebooks on object storage.
+### Workspace store — users' workspaces on object storage.
 
-The durable home of every user's Workspace notebooks and own Snapshots. Each
-notebook is one object, keyed by the user's Union subject:
+The durable home of every user's workspace: every file in it, one object per
+file at its path, keyed by the user's Union subject:
 
-    <WORKSPACE_ROOT>/users/<subject>/notebooks/<filename>
-    <WORKSPACE_ROOT>/users/<subject>/snapshots/<filename>
+    <WORKSPACE_ROOT>/users/<subject>/workspace/<path>
 
-Notebooks stay individually addressable so the dashboard can list a user's
-notebooks and read one header without fetching the rest. Per-notebook pods
-hydrate their `/workspace` from `workspace_uri()` at launch and write each
-notebook back to its own key, so two running notebooks can never clobber each
-other.
+The dashboard reads and writes only the notebooks, the top-level `.py` files,
+so it can list a user's notebooks and read one header without fetching the
+rest. Per-notebook pods hydrate their `/workspace` from `workspace_uri()` at
+launch and write each changed file back to its own key, so two running
+notebooks can never clobber each other.
 
 Reads and writes go through `flyte.storage`, listing and deletes through the
 fsspec filesystem it resolves for the root (obstore on `s3://`, the local
@@ -49,13 +48,8 @@ def _subject_prefix(subject: str) -> str:
 
 
 def workspace_uri(subject: str) -> str:
-    """URI of the user's Workspace notebooks prefix (what a pod hydrates from)."""
-    return f"{_subject_prefix(subject)}/notebooks"
-
-
-def snapshots_uri(subject: str) -> str:
-    """URI of the user's own Snapshots prefix."""
-    return f"{_subject_prefix(subject)}/snapshots"
+    """URI of the user's workspace prefix (what a pod hydrates from)."""
+    return f"{_subject_prefix(subject)}/workspace"
 
 
 def _key(prefix: str, filename: str) -> str:
@@ -128,29 +122,14 @@ async def list_workspace(subject: str) -> list[str]:
     return await _list(workspace_uri(subject))
 
 
-async def list_snapshots(subject: str) -> list[str]:
-    """List the user's own Snapshot filenames, sorted."""
-    return await _list(snapshots_uri(subject))
-
-
 async def get_workspace_notebook(subject: str, filename: str) -> str | None:
     """Read a Workspace notebook's source, or None if absent."""
     return await _get(_key(workspace_uri(subject), filename))
 
 
-async def get_snapshot_notebook(subject: str, filename: str) -> str | None:
-    """Read an own Snapshot's source, or None if absent."""
-    return await _get(_key(snapshots_uri(subject), filename))
-
-
 async def create_workspace_notebook(subject: str, filename: str, content: str) -> None:
     """Create a Workspace notebook. Raises `NotebookExistsError` if taken."""
     await _create(_key(workspace_uri(subject), filename), content)
-
-
-async def create_snapshot_notebook(subject: str, filename: str, content: str) -> None:
-    """Create an own Snapshot. Raises `NotebookExistsError` if taken."""
-    await _create(_key(snapshots_uri(subject), filename), content)
 
 
 async def update_workspace_notebook(subject: str, filename: str, content: str) -> None:
@@ -161,8 +140,3 @@ async def update_workspace_notebook(subject: str, filename: str, content: str) -
 async def delete_workspace_notebook(subject: str, filename: str) -> None:
     """Delete a Workspace notebook. Idempotent."""
     await _delete(_key(workspace_uri(subject), filename))
-
-
-async def delete_snapshot_notebook(subject: str, filename: str) -> None:
-    """Delete an own Snapshot. Idempotent."""
-    await _delete(_key(snapshots_uri(subject), filename))

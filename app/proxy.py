@@ -13,14 +13,13 @@ stripped before anything reaches marimo, so notebook code never sees the
 visitor's platform token through a request.
 
 **Workspace.** The user's notebooks live in the workspace store, one object per
-notebook, under `<STARGAZER_WORKSPACE_ROOT>/users/<subject>/` — the layout
-`app.workspace_store` owns (mirrored here because this module can't import the
-`app` package). At launch, `hydrate()` copies the owner's notebooks into
-`/workspace` and their own snapshots into `/snapshots`. While the pod runs, a
-background loop uploads any `/workspace` notebook whose content changed, every
-`SYNC_INTERVAL_SECONDS`, and the `lifespan` shutdown hook does a final flush
-when the pod scales to zero. Snapshots are never written back, and deletions
-are not propagated (deleting is a dashboard action).
+notebook, under `<STARGAZER_WORKSPACE_ROOT>/users/<subject>/workspace/` — the
+layout `app.workspace_store` owns (mirrored here because this module can't
+import the `app` package). At launch, `hydrate()` copies the owner's notebooks
+into `/workspace`. While the pod runs, a background loop uploads any
+`/workspace` notebook whose content changed, every `SYNC_INTERVAL_SECONDS`, and
+the `lifespan` shutdown hook does a final flush when the pod scales to zero.
+Deletions are not propagated (deleting is a dashboard action).
 
 It also injects a Quake-style dropdown terminal into marimo's HTML: every
 `text/html` response gets an xterm.js overlay (loaded from CDN) spliced in
@@ -73,10 +72,9 @@ from starlette.background import BackgroundTask
 
 MARIMO_HOST = "127.0.0.1"
 MARIMO_HTTP_PORT = 8081
-# Flat pod-local dirs the launch hydrates into. Mirrors
-# `app.per_notebook.WORKSPACE_NOTEBOOK_DIR` / `SNAPSHOT_NOTEBOOK_DIR`.
+# The pod-local dir the launch hydrates into. Mirrors
+# `app.per_notebook.WORKSPACE_NOTEBOOK_DIR`.
 WORKSPACE_DIR = Path("/workspace")
-SNAPSHOT_DIR = Path("/snapshots")
 # How often edited notebooks are written back to the store. Notebooks are
 # kilobytes, so a short interval costs little and bounds what a crash can lose.
 SYNC_INTERVAL_SECONDS = 5
@@ -166,7 +164,7 @@ def _init_storage() -> None:
 def _user_prefix(kind: str) -> str | None:
     """`<root>/users/<owner>/<kind>`, or None when the store isn't configured.
 
-    Same layout as `app.workspace_store.workspace_uri` / `snapshots_uri`.
+    Same layout as `app.workspace_store.workspace_uri`.
     """
     root = os.environ.get("STARGAZER_WORKSPACE_ROOT", "").rstrip("/")
     owner = os.environ.get("SG_OWNER_SUBJECT", "")
@@ -209,23 +207,21 @@ async def _download_prefix(prefix: str, dest: Path) -> int:
 async def hydrate_async() -> None:
     """Async body of `hydrate()`; also records the hydrated content as synced."""
     WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
-    SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
-    notebooks, snapshots = _user_prefix("notebooks"), _user_prefix("snapshots")
-    if notebooks is None or snapshots is None:
+    prefix = _user_prefix("workspace")
+    if prefix is None:
         print("[sg] workspace store not configured; starting with an empty workspace")
         return
     _init_storage()
-    n = await _download_prefix(notebooks, WORKSPACE_DIR)
-    s = await _download_prefix(snapshots, SNAPSHOT_DIR)
-    print(f"[sg] hydrated {n} notebook(s) and {s} snapshot(s)")
+    n = await _download_prefix(prefix, WORKSPACE_DIR)
+    print(f"[sg] hydrated {n} notebook(s)")
     _seed_from_disk()
 
 
 def hydrate() -> None:
-    """Fill `/workspace` and `/snapshots` from the owner's stored notebooks.
+    """Fill `/workspace` from the owner's stored notebooks.
 
     Run by the launch script, as its own process, before marimo starts, so the
-    notebook marimo opens already exists on disk. Always leaves both dirs in
+    notebook marimo opens already exists on disk. Always leaves the dir in
     place, empty for a new user or an unconfigured store.
     """
     asyncio.run(hydrate_async())
@@ -259,7 +255,7 @@ async def sync_once() -> list[str]:
     Only top-level, non-`_`-prefixed `.py` files sync, each to its own object.
     A failed upload is logged and retried on the next pass rather than raised.
     """
-    prefix = _user_prefix("notebooks")
+    prefix = _user_prefix("workspace")
     if prefix is None or not WORKSPACE_DIR.is_dir():
         return []
     _init_storage()

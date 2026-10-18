@@ -3,9 +3,9 @@
 
 Curated, hand-maintained tuple of every notebook that ships in the
 `notebook-app` image, plus the helpers that read shipped notebook sources
-(seeds, workflows, public snapshots) out of the installed `stargazer`
-package. Workspace notebooks and a user's own snapshots are NOT here — they
-live in the workspace store (`app.workspace_store`).
+(seeds, workflows) out of the installed `stargazer` package. Workspace
+notebooks are NOT here — they live in the workspace store
+(`app.workspace_store`).
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -24,9 +24,6 @@ IMAGE_WORKDIR = "/stargazer"
 # The installed `stargazer.notebooks` package: the same files the notebook
 # image ships under IMAGE_WORKDIR, readable from the dashboard process.
 NOTEBOOKS_PKG_DIR = Path(stargazer.notebooks.__file__).parent
-# Public snapshots: frozen notebooks merged upstream, shipped to everyone in
-# the image like tutorials. Module attribute so tests can point it elsewhere.
-PUBLIC_SNAPSHOTS_DIR = NOTEBOOKS_PKG_DIR / "snapshots"
 _IMAGE_NOTEBOOKS_PREFIX = f"{IMAGE_WORKDIR}/src/stargazer/notebooks/"
 
 
@@ -140,40 +137,3 @@ def seed_source(seed: str) -> str | None:
         return None
     path = NOTEBOOKS_PKG_DIR / "workspace" / f"{seed}.py"
     return path.read_text() if path.is_file() else None
-
-
-@dataclass(frozen=True)
-class PublicSnapshot:
-    """A frozen notebook shipped to everyone in the image."""
-
-    slug: str
-    filename: str
-
-    @property
-    def path_in_image(self) -> str:
-        """Where the notebook pod finds it."""
-        return f"{_IMAGE_NOTEBOOKS_PREFIX}snapshots/{self.filename}"
-
-    def source(self) -> str:
-        """The snapshot's source, read from the installed package."""
-        return (PUBLIC_SNAPSHOTS_DIR / self.filename).read_text()
-
-
-def public_snapshots() -> tuple[PublicSnapshot, ...]:
-    """Every shipped public snapshot, sorted by filename.
-
-    Filenames may use underscores (they're modules); the slug is the
-    launchable form.
-    """
-    if not PUBLIC_SNAPSHOTS_DIR.is_dir():
-        return ()
-    return tuple(
-        PublicSnapshot(slug=slugify(p.stem), filename=p.name)
-        for p in sorted(PUBLIC_SNAPSHOTS_DIR.glob("*.py"))
-        if not p.name.startswith("_") and slugify(p.stem)
-    )
-
-
-def public_snapshot(slug: str) -> PublicSnapshot | None:
-    """The shipped public snapshot with this slug, or None."""
-    return next((s for s in public_snapshots() if s.slug == slug), None)

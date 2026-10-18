@@ -10,13 +10,13 @@ org admin who can view the project) sees the owner's dashboard. There is no OAut
 GitHub integration. It has three jobs:
 
 1. **Dashboard.** Renders the notebook tile sections: Workflows and
-   Tutorials (shipped in the per-notebook image), Snapshots (shipped public
-   ones plus the owner's own), and Workspace (the owner's notebooks). The
-   owner's notebooks live in the workspace store (`app.workspace_store`),
-   keyed by their Union subject, so saving needs no setup.
+   Tutorials (shipped in the per-notebook image), and Workspace (the owner's
+   notebooks). The owner's notebooks live in the workspace store
+   (`app.workspace_store`), keyed by their Union subject, so saving needs no
+   setup.
 
-2. **Workspace actions.** Create, settings, delete, snapshot (freeze), copy
-   and download, all against the workspace store.
+2. **Workspace actions.** Create, settings, delete, copy and download, all
+   against the workspace store.
 
 3. **Launch broker.** `POST /launch` builds a per-notebook AppEnvironment via
    `app.per_notebook.per_notebook_env(...)`, owned by the same user, serves
@@ -83,14 +83,11 @@ from app.notebooks import (
     Notebook,
     by_section,
     by_slug,
-    public_snapshot,
-    public_snapshots,
     seed_source,
     shipped_source,
     slugify,
 )
 from app.per_notebook import (
-    SNAPSHOT_NOTEBOOK_DIR,
     WORKSPACE_NOTEBOOK_DIR,
     list_project_apps,
     per_notebook_env,
@@ -299,22 +296,17 @@ def _tile_dict(
     *,
     cpu: int | None = None,
     memory: int | None = None,
-    source: str | None = None,
 ) -> dict:
     """Build the context dict consumed by `_tile.html`.
 
-    `source` is what launch/copy/download send as `section`: it differs from
-    the rendered `section` only for shipped public snapshots, which render in
-    Snapshots but come from the image (`public-snapshots`). `cpu`/`memory`
-    (whole GiB) are carried only for workspace tiles — they seed the settings
-    modal's fields via the gear button's data attributes.
+    `cpu`/`memory` (whole GiB) are carried only for workspace tiles — they
+    seed the settings modal's fields via the gear button's data attributes.
     """
     return {
         "slug": slug,
         "title": title,
         "description": description,
         "section": section,
-        "source": source or section,
         "cpu": cpu,
         "memory": memory,
     }
@@ -351,17 +343,6 @@ def _workspace_tile_dict(
     )
 
 
-def _snapshot_tile_dict(slug: str, *, public: bool = False) -> dict:
-    """A read-only Snapshots tile — a frozen record, runnable only in run mode."""
-    return _tile_dict(
-        slug,
-        _display_name(f"{slug}.py"),
-        "",
-        "snapshots",
-        source="public-snapshots" if public else "snapshots",
-    )
-
-
 async def _workspace_tiles(user: User) -> list[dict]:
     """Build Workspace tiles from the user's own notebooks in the store.
 
@@ -393,19 +374,6 @@ async def _workspace_tiles(user: User) -> list[dict]:
         return _workspace_tile_dict(slug, cpu, memory, desc, name=name)
 
     return list(await asyncio.gather(*[_tile(s) for s in slugs]))
-
-
-async def _snapshot_tiles(user: User) -> list[dict]:
-    """Shipped public snapshots, then the user's own, as Snapshots tiles."""
-    tiles = [_snapshot_tile_dict(s.slug, public=True) for s in public_snapshots()]
-    if _store_ready():
-        try:
-            own = await store.list_snapshots(user.subject)
-        except Exception as exc:
-            logger.warning(f"Snapshot listing failed for {user.subject!r}: {exc}")
-            own = []
-        tiles += [_snapshot_tile_dict(f.removesuffix(".py")) for f in own]
-    return tiles
 
 
 async def _teardown_notebook_pods(user: User, slug: str) -> None:
@@ -449,10 +417,7 @@ def _invalid_slug(slug: str) -> JSONResponse | None:
 @asgi_app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, user: CurrentUser):
     """Render the owner's dashboard."""
-    workspace, snapshots = await asyncio.gather(
-        _workspace_tiles(user) if _store_ready() else asyncio.sleep(0, []),
-        _snapshot_tiles(user),
-    )
+    workspace = await _workspace_tiles(user) if _store_ready() else []
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -468,7 +433,6 @@ async def dashboard(request: Request, user: CurrentUser):
                 _tile_dict(n.slug, n.title, n.description, "workflows")
                 for n in by_section("workflows")
             ],
-            "snapshots": snapshots,
             "workspace": workspace,
             "version": config.VERSION,
         },
@@ -536,7 +500,7 @@ async def workspace_create(
     return JSONResponse({"slug": slug, "tile_html": _render_tile(tile)})
 
 
-async def _copy_source(user: User, slug: str, section: str) -> tuple[str, str, str]:
+def _copy_source(slug: str, section: str) -> tuple[str, str, str]:
     """Resolve a copy source to `(source, default_title, default_description)`.
 
     Raises `LookupError` when the source doesn't exist and `ValueError` for a
@@ -548,32 +512,17 @@ async def _copy_source(user: User, slug: str, section: str) -> tuple[str, str, s
         if nb is None or nb.section != "workflows" or source is None:
             raise LookupError(f"unknown workflow: {slug}")
         return source, nb.title, nb.description
-    if section == "public-snapshots":
-        snap = public_snapshot(slug)
-        if snap is None:
-            raise LookupError(f"unknown snapshot: {slug}")
-        source = snap.source()
-    elif section == "snapshots":
-        if _notebook_slug(slug) != slug:
-            raise ValueError(f"invalid notebook: {slug!r}")
-        source = await store.get_snapshot_notebook(user.subject, f"{slug}.py")
-        if source is None:
-            raise LookupError(f"source notebook not found: {slug}")
-    else:
-        raise ValueError(f"cannot copy from section: {section}")
-    title = parse_notebook_name(source) or _display_name(f"{slug}.py")
-    return source, title, parse_notebook_description(source)
+    raise ValueError(f"cannot copy from section: {section}")
 
 
 @asgi_app.post("/workspace/copy")
 async def workspace_copy(
     user: CurrentUser, slug: str = Form(...), section: str = Form(...)
 ):
-    """Copy a Workflows or Snapshots notebook into the user's workspace.
+    """Copy a Workflows notebook into the user's workspace.
 
-    The source is a shipped Workflows notebook, a shipped public snapshot, or
-    one of the user's own snapshots; it's written as a fresh, editable
-    workspace notebook. The copy keeps the source's `[tool.stargazer]`
+    The source is a shipped Workflows notebook; it's written as a fresh,
+    editable workspace notebook. The copy keeps the source's `[tool.stargazer]`
     resources but gets its own name/description so it tiles like any other
     workspace notebook. The target slug is derived from the source title;
     like `/workspace/create` it fails with 409 if that name is taken. Returns
@@ -582,7 +531,7 @@ async def workspace_copy(
     if not _store_ready():
         return _store_off()
     try:
-        source, title, desc = await _copy_source(user, slug, section)
+        source, title, desc = _copy_source(slug, section)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     except LookupError as exc:
@@ -687,97 +636,21 @@ async def workspace_delete(user: CurrentUser, slug: str = Form(...)):
     return JSONResponse({"status": "deleted", "slug": slug})
 
 
-@asgi_app.post("/workspace/snapshot")
-async def workspace_snapshot(user: CurrentUser, slug: str = Form(...)):
-    """Freeze a workspace notebook by *moving* it into the user's snapshots.
-
-    The notebook's current stored source (what its pod last saved) is
-    re-created verbatim as a snapshot, then the workspace original is
-    deleted. The snapshot write happens first, so a failed move leaves the
-    notebook editable rather than lost. A slug shared with a shipped public
-    snapshot is refused, since both would launch as the same pod. Tears down
-    any running pod for the slug — once moved, no Workspace tile remains to
-    Stop it.
-    """
-    if not _store_ready():
-        return _store_off()
-    if bad := _invalid_slug(slug):
-        return bad
-    if public_snapshot(slug) is not None:
-        return JSONResponse(
-            {"error": f"a published snapshot is already named {slug!r}; rename first"},
-            status_code=409,
-        )
-    filename = f"{slug}.py"
-    try:
-        source = await store.get_workspace_notebook(user.subject, filename)
-        if source is None:
-            return JSONResponse(
-                {"error": f"notebook not found: {filename}"}, status_code=404
-            )
-        await store.create_snapshot_notebook(user.subject, filename, source)
-        await store.delete_workspace_notebook(user.subject, filename)
-    except store.NotebookExistsError:
-        return JSONResponse(
-            {"error": f"a snapshot named {filename} already exists"}, status_code=409
-        )
-    except Exception as exc:
-        logger.error(f"Notebook snapshot failed for {slug!r}: {exc}")
-        return JSONResponse({"error": f"snapshot failed: {exc}"}, status_code=502)
-
-    await _teardown_notebook_pods(user, slug)
-    tile_html = _render_tile(_snapshot_tile_dict(slug))
-    return JSONResponse({"status": "snapshotted", "slug": slug, "tile_html": tile_html})
-
-
-@asgi_app.post("/snapshot/delete")
-async def snapshot_delete(user: CurrentUser, slug: str = Form(...)):
-    """Delete one of the user's own snapshots and tear down its run pod.
-
-    Idempotent. Shipped public snapshots aren't the user's to delete.
-    """
-    if not _store_ready():
-        return _store_off()
-    if bad := _invalid_slug(slug):
-        return bad
-    await _teardown_notebook_pods(user, slug)
-    try:
-        await store.delete_snapshot_notebook(user.subject, f"{slug}.py")
-    except Exception as exc:
-        logger.error(f"Snapshot delete failed for {slug!r}: {exc}")
-        return JSONResponse({"error": f"delete failed: {exc}"}, status_code=502)
-    return JSONResponse({"status": "deleted", "slug": slug})
-
-
 @asgi_app.get("/workspace/download")
-async def workspace_download(user: CurrentUser, slug: str, section: str = "workspace"):
-    """Download a notebook's `.py` source as an attachment.
+async def workspace_download(user: CurrentUser, slug: str):
+    """Download a workspace notebook's `.py` source as an attachment.
 
-    Covers the user's workspace notebooks and own snapshots (from the store)
-    and shipped public snapshots (from the image). This is the path for
-    sharing a notebook upstream: download it and contribute it like any file.
+    This is the path for sharing a notebook upstream: download it and
+    contribute it like any file.
     """
-    if section == "public-snapshots":
-        snap = public_snapshot(slug)
-        if snap is None:
-            return JSONResponse({"error": "notebook not found"}, status_code=404)
-        source, filename = snap.source(), snap.filename
-    elif section in ("workspace", "snapshots"):
-        if not _store_ready():
-            return _store_off()
-        if bad := _invalid_slug(slug):
-            return bad
-        filename = f"{slug}.py"
-        read = (
-            store.get_workspace_notebook
-            if section == "workspace"
-            else store.get_snapshot_notebook
-        )
-        source = await read(user.subject, filename)
-        if source is None:
-            return JSONResponse({"error": "notebook not found"}, status_code=404)
-    else:
-        return JSONResponse({"error": f"invalid section: {section}"}, status_code=400)
+    if not _store_ready():
+        return _store_off()
+    if bad := _invalid_slug(slug):
+        return bad
+    filename = f"{slug}.py"
+    source = await store.get_workspace_notebook(user.subject, filename)
+    if source is None:
+        return JSONResponse({"error": "notebook not found"}, status_code=404)
     return Response(
         source,
         media_type="text/x-python; charset=utf-8",
@@ -789,7 +662,7 @@ async def workspace_download(user: CurrentUser, slug: str, section: str = "works
 # Launch / stop / status / cleanup
 # ---------------------------------------------------------------------------
 
-_SECTIONS = ("tutorials", "workflows", "workspace", "snapshots", "public-snapshots")
+_SECTIONS = ("tutorials", "workflows", "workspace")
 
 
 async def _launch_target(
@@ -797,35 +670,22 @@ async def _launch_target(
 ) -> tuple[str, NotebookResources | None, str | None] | None:
     """Resolve a launch to `(notebook_path, resources, main_img)`, or None if unknown.
 
-    Store-backed notebooks (workspace, own snapshots) and shipped public
-    snapshots declare resources in their `[tool.stargazer]` header; a missing
-    or unreadable header falls back to the defaults. Tutorials and workflows
-    keep the env's legacy defaults (`resources=None`). Store-backed notebooks
-    can also declare their own image (`main_img`, the expression to build);
-    every other section runs on the deployed notebook image.
+    Workspace notebooks declare resources in their `[tool.stargazer]` header;
+    a missing or unreadable header falls back to the defaults. Tutorials and
+    workflows keep the env's legacy defaults (`resources=None`). Workspace
+    notebooks can also declare their own image (`main_img`, the expression to
+    build); every other section runs on the deployed notebook image.
     """
-    if section in ("workspace", "snapshots"):
-        if section == "workspace":
-            notebook_dir, read = WORKSPACE_NOTEBOOK_DIR, store.get_workspace_notebook
-        else:
-            notebook_dir, read = SNAPSHOT_NOTEBOOK_DIR, store.get_snapshot_notebook
+    if section == "workspace":
+        path = f"{WORKSPACE_NOTEBOOK_DIR}/{slug}.py"
         try:
-            source = await read(user.subject, f"{slug}.py")
+            source = await store.get_workspace_notebook(user.subject, f"{slug}.py")
         except Exception as exc:
-            logger.warning(f"Resource read failed for {section} {slug!r}: {exc}")
+            logger.warning(f"Resource read failed for {slug!r}: {exc}")
             source = None
         if not source:
-            return f"{notebook_dir}/{slug}.py", DEFAULT_RESOURCES, None
-        return (
-            f"{notebook_dir}/{slug}.py",
-            parse_notebook_resources(source),
-            extract_main_img(source),
-        )
-    if section == "public-snapshots":
-        snap = public_snapshot(slug)
-        if snap is None:
-            return None
-        return snap.path_in_image, parse_notebook_resources(snap.source()), None
+            return path, DEFAULT_RESOURCES, None
+        return path, parse_notebook_resources(source), extract_main_img(source)
     nb: Notebook | None = by_slug(slug)
     if nb is None or nb.section != section:
         return None
@@ -856,11 +716,7 @@ async def launch(
         return JSONResponse({"error": f"invalid mode: {mode}"}, status_code=400)
     if section not in _SECTIONS:
         return JSONResponse({"error": f"invalid section: {section}"}, status_code=400)
-    if section in ("snapshots", "public-snapshots") and mode != "run":
-        return JSONResponse(
-            {"error": "snapshots open in run mode only"}, status_code=400
-        )
-    if section in ("workspace", "snapshots"):
+    if section == "workspace":
         if not _store_ready():
             return _store_off()
         if bad := _invalid_slug(slug):

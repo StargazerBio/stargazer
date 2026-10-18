@@ -254,44 +254,37 @@ def test_proxy_forwards_method_and_body(owner_client, upstream):
 
 @pytest.fixture
 def pod_dirs(tmp_path, monkeypatch):
-    """Point the pod's workspace/snapshot dirs and the store root at tmp paths."""
+    """Point the pod's workspace dir and the store root at tmp paths."""
     store = tmp_path / "store"
     monkeypatch.setenv("STARGAZER_WORKSPACE_ROOT", str(store))
     monkeypatch.setattr(proxy, "WORKSPACE_DIR", tmp_path / "workspace")
-    monkeypatch.setattr(proxy, "SNAPSHOT_DIR", tmp_path / "snapshots")
     monkeypatch.setattr(proxy, "_synced", {})
-    notebooks = store / "users" / OWNER / "notebooks"
-    snapshots = store / "users" / OWNER / "snapshots"
-    return tmp_path / "workspace", tmp_path / "snapshots", notebooks, snapshots
+    return tmp_path / "workspace", store / "users" / OWNER / "workspace"
 
 
-def test_hydrate_pulls_owner_notebooks_and_snapshots(pod_dirs):
-    """Launch fills /workspace and /snapshots from the owner's stored notebooks."""
-    workspace, snaps, notebooks, snapshots = pod_dirs
+def test_hydrate_pulls_owner_notebooks(pod_dirs):
+    """Launch fills /workspace from the owner's stored notebooks."""
+    workspace, notebooks = pod_dirs
     notebooks.mkdir(parents=True)
-    snapshots.mkdir(parents=True)
     (notebooks / "qc.py").write_text("# qc\n")
-    (snapshots / "frozen.py").write_text("# frozen\n")
 
     proxy.hydrate()
 
     assert (workspace / "qc.py").read_text() == "# qc\n"
-    assert (snaps / "frozen.py").read_text() == "# frozen\n"
 
 
-def test_hydrate_new_user_gets_empty_dirs(pod_dirs):
-    """A user with nothing stored starts with empty, existing directories."""
-    workspace, snaps, _, _ = pod_dirs
+def test_hydrate_new_user_gets_an_empty_dir(pod_dirs):
+    """A user with nothing stored starts with an empty, existing directory."""
+    workspace, _ = pod_dirs
 
     proxy.hydrate()
 
     assert sorted(p.name for p in workspace.iterdir()) == []
-    assert sorted(p.name for p in snaps.iterdir()) == []
 
 
 async def test_sync_uploads_only_changed_notebooks(pod_dirs):
     """Unchanged hydrated files stay put; edits and new notebooks upload."""
-    workspace, _, notebooks, _ = pod_dirs
+    workspace, notebooks = pod_dirs
     notebooks.mkdir(parents=True)
     (notebooks / "qc.py").write_text("# qc\n")
     await proxy.hydrate_async()
@@ -309,22 +302,9 @@ async def test_sync_uploads_only_changed_notebooks(pod_dirs):
     assert await proxy.sync_once() == []
 
 
-async def test_sync_never_writes_snapshots(pod_dirs):
-    """Edits under /snapshots are never written back to the store."""
-    _, snaps, _, snapshots = pod_dirs
-    snapshots.mkdir(parents=True)
-    (snapshots / "frozen.py").write_text("# frozen\n")
-    await proxy.hydrate_async()
-
-    (snaps / "frozen.py").write_text("# tampered\n")
-
-    assert await proxy.sync_once() == []
-    assert (snapshots / "frozen.py").read_text() == "# frozen\n"
-
-
 def test_shutdown_flushes_pending_edits(pod_dirs, monkeypatch):
     """Scale-to-zero writes edits made since the last periodic sync."""
-    workspace, _, notebooks, _ = pod_dirs
+    workspace, notebooks = pod_dirs
     monkeypatch.setattr(proxy, "SYNC_INTERVAL_SECONDS", 3600)
     proxy.hydrate()
 

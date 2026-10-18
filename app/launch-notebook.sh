@@ -8,9 +8,8 @@
 # Three things happen on startup:
 #
 #   1. Hydrate: copy the owner's notebooks from the workspace store into
-#      /workspace and their own snapshots into /snapshots (flat, one file per
-#      notebook), via the proxy module's `hydrate()`. A new user, or a deploy
-#      without a store, starts with empty dirs. The session then cd's into
+#      /workspace, via the proxy module's `hydrate()`. A new user, or a deploy
+#      without a store, starts with an empty dir. The session then cd's into
 #      /workspace so marimo and the proxy's dropdown terminal both work there.
 #   2. Start marimo on 127.0.0.1:8081 in sandbox mode (notebook's PEP 723
 #      header drives the venv).
