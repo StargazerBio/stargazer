@@ -1,8 +1,9 @@
 ---
 title: Publish an asset to the public tier
-status: doing
+status: review
 priority: normal
 created: 2026-10-06
+pr: 43
 ---
 
 `publish(asset)` promotes a stored asset to Pinata's public network with its keyvalues and
@@ -33,17 +34,29 @@ tickets.
 
 ## Pieces
 
-- [ ] Tests first, in `tests/utils/test_storage.py`, with a fake public tier
+- [x] Tests first, in `tests/utils/test_storage.py`, with a fake public tier
       that records what it's sent and assigns the CID the real one would:
   - a stored file published → the fake got its bytes and keyvalues,
     `_owner` included, and the record's CID is the stored CID
   - no public tier → refused; an unknown CID → refused; nothing sent
   - the public tier assigns a different CID → raises
-- [ ] `StorageClient.publish(cid)`.
-- [ ] MCP `publish_file(cid)` in `src/stargazer/server.py`, with a test
+- [x] `StorageClient.publish(cid)`.
+- [x] MCP `publish_file(cid)` in `src/stargazer/server.py`, with a test
       beside the other tools'.
-- [ ] Pinata tier, against the real API: store a small random file, publish
+- [x] Pinata tier, against the real API: store a small random file, publish
       it, find it on the public network with the same CID and keyvalues,
       then delete it from Pinata.
-- [ ] Docs: `docs/architecture/configuration.md` (the public tier) and the
+- [x] Docs: `docs/architecture/configuration.md` (the public tier) and the
       MCP guide's tool list.
+
+## Verified (2026-10-18)
+
+Unit tier: 460 passed, the five new tests failing first. Pinata tier, real
+API: a random file stored in a temp store and published came back on the
+public network with the same CID and keyvalues, then was deleted from
+Pinata. Branch `feat/publish-asset`, PR #43.
+
+Found along the way: hosted notebook pods hold no Pinata key (measured
+2026-10-17), so `publish` in a hosted notebook raises. It works in tasks, on
+the dashboard and locally with a key. The Publish buttons will run on the
+dashboard.
