@@ -161,11 +161,12 @@ download. Download is still how a notebook is shared, until Publish.
 
 ## Pieces
 
-- [ ] Prove the save at scale-down on Union, on its own: deploy with the
+- [x] Prove the save at scale-down on Union, on its own: deploy with the
       interval at 0, so the save at SIGTERM is the only one, write files in
       a running pod, check the store doesn't have them, stop the pod, and
-      check they're in the next pod. Read the pod's
-      `terminationGracePeriodSeconds` from the EKS audit log.
+      check they're in the next pod (below). Not done: reading the pod's
+      `terminationGracePeriodSeconds` from the EKS audit log, since the
+      read-only AWS session had expired.
 - [x] Proxy: save and hydrate every file, with the new prefix, the skips,
       the size and modification-time check, deletions, the 100 MB cap, and
       the interval from `SG_SAVE_INTERVAL_SECONDS`. Tests in
@@ -216,7 +217,7 @@ download. Download is still how a notebook is shared, until Publish.
   - If a doc is added or removed, update the `zensical.toml` nav. If the
     README mentions snapshots, list that drift in the PR and don't edit the
     README.
-- [ ] Verify on Union with the test account (`verify-stargazer`; the closest
+- [x] Verify on Union with the test account (`verify-stargazer`; the closest
       existing feature is `union-main-img`):
   - edit a notebook and write `data/counts.csv` from the terminal, let the
     pod scale to zero, reopen → both are there
@@ -229,6 +230,49 @@ download. Download is still how a notebook is shared, until Publish.
 
   Then add a feature file for saving the workspace, and stop every app the
   check started.
+
+## Verified on Union (2026-10-18)
+
+The test account's dashboard, deployed from the branch twice with
+`union_dashboard.py deploy`: first with `STARGAZER_SAVE_INTERVAL_SECONDS=0`
+(`037b45a`), then with the default (`70e333c`). The pods were driven through
+their own terminal websocket with `scripts/union_pod.py`, the banner in
+Chrome as the test account. Feature file:
+`verify-stargazer/features/union-workspace-save.md`.
+
+- **The save at SIGTERM, on its own.** Interval 0: the pod had
+  `SG_SAVE_INTERVAL_SECONDS=0` and no `/snapshots`. After writing
+  `data/counts.csv`, `data/old.csv`, `lib/helpers.py`, a line in the
+  notebook, `.env`, `__marimo__/c.json` and a 150 MB `data/big.bin`, and
+  waiting over 12 s, the store held only the notebook as created (788 bytes).
+  After Stop and a relaunch (a new pod), `/workspace` held the edited
+  notebook and the three files at their paths, and the store exactly those
+  four (the notebook now 811 bytes). `.env`, `__marimo__/` and the 150 MB
+  file weren't stored.
+- **Deletes.** `rm data/old.csv`, Stop, relaunch: gone from the pod and the
+  store. With the default interval, `rm -rf data lib` reached the store
+  within 8 s.
+- **The interval.** Default deploy: the pod had `SG_SAVE_INTERVAL_SECONDS=5`,
+  and a file the store had never held was stored within 8 s while the pod
+  ran.
+- **Big files.** `/__sg__/save-status` listed `data/reads.bam` (2,621,440,000
+  bytes). In Chrome the banner read "data/reads.bam (2.4 GB) is over 100 MB,
+  so it isn't saved with your workspace...", with the cell. The first deploy
+  showed "105 MB", fixed in `70e333c`. The cell, run in the kernel's sandbox
+  venv on a random 150 MB file, stored it as
+  `.../users/387300641116005877/assets/bafybeia7oarku7qtwiotl3ey6t4vmxtremxozuib6dxs7lc2oxyzkinfce/big2.bin`,
+  and `default_client.query({"asset": "data"})` returned its row, owner
+  stamped. Not run: `assemble()` from a task pod; the query went through the
+  same index client tasks use.
+- **Dashboard.** The full page has no Snapshots section or 📸, and says
+  "up to 100 MB each; store bigger files as assets."
+- **Torn down.** The probe files and notebook deleted, the dashboard
+  stopped, nothing active or running in `u-pryce` or `flytesnacks`. The
+  150 MB asset stays in the test account's asset store.
+
+One thing seen: a launch straight after a dashboard redeploy reached the old
+revision, so the pod got the old interval. Relaunching after the new
+revision was ready fixed it. In the feature file's gotchas.
 
 ## Open questions
 
