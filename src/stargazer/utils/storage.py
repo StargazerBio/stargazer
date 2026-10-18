@@ -242,6 +242,50 @@ class StorageClient:
         if row is not None:
             await asyncio.to_thread(_remove, row["uri"])
 
+    async def publish(self, cid: str) -> dict:
+        """Put one of the user's stored assets on the public tier, same CID.
+
+        Uploads the stored file to Pinata's public network with its index
+        row's keyvalues; `_owner` is restamped from `STARGAZER_OWNER`, as on
+        any upload, and files over 100 MB go up in resumable chunks. The
+        user's row stays, so the asset is in both tiers, and `query` keeps
+        the row over the public duplicate.
+
+        Args:
+            cid: The stored asset to publish
+
+        Returns:
+            The public record: `cid`, `name` and `keyvalues`
+
+        Raises:
+            ValueError: with no public tier, for a CID that isn't in the
+                user's index, for keyvalues over Pinata's limits (before
+                anything is sent), or when Pinata assigns a different CID
+        """
+        if self.public is None:
+            raise ValueError("No PINATA_JWT: there's no public tier to publish to")
+        row = await self.index.get(cid)
+        if row is None:
+            raise ValueError(f"{cid} isn't in your storage")
+        stored = Asset(
+            cid=cid,
+            path=File(path=row["uri"], name=row["name"], hash=cid),
+            keyvalues=dict(row["keyvalues"]),
+        )
+        local = await self.download(stored)
+        published = Asset(keyvalues=dict(row["keyvalues"]))
+        await self.public.upload(published, local)
+        # Our CIDs are computed to match Pinata's, so a mismatch is a bug.
+        if published.cid != cid:
+            raise ValueError(
+                f"Pinata stored {cid} as {published.cid}; the CIDs should match"
+            )
+        return {
+            "cid": cid,
+            "name": row["name"],
+            "keyvalues": _stamp_owner(published.to_keyvalues()),
+        }
+
     async def update_metadata(
         self, cid: str, keyvalues: dict[str, str], network: str | None = None
     ) -> dict:

@@ -63,6 +63,7 @@ run_workflow(
 | `download_file(cid="bafkrei…")` | Download to the local cache |
 | `delete_file(cid="bafkrei…")` | Remove a file |
 | `update_file(cid="bafkrei…", keyvalues={"asset": "reference", "build": "GRCh38"})` | Fix a mis-tagged record's metadata in place (merge, CID unchanged) |
+| `publish_file(cid="bafkrei…")` | Make one of your stored files public, under the same CID; your own copy stays |
 | `list_bundles()` / `fetch_resource_bundle(bundle_name="variant_calling_demo")` | Fetch a curated set of public files, such as the TP53 reference and reads used above |
 
 ## Inspecting Resources

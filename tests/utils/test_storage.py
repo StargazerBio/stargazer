@@ -224,6 +224,79 @@ async def test_update_metadata_merges_and_stamps_owner(client, tmp_path, monkeyp
     assert row["keyvalues"]["_owner"] == "u1"
 
 
+class _PublicTier:
+    """A public tier that records each upload and assigns the CID Pinata would."""
+
+    def __init__(self, cid: str = ""):
+        self.uploads = []
+        self.cid = cid
+
+    async def upload(self, component, path):
+        self.uploads.append(
+            {
+                "bytes": Path(path).read_bytes(),
+                "name": Path(path).name,
+                "keyvalues": component.to_keyvalues(),
+            }
+        )
+        component.cid = self.cid or compute_cid(Path(path))
+
+
+@pytest.mark.asyncio
+async def test_publish_sends_the_stored_file_and_its_keyvalues(tmp_path, monkeypatch):
+    """Publishing uploads the stored bytes with the row's keyvalues, same CID."""
+    monkeypatch.setenv("STARGAZER_OWNER", "u1")
+    public = _PublicTier()
+    c = _client(tmp_path, public=public)
+    monkeypatch.setattr(storage_mod, "default_client", c)
+    aln = Alignment()
+    await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x07"), sample_id="S1")
+    row = await c.index.get(aln.cid)
+
+    record = await c.publish(aln.cid)
+
+    assert public.uploads == [
+        {"bytes": b"BAM\x07", "name": "s1.bam", "keyvalues": row["keyvalues"]}
+    ]
+    assert row["keyvalues"]["_owner"] == "u1"
+    assert record == {"cid": aln.cid, "name": "s1.bam", "keyvalues": row["keyvalues"]}
+
+
+@pytest.mark.asyncio
+async def test_publish_refuses_without_a_public_tier(client, tmp_path):
+    """No Pinata key means nothing to publish to."""
+    aln = Alignment()
+    await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x08"), sample_id="S1")
+
+    with pytest.raises(ValueError, match="public tier"):
+        await client.publish(aln.cid)
+
+
+@pytest.mark.asyncio
+async def test_publish_refuses_an_unknown_cid(tmp_path, monkeypatch):
+    """Only the user's own stored assets can be published; nothing is sent."""
+    monkeypatch.delenv("STARGAZER_OWNER", raising=False)
+    public = _PublicTier()
+    c = _client(tmp_path, public=public)
+
+    with pytest.raises(ValueError, match="isn't in your storage"):
+        await c.publish("bafyNotStored")
+    assert public.uploads == []
+
+
+@pytest.mark.asyncio
+async def test_publish_raises_when_the_cid_changes(tmp_path, monkeypatch):
+    """A public CID that differs from ours is a bug, not a quiet success."""
+    monkeypatch.delenv("STARGAZER_OWNER", raising=False)
+    c = _client(tmp_path, public=_PublicTier(cid="bafyDifferent"))
+    monkeypatch.setattr(storage_mod, "default_client", c)
+    aln = Alignment()
+    await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x09"), sample_id="S1")
+
+    with pytest.raises(ValueError, match="bafyDifferent"):
+        await c.publish(aln.cid)
+
+
 def test_local_path_becomes_a_file(tmp_path):
     """Assigning a Path to `path` stores a File pointing at it, named after it."""
     ref = Reference(path=tmp_path / "ref.fa")

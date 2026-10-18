@@ -15,7 +15,9 @@ from conftest import FIXTURES_DIR
 from stargazer.assets import R1, Alignment
 from stargazer.assets.asset import Asset
 from stargazer.utils.cid import compute_cid
+from stargazer.utils.index import SqliteIndex
 from stargazer.utils.pinata import PinataClient
+from stargazer.utils.storage import StorageClient
 
 CIDS = {
     "GRCh38_TP53.fa": "bafkreib6vj3os7l4lqqytaw5vju46iorcknttfiwfnlbizjcqn7xd5hrvy",
@@ -297,3 +299,32 @@ async def test_alignment_uploads_with_every_field_and_owner(tmp_path, monkeypatc
         assert len(rec["keyvalues"]) == 9
     finally:
         await client.delete(Asset(cid=aln.cid))
+
+
+@pytest.mark.asyncio
+async def test_publish_puts_a_stored_asset_on_the_public_network(tmp_path, monkeypatch):
+    """A stored asset published keeps its CID and keyvalues on Pinata."""
+    monkeypatch.setenv("STARGAZER_OWNER", "integration-test")
+    tag = uuid.uuid4().hex
+    client = StorageClient(
+        local_dir=tmp_path / "cache",
+        store_root=str(tmp_path / "store"),
+        index=SqliteIndex(tmp_path / "index.db"),
+        public=PinataClient(),
+    )
+    stored = Asset(keyvalues={"asset": "publish_probe", "tag": tag})
+    await client.upload(stored, _unique_file(tmp_path, tag))
+
+    record = await client.publish(stored.cid)
+
+    try:
+        assert record["cid"] == stored.cid
+        [rec] = await client.public.query({"tag": tag})
+        assert rec["cid"] == stored.cid
+        assert rec["keyvalues"] == {
+            "asset": "publish_probe",
+            "tag": tag,
+            "_owner": "integration-test",
+        }
+    finally:
+        await client.public.delete(Asset(cid=stored.cid))
