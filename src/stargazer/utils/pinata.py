@@ -8,9 +8,8 @@ Provides async interface for authenticated Pinata operations:
 - Minting signed upload and download URLs
 
 Stargazer uses Pinata's public network only: shared data lives there,
-readable by everyone and attributed by `_owner`. Every call defaults to it.
-The asset-manager page (`app/assets.py`) still passes `network="private"`
-for its Private tab until the page moves onto the asset index.
+readable by everyone and attributed by `_owner`. Every call defaults to it,
+and no caller asks for the private network any more.
 
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
@@ -113,7 +112,7 @@ class PinataClient:
     client's job (`stargazer.utils.storage`).
 
     Every call works on Pinata's public network unless given another
-    `network`. Only the asset-manager page still asks for "private".
+    `network`; no caller gives one.
 
     Usage:
         client = PinataClient()

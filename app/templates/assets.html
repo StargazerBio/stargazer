@@ -280,8 +280,6 @@
 .kv-row { display: flex; gap: 0.5rem; align-items: center; }
 .kv-row input { flex: 1; }
 .kv-row button { background: transparent; border: 1px solid var(--border); color: var(--text-dim); border-radius: 6px; cursor: pointer; padding: 0.3rem 0.55rem; }
-.upload-net { display: inline-flex; gap: 1rem; align-items: center; font-size: 0.82rem; }
-.upload-net label { display: inline-flex; gap: 0.3rem; align-items: center; cursor: pointer; color: var(--text-dim); }
 .upload-note { font-size: 0.78rem; color: var(--text-dim); }
 .upload-status { font-size: 0.82rem; }
 .upload-status.err { color: var(--danger); }
@@ -321,10 +319,7 @@
     {% else %}
     <div class="assets-controls">
         <div class="seg" id="network-tabs" role="tablist" aria-label="Network">
-            <button data-network="public" role="tab" aria-selected="false">Public</button>
-            {% if username %}
-            <button data-network="private" role="tab" aria-selected="true">Private</button>
-            {% endif %}
+            <button data-network="public" role="tab" aria-selected="true">Public</button>
         </div>
         <div class="seg" id="view-toggle" role="tablist" aria-label="View">
             <button data-view="graph" role="tab" aria-selected="true">Graph</button>
@@ -398,11 +393,9 @@
                 <div><button type="button" class="btn btn-muted" id="add-kv">+ Add field</button></div>
             </div>
 
-            <div class="upload-net">
-                <span>Network:</span>
-                <label><input type="radio" name="net" value="private" checked /> Private (only you)</label>
-                <label><input type="radio" name="net" value="public" /> Public — <strong>anyone on the internet</strong> can browse it</label>
-            </div>
+            <p class="upload-note">
+                Uploads are public: <strong>anyone on the internet</strong> can browse them.
+            </p>
 
             <p class="upload-note">
                 Uploads are capped at <strong>100&nbsp;MB</strong>.
@@ -427,7 +420,7 @@ const USERNAME = {{ username | tojson }};
 
 const NODE_CAP = 150;
 const state = {
-    network: AUTHED ? "private" : "public",
+    network: "public",
     view: "graph",
     filters: {},
     records: [],
@@ -440,8 +433,7 @@ const $ = (id) => document.getElementById(id);
 const shortCid = (c) => (c && c.length > 14 ? c.slice(0, 8) + "…" + c.slice(-4) : c || "");
 const assetType = (r) => (r.keyvalues && r.keyvalues.asset) || "(bare)";
 const owner = (r) => (r.keyvalues && r.keyvalues._owner) || "shared";
-// On the public tab, flag records the signed-in user owns so they read green.
-// (Private is already all-yours, so it gets no green — that would be noise.)
+// Flag records the signed-in user owns so they read green.
 const ownedByUser = (r) => state.network === "public" && !!USERNAME && owner(r) === USERNAME;
 // Relationship keys: companion_of, and any keyvalue ending in _cid, with a
 // non-empty value. Bare "cid" is excluded (no underscore before the suffix).
@@ -510,8 +502,6 @@ function renderView() {
         setRegionMessage(
             filtered
                 ? "No assets match this filter."
-                : state.network === "private"
-                ? "No private assets you own yet. Unowned or pipeline records are reachable via the SDK/MCP."
                 : "No public assets on this network yet."
         );
         return;
@@ -1064,8 +1054,6 @@ async function doUpload() {
     let keyvalues;
     try { keyvalues = collectKeyvalues(); }
     catch (err) { status.textContent = err.message; status.className = "upload-status err"; return; }
-    const network = document.querySelector('input[name="net"]:checked').value;
-
     const btn = $("up-submit");
     btn.disabled = true;
     status.textContent = "Validating…";
@@ -1075,7 +1063,7 @@ async function doUpload() {
         const resp = await fetch("/assets/sign", {
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({ filename: file.name, keyvalues, network }),
+            body: JSON.stringify({ filename: file.name, keyvalues }),
         });
         const body = await resp.json().catch(() => ({}));
         if (!resp.ok) throw new Error(body.detail || "HTTP " + resp.status);
@@ -1104,9 +1092,9 @@ async function doUpload() {
             cid: rec.cid,
             name: rec.name || file.name,
             keyvalues: rec.keyvalues || minted.keyvalues,
-            network,
+            network: "public",
         };
-        if (network === state.network && !state.records.some((r) => r.cid === optimistic.cid)) {
+        if (!state.records.some((r) => r.cid === optimistic.cid)) {
             state.records = [optimistic, ...state.records];
             renderView();
         }

@@ -8,11 +8,12 @@ header Union's auth layer sets on every request. The Pinata client is swapped fo
 query returns canned records, and both capture their call args. Sign runs
 the real client's keyvalue-count check, which happens before any request.
 
-Auth model: public-network browsing (schema, public list, public download)
-is anonymous — public bytes are world-readable on IPFS anyway, and the
-public listing is served from an in-process TTL cache so the admin is a
-semi-static mirror, not an open proxy to the Pinata API. Private routes and
-sign minting require a signed-in user.
+Auth model: the page is public-only. Browsing (schema, list, download) is
+anonymous — public bytes are world-readable on IPFS anyway, and the listing
+is served from an in-process TTL cache so the admin is a semi-static mirror,
+not an open proxy to the Pinata API. Sign minting and metadata edits require
+a signed-in user. Asking for the private network is refused: private assets
+belong in the user's own store, not on the org's shared Pinata account.
 """
 
 import pytest
@@ -110,7 +111,7 @@ def _auth(client: TestClient, subject: str = "octocat") -> None:
 
 
 class TestAuth:
-    """Anonymous: public browsing OK; private + sign require a session."""
+    """Anonymous: browsing OK; sign requires a session."""
 
     def test_anonymous_can_read_schema(self, fake_pinata, client):
         assert client.get("/assets/schema").status_code == 200
@@ -124,14 +125,11 @@ class TestAuth:
         resp = client.get("/assets/download/bafy123", params={"network": "public"})
         assert resp.status_code == 302
 
-    def test_anonymous_private_list_401(self, fake_pinata, client):
-        assert client.get("/assets/list").status_code == 401
-        assert (
-            client.get("/assets/list", params={"network": "private"}).status_code == 401
-        )
-
-    def test_anonymous_private_download_401(self, fake_pinata, client):
-        assert client.get("/assets/download/bafy123").status_code == 401
+    def test_anonymous_list_defaults_to_public(self, fake_pinata, client):
+        resp = client.get("/assets/list")
+        assert resp.status_code == 200
+        assert resp.json() == CANNED_RECORDS
+        assert fake_pinata.query_calls[0]["network"] == "public"
 
     def test_anonymous_sign_401(self, fake_pinata, client):
         resp = client.post(
@@ -155,28 +153,51 @@ class TestSchema:
         assert "keyvalues" not in fields
 
 
-class TestPrivateList:
-    def test_injects_owner_filter(self, fake_pinata, client):
-        _auth(client)
-        resp = client.get("/assets/list", params={"network": "private", "build": "X"})
-        assert resp.status_code == 200
-        assert resp.json() == CANNED_RECORDS
-        call = fake_pinata.query_calls[0]
-        assert call["network"] == "private"
-        assert call["keyvalues"] == {"build": "X", "_owner": "octocat"}
+class TestPrivateRefused:
+    """No route touches Pinata's private network: the org key is shared."""
 
-    def test_overrides_client_supplied_owner(self, fake_pinata, client):
-        """Fail closed: the session, never the query string, decides _owner."""
-        _auth(client)
-        client.get("/assets/list", params={"network": "private", "_owner": "mallory"})
-        assert fake_pinata.query_calls[0]["keyvalues"]["_owner"] == "octocat"
+    REFUSED = "Only public assets are available here."
 
-    def test_network_defaults_to_private(self, fake_pinata, client):
+    def test_list(self, fake_pinata, client):
         _auth(client)
-        client.get("/assets/list")
-        call = fake_pinata.query_calls[0]
-        assert call["network"] == "private"
-        assert call["keyvalues"] == {"_owner": "octocat"}
+        resp = client.get("/assets/list", params={"network": "private"})
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == self.REFUSED
+        assert fake_pinata.query_calls == []
+
+    def test_sign(self, fake_pinata, client):
+        _auth(client)
+        resp = client.post(
+            "/assets/sign",
+            json={
+                "filename": "x.bam",
+                "keyvalues": {"asset": "alignment"},
+                "network": "private",
+            },
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == self.REFUSED
+        assert fake_pinata.sign_calls == []
+
+    def test_update(self, fake_pinata, client):
+        _auth(client, "octocat")
+        resp = client.post(
+            "/assets/update",
+            json={
+                "cid": "bafybam",
+                "network": "private",
+                "keyvalues": {"asset": "alignment"},
+            },
+        )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == self.REFUSED
+        assert fake_pinata.update_calls == []
+
+    def test_download(self, fake_pinata, client):
+        _auth(client)
+        resp = client.get("/assets/download/bafy123", params={"network": "private"})
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == self.REFUSED
 
 
 class TestPublicList:
@@ -217,7 +238,7 @@ class TestSign:
         assert body["keyvalues"]["asset"] == "r1"
         call = fake_pinata.sign_calls[0]
         assert call["filename"] == "r1.fq"
-        assert call["network"] == "private"
+        assert call["network"] == "public"
         assert call["keyvalues"]["_owner"] == "octocat"
         assert call["max_file_size"] is not None
 
@@ -385,12 +406,6 @@ class TestUpdate:
 
 
 class TestDownload:
-    def test_private_redirects_to_signed_url(self, fake_pinata, client):
-        _auth(client)
-        resp = client.get("/assets/download/bafy123", params={"network": "private"})
-        assert resp.status_code == 302
-        assert resp.headers["location"] == "https://gw.example/signed/bafy123"
-
     def test_public_authed_redirects_to_dedicated_gateway(
         self, fake_pinata, client, monkeypatch
     ):
@@ -428,14 +443,16 @@ class TestNotConfigured:
 class TestPage:
     """`GET /assets` renders assets.html (plan 21, piece 3)."""
 
-    def test_authed_gets_private_tab_and_upload(self, fake_pinata, client):
+    def test_authed_gets_public_upload_only(self, fake_pinata, client):
         _auth(client)
         resp = client.get("/assets")
         assert resp.status_code == 200
         html = resp.text
-        # Private tab + upload panel only show for a session.
-        assert 'data-network="private"' in html
+        # The upload panel shows for a session, and only uploads publicly.
         assert 'id="upload-panel"' in html
+        assert 'data-network="private"' not in html
+        assert 'value="private"' not in html
+        assert "anyone on the internet" in html
         # The page knows who it's for (drives the "Mine" filter + optimistic row).
         assert 'USERNAME = "octocat"' in html
         assert "AUTHED = true" in html

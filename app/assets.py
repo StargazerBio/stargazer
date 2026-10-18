@@ -2,21 +2,23 @@
 ### Asset manager page and API routes.
 
 APIRouter included by the dashboard serving `/assets`: the registry schema
-for the dynamic upload form, Pinata-backed listing, signed-URL minting for
-direct browser→Pinata uploads (bytes never transit the dashboard pod), and
-download redirects.
+for the dynamic upload form, listing of Pinata's public network, signed-URL
+minting for direct browser→Pinata uploads (bytes never transit the dashboard
+pod), and download redirects.
 
-Dashboards are deployed without a Pinata key (a per-user app's spec is
-readable by its owner, so a shared key would leak), so on the hosted deploy
-the page shows that asset storage isn't available and the API routes 503.
+Public only. The dashboard holds the org's shared Pinata key (a Flyte secret,
+`app.admin_app`), so Pinata's private network would keep nothing private
+from anyone else who can reach that key. A request for it is a 400. Private
+assets come back on the user's own store (ticket `asset-manager-on-index`).
+Without a key (the devbox, which drops app secrets, or a local run with
+none) the page says asset storage isn't available and the API routes 503.
 
 Auth model: Union's login sits in front of these routes, so on the hosted
-deploy every request is a signed-in user. The routes still degrade for an anonymous request (a local run): public
-browsing works, private routes 401. The public listing is served from an
-in-process TTL cache so the dashboard acts as a semi-static read-only mirror
-rather than an open proxy to the Pinata API. Private listing fails closed
-(`_owner == the user's subject` only, stamped and filtered server-side), and
-sign minting always requires a signed-in user.
+deploy every request is a signed-in user. The routes still degrade for an
+anonymous request (a local run): browsing works, while minting and edits
+401. The listing is served from an in-process TTL cache so the dashboard
+acts as a semi-static read-only mirror rather than an open proxy to the
+Pinata API. Edits fail closed: only a record's `_owner` may change it.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -71,6 +73,14 @@ def _require_user(request: Request) -> User:
     if user is None:
         raise HTTPException(status_code=401, detail="not signed in")
     return user
+
+
+def _require_public(network: str) -> None:
+    """Raise 400 for any network but public; see the module docstring."""
+    if network != "public":
+        raise HTTPException(
+            status_code=400, detail="Only public assets are available here."
+        )
 
 
 def _require_pinata() -> None:
@@ -146,28 +156,17 @@ async def assets_schema() -> dict:
 
 @router.get("/assets/list")
 async def assets_list(request: Request):
-    """List assets on one network, filtered by keyvalue query params.
+    """List public assets, filtered by keyvalue query params.
 
-    Public: anonymous, served from the TTL cache with filters applied
-    in-process. Private: a signed-in user is required; `_owner` is forced
-    to their subject server-side (fail closed — unowned and other-owned
-    records are never returned, whatever the query string says).
+    Anonymous, served from the TTL cache with filters applied in-process.
     """
     _require_pinata()
     params = dict(request.query_params)
-    network = params.pop("network", "private")
-
-    if network == "public":
-        records = await _public_records()
-        return [
-            r
-            for r in records
-            if all(r["keyvalues"].get(k) == v for k, v in params.items())
-        ]
-
-    user = _require_user(request)
-    params["_owner"] = user.subject
-    return await _pinata().query(params, network="private")
+    _require_public(params.pop("network", "public"))
+    records = await _public_records()
+    return [
+        r for r in records if all(r["keyvalues"].get(k) == v for k, v in params.items())
+    ]
 
 
 @router.post("/assets/sign")
@@ -185,13 +184,9 @@ async def assets_sign(request: Request):
 
     body = await request.json()
     filename = body.get("filename", "")
-    network = body.get("network", "private")
+    _require_public(body.get("network", "public"))
     if not filename:
         raise HTTPException(status_code=400, detail="filename is required")
-    if network not in ("private", "public"):
-        raise HTTPException(
-            status_code=400, detail="network must be 'private' or 'public'"
-        )
     try:
         asset = build_asset(body.get("keyvalues") or {})
     except ValueError as exc:
@@ -203,7 +198,7 @@ async def assets_sign(request: Request):
         url = await _pinata().create_signed_upload_url(
             filename=filename,
             keyvalues=keyvalues,
-            network=network,
+            network="public",
             max_file_size=MAX_UPLOAD_BYTES,
         )
     except ValueError as exc:
@@ -229,17 +224,13 @@ async def assets_update(request: Request):
 
     body = await request.json()
     cid = body.get("cid", "")
-    network = body.get("network", "private")
+    _require_public(body.get("network", "public"))
     if not cid:
         raise HTTPException(status_code=400, detail="cid is required")
-    if network not in ("private", "public"):
-        raise HTTPException(
-            status_code=400, detail="network must be 'private' or 'public'"
-        )
 
     # Fail-closed: only the owner of record may edit it. Read fresh (not the
     # public TTL cache) so a mutation never decides off stale ownership.
-    records = await _pinata().query({}, network=network)
+    records = await _pinata().query({}, network="public")
     current = next((r for r in records if r["cid"] == cid), None)
     if current is None or current["keyvalues"].get("_owner") != user.subject:
         raise HTTPException(status_code=403, detail="you can only edit assets you own")
@@ -252,7 +243,7 @@ async def assets_update(request: Request):
     patch = dict(body.get("keyvalues") or {})
     patch["_owner"] = user.subject
     try:
-        return await _pinata().update_metadata(cid, patch, network=network)
+        return await _pinata().update_metadata(cid, patch, network="public")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -262,15 +253,8 @@ async def assets_download(request: Request, cid: str):
     """Redirect to the file bytes — they never transit the dashboard pod.
 
     Public files live on world-readable IPFS, so anyone gets a redirect to
-    PINATA_GATEWAY, signed in or not. Private files need a signed-in user and
-    get a short-lived signed URL.
+    PINATA_GATEWAY, signed in or not.
     """
-    network = request.query_params.get("network", "private")
-    if network == "public":
-        gateway = os.environ["PINATA_GATEWAY"]
-        return RedirectResponse(f"{gateway}/ipfs/{cid}", status_code=302)
-
-    _require_user(request)
-    _require_pinata()
-    url = await _pinata()._get_signed_url(cid)
-    return RedirectResponse(url, status_code=302)
+    _require_public(request.query_params.get("network", "public"))
+    gateway = os.environ["PINATA_GATEWAY"]
+    return RedirectResponse(f"{gateway}/ipfs/{cid}", status_code=302)

@@ -30,8 +30,9 @@ The dashboard also owns the user's asset index (`app.index_api`): a SQLite
 file on its own disk, served to the user's task and notebook pods at the
 dashboard's in-cluster address, and kept durable in the bucket by Litestream.
 
-The asset manager (`app.assets`) is mounted but has no store on a hosted
-dashboard: no Pinata key is baked in, since the owner can read the app spec.
+The asset manager (`app.assets`) reaches Pinata with the org's key, which the
+dashboard gets as a Flyte secret: injected into the pod, never in the app
+spec the owner can read.
 
 `app_env` (this app's own AppEnvironment) is also defined here. It is
 deployed per user by `app.onboard` (`stargazer-users`), never on its own.
@@ -99,16 +100,13 @@ from stargazer.config import (
     IMAGE_PLATFORM,
     PROJECT_ROOT,
     STARGAZER_ENV_VARS,
+    STARGAZER_SECRETS,
     logger,
 )
 
 # ---------------------------------------------------------------------------
 # Flyte AppEnvironment for the dashboard itself.
 # ---------------------------------------------------------------------------
-
-# No secrets are baked in: a dashboard's owner can read its app spec, so any
-# shared credential there would leak to every user. That's why the asset
-# manager (Pinata) is off on hosted dashboards.
 
 # The dashboard's own project: notebooks are served into it, and code-bundle
 # uploads during `serve.aio(per_notebook_env)` use the client's init-time
@@ -175,6 +173,10 @@ app_env = flyte.app.AppEnvironment(
         **_FLYTE_CONTEXT,
         **_PUBLIC_CONFIG,
     },
+    # The Pinata key as a secret, never in `env_vars`: the owner can read the
+    # app spec, and Union keeps only a reference to a secret there. The devbox
+    # drops app secrets, so a devbox dashboard has no public tier.
+    secrets=STARGAZER_SECRETS,
     # Flyte's loaded_modules bundler ships only the .py files the deployer
     # imported; HTML and the landing-page logo must be enumerated, and so must
     # the startup module, which nothing imports. The bundle's `app/` shadows

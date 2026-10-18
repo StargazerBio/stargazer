@@ -67,17 +67,13 @@ There is no single host/IP that's reachable from both the laptop and from in-clu
 
 ---
 
-## `AppEnvironment(secrets=[...])` is silently dropped
+## `AppEnvironment(secrets=[...])` is silently dropped on the devbox
 
 **Symptom:** Secret registered with `flyte create secret`, declared on the `AppEnvironment` via `secrets=[flyte.Secret(...)]`, never reaches the running container. `os.environ["MY_SECRET"]` raises `KeyError`.
 
-**Cause:** `secrets=[...]` is dropped at the flyte-binary → Knative translation — **not** merely the missing label. Verified by deploying an AppEnvironment with `secrets=[flyte.Secret(...)]` and inspecting the rendered ksvc: `kubectl get ksvc <app> -n flyte -o jsonpath='{.spec.template.metadata.annotations}'` shows only `autoscaling.knative.dev/*` — no secret annotations and no `inject-flyte-secrets` label. The `flyte-binary-webhook` (`failurePolicy: Fail`, `objectSelector matchLabels: inject-flyte-secrets=true`) injects from pod *annotations*, so with neither annotation nor label present **no cluster-side webhook change can rescue it** — there is nothing for the webhook to act on. This is a Flyte App-serving limitation, reproducible on any cluster, not a pure devbox quirk.
+**Cause:** `secrets=[...]` is dropped at the flyte-binary → Knative translation — **not** merely the missing label. Verified by deploying an AppEnvironment with `secrets=[flyte.Secret(...)]` and inspecting the rendered ksvc: `kubectl get ksvc <app> -n flyte -o jsonpath='{.spec.template.metadata.annotations}'` shows only `autoscaling.knative.dev/*` — no secret annotations and no `inject-flyte-secrets` label. The `flyte-binary-webhook` (`failurePolicy: Fail`, `objectSelector matchLabels: inject-flyte-secrets=true`) injects from pod *annotations*, so with neither annotation nor label present **no cluster-side webhook change can rescue it** — there is nothing for the webhook to act on. It's the devbox's flyte-binary, not Flyte apps in general: **Union injects app secrets.** Measured 2026-10-17 with a probe app on the tenant declaring `PINATA_JWT`: the key reached the pod with the right length and hash prefix, and the app record held only a reference to it.
 
-**Workaround:** Bake secret values into `env_vars={...}` from the deployer's local shell at deploy time, e.g. `env_vars={"MY_SECRET": os.environ["MY_SECRET"]}`.
-
-**The app tier bakes no secrets today.** Plan 25 removed the GitHub OAuth, GitHub App and session secrets, and plan 26 stopped baking `PINATA_JWT` into dashboards: a user can read their own dashboard's app spec, so any secret there reaches that user. A secret the app tier needs again has to come from real secret injection, or be one each user may see.
-
-**Trade-off / prod gap:** secret values are stored in the App spec in Flyte's DB. This is the one accepted parity gap in `app/` — revisit when Flyte supports App-pod secret injection (then switch to `secrets=[flyte.Secret(key=…, as_env_var=…)]` and drop the baking).
+**No workaround in use.** Baking the value into `env_vars={...}` would work, but a user can read their own dashboard's app spec, so the key would reach them. The dashboard declares `PINATA_JWT` as a secret (`app/admin_app.py`) and goes without it on the devbox: the asset page says asset storage isn't available.
 
 Paths investigated and rejected: (a) `pod_template=PodTemplate(labels={"inject-flyte-secrets": "true"})` — even with the label the webhook has no secret annotations to inject, because flyte-binary never stamps them on App pods; (b) relaxing the webhook `objectSelector` — same reason, and `failurePolicy: Fail` makes a match-all selector dangerous (a webhook blip would block all pod scheduling).
 
