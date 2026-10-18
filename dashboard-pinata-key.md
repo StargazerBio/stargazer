@@ -1,8 +1,9 @@
 ---
 title: Dashboards get the Pinata key as a secret
-status: doing
+status: review
 priority: high
 created: 2026-10-17
+pr: 40
 ---
 
 The dashboard declares `secrets=[flyte.Secret(key="PINATA_JWT",
