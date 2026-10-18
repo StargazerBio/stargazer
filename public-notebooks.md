@@ -5,6 +5,7 @@ priority: normal
 created: 2026-10-16
 blocked_by:
   - publish-asset
+  - dashboard-pinata-key
 ---
 
 A notebook in a user's workspace is a plain file (ticket
@@ -41,12 +42,6 @@ from its path in the package, so it has to change too.
 
 ## Reading the public tier
 
-**This is the open problem.** A hosted dashboard holds no Pinata key,
-because its user can read its app spec, so any key baked into it reaches them.
-Reading Pinata's public index needs a key, even for public files. Options:
-
-- a Pinata key users are allowed to see, scoped to reading only. Not checked:
-  whether Pinata can scope a key that narrowly.
-- real secret injection into app pods, once Flyte supports it
-  (`.opencode/reference/devbox_workarounds.md`, "`AppEnvironment(secrets=[...])` is silently
-  dropped")
+Hosted dashboards read Pinata's public index once they have the key as a
+secret (ticket `dashboard-pinata-key`). Union injects app secrets without
+putting the value in the app record (measured 2026-10-17).
