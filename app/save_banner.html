@@ -34,9 +34,10 @@
   var POLL_MS = 10000;
   var banner, list, shown = '', dismissed = '';
 
+  // Binary units, so the 100 MB limit (100 * 1024^2 bytes) reads as 100 MB.
   function size(bytes) {
-    if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + ' GB';
-    return Math.round(bytes / 1e6) + ' MB';
+    if (bytes >= Math.pow(1024, 3)) return (bytes / Math.pow(1024, 3)).toFixed(1) + ' GB';
+    return Math.round(bytes / Math.pow(1024, 2)) + ' MB';
   }
 
   function snippet(path) {
