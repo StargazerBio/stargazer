@@ -41,22 +41,51 @@ its SHA-256.
 
 ## Pieces
 
-- [ ] Declare the secret on the dashboard's `AppEnvironment`. No test: it's
-      one argument, and the check is the deploy below.
-- [ ] The asset page's "isn't available yet" state stays for a dashboard with
-      no key (a local `uvicorn`, or the devbox, which drops app secrets).
-- [ ] Docs:
-  - `.opencode/reference/devbox_workarounds.md`: the app-secrets entry says
-    the drop is "reproducible on any cluster". It's the devbox's
-    flyte-binary; Union injects them. Say so, and drop "The app tier bakes
-    no secrets today" in favour of what the dashboard declares.
-  - `.opencode/reference/architecture/app_internals.md`: "Off on hosted
-    dashboards" goes.
-  - `docs/architecture/app.md` and `docs/architecture/configuration.md`,
-    wherever they say hosted dashboards have no public tier.
-- [ ] Verify on Union: redeploy the test account's dashboard, then on its
-      asset page list the Public tab and upload a small public file. Stop
-      the dashboard after.
+Branch `feat/dashboard-pinata-key`.
+
+- [x] Declare the secret on the dashboard's `AppEnvironment`
+      (`secrets=STARGAZER_SECRETS`). No unit test: it's one argument, and
+      the check is the deploy below.
+- [x] **The asset page goes public-only** (decided 2026-10-17). With the
+      org's shared key on every dashboard, Pinata's private network would
+      keep nothing private between users. The Private tab and the network
+      choice in the upload form go, and every route answers a network other
+      than public with a 400. Private assets come back on the user's own
+      store in `asset-manager-on-index`, which also drops the client's
+      `network` parameter. Tests in `tests/unit/test_assets_routes.py`:
+      private list, sign, update and download → 400 with nothing sent to
+      Pinata; signing defaults to public; the signed-in page has the upload
+      panel, no Private tab and no private option. All seven failed before
+      the change, for the missing behavior.
+- [x] The "isn't available yet" state stays for a dashboard with no key (a
+      local `uvicorn`, or the devbox, which drops app secrets).
+- [x] Docs: `.opencode/reference/devbox_workarounds.md` (the drop is the
+      devbox's, Union injects), `.opencode/reference/architecture/app_internals.md`,
+      `docs/architecture/app.md`, `docs/architecture/configuration.md`, and
+      the `PinataClient` docstrings.
+- [x] Verified on Union, 2026-10-17 (below).
+
+## Verified on Union (2026-10-17)
+
+The test account's dashboard, redeployed from the branch (`37dfeeb`) with
+`union_dashboard.py deploy`. Before: its spec had no `PINATA_JWT` and no
+secrets, so the asset routes 503.
+
+- The app record has one secret reference, `PINATA_JWT`, and no
+  `PINATA_JWT` env var. Neither the key nor any 40-character slice of it is
+  in the record.
+- `GET /assets/list` → 200 with the six public records (anndata,
+  known_sites, r1, r2, reference). `network=private` on list and download →
+  400, "Only public assets are available here."
+- In Chrome as the test account: the asset page shows the Public tab, the
+  graph of the six records, and the upload panel, which says "Uploads are
+  public: anyone on the internet can browse them." A custom `verify_probe`
+  upload from the form → "Uploaded ✓", then on Pinata's public network as
+  `bafkreidir322j53anwo7wmt3c4ak4narsw4uhvi3wmd65kpwwfw3zaqpiy`, `_owner` the
+  test account's subject, nothing on the private network. Deleted from
+  Pinata straight after.
+- Torn down: the dashboard stopped, no active apps or live runs in `u-pryce`
+  or `flytesnacks` (where the image built).
 
 ## Related tickets
 
