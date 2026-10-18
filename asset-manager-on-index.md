@@ -117,8 +117,9 @@ routes switch from Pinata to those two for `network=private`;
       `SG_OWNER_SUBJECT`. Locally, with no owner set, allow.
 - [ ] Drop Pinata's private network: `PinataClient` loses `network` and
       `_get_signed_url`; `_require_pinata()` guards public routes only.
-- [ ] Hosted dashboards show the Private tab. Public says shared data isn't
-      available there, in product terms (no vendor or key names).
+- [ ] Hosted dashboards show the Private tab. The Public tab works there
+      once ticket `dashboard-pinata-key` lands; until then it says shared
+      data isn't available, in product terms (no vendor or key names).
 
 ## The dashboard home as the explorer
 
