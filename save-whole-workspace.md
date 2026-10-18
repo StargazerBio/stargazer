@@ -83,14 +83,28 @@ every marimo page, so a banner goes in the same way. It polls a new
 `/__sg__/save-status` endpoint, which lists the files the last pass skipped
 for size. The banner reads, for example: "`data/big.h5ad` (2.3 GB) is over
 100 MB, so it isn't saved with your workspace and will be gone when this
-notebook stops. Upload it as an asset to keep it." The pod's log gets a line
-too.
+notebook stops. To keep it, store it as an asset from a cell, then delete
+it from the workspace:" followed by a snippet to copy. The pod's log gets a
+line too.
 
-100 MB matches the dashboard's upload cap (`MAX_UPLOAD_BYTES` in
-`app/assets.py`), so a file over it can't go through the dashboard as an
-asset either. It's uploaded from code in the notebook, with
-`StorageClient.upload`, which goes straight from the pod to the store with no
-cap. No notebook or guide shows that yet.
+**Keeping a big file as an asset happens in the notebook** (decided
+2026-10-17). The file is already on the pod, so the pod uploads it straight
+to the user's store, with no size limit. Going through the asset page would
+mean downloading it to the user's machine and uploading it again. Workspace
+notebooks already have the SDK (the seeds' PEP 723 header), so the snippet
+is the SDK's own calls, the same ones the MCP `upload_file` tool makes, and
+no new function:
+
+```python
+from pathlib import Path
+from stargazer.assets import build_asset
+from stargazer.utils.storage import default_client
+
+await default_client.upload(build_asset({"asset": "counts"}), Path("data/big.h5ad"))
+```
+
+The banner fills in the path. The docs site isn't hosted, so the banner
+carries the snippet itself, rather than a link.
 
 With the cap, a file the proxy reads is at most 100 MB, so it keeps reading
 whole files and uploading from memory. It still compares size and
@@ -164,8 +178,10 @@ download. Download is still how a notebook is shared, until Publish.
   - with the interval at 0, a file written while the proxy serves → not in
     the store until shutdown, then stored
 - [ ] The banner: spliced into marimo's pages beside the terminal overlay,
-      polling `/__sg__/save-status`. A test: a proxied HTML page contains
-      it.
+      polling `/__sg__/save-status`, with the upload snippet. A test: a
+      proxied HTML page contains it. Run the snippet once in a workspace
+      notebook on a file over 100 MB, against an isolated store, and check
+      the index row and the stored bytes.
 - [ ] Dashboard: `STARGAZER_SAVE_INTERVAL_SECONDS` in `app/config.py`, passed
       to each pod as `SG_SAVE_INTERVAL_SECONDS` in `per_notebook_env`. A
       test: set to 60 → the built environment carries `60`.
@@ -198,7 +214,8 @@ download. Download is still how a notebook is shared, until Publish.
   - delete a file from the terminal, scale to zero, reopen → it stays
     deleted
   - write a 150 MB file from the terminal → the banner names it within one
-    interval, and it isn't in the store
+    interval, and it isn't in the store. Run the banner's snippet in a cell
+    → the file is an asset, and `assemble()` finds it from a task pod
   - the dashboard has no Snapshots section
 
   Then add a feature file for saving the workspace, and stop every app the
@@ -218,6 +235,8 @@ download. Download is still how a notebook is shared, until Publish.
   public listing, and the tutorials and scRNA notebook as public notebooks.
 - `asset-manager-on-index`: the dashboard as asset explorer and notebook
   launcher, ahead of this ticket in the queue.
+- `tus-browser-uploads`: uploads from the user's machine up to 10 GB, through
+  the dashboard. Not needed for files already in the workspace.
 - `notebook-environment`: notebooks declare their own app environment.
 - `bit-for-bit-snapshots`: superseded. Close it as `done`, with an Outcome
   saying so, when this ticket merges.

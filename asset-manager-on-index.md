@@ -22,8 +22,7 @@ their own section.
 To get there, the browser's Private tab first moves off Pinata, onto the
 user's index and store. That move is the rest of this ticket.
 
-Point the asset-manager page at the user's index instead of Pinata. That also retires most of
-[tus-browser-uploads](tus-browser-uploads.md). A follow-up from [plan 27](archive/27_asset_storage_index.md),
+Point the asset-manager page at the user's index instead of Pinata. A follow-up from [plan 27](archive/27_asset_storage_index.md),
 which moved task outputs onto the object store and the asset index into each user's dashboard.
 
 **The asset manager's Private tab moves onto the user's index and store.** It
@@ -82,7 +81,9 @@ Measured unless marked otherwise.
 
 - [ ] **Q1. Upload size through the dashboard.** Uploads stream to the pod's
       ephemeral disk. Start at the current 100 MB cap and confirm the pod's
-      ephemeral-storage limit before raising it.
+      ephemeral-storage limit before raising it. Ticket
+      `tus-browser-uploads` takes private uploads past 100 MB, up to 10 GB,
+      without the disk.
 
 ## The Private tab on the index and store
 
@@ -145,7 +146,7 @@ routes switch from Pinata to those two for `network=private`;
 
 ## Follow-ups (not in this ticket)
 
-- Browser uploads straight to the store through a presigned `PUT`, taking the
-  dashboard out of the upload path and lifting the size cap. Needs a CORS
-  rule on the bucket, and the CID computed in the browser or after the
-  upload. The large-upload half of [tus-browser-uploads](tus-browser-uploads.md).
+- Private uploads up to 10 GB, resumable, passed through the dashboard to
+  the store in chunks: ticket `tus-browser-uploads`. It replaces the earlier
+  idea of a presigned `PUT` straight from the browser, which needed a CORS
+  rule on the bucket.
