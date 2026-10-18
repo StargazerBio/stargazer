@@ -12,14 +12,16 @@ hydrates from and saves to. Platform cookies and `X-User-*` headers are
 stripped before anything reaches marimo, so notebook code never sees the
 visitor's platform token through a request.
 
-**Workspace.** The user's notebooks live in the workspace store, one object per
-notebook, under `<STARGAZER_WORKSPACE_ROOT>/users/<subject>/workspace/` — the
-layout `app.workspace_store` owns (mirrored here because this module can't
-import the `app` package). At launch, `hydrate()` copies the owner's notebooks
-into `/workspace`. While the pod runs, a background loop uploads any
-`/workspace` notebook whose content changed, every `SYNC_INTERVAL_SECONDS`, and
-the `lifespan` shutdown hook does a final flush when the pod scales to zero.
-Deletions are not propagated (deleting is a dashboard action).
+**Workspace.** Every file in the user's workspace lives in the workspace store,
+one object per file at its path, under
+`<STARGAZER_WORKSPACE_ROOT>/users/<subject>/workspace/` — the layout
+`app.workspace_store` owns (mirrored here because this module can't import the
+`app` package). At launch, `hydrate()` copies the owner's whole workspace into
+`/workspace`. While the pod runs, a background loop saves every file whose size
+or modification time changed, every `SYNC_INTERVAL_SECONDS`, and deletes from
+the store the files deleted from `/workspace`. The `lifespan` shutdown hook
+does a final pass when the pod scales to zero. Dotfiles, `__pycache__/` and
+`__marimo__/` are never saved.
 
 It also injects a Quake-style dropdown terminal into marimo's HTML: every
 `text/html` response gets an xterm.js overlay (loaded from CDN) spliced in
@@ -52,7 +54,6 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 
 import asyncio
 import fcntl
-import hashlib
 import json
 import os
 import pty
@@ -75,9 +76,12 @@ MARIMO_HTTP_PORT = 8081
 # The pod-local dir the launch hydrates into. Mirrors
 # `app.per_notebook.WORKSPACE_NOTEBOOK_DIR`.
 WORKSPACE_DIR = Path("/workspace")
-# How often edited notebooks are written back to the store. Notebooks are
-# kilobytes, so a short interval costs little and bounds what a crash can lose.
+# How often changed files are written back to the store. A pass reads only
+# files whose size or mtime changed, so a short interval costs little and bounds
+# what a crash can lose.
 SYNC_INTERVAL_SECONDS = 5
+# Never saved: Python's bytecode caches and marimo's per-notebook session caches.
+_SKIPPED_DIRS = {"__pycache__", "__marimo__"}
 
 # Env keys never handed to the interactive shell. The suffix list catches future
 # secret-shaped vars without an explicit entry per name.
@@ -112,9 +116,10 @@ display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
 # connections), short for readiness probes.
 _upstream: httpx.AsyncClient | None = None
 
-# filename -> sha256 of the content last known to be in the store. Seeded at
-# proxy startup from the freshly hydrated disk, so nothing re-uploads needlessly.
-_synced: dict[str, str] = {}
+# Relative path -> (size, mtime) of each file as it was last stored. Seeded at
+# proxy startup from the freshly hydrated disk, so nothing re-uploads needlessly,
+# and the set of files a pass may delete from the store.
+_synced: dict[str, tuple[int, int]] = {}
 
 _storage_ready = False
 
@@ -173,39 +178,55 @@ def _user_prefix(kind: str) -> str | None:
     return f"{root}/users/{owner}/{kind}"
 
 
-def _is_notebook(name: str) -> bool:
-    """A syncable notebook: a top-level `.py` file that isn't `_`/`.`-prefixed."""
-    return name.endswith(".py") and not name.startswith(("_", "."))
+def _workspace_files() -> dict[str, Path]:
+    """Every file in `/workspace` that's saved, by its POSIX path relative to it.
+
+    Skips dotfiles and dot-dirs, Python's `__pycache__/`, and the session
+    caches marimo writes in `__marimo__/`. Symlinks aren't followed, so a link
+    to data elsewhere on the pod isn't copied into the store.
+    """
+    files: dict[str, Path] = {}
+    for root, dirs, names in os.walk(WORKSPACE_DIR):
+        dirs[:] = [d for d in dirs if not (d.startswith(".") or d in _SKIPPED_DIRS)]
+        for name in names:
+            path = Path(root) / name
+            if name.startswith(".") or path.is_symlink():
+                continue
+            files[path.relative_to(WORKSPACE_DIR).as_posix()] = path
+    return files
 
 
-def _digest(data: bytes) -> str:
-    """Content hash used to decide whether a notebook needs uploading."""
-    return hashlib.sha256(data).hexdigest()
+def _stamp(path: Path) -> tuple[int, int]:
+    """A file's size and modification time, which say whether it changed."""
+    st = path.stat()
+    return st.st_size, st.st_mtime_ns
 
 
 async def _download_prefix(prefix: str, dest: Path) -> int:
-    """Copy every notebook object directly under `prefix` into `dest`.
+    """Copy every object under `prefix` to its relative path under `dest`.
 
     Returns how many were written. A missing prefix (a new user) writes none.
     """
     fs = flyte.storage.get_underlying_filesystem(path=prefix)
     try:
-        entries = await asyncio.to_thread(fs.ls, prefix, detail=False)
+        entries = await asyncio.to_thread(fs.find, prefix)
     except FileNotFoundError:
         return 0
+    # `find` names objects without the URI scheme (`bucket/key` on S3).
+    base = fs._strip_protocol(prefix).rstrip("/") + "/"
     count = 0
     for entry in entries:
-        name = str(entry).rstrip("/").rsplit("/", 1)[-1]
-        if not _is_notebook(name):
-            continue
-        chunks = [c async for c in flyte.storage.get_stream(f"{prefix}/{name}")]
-        (dest / name).write_bytes(b"".join(chunks))
+        rel = str(entry).removeprefix(base)
+        target = dest / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        chunks = [c async for c in flyte.storage.get_stream(f"{prefix}/{rel}")]
+        target.write_bytes(b"".join(chunks))
         count += 1
     return count
 
 
 async def hydrate_async() -> None:
-    """Async body of `hydrate()`; also records the hydrated content as synced."""
+    """Async body of `hydrate()`; also records the hydrated files as saved."""
     WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
     prefix = _user_prefix("workspace")
     if prefix is None:
@@ -213,12 +234,12 @@ async def hydrate_async() -> None:
         return
     _init_storage()
     n = await _download_prefix(prefix, WORKSPACE_DIR)
-    print(f"[sg] hydrated {n} notebook(s)")
+    print(f"[sg] hydrated {n} file(s)")
     _seed_from_disk()
 
 
 def hydrate() -> None:
-    """Fill `/workspace` from the owner's stored notebooks.
+    """Fill `/workspace` from the owner's stored workspace.
 
     Run by the launch script, as its own process, before marimo starts, so the
     notebook marimo opens already exists on disk. Always leaves the dir in
@@ -228,20 +249,21 @@ def hydrate() -> None:
 
 
 def _seed_from_disk() -> None:
-    """Record the current `/workspace` content as already stored.
+    """Record every file now in `/workspace` as already stored.
 
-    Called at proxy startup, right after hydration, so the first sync pass
-    doesn't re-upload every notebook that was just downloaded.
+    Called at proxy startup, right after hydration, so the first pass doesn't
+    re-upload what was just downloaded. It's also what a later pass may
+    delete from the store: only files this pod knew about. After a failed
+    hydrate the workspace is empty, so nothing stored is ever deleted.
     """
     if not WORKSPACE_DIR.is_dir():
         return
-    for path in WORKSPACE_DIR.iterdir():
-        if path.is_file() and _is_notebook(path.name):
-            _synced.setdefault(path.name, _digest(path.read_bytes()))
+    for rel, path in _workspace_files().items():
+        _synced.setdefault(rel, _stamp(path))
 
 
 async def _upload(uri: str, data: bytes) -> None:
-    """Write one notebook object (one PUT, atomic per object)."""
+    """Write one file's bytes as one object (one PUT, atomic per object)."""
     parent = uri.rsplit("/", 1)[0]
     # Object stores have no directories; a local root does. A no-op on S3.
     fs = flyte.storage.get_underlying_filesystem(path=parent)
@@ -249,34 +271,51 @@ async def _upload(uri: str, data: bytes) -> None:
     await flyte.storage.put_stream(data, to_path=uri)
 
 
-async def sync_once() -> list[str]:
-    """Upload every `/workspace` notebook whose content changed; return their names.
+def _delete_sync(uri: str) -> None:
+    """Remove one object; one already gone counts as deleted."""
+    with suppress(FileNotFoundError):
+        flyte.storage.get_underlying_filesystem(path=uri).rm(uri)
 
-    Only top-level, non-`_`-prefixed `.py` files sync, each to its own object.
-    A failed upload is logged and retried on the next pass rather than raised.
+
+async def sync_once() -> list[str]:
+    """Save every changed file in `/workspace`; return their relative paths.
+
+    A file whose size and modification time match what was last stored isn't
+    read at all. A file deleted from `/workspace` is deleted from the store,
+    if this pod hydrated or saved it. A failed upload or delete is logged and
+    retried on the next pass rather than raised.
     """
     prefix = _user_prefix("workspace")
     if prefix is None or not WORKSPACE_DIR.is_dir():
         return []
     _init_storage()
-    uploaded = []
-    for path in sorted(WORKSPACE_DIR.iterdir()):
-        if not (path.is_file() and _is_notebook(path.name)):
-            continue
-        data = path.read_bytes()
-        digest = _digest(data)
-        if _synced.get(path.name) == digest:
-            continue
+    files = _workspace_files()
+    saved = []
+    for rel, path in sorted(files.items()):
         try:
-            await _upload(f"{prefix}/{path.name}", data)
+            stamp = _stamp(path)
+            if _synced.get(rel) == stamp:
+                continue
+            await _upload(f"{prefix}/{rel}", path.read_bytes())
         except Exception as exc:
-            print(f"[sg] saving {path.name} failed: {exc}")
+            print(f"[sg] saving {rel} failed: {exc}")
             continue
-        _synced[path.name] = digest
-        uploaded.append(path.name)
-    if uploaded:
-        print(f"[sg] saved {', '.join(uploaded)}")
-    return uploaded
+        _synced[rel] = stamp
+        saved.append(rel)
+    deleted = []
+    for rel in sorted(_synced.keys() - files.keys()):
+        try:
+            await asyncio.to_thread(_delete_sync, f"{prefix}/{rel}")
+        except Exception as exc:
+            print(f"[sg] deleting {rel} failed: {exc}")
+            continue
+        del _synced[rel]
+        deleted.append(rel)
+    if saved:
+        print(f"[sg] saved {', '.join(saved)}")
+    if deleted:
+        print(f"[sg] deleted {', '.join(deleted)}")
+    return saved
 
 
 async def _sync_loop() -> None:

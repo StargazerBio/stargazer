@@ -9,6 +9,8 @@ workspace hydrate/sync against a local store root through the real
 `httpx.MockTransport` installed as the proxy's shared upstream client.
 """
 
+import os
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
@@ -262,15 +264,17 @@ def pod_dirs(tmp_path, monkeypatch):
     return tmp_path / "workspace", store / "users" / OWNER / "workspace"
 
 
-def test_hydrate_pulls_owner_notebooks(pod_dirs):
-    """Launch fills /workspace from the owner's stored notebooks."""
-    workspace, notebooks = pod_dirs
-    notebooks.mkdir(parents=True)
-    (notebooks / "qc.py").write_text("# qc\n")
+def test_hydrate_restores_every_file_at_its_path(pod_dirs):
+    """Launch fills /workspace with every stored file, folders included."""
+    workspace, stored = pod_dirs
+    (stored / "data").mkdir(parents=True)
+    (stored / "qc.py").write_text("# qc\n")
+    (stored / "data" / "counts.csv").write_text("a,b\n")
 
     proxy.hydrate()
 
     assert (workspace / "qc.py").read_text() == "# qc\n"
+    assert (workspace / "data" / "counts.csv").read_text() == "a,b\n"
 
 
 def test_hydrate_new_user_gets_an_empty_dir(pod_dirs):
@@ -282,24 +286,84 @@ def test_hydrate_new_user_gets_an_empty_dir(pod_dirs):
     assert sorted(p.name for p in workspace.iterdir()) == []
 
 
-async def test_sync_uploads_only_changed_notebooks(pod_dirs):
-    """Unchanged hydrated files stay put; edits and new notebooks upload."""
-    workspace, notebooks = pod_dirs
-    notebooks.mkdir(parents=True)
-    (notebooks / "qc.py").write_text("# qc\n")
+async def test_sync_saves_changed_files_at_their_paths(pod_dirs):
+    """Unchanged hydrated files stay put; edits and new files of any kind save."""
+    workspace, stored = pod_dirs
+    stored.mkdir(parents=True)
+    (stored / "qc.py").write_text("# qc\n")
     await proxy.hydrate_async()
 
     assert await proxy.sync_once() == []
 
     (workspace / "qc.py").write_text("# qc v2\n")
-    (workspace / "new.py").write_text("# new\n")
-    (workspace / "_scratch.py").write_text("# private\n")
+    (workspace / "data").mkdir()
+    (workspace / "data" / "counts.csv").write_text("a,b\n")
+    (workspace / "_scratch.py").write_text("# scratch\n")
 
-    assert await proxy.sync_once() == ["new.py", "qc.py"]
-    assert (notebooks / "qc.py").read_text() == "# qc v2\n"
-    assert (notebooks / "new.py").read_text() == "# new\n"
-    assert not (notebooks / "_scratch.py").exists()
+    assert await proxy.sync_once() == ["_scratch.py", "data/counts.csv", "qc.py"]
+    assert (stored / "qc.py").read_text() == "# qc v2\n"
+    assert (stored / "data" / "counts.csv").read_text() == "a,b\n"
     assert await proxy.sync_once() == []
+
+
+async def test_sync_skips_dotfiles_and_caches(pod_dirs):
+    """Dotfiles, and Python's and marimo's caches, are never saved."""
+    workspace, stored = pod_dirs
+    for rel in (
+        ".env",
+        ".ipynb_checkpoints/a.py",
+        "__marimo__/session/qc.py.json",
+        "__pycache__/qc.cpython-313.pyc",
+        "lib/__pycache__/helpers.cpython-313.pyc",
+    ):
+        (workspace / rel).parent.mkdir(parents=True, exist_ok=True)
+        (workspace / rel).write_text("x")
+
+    assert await proxy.sync_once() == []
+    assert not stored.exists()
+
+
+async def test_same_size_and_mtime_is_not_read(pod_dirs):
+    """An edit that keeps a file's size and mtime goes unseen: it isn't read."""
+    workspace, stored = pod_dirs
+    workspace.mkdir()
+    path = workspace / "a.txt"
+    path.write_text("aaaa")
+    assert await proxy.sync_once() == ["a.txt"]
+
+    before = path.stat()
+    path.write_text("bbbb")
+    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+
+    assert await proxy.sync_once() == []
+    assert (stored / "a.txt").read_text() == "aaaa"
+
+
+async def test_deleted_file_is_deleted_from_the_store(pod_dirs):
+    """A hydrated file deleted from /workspace is deleted from the store too."""
+    workspace, stored = pod_dirs
+    (stored / "data").mkdir(parents=True)
+    (stored / "qc.py").write_text("# qc\n")
+    (stored / "data" / "old.csv").write_text("x\n")
+    await proxy.hydrate_async()
+
+    (workspace / "data" / "old.csv").unlink()
+    await proxy.sync_once()
+
+    assert not (stored / "data" / "old.csv").exists()
+    assert (stored / "qc.py").read_text() == "# qc\n"
+
+
+async def test_store_files_the_pod_never_had_are_kept(pod_dirs):
+    """After a failed hydrate the workspace is empty, and saving mustn't wipe the store."""
+    workspace, stored = pod_dirs
+    stored.mkdir(parents=True)
+    (stored / "qc.py").write_text("# qc\n")
+    workspace.mkdir()
+
+    await proxy.sync_once()
+
+    assert (stored / "qc.py").read_text() == "# qc\n"
 
 
 def test_shutdown_flushes_pending_edits(pod_dirs, monkeypatch):
