@@ -1,8 +1,9 @@
 ---
 title: The asset page's Private tab on the user's index and store
-status: doing
+status: review
 priority: high
 created: 2026-10-06
+pr: 42
 ---
 
 **The asset page's Private tab moves onto the user's own index and store.**
