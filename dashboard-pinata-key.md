@@ -1,6 +1,6 @@
 ---
 title: Dashboards get the Pinata key as a secret
-status: review
+status: done
 priority: high
 created: 2026-10-17
 pr: 40
@@ -95,3 +95,16 @@ secrets, so the asset routes 503.
 - `asset-manager-on-index`: the Public tab works on hosted dashboards.
 - `tus-browser-uploads`: public uploads go through the dashboard too.
 - `publish-asset`: Publish can run on the dashboard.
+
+## Outcome
+
+Merged as PR #40 (2026-10-18). Hosted dashboards declare `PINATA_JWT` as a
+Flyte secret and have the public tier: the asset page lists and uploads to
+Pinata's public network. The page is public-only, and every route refuses
+another network with a 400. A follow-up commit on the PR corrected the docs
+that said the dashboard holds no secrets, which is how `main_img`'s eval of
+the owner's code was justified: its one secret is the org key the owner can
+already read from any task. Verified on the test account's dashboard (above).
+
+Left: `PinataClient`'s unused `network` parameter and `_get_signed_url`, and
+a Private tab on the user's own store, both in `asset-manager-on-index`.
