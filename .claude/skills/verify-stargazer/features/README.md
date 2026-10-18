@@ -30,6 +30,7 @@ Each feature file starts with an H1 title and one paragraph describing the user-
 - [Asset storage on the devbox](./devbox-asset-storage.md) covers the devbox dashboard, storing and finding assets across task pods, and the index surviving a dashboard restart. It needs the devbox, not the Launch block, and is driven by the devbox test tier (`pytest -m devbox`).
 - [Germline variant calling on the devbox](./devbox-germline.md) covers seeding a reference and paired reads, the germline workflow from alignment to joint calling with each step in its own pod, and finding the cohort's VCF afterwards. It needs the devbox, not the Launch block, and is driven by the devbox test tier.
 - [Notebook-declared images on Union](./union-main-img.md) covers a workspace notebook's `main_img` being built at launch, the notebook running on it, and a relaunch reusing it. It needs the Union tenant and the test account in Chrome, not the Launch block.
+- [Saving the workspace on Union](./union-workspace-save.md) covers the save when a pod stops, files in folders, deletes, the save interval, and the banner for files over 100 MB. It needs the Union tenant, not the Launch block, and is driven from the shell with `scripts/union_pod.py`.
 
 ## Not yet mapped
 
