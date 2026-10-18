@@ -156,12 +156,12 @@ download. Download is still how a notebook is shared, until Publish.
 
 ## Pieces
 
-- [ ] Prove the save at scale-down on Union, on its own, before anything
-      depends on it: write a file into a running pod's `/workspace` straight
-      after a save pass, let the pod scale to zero, and read the pod's logs
-      for `[sg] saved` after SIGTERM, then reopen. Read the pod's
+- [ ] Prove the save at scale-down on Union, on its own: deploy with the
+      interval at 0, so the save at SIGTERM is the only one, write files in
+      a running pod, check the store doesn't have them, stop the pod, and
+      check they're in the next pod. Read the pod's
       `terminationGracePeriodSeconds` from the EKS audit log.
-- [ ] Proxy: save and hydrate every file, with the new prefix, the skips,
+- [x] Proxy: save and hydrate every file, with the new prefix, the skips,
       the size and modification-time check, deletions, the 100 MB cap, and
       the interval from `SG_SAVE_INTERVAL_SECONDS`. Tests in
       `tests/unit/test_proxy.py`:
@@ -177,24 +177,28 @@ download. Download is still how a notebook is shared, until Publish.
     in the store, and `/__sg__/save-status` lists its path and size
   - with the interval at 0, a file written while the proxy serves → not in
     the store until shutdown, then stored
-- [ ] The banner: spliced into marimo's pages beside the terminal overlay,
+- [x] The banner: spliced into marimo's pages beside the terminal overlay,
       polling `/__sg__/save-status`, with the upload snippet. A test: a
       proxied HTML page contains it. Run the snippet once in a workspace
       notebook on a file over 100 MB, against an isolated store, and check
       the index row and the stored bytes.
-- [ ] Dashboard: `STARGAZER_SAVE_INTERVAL_SECONDS` in `app/config.py`, passed
+- [x] Dashboard: `STARGAZER_SAVE_INTERVAL_SECONDS` in `app/config.py`, passed
       to each pod as `SG_SAVE_INTERVAL_SECONDS` in `per_notebook_env`. A
       test: set to 60 → the built environment carries `60`.
-- [ ] `app/workspace_store.py`: the `workspace/` prefix. A test: a nested
+- [x] `app/workspace_store.py`: the `workspace/` prefix. A test: a nested
       `lib/helpers.py` and `data/counts.csv` under the prefix → not listed as
       notebooks.
-- [ ] Remove snapshots: `/workspace/snapshot`, `/snapshot/delete`, the
+- [x] Remove snapshots: `/workspace/snapshot`, `/snapshot/delete`, the
       snapshot sources of copy and launch, the Snapshots section in
       `app/templates/dashboard.html`, `src/stargazer/notebooks/snapshots/`,
       `PUBLIC_SNAPSHOTS_DIR` and `PublicSnapshot`, `SNAPSHOT_NOTEBOOK_DIR`, the
       `snapshots_uri` layout, and the snapshot tests in
-      `tests/unit/test_app.py`.
-- [ ] Docs:
+      `tests/unit/test_app.py`. The two routes get a 404 test, as plan 25's
+      removed routes have.
+- [x] Docs. `STARGAZER_SAVE_INTERVAL_SECONDS` went into the deployer settings
+      in `app_internals.md`, where the others are, not `configuration.md`.
+      No user guide covers the hosted workspace, so the 100 MB limit is in
+      the dashboard's Workspace section text instead.
   - `docs/architecture/notebook.md`: the types table, the archetypes,
     Promotion Paths (freeze goes, and promotion outside the dashboard
     stays)
