@@ -47,6 +47,9 @@ the app on one side, tasks and workflows in the SDK on the other.
   index rows for work in progress, and no second save loop.
 - **Every file is saved**, not only top-level `.py` files as now.
 - **The pod's disk is the working copy for normal saves.**
+- **The save interval is configurable** (Q1).
+- **A file over 100 MB isn't saved.** The user is told, and pointed to
+  uploading it as an asset instead.
 
 ## Measured (2026-10-16)
 
@@ -71,12 +74,29 @@ is `notebooks/`. It skips dotfiles, `__pycache__/`, and marimo's
 `__marimo__/` session caches. A notebook is still a top-level `.py` file, and
 the dashboard's Workspace section lists those as it does now.
 
-**Big files.** `sync_once` in `app/proxy.py` reads each file whole and hashes
-it on every pass (`_digest(path.read_bytes())`), then uploads it from memory.
-That's fine for notebooks. A multi-gigabyte data file would be read in full
-on every pass, and loading it into memory could OOM the pod. So the proxy
-compares size and modification time before reading a file, and streams
-uploads from disk.
+**Files over 100 MB.** The proxy doesn't save them. The file stays on the
+pod's disk while the pod runs, and is gone once it stops. The user's code or
+terminal wrote the file, and the proxy finds it later, on a save pass, so
+there's no call of ours to raise an error in. The error is a notice in the
+notebook's page instead. The proxy already splices a terminal overlay into
+every marimo page, so a banner goes in the same way. It polls a new
+`/__sg__/save-status` endpoint, which lists the files the last pass skipped
+for size. The banner reads, for example: "`data/big.h5ad` (2.3 GB) is over
+100 MB, so it isn't saved with your workspace and will be gone when this
+notebook stops. Upload it as an asset to keep it." The pod's log gets a line
+too.
+
+100 MB matches the dashboard's upload cap (`MAX_UPLOAD_BYTES` in
+`app/assets.py`), so a file over it can't go through the dashboard as an
+asset either. It's uploaded from code in the notebook, with
+`StorageClient.upload`, which goes straight from the pod to the store with no
+cap. No notebook or guide shows that yet.
+
+With the cap, a file the proxy reads is at most 100 MB, so it keeps reading
+whole files and uploading from memory. It still compares size and
+modification time before reading a file: `sync_once` in `app/proxy.py` reads
+and hashes every file on every pass (`_digest(path.read_bytes())`), and a few
+large files would make each pass read hundreds of megabytes.
 
 **Deletions.** Today a deleted file isn't deleted from the store (notebooks
 are deleted from the dashboard), so a file deleted in the terminal would come
@@ -88,8 +108,16 @@ a plain mirror would then wipe the store.
 **Hydrating.** At launch the pod downloads every object under the prefix to
 its path under `/workspace`. `/snapshots` goes.
 
-**When it saves** is Q1. The proxy already saves at scale-down: on Knative's
-SIGTERM, the proxy's FastAPI shutdown hook runs a last pass. What's known:
+**When it saves.** On an interval, and once more at scale-down. The interval
+is `SG_SAVE_INTERVAL_SECONDS` on the pod, which the dashboard sets at launch
+from its own `STARGAZER_SAVE_INTERVAL_SECONDS`. The default is 5 s, as now,
+and 0 turns the interval off, so the pod saves only at scale-down. It's set
+per deployment, not per user or notebook. A pass writes only the files that
+changed.
+
+The proxy already saves at scale-down: on Knative's SIGTERM, the proxy's
+FastAPI shutdown hook runs a last pass. A long interval, or 0, leans on it.
+What's known:
 
 - The signal path is fragile and was broken once. Flyte's `fserve` is PID 1
   and forwards SIGTERM to its one direct child only, so the launch chain
@@ -120,8 +148,8 @@ download. Download is still how a notebook is shared, until Publish.
       for `[sg] saved` after SIGTERM, then reopen. Read the pod's
       `terminationGracePeriodSeconds` from the EKS audit log.
 - [ ] Proxy: save and hydrate every file, with the new prefix, the skips,
-      the size and modification-time check, streamed uploads, and deletions.
-      Then whatever Q1 decides about the 5 s pass. Tests in
+      the size and modification-time check, deletions, the 100 MB cap, and
+      the interval from `SG_SAVE_INTERVAL_SECONDS`. Tests in
       `tests/unit/test_proxy.py`:
   - a CSV written to `data/` → saved at `workspace/data/counts.csv`, and
     hydrated back to `/workspace/data/counts.csv`
@@ -131,6 +159,16 @@ download. Download is still how a notebook is shared, until Publish.
   - a hydrated file deleted from `/workspace` → deleted from the store at
     the next save
   - a store object the pod never hydrated (the hydrate failed) → kept
+  - a file one byte over 100 MB (sparse, so the test writes no data) → not
+    in the store, and `/__sg__/save-status` lists its path and size
+  - with the interval at 0, a file written while the proxy serves → not in
+    the store until shutdown, then stored
+- [ ] The banner: spliced into marimo's pages beside the terminal overlay,
+      polling `/__sg__/save-status`. A test: a proxied HTML page contains
+      it.
+- [ ] Dashboard: `STARGAZER_SAVE_INTERVAL_SECONDS` in `app/config.py`, passed
+      to each pod as `SG_SAVE_INTERVAL_SECONDS` in `per_notebook_env`. A
+      test: set to 60 → the built environment carries `60`.
 - [ ] `app/workspace_store.py`: the `workspace/` prefix. A test: a nested
       `lib/helpers.py` and `data/counts.csv` under the prefix → not listed as
       notebooks.
@@ -148,6 +186,8 @@ download. Download is still how a notebook is shared, until Publish.
     section
   - `.opencode/reference/architecture/app_internals.md`: Pod Hydrate & Save,
     snapshots, copy, and the route table
+  - `docs/architecture/configuration.md`: `STARGAZER_SAVE_INTERVAL_SECONDS`
+  - the user guides: what's saved, and the 100 MB limit, in product terms
   - If a doc is added or removed, update the `zensical.toml` nav. If the
     README mentions snapshots, list that drift in the PR and don't edit the
     README.
@@ -157,6 +197,8 @@ download. Download is still how a notebook is shared, until Publish.
     pod scale to zero, reopen → both are there
   - delete a file from the terminal, scale to zero, reopen → it stays
     deleted
+  - write a 150 MB file from the terminal → the banner names it within one
+    interval, and it isn't in the store
   - the dashboard has no Snapshots section
 
   Then add a feature file for saving the workspace, and stop every app the
@@ -164,14 +206,11 @@ download. Download is still how a notebook is shared, until Publish.
 
 ## Open questions
 
-- [ ] **Q1. Save only at scale-down, or keep the 5 s pass too?** Saving only
-      at scale-down means no writes while the user works. A pod that dies
-      without SIGTERM loses the whole session, not the last 5 s, and
-      everything changed in the session has to upload in the grace period.
-      The 5 s pass writes a file only when it changed, so the cost of
-      keeping it is a stat of each file every 5 s, plus a partly written
-      large file being uploaded more than once while it grows. Decide after
-      the first piece measures the scale-down save.
+- [x] **Q1. Save only at scale-down, or keep the 5 s pass too?** Decided
+      2026-10-17: the interval is configurable, 5 s by default, and 0 saves
+      only at scale-down. A pod that dies without SIGTERM loses everything
+      since the last pass, so the longer the interval, the more the first
+      piece's proof of the scale-down save matters.
 
 ## Related tickets
 
