@@ -1,9 +1,49 @@
 ---
 title: Publish an asset to the public tier
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-06
 ---
 
 `publish(asset)` promotes a stored asset to Pinata's public network with its keyvalues and
 `_owner`. The CID doesn't change. A follow-up from [plan 27](archive/27_asset_storage_index.md).
+
+It's the step under every Publish button: on an asset (ticket
+`assets-on-dashboard-home`) and on a notebook (ticket `public-notebooks`).
+This ticket is the SDK half and an MCP tool; the buttons come with those
+tickets.
+
+## Design (2026-10-18)
+
+- **`StorageClient.publish(cid)`** reads the user's index row, makes a local
+  copy of the stored file (`download`), and uploads it to Pinata with the
+  row's keyvalues (`PinataClient.upload`, which sends files over 100 MB in
+  resumable chunks). `_owner` is restamped from `STARGAZER_OWNER`, as every
+  upload is. Returns the public record.
+- **The CID must come back the same.** Ours is computed to match Pinata's
+  (`stargazer.utils.cid`), so a different CID is a bug: it raises, and the
+  public copy is left for the caller to see.
+- **The private row stays.** The asset is now in both tiers; `query` shows
+  the user's row and drops the public duplicate by CID.
+- **Refused before anything is sent:** no public tier (`PINATA_JWT` unset),
+  a CID that isn't in the user's index, and keyvalues over Pinata's limits
+  (nine keys, 250 characters each), which the client already checks.
+- **One asset at a time.** Companions aren't published with it.
+- **MCP:** `publish_file(cid)`.
+
+## Pieces
+
+- [ ] Tests first, in `tests/utils/test_storage.py`, with a fake public tier
+      that records what it's sent and assigns the CID the real one would:
+  - a stored file published → the fake got its bytes and keyvalues,
+    `_owner` included, and the record's CID is the stored CID
+  - no public tier → refused; an unknown CID → refused; nothing sent
+  - the public tier assigns a different CID → raises
+- [ ] `StorageClient.publish(cid)`.
+- [ ] MCP `publish_file(cid)` in `src/stargazer/server.py`, with a test
+      beside the other tools'.
+- [ ] Pinata tier, against the real API: store a small random file, publish
+      it, find it on the public network with the same CID and keyvalues,
+      then delete it from Pinata.
+- [ ] Docs: `docs/architecture/configuration.md` (the public tier) and the
+      MCP guide's tool list.
