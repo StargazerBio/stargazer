@@ -34,7 +34,8 @@ the app on one side, tasks and workflows in the SDK on the other.
   they are. Making them one declaration is ticket `notebook-environment`.
 - **The tutorials and the scRNA notebook leave the SDK and become public
   notebooks**, in ticket `public-notebooks`, which also removes the Tutorials
-  and Workflows sections. Until then they ship as they do now.
+  and Workflows sections. Until then they ship as they do now. (Changed
+  2026-10-17, below.)
 - **Promotion happens outside the dashboard.** Ideas move from notebooks into
   the SDK by hand, in the repo (ticket `promote-task-cli` stays `maybe`). It
   may be automated later.
@@ -50,6 +51,10 @@ the app on one side, tasks and workflows in the SDK on the other.
 - **The save interval is configurable** (Q1).
 - **A file over 100 MB isn't saved.** The user is told, and pointed to
   uploading it as an asset instead.
+- **The tutorials stay in the SDK, and the scRNA notebook moves to a
+  top-level `notebooks/` folder in the repo** (ticket `top-level-notebooks`),
+  replacing the 2026-10-16 plan to publish them. Notebooks in the repo aren't
+  published, since GitHub already makes them public.
 
 ## Measured (2026-10-16)
 
@@ -235,8 +240,10 @@ download. Download is still how a notebook is shared, until Publish.
 
 ## Related tickets
 
-- `public-notebooks`: Publish, which turns a notebook into an asset, the
-  public listing, and the tutorials and scRNA notebook as public notebooks.
+- `public-notebooks`: Publish, which turns a workspace notebook into an asset,
+  and the public listing.
+- `top-level-notebooks`: the scRNA notebook moves to a top-level `notebooks/`
+  folder, and the seeds to `app/`.
 - `asset-manager-on-index`: the dashboard as asset explorer and notebook
   launcher, ahead of this ticket in the queue.
 - `tus-browser-uploads`: uploads from the user's machine up to 10 GB, through
@@ -245,6 +252,6 @@ download. Download is still how a notebook is shared, until Publish.
 - `bit-for-bit-snapshots`: superseded. Close it as `done`, with an Outcome
   saying so, when this ticket merges.
 - `sdk-package`: its step "Decide where the notebooks live" is settled. User
-  notebooks live in the workspace, and the tutorials and scRNA notebook
-  leave the package as public notebooks.
+  notebooks live in the workspace, the tutorials stay in the package, and the
+  scRNA notebook moves to `notebooks/`.
 - `promote-task-cli`: unchanged.
