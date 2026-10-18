@@ -90,7 +90,8 @@ def evaluate_main_img(expr: str) -> flyte.Image:
         raise MainImgError("Notebooks can't build their own image on this deployment.")
     base = notebook_image_base(config.NOTEBOOK_IMAGE)
     try:
-        # The owner's own code, in their own dashboard, which holds no secrets.
+        # The owner's own code, in their own dashboard. Its one secret, the
+        # org's Pinata key, is one any of the owner's tasks can read anyway.
         img = eval(expr, {"flyte": flyte, "notebook_base": base})
     except Exception as exc:
         raise MainImgError(f"main_img: {type(exc).__name__}: {exc}") from exc
