@@ -256,6 +256,7 @@ def per_notebook_env(
             "STARGAZER_NOTEBOOK_IMAGE": config.NOTEBOOK_IMAGE,
             "SG_OWNER_SUBJECT": owner_subject,
             "STARGAZER_WORKSPACE_ROOT": config.WORKSPACE_ROOT,
+            "SG_SAVE_INTERVAL_SECONDS": config.SAVE_INTERVAL_SECONDS,
             "STARGAZER_ADMIN_URL": admin_url,
             "STARGAZER_INDEX_URL": index_url,
             **(

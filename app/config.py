@@ -50,6 +50,14 @@ NOTEBOOK_IMAGE: str | None = os.environ.get("STARGAZER_NOTEBOOK_IMAGE") or None
 FLYTE_PROJECT: str = os.environ.get("FLYTE_PROJECT", "flytesnacks")
 FLYTE_DOMAIN: str = os.environ.get("FLYTE_DOMAIN", "development")
 
+# Seconds between a notebook pod's saves of its workspace to the store, set
+# per deployment and passed to each pod at launch (`app.per_notebook`). 0 turns
+# the periodic save off, leaving the save when the pod stops. Checked here, so
+# a bad value fails the dashboard at startup rather than every pod.
+SAVE_INTERVAL_SECONDS: str = os.environ.get("STARGAZER_SAVE_INTERVAL_SECONDS", "5")
+if float(SAVE_INTERVAL_SECONDS) < 0:
+    raise ValueError("STARGAZER_SAVE_INTERVAL_SECONDS must be 0 or more")
+
 # Root URI of the workspace store (`app.workspace_store`): every user's
 # notebooks live under `<root>/users/<subject>/`. On Union this is a prefix in
 # the tenant bucket, e.g. `s3://union-us-west-2-stargazerbio/stargazer`. Unset

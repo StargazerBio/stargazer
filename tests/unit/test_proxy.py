@@ -10,6 +10,7 @@ workspace hydrate/sync against a local store root through the real
 """
 
 import os
+import time
 
 import httpx
 import pytest
@@ -367,12 +368,40 @@ async def test_store_files_the_pod_never_had_are_kept(pod_dirs):
 
 
 def test_shutdown_flushes_pending_edits(pod_dirs, monkeypatch):
-    """Scale-to-zero writes edits made since the last periodic sync."""
-    workspace, notebooks = pod_dirs
-    monkeypatch.setattr(proxy, "SYNC_INTERVAL_SECONDS", 3600)
+    """Scale-to-zero writes edits made since the last periodic save."""
+    workspace, stored = pod_dirs
+    monkeypatch.setenv("SG_SAVE_INTERVAL_SECONDS", "3600")
     proxy.hydrate()
 
     with TestClient(proxy.asgi_app):
         (workspace / "late.py").write_text("# late edit\n")
 
-    assert (notebooks / "late.py").read_text() == "# late edit\n"
+    assert (stored / "late.py").read_text() == "# late edit\n"
+
+
+def test_interval_from_env_saves_while_serving(pod_dirs, monkeypatch):
+    """The pod saves on the interval its env sets, while it serves."""
+    workspace, stored = pod_dirs
+    monkeypatch.setenv("SG_SAVE_INTERVAL_SECONDS", "0.1")
+    proxy.hydrate()
+
+    with TestClient(proxy.asgi_app):
+        (workspace / "live.py").write_text("# live\n")
+        deadline = time.monotonic() + 2
+        while not (stored / "live.py").exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert (stored / "live.py").read_text() == "# live\n"
+
+
+def test_interval_zero_saves_only_at_shutdown(pod_dirs, monkeypatch):
+    """An interval of 0 turns the periodic save off; shutdown still saves."""
+    workspace, stored = pod_dirs
+    monkeypatch.setenv("SG_SAVE_INTERVAL_SECONDS", "0")
+    proxy.hydrate()
+
+    with TestClient(proxy.asgi_app):
+        (workspace / "late.py").write_text("# late edit\n")
+        time.sleep(0.5)
+        assert not (stored / "late.py").exists()
+
+    assert (stored / "late.py").read_text() == "# late edit\n"

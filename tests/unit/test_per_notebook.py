@@ -61,6 +61,12 @@ def test_pod_env_carries_the_asset_store_and_index(monkeypatch):
     )
 
 
+def test_pod_env_carries_the_save_interval(monkeypatch):
+    """The deployment's save interval reaches the pod's proxy."""
+    monkeypatch.setattr(config, "SAVE_INTERVAL_SECONDS", "60")
+    assert _env().env_vars["SG_SAVE_INTERVAL_SECONDS"] == "60"
+
+
 def test_pod_env_has_no_git_or_session_credentials():
     """Nothing from the old fork/session model reaches the pod."""
     env = _env()

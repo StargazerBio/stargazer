@@ -18,8 +18,8 @@ one object per file at its path, under
 `app.workspace_store` owns (mirrored here because this module can't import the
 `app` package). At launch, `hydrate()` copies the owner's whole workspace into
 `/workspace`. While the pod runs, a background loop saves every file whose size
-or modification time changed, every `SYNC_INTERVAL_SECONDS`, and deletes from
-the store the files deleted from `/workspace`. The `lifespan` shutdown hook
+or modification time changed, every `SG_SAVE_INTERVAL_SECONDS` (5 by default,
+0 for none), and deletes from the store the files deleted from `/workspace`. The `lifespan` shutdown hook
 does a final pass when the pod scales to zero. Dotfiles, `__pycache__/` and
 `__marimo__/` are never saved.
 
@@ -76,10 +76,6 @@ MARIMO_HTTP_PORT = 8081
 # The pod-local dir the launch hydrates into. Mirrors
 # `app.per_notebook.WORKSPACE_NOTEBOOK_DIR`.
 WORKSPACE_DIR = Path("/workspace")
-# How often changed files are written back to the store. A pass reads only
-# files whose size or mtime changed, so a short interval costs little and bounds
-# what a crash can lose.
-SYNC_INTERVAL_SECONDS = 5
 # Never saved: Python's bytecode caches and marimo's per-notebook session caches.
 _SKIPPED_DIRS = {"__pycache__", "__marimo__"}
 
@@ -318,10 +314,20 @@ async def sync_once() -> list[str]:
     return saved
 
 
-async def _sync_loop() -> None:
-    """Sync on an interval for the life of the pod."""
+def _save_interval() -> float:
+    """Seconds between save passes, from the pod's env; 0 means none.
+
+    The dashboard sets it at launch from its deployment's setting. The pass
+    reads only files whose size or mtime changed, so a short interval costs
+    little and bounds what a pod that dies without SIGTERM loses.
+    """
+    return float(os.environ.get("SG_SAVE_INTERVAL_SECONDS", "5"))
+
+
+async def _sync_loop(interval: float) -> None:
+    """Save every `interval` seconds for the life of the pod."""
     while True:
-        await asyncio.sleep(SYNC_INTERVAL_SECONDS)
+        await asyncio.sleep(interval)
         try:
             await sync_once()
         except Exception as exc:  # keep the loop alive whatever happens
@@ -330,10 +336,11 @@ async def _sync_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Run the sync loop while serving; flush pending edits on shutdown.
+    """Run the save loop while serving; flush pending edits on shutdown.
 
     `/workspace` is ephemeral, so anything not written before the pod idles is
-    lost. Flyte's `fserve` wrapper is PID 1 and forwards the Knative SIGTERM to
+    lost. With the interval at 0 there's no loop, and this flush is the only
+    save. Flyte's `fserve` wrapper is PID 1 and forwards the Knative SIGTERM to
     its one direct child; the launch script's `exec` chain (args prepend `exec`,
     then the script `exec`s uvicorn) makes uvicorn that direct child, so it
     receives SIGTERM and runs this hook. See app/launch-notebook.sh — an
@@ -341,11 +348,13 @@ async def lifespan(_: FastAPI):
     this flush.
     """
     _seed_from_disk()
-    loop_task = asyncio.create_task(_sync_loop())
+    interval = _save_interval()
+    loop_task = asyncio.create_task(_sync_loop(interval)) if interval > 0 else None
     yield
-    loop_task.cancel()
-    with suppress(asyncio.CancelledError):
-        await loop_task
+    if loop_task is not None:
+        loop_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await loop_task
     try:
         await sync_once()
     except Exception as exc:  # never block shutdown

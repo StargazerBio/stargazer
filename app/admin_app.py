@@ -121,6 +121,7 @@ _PUBLIC_CONFIG = {
     for name, value in (
         ("STARGAZER_WORKSPACE_ROOT", config.WORKSPACE_ROOT),
         ("SG_OWNER_SUBJECT", config.OWNER_SUBJECT),
+        ("STARGAZER_SAVE_INTERVAL_SECONDS", config.SAVE_INTERVAL_SECONDS),
     )
     if value
 }
