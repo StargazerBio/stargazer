@@ -43,12 +43,12 @@ a clean venv outside any checkout:
 
 ## Plan
 
-- [ ] **Decide where the notebooks live.** They ship in the SDK wheel today.
-      Tutorials teach the SDK and fit there; workflow notebooks, snapshots, the
-      workspace seeds and `notebook_base` are arguably app content. Notebooks
-      import each other as `stargazer.notebooks.*` (the Execution tutorial
-      imports the Workflows tutorial's workflow), so moving them changes those
-      paths.
+- [x] **Decide where the notebooks live.** Settled 2026-10-17. The tutorials
+      and `notebook_base` stay in the package, so the tutorials keep importing
+      each other as `stargazer.notebooks.tutorials.*`. Other notebooks, the
+      scRNA notebook first, live in a top-level `notebooks/` folder that no
+      distribution ships, and the workspace seeds move to `app/` (ticket
+      `top-level-notebooks`). Snapshots go (ticket `save-whole-workspace`).
 - [ ] **Versioned, published task images.** A task's code runs from its image,
       so the image must carry the same `stargazer` version as the caller.
       Publish the gatk and scrna images per release (for example
