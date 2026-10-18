@@ -294,6 +294,9 @@ revision was ready fixed it. In the feature file's gotchas.
 - `tus-browser-uploads`: uploads from the user's machine up to 10 GB, through
   the dashboard. Not needed for files already in the workspace.
 - `notebook-environment`: notebooks declare their own app environment.
+- `dashboard-settings`: the save interval moves from
+  `STARGAZER_SAVE_INTERVAL_SECONDS` to a per-user setting in a new Settings
+  section on the dashboard.
 - `bit-for-bit-snapshots`: superseded. Close it as `done`, with an Outcome
   saying so, when this ticket merges.
 - `sdk-package`: its step "Decide where the notebooks live" is settled. User
