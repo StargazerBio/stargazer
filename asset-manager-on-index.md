@@ -58,7 +58,7 @@ and upload form tell users not to upload sensitive data
 | Private upload | Browser → Pinata through a signed URL, 100 MB cap | Browser → dashboard → the user's store |
 | Private download | Pinata signed URL | A presigned store URL, or the file itself when run locally |
 | Metadata edits | Pinata | The index (`merge`) |
-| Private tab on hosted dashboards | Off (no Pinata key) | On |
+| Private tab | None: the page is public-only (ticket `dashboard-pinata-key`) | On, on every dashboard |
 | Pinata's private network | Used by the Private tab | Unused; `PinataClient` loses `network` |
 
 ## Verified (2026-10-07)
@@ -115,11 +115,13 @@ routes switch from Pinata to those two for `network=private`;
       with `_owner` restamped.
 - [ ] Owner gate on the private routes: the signed-in subject must equal
       `SG_OWNER_SUBJECT`. Locally, with no owner set, allow.
-- [ ] Drop Pinata's private network: `PinataClient` loses `network` and
-      `_get_signed_url`; `_require_pinata()` guards public routes only.
-- [ ] Hosted dashboards show the Private tab. The Public tab works there
-      once ticket `dashboard-pinata-key` lands; until then it says shared
-      data isn't available, in product terms (no vendor or key names).
+- [ ] Drop Pinata's private network from the client: `PinataClient` loses
+      `network` and `_get_signed_url`. The routes and the page already
+      refuse it (ticket `dashboard-pinata-key`), so nothing calls either.
+- [ ] The Private tab comes back, on the index and store, beside the Public
+      tab that ticket `dashboard-pinata-key` turned on for hosted
+      dashboards. The routes' `_require_public` guard gives way to the
+      private branches.
 
 ## The dashboard home as the explorer
 
