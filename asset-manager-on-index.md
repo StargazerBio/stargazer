@@ -1,26 +1,16 @@
 ---
-title: The dashboard as asset explorer and notebook launcher
-status: next
+title: The asset page's Private tab on the user's index and store
+status: doing
 priority: high
 created: 2026-10-06
 ---
 
-**The dashboard becomes an asset explorer and notebook launcher** (decided
-2026-10-16). Its home page shows the user's assets. Their notebooks get a
-section of their own, and they launch from there as they do now. Every other
-asset is in the graph and list browser that the separate asset page has
-today, with upload, download and metadata edits. The separate `/assets` page
-and its link in the avatar menu go.
-
-This is the frame the notebook work lands in. Ticket `save-whole-workspace`
-keeps the user's notebooks as files in their workspace, and ticket
-`public-notebooks` makes a published notebook an asset. None of the three
-blocks the others. Whichever of this ticket and `public-notebooks` lands
-second makes the browser leave out `asset=notebook`, since notebooks have
-their own section.
-
-To get there, the browser's Private tab first moves off Pinata, onto the
-user's index and store. That move is the rest of this ticket.
+**The asset page's Private tab moves onto the user's own index and store.**
+Afterwards it lists, uploads, downloads and edits the same assets the user's
+tasks write, on every dashboard. This is the first step of making the
+dashboard an asset explorer and notebook launcher (decided 2026-10-16); the
+second, moving the browser onto the dashboard's home page, is ticket
+`assets-on-dashboard-home`.
 
 Point the asset-manager page at the user's index instead of Pinata. A follow-up from [plan 27](archive/27_asset_storage_index.md),
 which moved task outputs onto the object store and the asset index into each user's dashboard.
@@ -123,28 +113,18 @@ routes switch from Pinata to those two for `network=private`;
       dashboards. The routes' `_require_public` guard gives way to the
       private branches.
 
-## The dashboard home as the explorer
+## Verify
 
-- [ ] Move the browser onto the dashboard's home page, below the notebook
-      sections: the Graph and List views, the detail card and the upload
-      panel. The routes stay under `/assets/*`. The `/assets` page and its
-      link in the avatar menu go.
-- [ ] If `public-notebooks` has landed, the browser leaves out
-      `asset=notebook` rows. Test it: a notebook row in the index → it isn't
-      in the browser's listing.
-- [ ] Verify on the devbox dashboard (`cli/devbox_dashboard.py`; the
-      `verify-stargazer` devbox recipe first, so storage is known good).
-      On the dashboard home: upload, list, download and edit. Then check that
-      `assemble()` finds the uploaded file from a task pod, and that the
-      notebook tiles still launch. Then once more on the test account's Union
-      dashboard.
+- [ ] On the test account's Union dashboard: upload a private file from the
+      asset page, list it, download it, edit its metadata, and check that
+      `assemble()` finds it from a task pod. Stop every app the check
+      started.
 
 ## Docs
 
 - [ ] `docs/architecture/app.md` and
       `.opencode/reference/architecture/app_internals.md`: the Private tab's
-      data path, and the Asset Manager section as part of the dashboard home
-      rather than a page of its own.
+      data path.
 - [ ] `src/stargazer/utils/pinata.py` docstrings: no private network left.
 
 ## Follow-ups (not in this ticket)
