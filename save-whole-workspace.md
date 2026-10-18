@@ -1,8 +1,9 @@
 ---
 title: The workspace saves every file, and snapshots go
-status: doing
+status: review
 priority: normal
 created: 2026-10-16
+pr: 41
 ---
 
 Each user has one workspace, a folder, and every file in it is saved, with
