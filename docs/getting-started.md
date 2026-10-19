@@ -12,6 +12,24 @@ docker run -p 8080:8080 ghcr.io/stargazerbio/stargazer
 
 Opens the Assets tutorial, a [Marimo](https://marimo.io/) notebook, at `http://localhost:8080` in edit mode. From there you can import stargazer tasks, run workflows, and visualize results interactively. The published tag can lag the source; [Contributing → Building Images](guides/contributing.md#building-images) builds it from a checkout under the same name. It is the image hosted notebooks run on (see [Notebooks](architecture/notebook.md) for the notebook types and [App](architecture/app.md) for hosting).
 
+## Use Your Own Files
+
+Mount a directory at `/workspace`, the notebook's working directory:
+
+```bash
+docker run -p 8080:8080 -v "$PWD/data":/workspace ghcr.io/stargazerbio/stargazer
+```
+
+Its files show up in the notebook's file explorer and in the dropdown terminal, so a notebook reads them by relative path (`pd.read_csv("reads/sample.csv")`). It is the same place a hosted notebook keeps the files beside it. On Linux the container runs as user 1000, so the directory must be writable by that user.
+
+To keep assets between runs, mount a volume at `/home/flyte/.stargazer`, which holds the asset store, its index and the download cache:
+
+```bash
+docker run -p 8080:8080 -v stargazer-data:/home/flyte/.stargazer ghcr.io/stargazerbio/stargazer
+```
+
+A file in `/workspace` isn't an asset until a notebook stores it with `await asset.update(path, ...)`; after that `assemble()` finds it by its metadata and `fetch()` copies it into the download cache. The Assets tutorial walks through it. To keep assets somewhere else, set `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` (see Configuration below).
+
 ## Agent — Claude Code in the Notebook
 
 Press Ctrl+` in the notebook to drop down a terminal, and run `claude` to log in and start Claude Code. It opens in the notebook's working directory, with the Stargazer SDK installed at `/stargazer` and the tools the bundled workflows call (GATK, samtools, BWA) on the `PATH`, so the agent can run them for you.

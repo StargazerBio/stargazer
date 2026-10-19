@@ -51,8 +51,9 @@ COPY --chown=flyte:flyte pyproject.toml README.md /stargazer/
 COPY --chown=flyte:flyte src/ /stargazer/src/
 COPY --chown=flyte:flyte app/ /stargazer/app/
 
-RUN mkdir -p /workspace /snapshots \
-    && chown -R flyte:flyte /workspace /snapshots
+# ~/.stargazer exists so a volume mounted there takes its ownership from it.
+RUN mkdir -p /workspace /snapshots /home/flyte/.stargazer \
+    && chown -R flyte:flyte /workspace /snapshots /home/flyte/.stargazer
 
 ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONPATH="/usr/local/lib" \
