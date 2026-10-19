@@ -1,6 +1,6 @@
 ---
 title: The workspace saves every file, and snapshots go
-status: review
+status: done
 priority: normal
 created: 2026-10-16
 pr: 41
@@ -331,3 +331,27 @@ name never launched, a separate bug (ticket `long-notebook-names`).
   notebooks live in the workspace, the tutorials stay in the package, and the
   scRNA notebook moves to `notebooks/`.
 - `promote-task-cli`: unchanged.
+
+## Outcome
+
+Merged in #41 (2026-10-18). Each user's workspace is a folder, and every
+file in it is saved at its path, folders included. Dotfiles,
+`__pycache__/`, `__marimo__/`, symlinks and files over 100 MB are skipped.
+A file deleted in the pod is deleted from the store, but only if that pod
+had it. A banner in the notebook names each file too big to save, with the
+cell that stores it as an asset. Pods save every 5 s and at SIGTERM. The
+proxy reads `SG_SAVE_INTERVAL_SECONDS`, which nothing sets until ticket
+`dashboard-settings`. Snapshots are gone, routes now 404, and the store
+prefix moved from `notebooks/` to `workspace/`, with no migration.
+
+Verified: the unit tier (456), and on Union with the test account: the save
+at SIGTERM on its own (interval 0), restores at their paths, deletes, the
+5 s save, the banner in Chrome and its cell storing an asset, no Snapshots
+section. The pods' grace period was measured afterwards: 300 s, with about
+30 s of Knative drain first (under What's known).
+
+Left: `assemble()` from a task pod on a banner-stored asset wasn't run. The
+save at SIGTERM can be rechecked on its own once `dashboard-settings` can set
+the interval to 0. A long notebook name never launches (ticket
+`long-notebook-names`). The verify feature file and its driver were dropped
+in review; the unit tests cover what they drove.
