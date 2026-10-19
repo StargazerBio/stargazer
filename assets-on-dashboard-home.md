@@ -48,8 +48,8 @@ linked source) with Download pointing at
 the asset type select re-renders the typed fields; the Public tab lists the
 shared records; the avatar menu has no Assets link; no console errors. The
 Tasks tutorial, launched through `/launch`, showed "Open: Edit Mode" and Stop
-on its tile after a reload; stopped after. Not run through the page: an
-actual upload, a metadata Save and a Download, which are form submissions or
-file downloads on the hosted dashboard and wait on the user's OK. The owner-
-only private routes refuse the admin CLI token, so they weren't driven from
-the CLI either.
+on its tile after a reload; stopped after. Then, with the user's OK, through the page from `ddbbc59`: uploaded
+`home-browser-probe.txt` as a private `verify_note` asset (34 → 35 rows);
+added `checked_on = home-page` with Edit metadata and Save, which persisted
+across a reload; downloaded it from the detail card, SHA-256 matching the
+upload. The probe asset stays in the test account's index. Torn down after.
