@@ -1,6 +1,6 @@
 ---
 title: Notebooks with long names never launch
-status: next
+status: doing
 priority: normal
 created: 2026-10-18
 ---
