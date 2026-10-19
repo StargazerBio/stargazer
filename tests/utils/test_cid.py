@@ -14,10 +14,23 @@ import pytest
 from conftest import GENERAL_FIXTURES_DIR
 
 import stargazer.utils.cid as cid_module
-from stargazer.utils.cid import compute_cid
+from stargazer.utils.cid import CidBuilder, compute_cid
 
 # 175 chunks of 256 KiB: one more than a single node can link.
 ONE_PAST_A_NODE = 174 * 256 * 1024 + 1
+# Piece sizes the builder is fed in: a byte at a time, a prime that never
+# lines up with a leaf, and the chunk size of a resumable upload.
+PRIME_BYTES = 7919
+UPLOAD_CHUNK_BYTES = 48 * 1024**2
+
+
+def _streamed(path, piece: int) -> str:
+    """The builder's CID for `path`, fed `piece` bytes at a time."""
+    builder = CidBuilder()
+    with path.open("rb") as fh:
+        while data := fh.read(piece):
+            builder.update(data)
+    return builder.cid()
 
 
 @pytest.fixture(scope="module")
@@ -81,5 +94,51 @@ def test_three_levels(past_one_node, monkeypatch):
     monkeypatch.setattr(cid_module, "CHUNK_BYTES", 1024)
     assert (
         compute_cid(past_one_node)
+        == "bafybeig6kus6wi5thzxnl2qb3fjfkmozg5yxdyfgq2u6p2lwed36onhlgm"
+    )
+
+
+@pytest.mark.parametrize("piece", [1, PRIME_BYTES, UPLOAD_CHUNK_BYTES])
+@pytest.mark.parametrize(
+    ("name", "cid"),
+    [
+        (
+            "GRCh38_TP53.fa",
+            "bafkreib6vj3os7l4lqqytaw5vju46iorcknttfiwfnlbizjcqn7xd5hrvy",
+        ),
+        (
+            "NA12829_TP53_R1.fq.gz",
+            "bafybeia3lsmhibzqk3uo5phryz4wurlj26pn74klczwbmnxq3pf5q3iyy4",
+        ),
+    ],
+)
+def test_builder_matches_pinata_however_the_bytes_arrive(name, cid, piece):
+    """One leaf, and one node over three: the same CID in any piece size."""
+    assert _streamed(GENERAL_FIXTURES_DIR / name, piece) == cid
+
+
+def test_builder_with_no_bytes_is_the_zero_byte_raw_leaf():
+    """Nothing fed, or only empty pieces: the empty file's CID."""
+    fed_empty = CidBuilder()
+    fed_empty.update(b"")
+    expected = "bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku"
+    assert CidBuilder().cid() == expected
+    assert fed_empty.cid() == expected
+
+
+@pytest.mark.parametrize("piece", [PRIME_BYTES, UPLOAD_CHUNK_BYTES])
+def test_builder_two_levels(past_one_node, piece):
+    """175 leaves fed unevenly still build two nodes under a root."""
+    assert (
+        _streamed(past_one_node, piece)
+        == "bafybeibwfjx4gjco2cvbbqlhbtazzttn73bsxnan2t4zmxrjmolwknbe7y"
+    )
+
+
+def test_builder_three_levels(past_one_node, monkeypatch):
+    """44,545 one-KiB leaves fed in prime-sized pieces build the third level."""
+    monkeypatch.setattr(cid_module, "CHUNK_BYTES", 1024)
+    assert (
+        _streamed(past_one_node, PRIME_BYTES)
         == "bafybeig6kus6wi5thzxnl2qb3fjfkmozg5yxdyfgq2u6p2lwed36onhlgm"
     )
