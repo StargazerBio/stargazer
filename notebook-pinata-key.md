@@ -20,12 +20,23 @@ a reference in the app's spec (measured 2026-10-17, ticket
 `dashboard-pinata-key`). The devbox drops app secrets, so a devbox notebook
 still has no public tier.
 
+**The terminal gets it too.** The proxy scrubs secret-shaped vars from the
+dropdown terminal's env (`_shell_env` in `app/proxy.py`), and it named
+`PINATA_JWT` as one, so the SDK and the agent in the terminal would still
+have had no public tier. The key is now let through by name; every other
+var with a secret-shaped suffix is still dropped. Found while verifying: the
+first in-pod check read the env through the terminal and saw no key
+(2026-10-18).
+
 ## Pieces
 
-- [ ] `app/per_notebook.py`: the secret on the notebook env. A test in
+- [x] `app/per_notebook.py`: the secret on the notebook env. A test in
       `tests/unit/test_per_notebook.py`: the built env declares `PINATA_JWT`
       as a secret, and no env var holds it.
-- [ ] Docstrings and docs that say notebook pods carry no credential:
+- [x] `app/proxy.py`: the terminal keeps `PINATA_JWT`.
+      `test_shell_env_keeps_the_pinata_key` in `tests/unit/test_proxy.py`
+      replaces the test that it was scrubbed.
+- [x] Docstrings and docs that say notebook pods carry no credential:
       `app/per_notebook.py`, `app/config.py`,
       `docs/architecture/configuration.md`,
       `.opencode/reference/architecture/app_internals.md`,
