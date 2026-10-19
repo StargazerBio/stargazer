@@ -47,12 +47,10 @@ and work since the last save is lost if the notebook stops unexpectedly.
       store layout), and `.opencode/reference/architecture/app_internals.md`
       (the route table, the store layout, and Save on an interval).
 - [ ] Verify on Union with the test account: set 60 in Settings, launch a
-      notebook, and read `SG_SAVE_INTERVAL_SECONDS=60` in the pod (the
-      `union-workspace-save` feature drives the pod's terminal). Let the
-      dashboard scale to zero, reopen it, and the setting is still 60. Set
-      -1 and get the error. Then set 0 and run `union-workspace-save`'s
-      `workspace-save-shutdown` on its own again, restoring that step in the
-      feature file. Stop every app the check started.
+      notebook, and read `SG_SAVE_INTERVAL_SECONDS=60` in the pod's
+      terminal. Let the dashboard scale to zero, reopen it, and the setting
+      is still 60. Set -1 and get the error. Stop every app the check
+      started.
 
 ## Related tickets
 

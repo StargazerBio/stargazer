@@ -238,17 +238,17 @@ download. Download is still how a notebook is shared, until Publish.
     → the file is an asset, and `assemble()` finds it from a task pod
   - the dashboard has no Snapshots section
 
-  Then add a feature file for saving the workspace, and stop every app the
-  check started.
+  Then stop every app the check started. (A feature file for this was
+  written and then dropped in review on #41: the unit tests in
+  `tests/unit/test_proxy.py` cover what it drove.)
 
 ## Verified on Union (2026-10-18)
 
 The test account's dashboard, deployed from the branch twice with
 `union_dashboard.py deploy`: first with `STARGAZER_SAVE_INTERVAL_SECONDS=0`
 (`037b45a`), then with the default (`70e333c`). The pods were driven through
-their own terminal websocket with `scripts/union_pod.py`, the banner in
-Chrome as the test account. Feature file:
-`verify-stargazer/features/union-workspace-save.md`.
+their own terminal websocket with a driver script, since dropped with the
+feature file in review, and the banner in Chrome as the test account.
 
 - **The save at SIGTERM, on its own.** Interval 0: the pod had
   `SG_SAVE_INTERVAL_SECONDS=0` and no `/snapshots`. After writing
@@ -282,7 +282,7 @@ Chrome as the test account. Feature file:
 
 One thing seen: a launch straight after a dashboard redeploy reached the old
 revision, so the pod got the old interval. Relaunching after the new
-revision was ready fixed it. In the feature file's gotchas.
+revision was ready fixed it.
 
 Rechecked at `d83b9b0`, after the deploy setting came out, deployed with
 `STARGAZER_SAVE_INTERVAL_SECONDS=0` still in the shell: the pod had no
