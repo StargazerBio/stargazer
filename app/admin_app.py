@@ -156,9 +156,10 @@ app_env = flyte.app.AppEnvironment(
         )
         .with_commands(["flyte create config --local-persistence"])
     ),
-    # `exec` so the shell `fserve` starts becomes Python, which execs
-    # Litestream, which runs uvicorn: Litestream is then the process `fserve`
-    # signals at scale-to-zero, and it syncs the index after uvicorn exits.
+    # `exec` so the shell `fserve` starts becomes the launcher, which runs
+    # Litestream, which runs uvicorn: the launcher passes on the signal
+    # `fserve` sends at scale-to-zero, and Litestream syncs the index after
+    # uvicorn exits.
     args=["exec", "python", "-m", "app.dashboard_launch"],
     port=8080,
     # Union's login gates every request and forwards the user's identity.

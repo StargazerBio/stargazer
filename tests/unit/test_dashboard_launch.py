@@ -1,6 +1,28 @@
-"""Tests for the dashboard launcher: when Litestream runs, and what it replicates."""
+"""Tests for the dashboard launcher: when Litestream runs, what it replicates,
+and the lease that lets only one dashboard pod replicate at a time.
 
-from app.dashboard_launch import SERVER, litestream_env, replica_url
+The lease tests run the real `flyte.storage` calls against a local directory,
+the same code path that talks to the bucket on the tenant.
+"""
+
+import os
+import sys
+import threading
+import time
+
+import pytest
+
+from app.dashboard_launch import (
+    SERVER,
+    Lease,
+    lease_prefix,
+    litestream_env,
+    replica_url,
+    supervise,
+)
+
+# A child that would run far longer than any test: only supervise() stops it.
+SLEEPER = [sys.executable, "-c", "import time; time.sleep(30)"]
 
 
 def test_replica_lives_under_the_owner_in_the_store():
@@ -89,3 +111,112 @@ def test_without_flyte_keys_litestream_env_is_unchanged():
 def test_server_is_the_dashboard():
     """The process Litestream wraps is the dashboard's uvicorn."""
     assert SERVER[:2] == ["uvicorn", "app.admin_app:asgi_app"]
+
+
+def test_the_lease_lives_beside_the_replica():
+    """The lease is under the owner too, outside Litestream's own prefix."""
+    env = {"STARGAZER_STORE_ROOT": "s3://bucket/stargazer/", "SG_OWNER_SUBJECT": "u1"}
+    assert lease_prefix(env) == "s3://bucket/stargazer/users/u1/index-lease"
+
+
+@pytest.fixture
+def prefix(tmp_path):
+    """A fresh lease location in a local store."""
+    return str(tmp_path / "users" / "u1" / "index-lease")
+
+
+def _lease(prefix, pod, timeout=10.0):
+    """A lease for `pod` that checks every 50 ms."""
+    return Lease(prefix, pod, poll=0.05, timeout=timeout)
+
+
+def _timed(fn):
+    """Seconds `fn()` took."""
+    started = time.monotonic()
+    fn()
+    return time.monotonic() - started
+
+
+def test_the_first_pod_takes_the_lease_at_once(prefix):
+    """With no one before it, a pod holds the lease without waiting."""
+    lease = _lease(prefix, "pod-a")
+    assert _timed(lease.claim) < 1
+    assert lease.held()
+
+
+def test_a_new_pod_waits_for_the_old_one_to_let_go(prefix):
+    """A pod that finds another one holding the lease takes it over, then waits
+    until the old one has released it before going on."""
+    old = _lease(prefix, "pod-a")
+    old.claim()
+    new = _lease(prefix, "pod-b")
+    threading.Timer(0.5, old.release).start()
+    assert _timed(new.claim) >= 0.5
+    assert new.held()
+    assert not old.held()
+
+
+def test_a_lease_let_go_cleanly_is_taken_at_once(prefix):
+    """A dashboard that scaled to zero released the lease on its way out, so
+    the next one starts without waiting."""
+    old = _lease(prefix, "pod-a")
+    old.claim()
+    old.release()
+    new = _lease(prefix, "pod-b")
+    assert _timed(new.claim) < 1
+    assert new.held()
+
+
+def test_a_pod_that_never_lets_go_is_given_up_on(prefix):
+    """A pod killed outright never releases; the new one takes over after the
+    timeout instead of waiting forever."""
+    _lease(prefix, "pod-a").claim()
+    new = _lease(prefix, "pod-b", timeout=0.3)
+    assert 0.3 <= _timed(new.claim) < 2
+    assert new.held()
+
+
+def test_a_restarted_container_takes_its_own_pods_lease_at_once(prefix):
+    """The pod's name is the holder; a container restarted in the same pod
+    has no old process to wait for."""
+    _lease(prefix, "pod-a").claim()
+    again = _lease(prefix, "pod-a")
+    assert _timed(again.claim) < 1
+    assert again.held()
+
+
+def test_supervise_returns_the_childs_exit_code_and_lets_go(prefix):
+    """When Litestream exits (at scale-to-zero), the pod releases the lease."""
+    lease = _lease(prefix, "pod-a")
+    lease.claim()
+    code = supervise(
+        [sys.executable, "-c", "raise SystemExit(3)"], os.environ.copy(), lease
+    )
+    assert code == 3
+    new = _lease(prefix, "pod-b")
+    assert _timed(new.claim) < 1
+    assert new.held()
+
+
+def test_supervise_stands_down_when_another_pod_takes_over(prefix):
+    """A newer pod's claim stops this pod's Litestream and releases the lease,
+    which lets the newer pod go on."""
+    lease = _lease(prefix, "pod-a")
+    lease.claim()
+    new = _lease(prefix, "pod-b")
+    taking_over = threading.Thread(target=new.claim)
+    timer = threading.Timer(0.3, taking_over.start)
+    timer.start()
+    assert _timed(lambda: supervise(SLEEPER, os.environ.copy(), lease)) < 5
+    timer.join()
+    taking_over.join(timeout=5)
+    assert not taking_over.is_alive()
+    assert new.held()
+
+
+def test_standing_down_is_not_an_exit(prefix):
+    """supervise() tells a stand-down apart from Litestream exiting."""
+    lease = _lease(prefix, "pod-a")
+    lease.claim()
+    threading.Timer(0.3, _lease(prefix, "pod-b", timeout=0).claim).start()
+    assert supervise(SLEEPER, os.environ.copy(), lease) is None

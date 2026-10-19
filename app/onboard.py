@@ -317,10 +317,10 @@ def active_runs(project: str) -> list[str]:
 def refuse_while_running(projects: list[str]) -> None:
     """Raise if any of these projects has a run that hasn't finished.
 
-    A dashboard redeploy briefly runs the old and new versions side by side;
-    an index write the old one accepts after the new one has restored its
-    database is lost. Until that's handled properly, redeploys wait for runs
-    to finish.
+    A dashboard redeploy pauses the index for about 15 s while the new pod
+    takes over from the old one (`app.dashboard_launch.Lease`), and a run's
+    index write in that pause fails once its retries run out. Until they ride
+    it out, redeploys wait for runs to finish.
     """
     busy = {p: runs for p in projects if (runs := active_runs(p))}
     if busy:
