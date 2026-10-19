@@ -1,8 +1,9 @@
 ---
 title: Work out a CID from bytes as they arrive
-status: doing
+status: review
 priority: normal
 created: 2026-10-18
+pr: 45
 ---
 
 `src/stargazer/utils/cid.py` gets an incremental builder: fed a file's bytes
@@ -22,10 +23,21 @@ now. A 10 GB file is about 41,000 leaves, a few megabytes of state.
 
 ## Pieces
 
-- [ ] Tests first, in `tests/utils/test_cid.py`: fed in uneven piece sizes
+- [x] Tests first, in `tests/utils/test_cid.py`: fed in uneven piece sizes
       (one byte, a prime number of bytes, 48 MiB), the builder gives the
       CIDs the existing tests pin: the empty file, one leaf, one node, two
       levels, and three levels.
-- [ ] `CidBuilder` in `cid.py`, and `compute_cid` built on it.
-- [ ] Docs: the CID section of `docs/architecture/types.md` if it describes
-      how the CID is computed.
+- [x] `CidBuilder` in `cid.py`, and `compute_cid` built on it.
+- [x] Docs: no architecture doc describes the computation beyond
+      `configuration.md`'s identity paragraph, which still holds. The module
+      docstring, rendered in the API reference, covers the builder.
+
+## Verified (2026-10-18)
+
+- **Unit tier:** 465 passed. The 10 new tests failed against a stub first.
+- **Pinata tier:** `tests/pinata/test_cid_drift.py` passed 4 of 4 against the
+  real API: one block, three chunks, two levels, and the resumable upload
+  past 100 MB.
+- **Speed on a 1 GiB random file:** `main`'s `compute_cid` took 0.51 s and
+  0.49 s, the branch's 0.48 s and 0.48 s, and the builder fed 48 MiB pieces
+  0.55 s. All gave the same CID.
