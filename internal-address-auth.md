@@ -1,8 +1,9 @@
 ---
 title: App internal addresses skip Union's login
-status: doing
+status: review
 priority: high
 created: 2026-10-06
+pr: 51
 ---
 
 Every app answers at `http://<app>.<project>-<domain>.svc.cluster.local` with no login and no
@@ -48,3 +49,18 @@ project check never runs.
   websocket request.
 - `/index/*` stays open: tasks and notebooks call it with no token. That's
   ticket `index-api-auth`.
+
+## Verified (2026-10-18, PR #51)
+
+Test dashboard deployed from `1875752`, my subject in
+`STARGAZER_ADMIN_SUBJECTS`:
+
+- **Forged headers from `flytesnacks`:** 401 on the dashboard home, the
+  private assets, the notebook page and `/__sg__/ready`.
+- **A genuine Union token belonging to someone else**, the platform key's
+  subject minted in a pod: 403 on both. Union's public gate refused it
+  outright (302).
+- **Admin CLI token on the public address:** home 200, launch 200, the
+  terminal opens.
+- **Chrome as the test account:** dashboard 200, private assets 200,
+  notebook cells loaded, the terminal ran a command.
