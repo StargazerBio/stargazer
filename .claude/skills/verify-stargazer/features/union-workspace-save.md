@@ -38,4 +38,6 @@ Steps:
 
 - The login shell's `python` has no `flyte`; the base image's Python, which the proxy runs on, is `/opt/venv/bin/python`.
 - A relaunch straight after Stop can hydrate before the old pod's shutdown save lands. Wait 45 seconds between them.
+- A launch straight after a redeploy can reach the old dashboard revision, and its pod gets that revision's settings. `union_dashboard.py check dashboard` prints the dashboard pod's `STARGAZER_NOTEBOOK_IMAGE`; launch once it names the image the deploy just built.
+- Keep probe notebook names short (`ivl`, not `interval probe 20261018-180932`). A long name is created but never launches, and `launch` answers 503 "still starting" indefinitely (ticket `long-notebook-names`).
 - The files the check writes stay in the test account's workspace and show up in its later pods. Delete them from a pod's terminal if they get in the way.
