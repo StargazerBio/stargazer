@@ -1,8 +1,9 @@
 ---
 title: Give notebook pods the Pinata key as a secret
-status: doing
+status: review
 priority: normal
 created: 2026-10-18
+pr: 44
 ---
 
 Hosted notebook pods get the org's Pinata key, as a Flyte secret, the way
@@ -41,7 +42,24 @@ first in-pod check read the env through the terminal and saw no key
       `docs/architecture/configuration.md`,
       `.opencode/reference/architecture/app_internals.md`,
       `.opencode/reference/devbox_workarounds.md`.
-- [ ] Verify on Union with the test account: launch a notebook from a
+- [x] Verify on Union with the test account: launch a notebook from a
       dashboard deployed from the branch, and in the pod the key is set
       (its length only) and Pinata accepts it; the app's spec holds only a
       reference. Stop every app the check started.
+
+## Verified (Union, 2026-10-18)
+
+- **Before**, `main`'s `per_notebook_env` served under a throwaway owner:
+  `PINATA_JWT` unset; the notebook's Python had no public tier, and
+  `query({"asset": "reference"})` returned 0 rows.
+- **The secret alone:** the marimo process had the key (687 characters,
+  sha256 prefix `93946e8f`, the local Pinata key's), and with its env the
+  same query returned 1 public record. The terminal still showed it unset.
+- **Both commits, on the branch's image (`notebook-app-c83b3fca…`):**
+  - In a probe, marimo had `PINATA_JWT`, `_UNION_EAGER_API_KEY` and
+    `_UNION_PINATA_JWT`, and the terminal only `PINATA_JWT`.
+  - Then the dashboard, deployed from `eea1456`, ran `/launch` for the assets
+    tutorial in Edit mode. In that pod's terminal the key was set and the
+    SDK's query returned the public record.
+  - The spec only references the secret.
+- Everything started was stopped; no live runs.
