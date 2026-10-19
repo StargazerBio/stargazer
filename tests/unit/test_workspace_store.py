@@ -1,8 +1,10 @@
-"""Tests for `app.workspace_store`, the object-store home of user notebooks.
+"""Tests for `app.workspace_store`, the object-store home of user workspaces.
 
 Runs the real `flyte.storage` calls against a local directory root, so the
 same code path that talks to S3 on the tenant is exercised here — no mocks.
 """
+
+from pathlib import Path
 
 import pytest
 
@@ -45,13 +47,14 @@ async def test_list_of_new_user_is_empty():
     assert await ws.list_workspace(ALICE) == []
 
 
-async def test_workspace_and_snapshots_are_separate():
-    """A snapshot never shows up in the workspace listing, and vice versa."""
+async def test_nested_files_are_not_notebooks():
+    """Files in folders, a `.py` among them, never list as notebooks."""
     await ws.create_workspace_notebook(ALICE, "live.py", NB)
-    await ws.create_snapshot_notebook(ALICE, "frozen.py", NB)
+    root = Path(ws.workspace_uri(ALICE))
+    for rel in ("lib/helpers.py", "data/counts.csv"):
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text("x\n")
     assert await ws.list_workspace(ALICE) == ["live.py"]
-    assert await ws.list_snapshots(ALICE) == ["frozen.py"]
-    assert await ws.get_snapshot_notebook(ALICE, "frozen.py") == NB
 
 
 async def test_create_refuses_to_overwrite():
@@ -75,7 +78,6 @@ async def test_delete_is_idempotent():
     await ws.delete_workspace_notebook(ALICE, "qc.py")
     await ws.delete_workspace_notebook(ALICE, "qc.py")
     assert await ws.list_workspace(ALICE) == []
-    await ws.delete_snapshot_notebook(ALICE, "never.py")
 
 
 @pytest.mark.parametrize(
@@ -95,6 +97,5 @@ async def test_bad_subject_is_rejected(bad):
 
 
 def test_workspace_uri_layout():
-    """The notebooks prefix sits under users/<subject>/notebooks."""
-    assert ws.workspace_uri(ALICE) == f"{config.WORKSPACE_ROOT}/users/{ALICE}/notebooks"
-    assert ws.snapshots_uri(ALICE) == f"{config.WORKSPACE_ROOT}/users/{ALICE}/snapshots"
+    """The workspace prefix sits under users/<subject>/workspace."""
+    assert ws.workspace_uri(ALICE) == f"{config.WORKSPACE_ROOT}/users/{ALICE}/workspace"

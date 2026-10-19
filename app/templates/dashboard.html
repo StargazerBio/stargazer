@@ -35,32 +35,6 @@
 
     <section>
         <h2>
-            Snapshots
-            <span class="section-tag"
-                >Frozen notebooks — a saved analysis, pinned for
-                reproduction.</span
-            >
-        </h2>
-        <p
-            class="section-desc"
-            id="snapshots-empty"
-            {%
-            if
-            snapshots
-            %}hidden{%
-            endif
-            %}
-        >
-            No snapshots yet — freeze a workspace notebook (📸) to pin it here
-            as a read-only, reproducible record.
-        </p>
-        <div class="grid" id="snapshots-grid">
-            {% for tile in snapshots %}{% include "_tile.html" %}{% endfor %}
-        </div>
-    </section>
-
-    <section>
-        <h2>
             Workspace
             <span class="section-tag">Author and save your own notebooks.</span>
         </h2>
@@ -73,7 +47,9 @@
                 rel="noopener"
                 >template</a
             >. Your edits are saved automatically while a notebook is open,
-            and they're there the next time you open it.
+            and they're there the next time you open it. So is any other file
+            you keep in your workspace, up to 100 MB each; store bigger files as
+            assets.
         </p>
         <div class="grid" id="workspace-grid">
             {% for tile in workspace %}{% include "_tile.html" %}{% endfor %}
@@ -396,97 +372,8 @@
         deleteNotebook(btn);
     });
 
-    // Snapshot (freeze) a workspace notebook: a MOVE out of the workspace into
-    // the Snapshots section. Confirm, POST, then drop the workspace tile and
-    // drop the returned frozen tile into the Snapshots grid. Delegated so
-    // freshly created tiles get it too.
-    async function snapshotNotebook(btn) {
-        const slug = btn.dataset.snapshotSlug;
-        if (
-            !confirm(
-                `Snapshot "${slug}"? This removes edit functionality and moves it out of ` +
-                    `your workspace into Snapshots.`,
-            )
-        )
-            return;
-        const restore = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-inline"></span>';
-        try {
-            const resp = await fetch("/workspace/snapshot", {
-                method: "POST",
-                body: new URLSearchParams({ slug }),
-                headers: { Accept: "application/json" },
-            });
-            const payload = await resp.json().catch(() => ({}));
-            if (!resp.ok)
-                throw new Error(payload.error || "HTTP " + resp.status);
-            btn.closest(".tile").remove();
-            const grid = document.getElementById("snapshots-grid");
-            if (grid && payload.tile_html) {
-                grid.insertAdjacentHTML("beforeend", payload.tile_html);
-                const empty = document.getElementById("snapshots-empty");
-                if (empty) empty.hidden = true;
-            }
-        } catch (err) {
-            btn.disabled = false;
-            btn.innerHTML = restore;
-            alert("Snapshot failed: " + err.message);
-        }
-    }
-
-    document.addEventListener("click", (e) => {
-        const btn = e.target.closest("[data-snapshot-slug]");
-        if (!btn) return;
-        e.preventDefault();
-        snapshotNotebook(btn);
-    });
-
-    // Delete one of your own snapshots. Mirrors deleteNotebook but hits
-    // /snapshot/delete (the snapshots dir, not workspace); on success drop the
-    // tile and bring the empty-state hint back if the grid is now empty.
-    async function deleteSnapshot(btn) {
-        const slug = btn.dataset.snapshotDeleteSlug;
-        if (
-            !confirm(
-                `Delete snapshot "${slug}"? This can't be undone from here.`,
-            )
-        )
-            return;
-        const restore = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-inline"></span>';
-        try {
-            const resp = await fetch("/snapshot/delete", {
-                method: "POST",
-                body: new URLSearchParams({ slug }),
-                headers: { Accept: "application/json" },
-            });
-            const payload = await resp.json().catch(() => ({}));
-            if (!resp.ok)
-                throw new Error(payload.error || "HTTP " + resp.status);
-            btn.closest(".tile").remove();
-            const grid = document.getElementById("snapshots-grid");
-            const empty = document.getElementById("snapshots-empty");
-            if (grid && empty && grid.querySelectorAll(".tile").length === 0)
-                empty.hidden = false;
-        } catch (err) {
-            btn.disabled = false;
-            btn.innerHTML = restore;
-            alert("Delete failed: " + err.message);
-        }
-    }
-
-    document.addEventListener("click", (e) => {
-        const btn = e.target.closest("[data-snapshot-delete-slug]");
-        if (!btn) return;
-        e.preventDefault();
-        deleteSnapshot(btn);
-    });
-
-    // Copy a Workflows or Snapshots notebook into the editable Workspace. POST,
-    // then drop the returned workspace tile in before the New-notebook tile.
-    // Delegated so it covers freshly created snapshot tiles too.
+    // Copy a Workflows notebook into the editable Workspace. POST, then drop
+    // the returned workspace tile in before the New-notebook tile.
     async function copyToWorkspace(btn) {
         const slug = btn.dataset.copySlug;
         const section = btn.dataset.copySection;

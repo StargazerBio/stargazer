@@ -53,11 +53,10 @@ Union only proves the visitor can view the project, and org admins can view ever
 `app/workspace_store.py` owns the layout; no route composes a URI by hand.
 
 ```
-<STARGAZER_WORKSPACE_ROOT>/users/<subject>/notebooks/<slug>.py
-<STARGAZER_WORKSPACE_ROOT>/users/<subject>/snapshots/<slug>.py
+<STARGAZER_WORKSPACE_ROOT>/users/<subject>/workspace/<path>
 ```
 
-One object per notebook, so the dashboard can list a user's notebooks and read one header without fetching the rest. Subjects must match `[A-Za-z0-9_-]+` and filenames one plain `.py` segment, so a key can't escape its prefix. Create refuses to overwrite (`NotebookExistsError` → the 409 that create and copy rely on); get of a missing notebook returns None; delete is idempotent. Reads and writes go through `flyte.storage`, listing and deletes through the fsspec filesystem it resolves for the root, so the same code runs against `s3://` on the tenant and a local path in tests.
+One object per file in the user's workspace, at its path. The dashboard touches only the notebooks, the top-level `.py` files (a `.py` in a folder never lists as one), so it can list them and read one header without fetching the rest; the pod's proxy saves everything else. The old `notebooks/` and `snapshots/` prefixes stay in the bucket, unread. Subjects must match `[A-Za-z0-9_-]+` and filenames one plain `.py` segment, so a key can't escape its prefix. Create refuses to overwrite (`NotebookExistsError` → the 409 that create and copy rely on); get of a missing notebook returns None; delete is idempotent. Reads and writes go through `flyte.storage`, listing and deletes through the fsspec filesystem it resolves for the root, so the same code runs against `s3://` on the tenant and a local path in tests.
 
 On Union the root is a prefix in the tenant bucket (`s3://union-us-west-2-stargazerbio/stargazer`). Every project runs as one IAM role (`union-us-west-2-stargazerbio-userflyterole`), so cross-project access works (measured with the old shared admin in `flytesnacks` reading what a pod in another project wrote) and, equally, any pod can read every user's objects. A local machine has no credentials for the bucket; only pods can reach it.
 
@@ -78,14 +77,16 @@ The dashboard owns the user's asset index (plan 27). Pieces:
 
 The pod is a working copy; the store is the durable one. The dashboard never calls a pod (a `requires_auth=True` pod is unreachable server-to-server), so the pod does both ends itself.
 
-1. **Hydrate.** `launch-notebook.sh` runs `sg_proxy.hydrate()` before starting marimo: the owner's `notebooks/` prefix lands flat in `/workspace`, their `snapshots/` in `/snapshots`. A brand-new user, or a store failure, starts with empty dirs (logged, never fatal).
+1. **Hydrate.** `launch-notebook.sh` runs `sg_proxy.hydrate()` before starting marimo: every object under the owner's `workspace/` prefix lands at its path in `/workspace` (`fs.find`, then each object's path relative to the prefix with the URI scheme stripped, since S3 lists `bucket/key`). A brand-new user, or a store failure, starts with an empty dir (logged, never fatal).
 2. **Starting page.** The proxy answers immediately; until marimo is up, a browser request gets a self-refreshing "Starting your notebook…" page. `/__sg__/ready` reports 200/503 for scripts.
-3. **Save on an interval.** A background loop uploads every top-level, non-`_` `.py` in `/workspace` whose content hash changed, every `SYNC_INTERVAL_SECONDS` (5s), each to its own key. The hashes of just-hydrated files are seeded at startup, so the first pass doesn't re-upload them. A failed upload is logged and retried next pass. One PUT per object, so an interrupted upload can't leave a half-written notebook. Snapshots never write back, and deletions don't propagate (deleting is a dashboard action).
-4. **Save at shutdown.** The FastAPI `lifespan` shutdown hook cancels the loop and runs a final pass when Knative scales the pod to zero.
+3. **Save on an interval.** A background loop walks `/workspace` (`_workspace_files`: no dotfiles or dot-dirs, no `__pycache__/` or `__marimo__/`, symlinks not followed) and uploads each file whose size or mtime differs from what it last stored, each to its own key. An unchanged file is never read. The stamps of just-hydrated files are seeded at startup, so the first pass doesn't re-upload them. A failed upload is logged and retried next pass. One PUT per object, so an interrupted upload can't leave a half-written file. The interval is `SG_SAVE_INTERVAL_SECONDS` on the pod, 5 when unset. Nothing sets it yet; ticket `dashboard-settings` has the dashboard pass a per-user value at launch. 0 starts no loop.
+4. **Deletes follow.** A pass deletes from the store each file it hydrated or saved (a key of `_synced`) that's gone from `/workspace`. Nothing else: after a failed hydrate the workspace is empty, and mirroring it would wipe the store.
+5. **Big files stay out.** A file over `MAX_SAVED_BYTES` (100 MB) is skipped without being read. `GET /__sg__/save-status` lists such files, read from disk on each request so it works with the loop off, and `app/save_banner.html`, spliced into every marimo page beside the terminal overlay, polls it every 10 s and shows each one with the cell that stores it as an asset (`default_client.upload(build_asset(...), Path(...))`), which writes from the pod straight to the store and the index.
+6. **Save at shutdown.** The FastAPI `lifespan` shutdown hook cancels the loop and runs a final pass when Knative scales the pod to zero.
 
 Measured on the tenant (2026-10-06): a cell added in a fresh edit pod was readable through the dashboard's Download route seconds later; after the pod scaled to zero and was reopened, the cell was still there.
 
-The signal path is load-bearing for step 4. Flyte's `fserve` wrapper is PID 1 and, on the Knative SIGTERM, forwards the signal to its **one direct child only** (`Popen(cmd, shell=True)` + `send_signal`). So uvicorn must be that direct child: the AppEnvironment args prepend `exec` (so the `sh -c` wrapper replaces itself with the launch script rather than lingering; Debian's `/bin/sh` does not reliably exec-collapse a bare `sh -c "script"`), and the launch script then `exec`s uvicorn into that slot. An intermediate shell anywhere in the chain swallows SIGTERM and the final save is silently skipped.
+The signal path is load-bearing for step 6. Flyte's `fserve` wrapper is PID 1 and, on the Knative SIGTERM, forwards the signal to its **one direct child only** (`Popen(cmd, shell=True)` + `send_signal`). So uvicorn must be that direct child: the AppEnvironment args prepend `exec` (so the `sh -c` wrapper replaces itself with the launch script rather than lingering; Debian's `/bin/sh` does not reliably exec-collapse a bare `sh -c "script"`), and the launch script then `exec`s uvicorn into that slot. An intermediate shell anywhere in the chain swallows SIGTERM and the final save is silently skipped.
 
 Receiving SIGTERM is necessary but not sufficient: uvicorn drains open connections and in-flight background tasks **before** running the `lifespan` shutdown. The proxy holds a long-lived task to the local marimo backend that never drains on its own, so with uvicorn's default `timeout_graceful_shutdown=None` the drain blocks forever and the final save never fires (verified empirically). The launch script therefore passes `--timeout-graceful-shutdown 15`, which bounds the drain, cancels the lingering task, and then still runs `lifespan.shutdown`. 15s sits well under the pod's 300s termination grace period.
 
@@ -97,7 +98,7 @@ Each Workspace tile carries two corner controls:
 
 - **Gear** → settings modal to edit **resources (cpu/memory)** and **description**. Save (`POST /workspace/settings`, workspace-only) rewrites the `[tool.stargazer]` header in the store (`with_stargazer_resources(..., description=…)` via `update_workspace_notebook`) and echoes the normalized values so the browser refreshes the tile blurb + the gear's `data-*` in place. Resource changes take effect at the **next** launch (resources bind at pod-spawn); the description updates immediately. The gear seeds its fields from `data-*` the dashboard renders by fetching each workspace notebook's header (in parallel, best-effort) at page load.
 - **Trash** (`POST /workspace/delete`, workspace-only) removes `<slug>.py` from the store (idempotent — a file already gone still succeeds; recovery relies on bucket versioning, not yet confirmed enabled) and tears down any edit/run pod for that slug (deactivate, then delete the record), so deleting can't orphan a pod with no tile left to Stop it.
-- **Download** (`GET /workspace/download`) returns the notebook's `.py` as an attachment — the path for sharing a notebook upstream. Also on snapshot tiles (own and published).
+- **Download** (`GET /workspace/download`) returns the notebook's `.py` as an attachment — the path for sharing a notebook upstream.
 
 Seed slugs are rejected by both. The browser confirms delete, then drops the tile on success.
 
@@ -105,7 +106,7 @@ Resources are honored **as-authored — no ceiling**. At `/launch`, the dashboar
 
 ## Notebook-Declared Images (`main_img`)
 
-A store-backed notebook (workspace or own snapshot) can declare its pod image in its setup block, `main_img = notebook_base.with_…(…)`. The dashboard only finds and evaluates it (`app/notebook_image.py`); building is the SDK's.
+A workspace notebook can declare its pod image in its setup block, `main_img = notebook_base.with_…(…)`. The dashboard only finds and evaluates it (`app/notebook_image.py`); building is the SDK's.
 
 - **Find.** `extract_main_img` parses the source with `ast` and looks only inside the top-level `with app.setup:` (or `app.setup(...)`) block, which is where marimo writes the setup cell; cells are functions and are never searched. The last assignment wins. Unparseable source declares nothing.
 - **Evaluate.** `evaluate_main_img` `eval`s the expression in the dashboard process with only `flyte` and `notebook_base` in scope (the dashboard lacks each notebook's PEP 723 deps, so the rest of the setup block can't run), where `notebook_base` is `notebook_image_base(config.NOTEBOOK_IMAGE)`. It raises `MainImgError` (a 422 with its message) when the expression raises or the result isn't a `flyte.Image` whose `base_image` is the deployed notebook image (the pod needs the proxy, launch script and tools), and off Union (`STARGAZER_TARGET` ≠ `union`), where there's no builder: the SDK would "assume the image exists" and deploy a bare `name:tag` no node can pull.
@@ -125,31 +126,14 @@ Tile run-state is unified and authoritative. The dashboard's launch/stop handler
 
 A global **Clean up stopped apps** control (`POST /workspace/cleanup`) deletes (`App.delete`) the deployment records for every *deactivated* `nb-{slug}-{mode}` app in the user's project — Stop deactivates an app but leaves the record; this removes them. Active/idle apps are left alone.
 
-## Snapshots (freeze mechanics)
-
-Conceptual framing (snapshot vs. workflow, the publication path) is in the architecture doc and [Notebooks → Promotion Paths](../../../docs/architecture/notebook.md#promotion-paths). The mechanics:
-
-**Freezing is a move.** `POST /workspace/snapshot` takes a notebook *out* of the editable Workspace surface: it re-creates the notebook's current stored source verbatim as a snapshot (`create_snapshot_notebook`), then deletes the workspace original (`delete_workspace_notebook`). The snapshot write happens first, so a failed move leaves the notebook editable rather than lost. The source of truth is the store, which a running pod updates every few seconds, so a freeze captures edits up to the last save pass. Like delete, snapshot tears down any running pod for the slug (`_teardown_notebook_pods`), since once moved there's no Workspace tile left to Stop it. A slug shared with a published snapshot is refused (409), since both would launch as the same `nb-{slug}-run` pod.
-
-Each Workspace tile carries a **📸 snapshot** button (between the gear and trash) that calls this route, then drops the workspace tile and inserts the returned tile into the Snapshots grid. A snapshot tile carries **Run**, **Copy to workspace** and **Download**, plus a delete control on the user's own snapshots (`POST /snapshot/delete`); no Edit or gear, since a frozen record isn't edited or re-configured. Launching one goes through the same `/launch` path, **restricted to run mode** (`marimo run`, read-only), with its `[tool.stargazer]` resources honored like any workspace launch. A running snapshot's `nb-{slug}-run` app is discovered by `/launch/status`'s project list like any other launch, so it hydrates to Open/Stop on reload and `/workspace/cleanup` reaps its stopped pod.
-
-**Published vs. own.** The Snapshots section lists both:
-
-- **Published** snapshots ship in the image from `src/stargazer/notebooks/snapshots/` (`notebooks.public_snapshots()`), like tutorials. Everyone sees them, and they launch from their path in the image (`section=public-snapshots`).
-- **Own** snapshots live in the user's store under `snapshots/`, and the pod hydrates them into `/snapshots` (`section=snapshots`).
-
-Publishing one is a contribution: the author downloads it and adds it to the repo's `notebooks/snapshots/`; once merged it ships in the next image.
-
-**Deferred:** image-digest pinning and an inputs/outputs (CID) manifest. This cut freezes the notebook *source*, which is auditable; bit-for-bit re-run is a later phase.
-
 ## Copy to workspace
 
-**Copy is the reverse of freeze: a read-only source becomes editable.** Workflows tiles and Snapshots tiles carry a **Copy to workspace** button → `POST /workspace/copy` (`slug` + `section`). The route resolves the source (`_copy_source`): a Workflows notebook or a published snapshot is read from the installed package (`shipped_source`, `public_snapshot(...).source()`); an own snapshot from the store. It then writes it to the workspace via `create_workspace_notebook` and returns the rendered Workspace tile the browser drops before the New-notebook tile. The copy keeps the source's parsed `[tool.stargazer]` resources but gets its own `name`/`description` (from the workflow's registry title/blurb, or the snapshot's stored header) re-injected with `with_stargazer_resources`, so it tiles and launches like any user notebook. The target slug is derived from the source title (`_notebook_slug`); the store's no-overwrite create makes a name collision a **409**, so copy never clobbers an existing notebook. Copy is a pure "add a notebook" action: no launch, no navigation.
+**Copy makes a read-only source editable.** Workflows tiles carry a **Copy to workspace** button → `POST /workspace/copy` (`slug` + `section`). The route resolves the source (`_copy_source`): the Workflows notebook is read from the installed package (`shipped_source`). It then writes it to the workspace via `create_workspace_notebook` and returns the rendered Workspace tile the browser drops before the New-notebook tile. The copy keeps the source's parsed `[tool.stargazer]` resources but gets its own `name`/`description` (the workflow's registry title and blurb) re-injected with `with_stargazer_resources`, so it tiles and launches like any user notebook. The target slug is derived from the source title (`_notebook_slug`); the store's no-overwrite create makes a name collision a **409**, so copy never clobbers an existing notebook. Copy is a pure "add a notebook" action: no launch, no navigation.
 
 ## The Proxy Data Path
 
-- **Proxy:** the standalone `app/proxy.py` (which can't import the app package) keeps one module-local shared client with keep-alive to loopback marimo (`_upstream_client`, closed in the proxy lifespan after the shutdown save). Only `text/html` responses are buffered — for the terminal-overlay splice; everything else (static bundles, API JSON, downloads) **streams** through chunk-by-chunk (`StreamingResponse` over `aiter_raw`, `BackgroundTask(resp.aclose)`) with its original headers, so large bodies never sit in proxy memory. The raw query string passes through untouched (duplicate params intact), hop-by-hop, cookie and `X-User-*` headers are stripped, and the request body is streamed only when one exists (no gratuitous chunked framing on GETs).
-- **Concurrency:** the dashboard route resolves the workspace and snapshot listings with `asyncio.gather`, and reads each workspace notebook's header in parallel (best-effort).
+- **Proxy:** the standalone `app/proxy.py` (which can't import the app package) keeps one module-local shared client with keep-alive to loopback marimo (`_upstream_client`, closed in the proxy lifespan after the shutdown save). Only `text/html` responses are buffered — for the terminal overlay and save banner splice; everything else (static bundles, API JSON, downloads) **streams** through chunk-by-chunk (`StreamingResponse` over `aiter_raw`, `BackgroundTask(resp.aclose)`) with its original headers, so large bodies never sit in proxy memory. The raw query string passes through untouched (duplicate params intact), hop-by-hop, cookie and `X-User-*` headers are stripped, and the request body is streamed only when one exists (no gratuitous chunked framing on GETs).
+- **Concurrency:** the dashboard route reads each workspace notebook's header in parallel (best-effort).
 - **Compression:** the dashboard runs `GZipMiddleware` (min 1KB) for the dashboard HTML and asset listings. The proxy does **not** — it relays marimo's own encoding untouched.
 
 ## Dashboard Routes (full table)
@@ -162,17 +146,15 @@ All on `app/admin_app.py` (`app_env`), all behind Union's login. Lifespan runs `
 | `/workspace/create` | Writes a new notebook to the user's store from a seed, returns the rendered tile (409 on name collision) |
 | `/workspace/settings` | Rewrites a workspace notebook's `[tool.stargazer]` header (resources + description) |
 | `/workspace/delete` | Removes a workspace notebook (idempotent); tears down its pods |
-| `/workspace/snapshot` | *Moves* a workspace notebook into the user's snapshots; tears down its pods |
-| `/snapshot/delete` | Removes one of the user's own snapshots (idempotent); tears down its run pod |
-| `/workspace/copy` | *Copies* a Workflows or Snapshots notebook into the workspace as an editable notebook (409 on name collision); returns the rendered tile |
-| `/workspace/download` | A workspace notebook or snapshot (own or published) as a `.py` attachment |
+| `/workspace/copy` | *Copies* a Workflows notebook into the workspace as an editable notebook (409 on name collision); returns the rendered tile |
+| `/workspace/download` | A workspace notebook as a `.py` attachment |
 | `/launch` | Serves a per-notebook env into the dashboard's project, owned by its owner, on the notebook's declared image when it has one (422 if that won't evaluate or build); returns its URL |
 | `/launch/status` | Reports active per-notebook apps so the dashboard hydrates running tiles to Open/Stop |
 | `/stop` | Deactivates a per-notebook app by name |
 | `/workspace/cleanup` | Deletes deactivated per-notebook app records |
 | `/health` | Health probe |
 
-Gone with plan 25 (each has a test asserting the 404): `/auth/login`, `/auth/callback`, `/auth/logout`, `/auth/app-install-callback`, `/workspace/enable`, `/workspace/save`, `/workspace/pod-token`.
+Gone with plan 25 (each has a test asserting the 404): `/auth/login`, `/auth/callback`, `/auth/logout`, `/auth/app-install-callback`, `/workspace/enable`, `/workspace/save`, `/workspace/pod-token`. Gone with snapshots (ticket `save-whole-workspace`), tested the same way: `/workspace/snapshot`, `/snapshot/delete`.
 
 Asset-manager routes are a separate router (`app/assets.py`, `include_router`ed onto the same app):
 

@@ -24,9 +24,10 @@ The image layers, on top of the Flyte debian base:
   importable via `PYTHONPATH=/usr/local/lib` as `sg_proxy:asgi_app`; not
   under `app/` so it doesn't get shadowed by Flyte's loaded_modules
   code bundle which lands `app/` into the pod's `/home/flyte` cwd).
-- `app/terminal_overlay.html` baked at `/usr/local/lib/terminal_overlay.html`,
-  the dropdown-terminal markup the proxy reads relative to its own `__file__`
-  and injects into marimo's HTML responses.
+- `app/terminal_overlay.html` and `app/save_banner.html` baked in
+  `/usr/local/lib/`, the dropdown terminal and the notice for files too big
+  to save, which the proxy reads relative to its own `__file__` and injects
+  into marimo's HTML responses.
 - `app/launch-notebook.sh` baked at `/usr/local/bin/launch-notebook.sh`,
   invoked by the AppEnvironment `args=[...]`.
 
@@ -36,10 +37,10 @@ at boot, including `stargazer` via `[tool.uv.sources]`.
 
 Persistence model: the workspace store (`app.workspace_store`) is the
 source of truth and the pod is a working copy. At launch the script hydrates
-the owner's notebooks into `WORKSPACE_NOTEBOOK_DIR` and their own snapshots
-into `SNAPSHOT_NOTEBOOK_DIR`, both flat (`<dir>/<slug>.py`). The proxy writes
-edited notebooks back on a short interval and once more when the pod scales
-to zero. No PVC: pod-local disk plus the object store is cheaper and faster.
+the owner's notebooks into `WORKSPACE_NOTEBOOK_DIR`, flat (`<dir>/<slug>.py`).
+The proxy writes edited notebooks back on a short interval and once more when
+the pod scales to zero. No PVC: pod-local disk plus the object store is
+cheaper and faster.
 
 Auth: pods run `requires_auth=True`, so access control is the platform's alone;
 `SG_OWNER_SUBJECT` only keys the pod's workspace store. No credential of any
@@ -73,9 +74,8 @@ _PROXY_MODULE = "sg_proxy"
 _LAUNCH_BIN = "/usr/local/bin"
 
 # Where a launch hydrates the owner's notebooks, flat as `<dir>/<slug>.py`. The
-# dashboard builds `notebook_path` from these; the proxy mirrors them.
+# dashboard builds `notebook_path` from it; the proxy mirrors it.
 WORKSPACE_NOTEBOOK_DIR = "/workspace"
-SNAPSHOT_NOTEBOOK_DIR = "/snapshots"
 
 
 # Layered build recipe. Consumed only by the deployer's build step
@@ -144,6 +144,7 @@ notebook_app_img_recipe = (
     # own __file__) and injects into marimo's HTML. Baked into the same dir as
     # the proxy so that relative read resolves in-pod.
     .with_source_file(PROJECT_ROOT / "app" / "terminal_overlay.html", _PROXY_LIB_DIR)
+    .with_source_file(PROJECT_ROOT / "app" / "save_banner.html", _PROXY_LIB_DIR)
     .with_source_file(PROJECT_ROOT / "app" / "launch-notebook.sh", _LAUNCH_BIN)
     # Bake the stargazer source tree at `/stargazer/` so each notebook's
     # `[tool.uv.sources] stargazer = { path = "/stargazer", editable = true }`
@@ -157,10 +158,10 @@ notebook_app_img_recipe = (
         [
             f"mv {_PROXY_LIB_DIR}/proxy.py {_PROXY_LIB_DIR}/{_PROXY_MODULE}.py",
             f"chmod +x {_LAUNCH_BIN}/launch-notebook.sh",
-            # Pre-create the hydration targets owned by the flyte runtime
-            # user so the launch script can write into them at startup.
-            f"mkdir -p {WORKSPACE_NOTEBOOK_DIR} {SNAPSHOT_NOTEBOOK_DIR} "
-            f"&& chown -R flyte:flyte {WORKSPACE_NOTEBOOK_DIR} {SNAPSHOT_NOTEBOOK_DIR}",
+            # Pre-create the hydration target owned by the flyte runtime user
+            # so the launch script can write into it at startup.
+            f"mkdir -p {WORKSPACE_NOTEBOOK_DIR} "
+            f"&& chown -R flyte:flyte {WORKSPACE_NOTEBOOK_DIR}",
         ]
     )
     # PYTHONPATH lets the proxy import as `sg_proxy`. DISABLE_AUTOUPDATER pins
@@ -186,8 +187,7 @@ def per_notebook_env(
 
     `notebook_path` is the absolute path inside the spawned pod: image-baked
     notebooks live under `/stargazer/...`, the owner's notebooks under
-    `WORKSPACE_NOTEBOOK_DIR` and their own snapshots under
-    `SNAPSHOT_NOTEBOOK_DIR`, both hydrated by the launch script.
+    `WORKSPACE_NOTEBOOK_DIR`, hydrated by the launch script.
 
     `owner_subject` is the owner's platform user id. The pod sits behind the
     platform login (`requires_auth=True`), which is its only access control.

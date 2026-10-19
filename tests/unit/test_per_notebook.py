@@ -2,11 +2,7 @@
 
 from app import config
 from app.notebook_meta import NotebookResources
-from app.per_notebook import (
-    SNAPSHOT_NOTEBOOK_DIR,
-    WORKSPACE_NOTEBOOK_DIR,
-    per_notebook_env,
-)
+from app.per_notebook import WORKSPACE_NOTEBOOK_DIR, per_notebook_env
 from stargazer.notebooks import notebook_image_base
 
 SUBJECT = "387300641116005877"
@@ -78,12 +74,6 @@ def test_pod_env_has_no_git_or_session_credentials():
         "GITHUB_TOKEN",
     ):
         assert gone not in env.env_vars
-
-
-def test_notebook_dirs_are_flat_hydration_targets():
-    """Workspace and own snapshots hydrate into fixed, flat pod dirs."""
-    assert WORKSPACE_NOTEBOOK_DIR == "/workspace"
-    assert SNAPSHOT_NOTEBOOK_DIR == "/snapshots"
 
 
 def test_pod_runs_the_image_a_notebook_declares():

@@ -85,16 +85,14 @@ def _as(client: TestClient, subject: str = ALICE, name: str = "Alice Ng") -> Non
     client.headers["X-User-Claim-Email"] = '"alice@example.org"'
 
 
-def _put(subject: str, filename: str, src: str = NB_SRC, snapshot: bool = False):
+def _put(subject: str, filename: str, src: str = NB_SRC):
     """Seed the store directly."""
-    fn = ws.create_snapshot_notebook if snapshot else ws.create_workspace_notebook
-    asyncio.run(fn(subject, filename, src))
+    asyncio.run(ws.create_workspace_notebook(subject, filename, src))
 
 
-def _get(subject: str, filename: str, snapshot: bool = False) -> str | None:
+def _get(subject: str, filename: str) -> str | None:
     """Read the store directly."""
-    fn = ws.get_snapshot_notebook if snapshot else ws.get_workspace_notebook
-    return asyncio.run(fn(subject, filename))
+    return asyncio.run(ws.get_workspace_notebook(subject, filename))
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +145,13 @@ def test_fork_routes_are_gone(client, path):
     """Saving needs no opt-in, pods save themselves, and pods need no git token."""
     _as(client)
     assert client.post(path).status_code == 404
+
+
+@pytest.mark.parametrize("path", ["/workspace/snapshot", "/snapshot/delete"])
+def test_snapshot_routes_are_gone(client, path):
+    """Snapshots are gone: a notebook stays in the workspace until it's published."""
+    _as(client)
+    assert client.post(path, data={"slug": "qc-run"}).status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -205,16 +210,21 @@ def test_dashboard_shows_its_release_version(client, monkeypatch):
 
 
 def test_dashboard_lists_only_the_users_notebooks(client):
-    """Each user sees their own workspace and snapshots, never another's."""
+    """Each user sees their own workspace, never another's."""
     _put(ALICE, "qc-run.py")
-    _put(ALICE, "frozen.py", snapshot=True)
     _put(BOB, "bobs-secret.py")
     _as(client)
     html = client.get("/").text
     assert "qc-run.py" in html
     assert "QC run" in html
-    assert "frozen.py" in html
     assert "bobs-secret.py" not in html
+
+
+def test_dashboard_states_the_workspace_file_limit(client):
+    """The Workspace section says which files are kept, in product terms."""
+    _as(client)
+    text = " ".join(client.get("/").text.split())
+    assert "up to 100 MB each; store bigger files as assets." in text
 
 
 def test_dashboard_warns_against_sensitive_data(client):
@@ -237,7 +247,7 @@ def test_dashboard_without_store_says_saving_is_unavailable(client, monkeypatch)
 
 
 # ---------------------------------------------------------------------------
-# Create / settings / delete / snapshot / copy / download
+# Create / settings / delete / copy / download
 # ---------------------------------------------------------------------------
 
 
@@ -345,25 +355,6 @@ def test_delete_removes_only_the_users_notebook(client):
     assert _get(BOB, "qc-run.py") == NB_SRC
 
 
-def test_snapshot_moves_the_notebook(client):
-    """Freezing moves a notebook from the workspace into snapshots."""
-    _put(ALICE, "qc-run.py")
-    _as(client)
-    resp = client.post("/workspace/snapshot", data={"slug": "qc-run"})
-    assert resp.status_code == 200
-    assert "qc-run.py" in resp.json()["tile_html"]
-    assert _get(ALICE, "qc-run.py") is None
-    assert _get(ALICE, "qc-run.py", snapshot=True) == NB_SRC
-
-
-def test_snapshot_delete_removes_own_snapshot(client):
-    """A user's own snapshot can be deleted."""
-    _put(ALICE, "frozen.py", snapshot=True)
-    _as(client)
-    assert client.post("/snapshot/delete", data={"slug": "frozen"}).status_code == 200
-    assert _get(ALICE, "frozen.py", snapshot=True) is None
-
-
 def test_copy_workflow_reads_the_shipped_notebook(client):
     """Copying a workflow writes the shipped source as an editable notebook."""
     _as(client)
@@ -385,53 +376,11 @@ def test_copy_workflow_reads_the_shipped_notebook(client):
     assert again.status_code == 409
 
 
-def test_copy_own_snapshot(client):
-    """An own snapshot copies back into the workspace."""
-    _put(ALICE, "frozen.py", snapshot=True)
-    _as(client)
-    resp = client.post(
-        "/workspace/copy", data={"slug": "frozen", "section": "snapshots"}
-    )
-    assert resp.status_code == 200
-    assert resp.json()["slug"] == "qc-run"
-    assert parse_notebook_name(_get(ALICE, "qc-run.py")) == "QC run"
-
-
-@pytest.fixture
-def public_snapshot(tmp_path, monkeypatch):
-    """Ship one public snapshot `published_qc.py` in a temp snapshots dir."""
-    d = tmp_path / "public"
-    d.mkdir()
-    (d / "__init__.py").write_text("")
-    (d / "published_qc.py").write_text(NB_SRC)
-    monkeypatch.setattr(notebooks, "PUBLIC_SNAPSHOTS_DIR", d)
-    return d
-
-
-def test_dashboard_lists_public_snapshots(client, public_snapshot):
-    """Shipped snapshots show for everyone, without a delete control."""
-    _as(client)
-    html = client.get("/").text
-    assert "published-qc.py" in html
-    assert 'data-snapshot-delete-slug="published-qc"' not in html
-
-
-def test_copy_public_snapshot(client, public_snapshot):
-    """A shipped snapshot copies into the workspace."""
-    _as(client)
-    resp = client.post(
-        "/workspace/copy", data={"slug": "published-qc", "section": "public-snapshots"}
-    )
-    assert resp.status_code == 200
-    assert resp.json()["slug"] == "qc-run"
-    assert parse_notebook_name(_get(ALICE, "qc-run.py")) == "QC run"
-
-
 def test_download_workspace_notebook(client):
     """Download returns the source as an attachment."""
     _put(ALICE, "qc-run.py")
     _as(client)
-    resp = client.get("/workspace/download?slug=qc-run&section=workspace")
+    resp = client.get("/workspace/download?slug=qc-run")
     assert resp.status_code == 200
     assert resp.text == NB_SRC
     assert resp.headers["content-disposition"] == 'attachment; filename="qc-run.py"'
@@ -441,21 +390,8 @@ def test_download_is_scoped_to_the_user(client):
     """One user can't download another's notebook."""
     _put(BOB, "qc-run.py")
     _as(client)
-    resp = client.get("/workspace/download?slug=qc-run&section=workspace")
+    resp = client.get("/workspace/download?slug=qc-run")
     assert resp.status_code == 404
-
-
-def test_download_own_and_public_snapshots(client, public_snapshot):
-    """Snapshots download from the store (own) or the image (public)."""
-    _put(ALICE, "frozen.py", snapshot=True)
-    _as(client)
-    own = client.get("/workspace/download?slug=frozen&section=snapshots")
-    pub = client.get("/workspace/download?slug=published-qc&section=public-snapshots")
-    assert own.text == NB_SRC
-    assert pub.text == NB_SRC
-    assert (
-        pub.headers["content-disposition"] == 'attachment; filename="published_qc.py"'
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -530,27 +466,6 @@ def test_launch_tutorial_uses_the_image_path(client, served):
     assert served["kwargs"]["resources"] is None
 
 
-def test_launch_own_snapshot_is_run_only(client, served):
-    """Own snapshots launch read-only from /snapshots."""
-    _put(ALICE, "frozen.py", snapshot=True)
-    _as(client)
-    assert _launch(client, "frozen", "snapshots", mode="edit").status_code == 400
-    assert _launch(client, "frozen", "snapshots", mode="run").status_code == 200
-    assert served["kwargs"]["notebook_path"] == "/snapshots/frozen.py"
-
-
-def test_launch_public_snapshot_uses_the_image_path(client, served, public_snapshot):
-    """Shipped snapshots launch from their path in the image."""
-    _as(client)
-    assert (
-        _launch(client, "published-qc", "public-snapshots", mode="run").status_code
-        == 200
-    )
-    assert served["kwargs"]["notebook_path"] == (
-        f"{notebooks.IMAGE_WORKDIR}/src/stargazer/notebooks/snapshots/published_qc.py"
-    )
-
-
 IMG_SRC = (
     "import marimo\n"
     "app = marimo.App()\n"
@@ -580,16 +495,6 @@ def test_launch_serves_the_declared_image(client, served, union):
     _as(client)
     resp = _launch(client, "qc-run", "workspace")
     assert resp.json() == {"url": "https://nb.example"}
-    assert served["kwargs"]["image"] == notebook_image_base(
-        config.NOTEBOOK_IMAGE
-    ).with_apt_packages("bcftools")
-
-
-def test_launch_own_snapshot_serves_its_declared_image(client, served, union):
-    """A snapshot keeps the image its notebook declared."""
-    _put(ALICE, "frozen.py", IMG_SRC, snapshot=True)
-    _as(client)
-    assert _launch(client, "frozen", "snapshots", mode="run").status_code == 200
     assert served["kwargs"]["image"] == notebook_image_base(
         config.NOTEBOOK_IMAGE
     ).with_apt_packages("bcftools")

@@ -5,24 +5,9 @@
             data-description="{{ tile.description }}"
             aria-label="Edit this notebook's settings"
             title="Edit resources and description">⚙️</button>
-    <button type="button" class="tile-snapshot" data-snapshot-slug="{{ tile.slug }}"
-            aria-label="Freeze this notebook as a snapshot"
-            title="Freeze as a snapshot (moves it out of your workspace)">📸</button>
     <button type="button" class="tile-delete" data-delete-slug="{{ tile.slug }}"
             aria-label="Delete this notebook"
             title="Delete this notebook">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
-             stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M3 6h18"/>
-            <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/>
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-            <path d="M10 11v6M14 11v6"/>
-        </svg>
-    </button>
-    {% elif tile.source == 'snapshots' %}
-    <button type="button" class="tile-delete" data-snapshot-delete-slug="{{ tile.slug }}"
-            aria-label="Delete this snapshot"
-            title="Delete this snapshot">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
              stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M3 6h18"/>
@@ -35,30 +20,6 @@
     <span class="tile-file">{{ tile.slug }}.py</span>
     <h3>{{ tile.title }}</h3>
     {% if tile.description %}<p>{{ tile.description }}</p>{% endif %}
-    {% if tile.section == 'snapshots' %}
-    <div class="tile-actions">
-        <div class="launch-row">
-            <form method="post" action="/launch" class="launch-form">
-                <input type="hidden" name="slug" value="{{ tile.slug }}">
-                <input type="hidden" name="section" value="{{ tile.source }}">
-                <input type="hidden" name="mode" value="run">
-                <button class="btn btn-github" type="submit">Run</button>
-            </form>
-        </div>
-        <div class="launch-row">
-            <button type="button" class="btn btn-muted"
-                    data-copy-slug="{{ tile.slug }}" data-copy-section="{{ tile.source }}"
-                    title="Copy into your workspace as an editable notebook">
-                Copy to workspace
-            </button>
-        </div>
-        <div class="launch-row">
-            <a class="btn btn-muted" download
-               href="/workspace/download?slug={{ tile.slug | urlencode }}&section={{ tile.source }}"
-               title="Download this notebook's source">Download</a>
-        </div>
-    </div>
-    {% else %}
     <div class="tile-actions">
         <div class="launch-row">
             <form method="post" action="/launch" class="launch-form">
@@ -79,7 +40,7 @@
         {% if tile.section == 'workspace' %}
         <div class="launch-row">
             <a class="btn btn-muted" download
-               href="/workspace/download?slug={{ tile.slug | urlencode }}&section=workspace"
+               href="/workspace/download?slug={{ tile.slug | urlencode }}"
                title="Download this notebook's source">Download</a>
         </div>
         {% endif %}
@@ -93,5 +54,4 @@
         </div>
         {% endif %}
     </div>
-    {% endif %}
 </div>

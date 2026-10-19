@@ -23,7 +23,7 @@ flowchart LR
     D -->|/launch per tile click| FCP
     FCP -->|deploys| N[nb-SLUG-MODE pod]
     U -->|browser tab, platform login| N
-    N -->|hydrate at start, save edits| S
+    N -->|hydrate at start, save changes| S
     D -.-> PR
     N -.-> PR
 ```
@@ -51,7 +51,7 @@ sequenceDiagram
     D-->>B: notebook URL (open in tab)
     B->>P: GET notebook URL
     P->>N: request + signed-in user
-    N->>S: hydrate the owner's notebooks
+    N->>S: hydrate the owner's workspace
     N-->>B: starting page, then marimo
 ```
 
@@ -69,23 +69,19 @@ sequenceDiagram
 
 **Users are separated by Flyte project boundaries**, not by varying the env definition. Every per-notebook env is served into the user's project, so each user's runs, apps and cache stay in their own project, and their files sit under their own prefix in the store. The factory is parameterized by notebook (slug, mode, path, resources) and owner, so which project the env lands in is what separates users. **Storage isn't isolated yet:** every project runs as the same cloud role, so code in one user's notebook could read another user's objects. That stays soft until it needs hardening (a bucket and role per user, ticket `per-user-storage-isolation`); meanwhile the dashboard and the asset upload form carry an alpha notice asking users not to upload sensitive data.
 
-**Saving just works.** A user's own notebooks live in the workspace store: object storage, one object per notebook, under the user's subject. There's no opt-in and no setup. The store is the durable copy and pods are working copies. A pod loads its owner's notebooks when it starts, writes changed notebooks back every few seconds, and does a final save when it scales to zero. Each pod writes only the notebooks it changed, so two running notebooks can't overwrite each other.
+**Saving just works.** A user's workspace lives in the workspace store: object storage, one object per file at its path, under the user's subject. Notebooks are files like any other, and so is whatever the user keeps beside them: data, helper modules, outputs. There's no opt-in and no setup. The store is the durable copy and pods are working copies. A pod loads its owner's whole workspace when it starts and writes changed files back every 5 seconds. A file deleted in the pod is deleted from the store. The pod does a final save when it scales to zero. A pod that dies without warning loses what changed since its last save. Each pod writes only the files it changed, so two running notebooks overwrite each other's work only when both change the same file. Dotfiles and Python's and marimo's caches aren't saved.
 
-**Sharing upstream is a download.** Any workspace notebook or snapshot can be downloaded as its `.py` file and contributed to the repository like any other change. The app tier has no GitHub integration.
+**Big files belong in the asset store.** A file over 100 MB isn't saved with the workspace. It stays on the pod's disk until the pod stops, and the notebook page names it, with a cell that stores it as an asset straight from the pod, which has no size limit. The limit matches the asset page's upload limit, and it keeps the final save small enough to finish before the pod is killed.
+
+**Sharing upstream is a download.** Any workspace notebook can be downloaded as its `.py` file and contributed to the repository like any other change. The app tier has no GitHub integration.
 
 **Resources live in the notebook.** A workspace notebook's `[tool.stargazer]` header (cpu/memory) is parsed textually at launch (no code execution) and honored as-authored, with no ceiling. Image-baked notebooks carry no header and fall back to the env default.
 
-**So does the image.** A workspace notebook or own snapshot can declare the image its pod runs on as `main_img` in its setup block ([Notebooks → Notebook Environment](notebook.md#notebook-environment)). At launch the dashboard evaluates just that expression and hands the resulting image to the SDK's `serve`, which builds it on Union's remote builder in the user's own project (or finds it already built) before deploying the notebook on it. It's the one piece of notebook code the dashboard runs: the owner's, in the owner's own dashboard. The dashboard's one secret is the org's Pinata key, which any of the owner's tasks can read anyway.
+**So does the image.** A workspace notebook can declare the image its pod runs on as `main_img` in its setup block ([Notebooks → Notebook Environment](notebook.md#notebook-environment)). At launch the dashboard evaluates just that expression and hands the resulting image to the SDK's `serve`, which builds it on Union's remote builder in the user's own project (or finds it already built) before deploying the notebook on it. It's the one piece of notebook code the dashboard runs: the owner's, in the owner's own dashboard. The dashboard's one secret is the org's Pinata key, which any of the owner's tasks can read anyway.
 
 **Tiles are stateful and authoritative.** On load the dashboard asks the control plane which `nb-{slug}-{mode}` apps are live and hydrates those tiles to Open/Stop; a notebook runs in edit *or* run mode, never both. Discovery is a single project-scoped deployment list, re-checked per app for authoritative status. This is read from Flyte rather than in-memory state, so it survives dashboard restarts.
 
 **The tier is lightweight by construction.** Dashboard responses are gzip-compressed, and the notebook proxy streams everything except the HTML pages it decorates, so large notebook assets never sit in proxy memory. Details in `.opencode/reference/architecture/app_internals.md`.
-
-## Snapshots
-
-A **snapshot** is a frozen notebook: a researcher takes an analysis to a publication-ready state and pins it as a read-only, reproducible record. Freezing **moves** the notebook out of the editable Workspace into the user's snapshots in the workspace store. Published snapshots ship in the image, like tutorials, and appear in everyone's Snapshots section next to their own. Publishing one is a normal contribution: download it and add it to the repository's `notebooks/snapshots/`.
-
-This is deliberately the opposite of a **workflow**: workflows are off-the-shelf pipelines run again and again against new data; a snapshot is a single point-in-time record, valued precisely because it does not change. What's frozen is the notebook *source*, the auditable record of exactly what was run. The dashboard gives them separate sections. See [Notebooks → Promotion Paths](notebook.md#promotion-paths) for when to freeze versus graduate, and `.opencode/reference/architecture/app_internals.md` for the freeze/listing/launch mechanics.
 
 ## Asset Index
 
