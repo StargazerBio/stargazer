@@ -159,8 +159,8 @@ What's known:
   being created that day has `terminationGracePeriodSeconds: 300`; task
   pods have 30. The notebook container has a preStop hook,
   `/wait-for-drain` on queue-proxy's port 8022, so Knative drains first and
-  the 300 s covers the drain and the save. Five notebook pods and two
-  dashboards took 31–33 s from deletion to the kubelet's final delete, with
+  the 300 s covers the drain and the save. Six notebook pods and two
+  dashboards took 31–34 s from deletion to the kubelet's final delete, with
   no request in flight. So the drain is about 30 s (inferred: Knative's
   default), and the save has about 255 s once uvicorn's 15 s shutdown
   timeout is spent.
