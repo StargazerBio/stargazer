@@ -46,7 +46,7 @@ Union only proves the visitor can view the project, and org admins can view ever
 - **Dashboard.** No ownership check; Union's login (`requires_auth=True`) is the only gate, so an org admin who can view the project gets in. Routes take `CurrentUser` (`identity.current_user`): 401 without `X-User-Subject`, otherwise the visitor's name/email with `subject` replaced by `config.OWNER_SUBJECT` (`SG_OWNER_SUBJECT`, baked in by onboarding), so storage and pod ownership follow the dashboard's owner. With no owner configured (local run) the visitor's subject is the key.
 - **Notebook pods.** The proxy (`app/proxy.py`) does no identity check; `SG_OWNER_SUBJECT`, baked in at launch, only keys the hydrate/sync prefix. Before forwarding to marimo it strips `Host`, `Cookie` and every `X-User-*` header (`_forwardable`), so notebook code never sees a visitor's Union token through a request.
 
-**Residual risk.** Code in a pod can still read anything in the pod, and the cookies do reach the pod's proxy process. A malicious owner could serve code that captures a visiting member's token before the strip. Ticket `session-cookies-in-pods`.
+**Residual risk.** Code in a pod can still read anything in the pod, and the cookies do reach the pod's proxy process. A malicious owner could serve code that captures a visiting member's token before the strip. Accepted for now (decided 2026-10-18).
 
 ## The Workspace Store
 
@@ -246,4 +246,4 @@ Per dashboard, onboarding bakes in `FLYTE_PROJECT`, `SG_OWNER_SUBJECT` and `STAR
 
 ## Known Gaps
 
-Production gaps are tickets, not notes here: the org-wide platform key in every pod (`org-wide-platform-key`), the shared IAM role for the store (`per-user-storage-isolation`), Union cookies reaching pods (`session-cookies-in-pods`), and invite-only onboarding (`self-serve-onboarding`).
+Production gaps are tickets, not notes here: the org-wide platform key in every pod (`org-wide-platform-key`), the shared IAM role for the store (`per-user-storage-isolation`), and invite-only onboarding (`self-serve-onboarding`).
