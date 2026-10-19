@@ -6,6 +6,8 @@ uploading anything. `compute_cid()` builds the same UnixFS DAG Pinata builds:
 CIDv1, raw leaves, 256 KiB chunks, a balanced tree of at most 174 links per
 node, sha2-256 throughout. A file that fits in one chunk is its own raw leaf
 (`bafkrei…`); anything larger gets a dag-pb root (`bafybei…`).
+`CidBuilder` works it out from bytes as they arrive, in pieces of any size,
+and `compute_cid()` is the builder fed a file.
 
 Those parameters are part of every asset's identity. If Pinata changed its
 defaults, a newly published file's CID would stop matching the one computed
@@ -71,6 +73,57 @@ def _node(children: list[tuple[bytes, int, int]]) -> tuple[bytes, int, int]:
     return _cid(_DAG_PB, block), tsize, filesize
 
 
+class CidBuilder:
+    """Works out a file's CID from its bytes, fed in pieces of any size.
+
+    Each full leaf is hashed as soon as its bytes are in, so the state is the
+    leaves' CIDs and sizes plus at most one partial leaf: a few megabytes for
+    a 10 GB file. The tree over the leaves is built when `cid()` is asked.
+    """
+
+    def __init__(self) -> None:
+        """Start with no bytes."""
+        self._leaves: list[tuple[bytes, int, int]] = []
+        self._partial = bytearray()
+
+    def _add_leaf(self, block: bytes | memoryview) -> None:
+        """Record one leaf's CID and size."""
+        self._leaves.append((_cid(_RAW, block), len(block), len(block)))
+
+    def update(self, data: bytes) -> None:
+        """Take the next piece of the file."""
+        view = memoryview(data)
+        if self._partial:
+            take = CHUNK_BYTES - len(self._partial)
+            self._partial += view[:take]
+            view = view[take:]
+            if len(self._partial) < CHUNK_BYTES:
+                return
+            self._add_leaf(self._partial)
+            self._partial = bytearray()
+        while len(view) >= CHUNK_BYTES:
+            self._add_leaf(view[:CHUNK_BYTES])
+            view = view[CHUNK_BYTES:]
+        self._partial += view
+
+    def cid(self) -> str:
+        """The CID of everything fed so far.
+
+        Returns:
+            The CIDv1 in base32 (`bafk…` for one chunk, `bafy…` otherwise)
+        """
+        level = list(self._leaves)
+        if self._partial or not level:
+            level.append(
+                (_cid(_RAW, self._partial), len(self._partial), len(self._partial))
+            )
+        while len(level) > 1:
+            level = [
+                _node(level[i : i + MAX_LINKS]) for i in range(0, len(level), MAX_LINKS)
+            ]
+        return "b" + base64.b32encode(level[0][0]).decode().lower().rstrip("=")
+
+
 def compute_cid(path: Path) -> str:
     """Return the IPFS CID Pinata assigns `path`, reading it once in chunks.
 
@@ -80,14 +133,8 @@ def compute_cid(path: Path) -> str:
     Returns:
         The CIDv1 in base32 (`bafk…` for one chunk, `bafy…` otherwise)
     """
-    level: list[tuple[bytes, int, int]] = []
+    builder = CidBuilder()
     with Path(path).open("rb") as fh:
         while block := fh.read(CHUNK_BYTES):
-            level.append((_cid(_RAW, block), len(block), len(block)))
-    if not level:
-        level = [(_cid(_RAW, b""), 0, 0)]
-    while len(level) > 1:
-        level = [
-            _node(level[i : i + MAX_LINKS]) for i in range(0, len(level), MAX_LINKS)
-        ]
-    return "b" + base64.b32encode(level[0][0]).decode().lower().rstrip("=")
+            builder.update(block)
+    return builder.cid()
