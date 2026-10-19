@@ -155,6 +155,15 @@ What's known:
   recorded in `app/launch-notebook.sh`).
 - The pod gets 300 s between SIGTERM and SIGKILL. That's what our comments
   say, with no source recorded. The EKS audit log has the pod spec.
+  Measured 2026-10-18: every `nb-*` and dashboard pod the audit log shows
+  being created that day has `terminationGracePeriodSeconds: 300`; task
+  pods have 30. The notebook container has a preStop hook,
+  `/wait-for-drain` on queue-proxy's port 8022, so Knative drains first and
+  the 300 s covers the drain and the save. Five notebook pods and two
+  dashboards took 31–33 s from deletion to the kubelet's final delete, with
+  no request in flight. So the drain is about 30 s (inferred: Knative's
+  default), and the save has about 255 s once uvicorn's 15 s shutdown
+  timeout is spent.
 - The save at scale-down has never been checked on its own on Union. The
   2026-10-06 tenant run (plan 25) showed edits survive scale-to-zero, but the
   5 s save had already stored them.
@@ -173,9 +182,10 @@ download. Download is still how a notebook is shared, until Publish.
 - [x] Prove the save at scale-down on Union, on its own: deploy with the
       interval at 0, so the save at SIGTERM is the only one, write files in
       a running pod, check the store doesn't have them, stop the pod, and
-      check they're in the next pod (below). Not done: reading the pod's
-      `terminationGracePeriodSeconds` from the EKS audit log, since the
-      read-only AWS session had expired.
+      check they're in the next pod (below). The pod's
+      `terminationGracePeriodSeconds`, read from the EKS audit log once the
+      read-only AWS session was renewed, is 300 (2026-10-18, under What's
+      known).
 - [x] Proxy: save and hydrate every file, with the new prefix, the skips,
       the size and modification-time check, deletions, the 100 MB cap, and
       the interval from `SG_SAVE_INTERVAL_SECONDS`. Tests in

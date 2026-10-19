@@ -86,9 +86,9 @@ dashboard decides where it goes:
   and the row repointed, leaving the first copy unreferenced. It skips the
   transfer when the CID already has a row whose `uri` exists instead.
 - **Abandoned uploads.** An unfinished multipart upload keeps its parts, and
-  they're billed, until it's aborted. The dashboard aborts an upload idle for
-  an hour, and every open one at shutdown. One left behind by a crash stays
-  until a bucket lifecycle rule removes it (Q2).
+  they're billed, until it's aborted. Today nothing can abort one: the bucket
+  has no rule for it, and the pods' role isn't allowed to (Q2). How they get
+  cleaned up is Q3.
 
 ## Open questions
 
@@ -103,10 +103,43 @@ dashboard decides where it goes:
       reader going through the row: `StorageClient.download` and `delete`,
       and the asset page's private download (ticket
       `asset-manager-on-index`).
-- [ ] **Q2. Does the tenant bucket abort unfinished multipart uploads?**
-      Check its lifecycle rules with the read-only AWS access
-      (`get-bucket-lifecycle-configuration`). Union manages the bucket, so
-      if there's no rule, ask them for one.
+- [x] **Q2. Does the tenant bucket abort unfinished multipart uploads?**
+      No (measured 2026-10-18 with the read-only AWS access):
+  - The bucket's one lifecycle rule is `items_non_current_versions_expiration`:
+    versioning is on, and a deleted or overwritten object's old version is
+    kept for 7 days. There's no `AbortIncompleteMultipartUpload` rule, and
+    no bucket policy.
+  - The pods' role (`union-us-west-2-stargazerbio-userflyterole`) has
+    `s3:GetObject*`, `s3:PutObject*`, `s3:DeleteObject*` and `s3:ListBucket`
+    on the bucket. IAM's policy simulator: `s3:PutObject` allowed, so
+    starting, uploading parts and completing work; `s3:AbortMultipartUpload`,
+    `s3:ListMultipartUploadParts` and `s3:ListBucketMultipartUploads`
+    `implicitDeny`.
+  - No unfinished multipart uploads in the bucket.
+  
+  So an upload abandoned partway, by a closed browser or a dashboard
+  restart, stays in the bucket and is billed indefinitely. Nothing
+  Stargazer runs can find it or remove it. The same goes for any large
+  `flyte.storage.put` that fails partway today (inferred: the store's
+  client uploads big files in parts).
+- [ ] **Q3. How abandoned uploads get cleaned up.** Union manages the
+      bucket and the role, so either fix is a request to them. Options:
+  - **A lifecycle rule** on `union-us-west-2-stargazerbio`:
+    `AbortIncompleteMultipartUpload` with `DaysAfterInitiation: 1`, for the
+    whole bucket. It catches every leftover, a crash's included, and today's
+    large writes too. Nothing in the dashboard changes.
+  - **Abort permissions** for the role (`s3:AbortMultipartUpload`,
+    `s3:ListBucketMultipartUploads`), so the dashboard aborts idle uploads
+    and, at startup, any left under `uploads/`. That's more code, and it
+    still misses anything a sweep doesn't reach.
+  - **No multipart while uploading:** each chunk is stored as its own object
+    under `uploads/<id>/`, which the role can delete. At the end the chunks
+    are joined in the bucket with a short multipart copy, and the chunk
+    objects are deleted. Resumes survive a dashboard restart. A crash in the
+    seconds the copy takes still leaves an upload nothing can abort.
+
+  Recommendation: ask Union for the lifecycle rule. It's one setting and
+  covers every case.
 
 ## Pieces
 
