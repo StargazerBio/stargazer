@@ -4027,7 +4027,7 @@ requires-dist = [
     { name = "mcp", extras = ["cli"], marker = "extra == 'mcp'", specifier = ">=2.0,<3" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=1.0.3" },
     { name = "pooch", marker = "extra == 'bio'", specifier = ">=1.9.0" },
-    { name = "pyjwt", extras = ["crypto"], marker = "extra == 'landing'", specifier = ">=2.8" },
+    { name = "pyjwt", extras = ["crypto"], marker = "extra == 'landing'", specifier = ">=2.8,<3" },
     { name = "python-multipart", marker = "extra == 'landing'", specifier = ">=0.0.9" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "scanpy", marker = "extra == 'bio'", specifier = ">=1.12" },

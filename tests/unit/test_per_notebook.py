@@ -96,3 +96,12 @@ def test_pod_gets_the_pinata_key_as_a_secret():
     env = _env()
     assert env.secrets == [flyte.Secret(key="PINATA_JWT", as_env_var="PINATA_JWT")]
     assert "PINATA_JWT" not in env.env_vars
+
+
+def test_pod_env_carries_the_token_check(monkeypatch):
+    """The proxy checks tokens against the same issuer, for the same people."""
+    monkeypatch.setattr(config, "AUTH_ISSUER", "https://signin.example.test")
+    monkeypatch.setattr(config, "ADMIN_SUBJECTS", frozenset({"2", "1"}))
+    env = _env()
+    assert env.env_vars["SG_AUTH_ISSUER"] == "https://signin.example.test"
+    assert env.env_vars["SG_ADMIN_SUBJECTS"] == "1,2"

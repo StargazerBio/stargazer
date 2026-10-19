@@ -269,6 +269,10 @@ def deploy_dashboard(
     # deployer gives one; the pod's AWS_REGION wins if it has one.
     if region := os.environ.get("STARGAZER_STORE_REGION"):
         env_vars["STARGAZER_STORE_REGION"] = region
+    # The org admins who may open every user's dashboard and notebooks
+    # (`app.identity`), when the deployer names them.
+    if admins := os.environ.get("STARGAZER_ADMIN_SUBJECTS"):
+        env_vars["STARGAZER_ADMIN_SUBJECTS"] = admins
     # In-cluster init can't discover the org in an app pod; bake the deployer's.
     if org := get_init_config().org:
         env_vars["FLYTE_ORG"] = org
