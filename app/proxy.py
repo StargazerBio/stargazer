@@ -35,7 +35,8 @@ Reserved paths the proxy handles itself instead of forwarding:
   cold-starting.
 - `WS  /__sg__/term` — PTY websocket. Spawns a login `bash` and
   bridges it to the injected xterm.js overlay. The child's environment is
-  scrubbed of secret-shaped vars; that's tidiness, not a boundary.
+  scrubbed of secret-shaped vars other than the Pinata key; that's tidiness,
+  not a boundary.
 
 While marimo is still starting, a browser request gets a small self-refreshing
 "Starting your notebook…" page instead of an error.
@@ -81,10 +82,12 @@ SNAPSHOT_DIR = Path("/snapshots")
 # kilobytes, so a short interval costs little and bounds what a crash can lose.
 SYNC_INTERVAL_SECONDS = 5
 
-# Env keys never handed to the interactive shell. The suffix list catches future
-# secret-shaped vars without an explicit entry per name.
-_TERM_SECRET_KEYS = {"PINATA_JWT"}
+# Env keys never handed to the interactive shell, matched by suffix so future
+# secret-shaped vars need no entry per name.
 _TERM_SECRET_SUFFIXES = ("_SECRET", "_TOKEN", "_JWT", "_KEY", "_PASSWORD")
+# Secret-shaped, but handed over: the org's Pinata key is in the notebook, every
+# task and the dashboard too, and the shell's SDK calls and agent need it.
+_TERM_SHARED_KEYS = {"PINATA_JWT"}
 
 # Request headers that never reach marimo: the platform session cookies and the
 # identity headers it injects (notably `X-User-Token`, the visitor's ID token).
@@ -360,13 +363,15 @@ async def ready() -> Response:
 def _shell_env() -> dict[str, str]:
     """Pod env with auth-critical secrets stripped, for the interactive shell.
 
-    Drops every key in `_TERM_SECRET_KEYS` plus anything ending in a
-    secret-shaped suffix, so credentials stay out of casual `env` output. Not a boundary (see the module docstring). Sets a sane `TERM` so curses apps render.
+    Drops anything ending in a secret-shaped suffix except the keys in
+    `_TERM_SHARED_KEYS`, so credentials stay out of casual `env` output. Not a
+    boundary (see the module docstring). Sets a sane `TERM` so curses apps
+    render.
     """
     env = {
         k: v
         for k, v in os.environ.items()
-        if k not in _TERM_SECRET_KEYS and not k.endswith(_TERM_SECRET_SUFFIXES)
+        if k in _TERM_SHARED_KEYS or not k.endswith(_TERM_SECRET_SUFFIXES)
     }
     env.setdefault("TERM", "xterm-256color")
     return env
