@@ -10,6 +10,8 @@ holds org-wide `contributor`, so code in any notebook can act in any
 project. Ask Union whether an app can run without it or with a key we
 supply.
 
+Waiting on Union (2026-10-18).
+
 ## Direction
 
 Replace the org key with one key per user, each holding `contributor` on
