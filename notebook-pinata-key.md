@@ -51,7 +51,16 @@ first in-pod check read the env through the terminal and saw no key
 
 - **Before**, `main`'s `per_notebook_env` served under a throwaway owner:
   `PINATA_JWT` unset; the notebook's Python had no public tier, and
-  `query({"asset": "reference"})` returned 0 rows.
+  `query({"asset": "reference"})` returned 0 rows. **Correction
+  (2026-10-18):** both checks ran through the terminal, which scrubs
+  `PINATA_JWT` either way, so they couldn't show what the pod had. Rechecked
+  from the marimo process's own env, on `main` at `b8e3a4e`: no
+  `PINATA_JWT` and no `_UNION_PINATA_JWT`, but `_UNION_EAGER_API_KEY` is
+  there. From that pod, notebook code with that env submitted a ten-line
+  task declaring the org's `PINATA_JWT` secret, and the task saw the key:
+  687 characters, sha256 prefix `93946e8f` (run `ujgbbqc4xtlwgbb2hjst`). So
+  before this change the key was one deliberate step away from any
+  notebook, not out of reach.
 - **The secret alone:** the marimo process had the key (687 characters,
   sha256 prefix `93946e8f`, the local Pinata key's), and with its env the
   same query returned 1 public record. The terminal still showed it unset.
