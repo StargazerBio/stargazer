@@ -151,6 +151,20 @@ async def update_file(cid: str, keyvalues: dict[str, str]) -> dict:
     return await _storage.default_client.update_metadata(cid, keyvalues)
 
 
+@mcp.tool()
+async def publish_file(cid: str) -> dict:
+    """Publish one of your stored files: anyone on the internet can then find
+    and download it. The CID doesn't change, and your own copy stays.
+
+    Needs the public tier (a Pinata key). Refused for a CID that isn't in your
+    storage, and for metadata over the public tier's limits (nine fields, 250
+    characters each), before anything is sent.
+
+    When displaying results, always show a table with the CID and all keyvalues.
+    """
+    return await _storage.default_client.publish(cid)
+
+
 # ---------------------------------------------------------------------------
 # Bundle tools
 # ---------------------------------------------------------------------------

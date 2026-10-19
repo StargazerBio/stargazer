@@ -7,6 +7,8 @@ pass through as a bare Asset, reserved system keys (underscore-prefixed)
 are rejected everywhere.
 """
 
+from pathlib import Path
+
 import pytest
 
 from stargazer.assets import Asset, build_asset
@@ -130,3 +132,30 @@ class TestUploadFileTool:
         with pytest.raises(ValueError, match="stamped automatically"):
             await upload_file(str(f), {"asset": "alignment", "_owner": "me"})
         assert await isolated_storage.index.query({}) == []
+
+
+class TestPublishFileTool:
+    """server.py::publish_file publishes one of the user's stored files."""
+
+    async def test_publishes_a_stored_file(self, isolated_storage, tmp_path):
+        from stargazer.server import publish_file, upload_file
+
+        sent = []
+
+        class _PublicTier:
+            """Records the upload and assigns the CID Pinata would."""
+
+            async def upload(self, component, path):
+                sent.append(Path(path).read_bytes())
+                component.cid = compute_cid(Path(path))
+
+        isolated_storage.public = _PublicTier()
+        f = tmp_path / "sheet.tsv"
+        f.write_text("a\tb\n")
+        stored = await upload_file(str(f), {"asset": "sample_sheet_probe"})
+
+        result = await publish_file(stored["cid"])
+
+        assert sent == [b"a\tb\n"]
+        assert result["cid"] == stored["cid"]
+        assert result["keyvalues"] == {"asset": "sample_sheet_probe"}
