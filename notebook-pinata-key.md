@@ -87,5 +87,4 @@ the secret.
 
 The key was never out of reach: on `main` before this, notebook code got it
 through a ten-line task declaring the secret (run `ujgbbqc4xtlwgbb2hjst`).
-Keeping it private would mean the dashboard alone holding it, with tasks
-losing it and no user code in the dashboard; no ticket for that yet.
+Keeping it private is ticket `private-pinata-key` (`maybe`).
