@@ -5,12 +5,17 @@ Standalone ASGI app baked into the `notebook-app` image. Listens on the
 per-notebook pod's public port (8080) and forwards HTTP + websocket traffic to
 marimo on `127.0.0.1:8081`.
 
-**Auth.** The pod runs behind the platform login (`requires_auth=True`), which
-gates every request, so access control is the platform's alone; the proxy
-adds none. `SG_OWNER_SUBJECT` (baked in at launch) only keys where the pod
-hydrates from and saves to. Platform cookies and `X-User-*` headers are
-stripped before anything reaches marimo, so notebook code never sees the
-visitor's platform token through a request.
+**Auth.** The pod runs behind the platform login (`requires_auth=True`), but
+it also answers at an in-cluster address that skips the login, where any pod
+in any project can send whatever headers it likes (measured 2026-10-18). So on
+Union (`SG_AUTH_ISSUER` set) `_TokenGate` checks every HTTP and websocket
+request for a token the issuer signed, `X-User-Token`, whose subject is the
+owner (`SG_OWNER_SUBJECT`) or one of `SG_ADMIN_SUBJECTS`: 401 without one, 403
+for anyone else. It mirrors `app.identity`, which this module can't import.
+`SG_OWNER_SUBJECT` also keys where the pod hydrates from and saves to.
+Platform cookies and `X-User-*` headers are stripped before anything reaches
+marimo, so notebook code never sees the visitor's platform token through a
+request.
 
 **Workspace.** Every file in the user's workspace lives in the workspace store,
 one object per file at its path, under
@@ -65,11 +70,13 @@ import signal
 import struct
 import termios
 from contextlib import asynccontextmanager, suppress
+from functools import cache
 from pathlib import Path
 
 import flyte
 import flyte.storage
 import httpx
+import jwt
 import websockets
 from fastapi import FastAPI, Request, Response, WebSocket
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
@@ -379,9 +386,89 @@ async def lifespan(_: FastAPI):
         _upstream = None
 
 
+# Clock skew allowed on a token's expiry and not-before times.
+_LEEWAY_SECONDS = 60
+
+
+@cache
+def _jwks_client(issuer: str) -> jwt.PyJWKClient:
+    """The issuer's signing keys, found from its discovery document."""
+    discovery = httpx.get(f"{issuer}/.well-known/openid-configuration", timeout=10)
+    discovery.raise_for_status()
+    # An hour between refreshes: a token signed by a key not yet cached
+    # refetches the set anyway, and the first fetch blocks the request.
+    return jwt.PyJWKClient(discovery.json()["jwks_uri"], lifespan=3600)
+
+
+def _signing_key(token: str):
+    """The issuer's public key that signed `token`."""
+    return (
+        _jwks_client(os.environ["SG_AUTH_ISSUER"]).get_signing_key_from_jwt(token).key
+    )
+
+
+def _refusal(headers: dict[bytes, bytes]) -> int | None:
+    """The status that turns a request away, or None to let it through.
+
+    401 without a token the issuer signed that hasn't expired; 403 for a
+    subject other than the owner or an admin.
+    """
+    _, _, token = headers.get(b"x-user-token", b"").decode().partition(" ")
+    if not token:
+        return 401
+    try:
+        claims = jwt.decode(
+            token,
+            _signing_key(token),
+            algorithms=["RS256"],
+            issuer=os.environ["SG_AUTH_ISSUER"],
+            leeway=_LEEWAY_SECONDS,
+            options={"require": ["exp", "iss", "sub"], "verify_aud": False},
+        )
+    except jwt.PyJWTError:
+        return 401
+    admins = os.environ.get("SG_ADMIN_SUBJECTS", "").split(",")
+    allowed = {os.environ.get("SG_OWNER_SUBJECT", ""), *admins} - {""}
+    return None if claims["sub"] in allowed else 403
+
+
+class _TokenGate:
+    """ASGI middleware: on Union, a request `_refusal` turns away goes no further.
+
+    An HTTP request gets the status; a websocket is closed with 1008 (policy
+    violation) before it's accepted. Off when `SG_AUTH_ISSUER` is unset.
+    """
+
+    def __init__(self, app):
+        """Wrap `app`."""
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        """Check the request, then pass it on or refuse it."""
+        if scope["type"] in ("http", "websocket") and os.environ.get("SG_AUTH_ISSUER"):
+            # Off the event loop: the first check fetches the issuer's keys.
+            status = await asyncio.to_thread(_refusal, dict(scope["headers"]))
+            if status is not None:
+                if scope["type"] == "websocket":
+                    await send({"type": "websocket.close", "code": 1008})
+                    return
+                body = b"not signed in" if status == 401 else b"not your notebook"
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": status,
+                        "headers": [(b"content-type", b"text/plain")],
+                    }
+                )
+                await send({"type": "http.response.body", "body": body})
+                return
+        await self.app(scope, receive, send)
+
+
 asgi_app = FastAPI(
     title="stargazer-notebook-proxy", docs_url=None, redoc_url=None, lifespan=lifespan
 )
+asgi_app.add_middleware(_TokenGate)
 
 
 # ---------------------------------------------------------------------------

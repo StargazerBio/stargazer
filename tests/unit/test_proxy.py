@@ -2,7 +2,7 @@
 
 The proxy is baked into the notebook image as a standalone module; here we
 import it directly. Covered: what the proxy forwards from the platform-forwarded
-`X-User-Subject`, what is (not) forwarded to marimo, the starting page while
+`X-User-Subject`, the signed-token gate on Union, what is (not) forwarded to marimo, the starting page while
 marimo is cold, terminal-overlay injection and streaming passthrough, and the
 workspace hydrate/sync against a local store root through the real
 `flyte.storage` calls. The upstream marimo server is faked with an
@@ -16,6 +16,7 @@ import time
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from app import proxy
 
@@ -88,6 +89,82 @@ def test_any_signed_in_visitor_reaches_marimo(upstream):
 
     assert resp.status_code == 200
     assert resp.text == "hello"
+
+
+@pytest.fixture
+def on_union(monkeypatch, union_signer):
+    """The pod runs on Union: every request needs a token the test signer made."""
+    monkeypatch.setenv("SG_AUTH_ISSUER", "https://signin.example.test")
+    monkeypatch.setenv("SG_ADMIN_SUBJECTS", "")
+    monkeypatch.setattr(proxy, "_signing_key", lambda token: union_signer.public_key)
+    return union_signer
+
+
+def test_on_union_forged_headers_without_a_token_never_reach_marimo(on_union, upstream):
+    """What a pod can send the in-cluster address: an owner's headers, no token."""
+    recorder = upstream(lambda req: httpx.Response(200, text="hello"))
+    client = TestClient(proxy.asgi_app, headers={"X-User-Subject": OWNER})
+
+    resp = client.get("/api/status")
+
+    assert resp.status_code == 401
+    assert recorder == {}
+
+
+def test_on_union_the_owners_token_reaches_marimo(on_union, upstream):
+    """The owner's browser, through the login, carries a signed token."""
+    upstream(lambda req: httpx.Response(200, text="hello"))
+    client = TestClient(
+        proxy.asgi_app, headers={"X-User-Token": f"IDToken {on_union(OWNER)}"}
+    )
+
+    resp = client.get("/api/status")
+
+    assert resp.status_code == 200
+    assert resp.text == "hello"
+
+
+def test_on_union_an_admins_token_reaches_marimo(on_union, upstream, monkeypatch):
+    """A listed admin gets in like the owner."""
+    monkeypatch.setenv("SG_ADMIN_SUBJECTS", f"222222222222222222,{OTHER}")
+    upstream(lambda req: httpx.Response(200, text="hello"))
+    client = TestClient(
+        proxy.asgi_app, headers={"X-User-Token": f"Bearer {on_union(OTHER)}"}
+    )
+
+    assert client.get("/api/status").status_code == 200
+
+
+def test_on_union_a_strangers_token_never_reaches_marimo(on_union, upstream):
+    """A valid token for someone who isn't the owner or an admin is a 403."""
+    recorder = upstream(lambda req: httpx.Response(200, text="hello"))
+    client = TestClient(
+        proxy.asgi_app, headers={"X-User-Token": f"IDToken {on_union(OTHER)}"}
+    )
+
+    assert client.get("/api/status").status_code == 403
+    assert recorder == {}
+
+
+def test_on_union_an_expired_token_is_refused(on_union, upstream):
+    """An owner's token past its expiry no longer gets in."""
+    upstream(lambda req: httpx.Response(200, text="hello"))
+    token = on_union(OWNER, expires_in=-3600)
+    client = TestClient(proxy.asgi_app, headers={"X-User-Token": f"IDToken {token}"})
+
+    assert client.get("/api/status").status_code == 401
+
+
+def test_on_union_the_terminal_needs_a_token(on_union):
+    """The terminal websocket is a shell in the pod: forged headers don't open it."""
+    client = TestClient(proxy.asgi_app, headers={"X-User-Subject": OWNER})
+
+    with (
+        pytest.raises(WebSocketDisconnect) as exc,
+        client.websocket_connect("/__sg__/term"),
+    ):
+        pass
+    assert exc.value.code == 1008
 
 
 def test_identity_and_cookies_are_not_forwarded(owner_client, upstream):

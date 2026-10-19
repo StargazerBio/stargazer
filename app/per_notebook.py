@@ -42,8 +42,10 @@ The proxy writes edited notebooks back on a short interval and once more when
 the pod scales to zero. No PVC: pod-local disk plus the object store is
 cheaper and faster.
 
-Auth: pods run `requires_auth=True`, so access control is the platform's alone;
-`SG_OWNER_SUBJECT` only keys the pod's workspace store. No credential is baked
+Auth: pods run `requires_auth=True`, and on Union the proxy also checks every
+request for the login's signed token, from the owner or one of
+`SG_ADMIN_SUBJECTS` (`app/proxy.py`), since the in-cluster address skips the
+login. `SG_OWNER_SUBJECT` also keys the pod's workspace store. No credential is baked
 into the pod env: the org's Pinata key arrives as a Flyte secret, as on the
 dashboard and in tasks.
 
@@ -140,6 +142,8 @@ notebook_app_img_recipe = (
         "uvicorn>=0.34",
         "httpx>=0.27",
         "websockets>=12",
+        # The proxy checks Union's signed tokens (`_TokenGate`).
+        "pyjwt[crypto]>=2.8,<3",
     )
     # `/usr/local/lib/` already exists in the base image, so the COPY drops
     # `proxy.py` into it without needing a directory-creating trailing-slash.
@@ -196,8 +200,9 @@ def per_notebook_env(
     `WORKSPACE_NOTEBOOK_DIR`, hydrated by the launch script.
 
     `owner_subject` is the owner's platform user id. The pod sits behind the
-    platform login (`requires_auth=True`), which is its only access control.
-    `SG_OWNER_SUBJECT` keys where the pod hydrates from and saves to in the
+    platform login (`requires_auth=True`), and on Union its proxy lets in only
+    signed tokens from the owner or an admin (`SG_AUTH_ISSUER`,
+    `SG_ADMIN_SUBJECTS`). `SG_OWNER_SUBJECT` also keys where the pod hydrates from and saves to in the
     workspace store
     (`STARGAZER_WORKSPACE_ROOT`). `admin_url` is the dashboard's public base
     URL, which the proxy's `/__sg__/dashboard` route redirects to.
@@ -265,6 +270,9 @@ def per_notebook_env(
             "FLYTE_DOMAIN": config.FLYTE_DOMAIN,
             "STARGAZER_NOTEBOOK_IMAGE": config.NOTEBOOK_IMAGE,
             "SG_OWNER_SUBJECT": owner_subject,
+            # Who the proxy lets in, and how it checks (`app.proxy._TokenGate`).
+            "SG_AUTH_ISSUER": config.AUTH_ISSUER,
+            "SG_ADMIN_SUBJECTS": ",".join(sorted(config.ADMIN_SUBJECTS)),
             "STARGAZER_WORKSPACE_ROOT": config.WORKSPACE_ROOT,
             "STARGAZER_ADMIN_URL": admin_url,
             "STARGAZER_INDEX_URL": index_url,

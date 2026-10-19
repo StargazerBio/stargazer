@@ -38,7 +38,8 @@ landing = [
     "websockets>=12",
     "python-multipart>=0.0.9",
     "jinja2>=3.1",
-    "pyjwt[crypto]>=2.8",
+    # Checks Union's signed login tokens (`app.identity`).
+    "pyjwt[crypto]>=2.8,<3",
     "cryptography>=43",
     # Union user/RBAC admin for the onboarding command (`app.onboard`). Pre-1.0,
     # so bounded to the minor: its remote API has no stability promise yet.

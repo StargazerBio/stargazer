@@ -2,15 +2,17 @@
 
 Union's auth layer gates every request and forwards the signed-in user as
 `X-User-*` headers. Claim values arrive JSON-encoded (`"\"a@b.c\""`); the
-subject arrives bare. Union alone decides who may open a dashboard; state is
-keyed by the dashboard's owner (`config.OWNER_SUBJECT`), whoever is viewing.
+subject arrives bare. State is keyed by the dashboard's owner
+(`config.OWNER_SUBJECT`), whoever is viewing. On Union (`config.AUTH_ISSUER`
+set) only the signed `X-User-Token` counts, since an app's in-cluster address
+skips the login and takes any header, and only the owner and the admins get in.
 """
 
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from app import config
+from app import config, identity
 from app.identity import User, current_user, user_from_request
 
 OWNER = "387300641116005877"
@@ -121,3 +123,99 @@ def test_the_stand_in_is_never_honored_on_union():
         == ""
     )
     assert config.stand_in_subject({"STARGAZER_TARGET": "devbox"}) == ""
+
+
+@pytest.fixture
+def on_union(monkeypatch, union_signer):
+    """Token checks on, against the test signer, for a dashboard OWNER owns."""
+    monkeypatch.setattr(config, "AUTH_ISSUER", "https://signin.example.test")
+    monkeypatch.setattr(config, "OWNER_SUBJECT", OWNER)
+    monkeypatch.setattr(config, "ADMIN_SUBJECTS", frozenset())
+    monkeypatch.setattr(identity, "_signing_key", lambda token: union_signer.public_key)
+    return union_signer
+
+
+def test_on_union_the_subject_comes_from_the_signed_token(on_union):
+    """The token's subject wins over a subject header that disagrees."""
+    user = user_from_request(
+        _request(
+            {
+                "X-User-Token": f"IDToken {on_union(OWNER)}",
+                "X-User-Subject": "999999999999999999",
+                "X-User-Claim-Name": '"Pryce User"',
+            }
+        )
+    )
+    assert user == User(OWNER, "", "Pryce User")
+
+
+def test_on_union_a_bearer_token_counts_too(on_union):
+    """A CLI or API caller's access token arrives as `Bearer <jwt>`."""
+    user = user_from_request(_request({"X-User-Token": f"Bearer {on_union(OWNER)}"}))
+    assert user == User(OWNER)
+
+
+def test_on_union_a_subject_header_without_a_token_is_anonymous(on_union):
+    """What a pod can send to the in-cluster address: headers, no signed token."""
+    assert user_from_request(_request({"X-User-Subject": OWNER})) is None
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        pytest.param("not.a.jwt", id="garbage"),
+        pytest.param("other-key", id="signed-by-another-key"),
+        pytest.param("expired", id="expired"),
+        pytest.param("other-issuer", id="another-issuer"),
+    ],
+)
+def test_on_union_a_bad_token_is_anonymous(on_union, token):
+    """Only an unexpired token Union's issuer signed identifies anyone, whatever
+    subject header comes with it."""
+    made = {
+        "not.a.jwt": "not.a.jwt",
+        "other-key": on_union(OWNER, key=on_union.other_key),
+        "expired": on_union(OWNER, expires_in=-3600),
+        "other-issuer": on_union(OWNER, iss="https://elsewhere.example.test"),
+    }[token]
+    forged = {"X-User-Token": f"IDToken {made}", "X-User-Subject": OWNER}
+    assert user_from_request(_request(forged)) is None
+
+
+def test_on_union_a_stranger_is_refused(on_union):
+    """A valid token for someone who isn't the owner or an admin is a 403."""
+    with pytest.raises(HTTPException) as exc:
+        current_user(
+            _request({"X-User-Token": f"IDToken {on_union('222222222222222222')}"})
+        )
+    assert exc.value.status_code == 403
+
+
+def test_on_union_an_admin_gets_the_owners_dashboard(on_union, monkeypatch):
+    """A listed admin is keyed to the owner, like the owner is."""
+    monkeypatch.setattr(config, "ADMIN_SUBJECTS", frozenset({"111111111111111111"}))
+    user = current_user(
+        _request({"X-User-Token": f"Bearer {on_union('111111111111111111')}"})
+    )
+    assert user.subject == OWNER
+
+
+def test_on_union_no_token_is_401(on_union):
+    """Forged headers and no token: not signed in."""
+    with pytest.raises(HTTPException) as exc:
+        current_user(_request({"X-User-Subject": OWNER}))
+    assert exc.value.status_code == 401
+
+
+def test_the_issuer_is_unions_on_union_and_unset_elsewhere():
+    """Token checks are on for Union deploys and off where there's no login."""
+    assert config.auth_issuer({"STARGAZER_TARGET": "union"}) == (
+        "https://signin.us-west-2.unionai.cloud"
+    )
+    assert config.auth_issuer({"STARGAZER_TARGET": "devbox"}) == ""
+
+
+def test_admin_subjects_are_a_comma_separated_list():
+    """`STARGAZER_ADMIN_SUBJECTS`, spaces and empty entries ignored."""
+    assert config.admin_subjects({"STARGAZER_ADMIN_SUBJECTS": " 1, 2,,"}) == {"1", "2"}
+    assert config.admin_subjects({}) == frozenset()

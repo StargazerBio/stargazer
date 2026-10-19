@@ -5,9 +5,11 @@ One deployment per user, in that user's own Flyte project (`u-<handle>`),
 behind Union's login (`requires_auth=True`). The owner's subject is baked
 into the env at deploy (`SG_OWNER_SUBJECT`) and the project is the one the
 dashboard runs in (`FLYTE_PROJECT`); neither is derived from the request.
-Union's login is the only access control: whoever it admits (the owner, or an
-org admin who can view the project) sees the owner's dashboard. There is no OAuth flow, session cookie, or
-GitHub integration. It has three jobs:
+Union's login gates the public address, and on Union every request must also
+carry its signed token, from the owner or a listed admin (`app.identity`),
+since the in-cluster address skips the login. Whoever gets in sees the
+owner's dashboard. There is no OAuth flow, session cookie, or GitHub
+integration. It has three jobs:
 
 1. **Dashboard.** Renders the notebook tile sections: Workflows and
    Tutorials (shipped in the per-notebook image), and Workspace (the owner's

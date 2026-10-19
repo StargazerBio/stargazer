@@ -78,3 +78,31 @@ VERSION: str = os.environ.get("STARGAZER_VERSION", "")
 # (`app.identity.current_user`). Notebook pods read the same variable to key
 # where they load and save notebooks (`app/proxy.py`).
 OWNER_SUBJECT: str = os.environ.get("SG_OWNER_SUBJECT", "")
+
+
+def auth_issuer(env) -> str:
+    """Who signs the tokens Union's login forwards: Union's sign-in service on
+    Union, nobody elsewhere."""
+    if env.get("STARGAZER_TARGET") == "union":
+        return "https://signin.us-west-2.unionai.cloud"
+    return ""
+
+
+# On Union every request has to carry a token this issuer signed
+# (`app.identity`): an app's in-cluster address skips the login and passes on
+# whatever headers a pod sends, so the plain identity headers prove nothing.
+# Empty where there's no login in front (the devbox, a local run), and the
+# headers are taken as they come.
+AUTH_ISSUER: str = auth_issuer(os.environ)
+
+
+def admin_subjects(env) -> frozenset[str]:
+    """`STARGAZER_ADMIN_SUBJECTS`, a comma-separated list of Union subjects."""
+    raw = env.get("STARGAZER_ADMIN_SUBJECTS", "")
+    return frozenset(s.strip() for s in raw.split(",") if s.strip())
+
+
+# Who besides the owner may open this dashboard and its notebooks on Union: org
+# admins, set by the deployer (`app.onboard` bakes it). Union's own check,
+# that the visitor can view the project, never runs on the in-cluster address.
+ADMIN_SUBJECTS: frozenset[str] = admin_subjects(os.environ)
