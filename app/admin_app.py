@@ -770,7 +770,8 @@ async def launch(
     # `App.endpoint`) exist as soon as the app is admitted, and the pod shows
     # its own starting page. So on a watch error, recover the endpoint and
     # hand it back anyway. An app that isn't there was refused outright, and
-    # retrying won't change that, so the serve error goes back as the reason.
+    # retrying won't change that, so the serve error goes back as the reason (a
+    # 422, since Cloudflare in front of Union apps replaces a 502's body).
     try:
         deployment = await flyte.with_servecontext(
             project=project, domain=config.FLYTE_DOMAIN
@@ -791,7 +792,7 @@ async def launch(
                 name=f"nb-{slug}-{mode}", project=project, domain=config.FLYTE_DOMAIN
             )
         except Exception:
-            return JSONResponse({"error": str(exc)}, status_code=502)
+            return JSONResponse({"error": str(exc)}, status_code=422)
         endpoint = app.endpoint
         if not endpoint:
             return JSONResponse(

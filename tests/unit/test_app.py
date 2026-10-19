@@ -604,7 +604,7 @@ def test_launch_reports_why_the_app_was_never_created(client, served, monkeypatc
     _put(ALICE, "qc-run.py")
     _as(client)
     resp = _launch(client, "qc-run", "workspace")
-    assert resp.status_code == 502
+    assert resp.status_code == 422
     assert resp.json()["error"] == "app.metadata.id.name: too long"
 
 
