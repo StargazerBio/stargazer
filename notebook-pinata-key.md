@@ -21,22 +21,23 @@ a reference in the app's spec (measured 2026-10-17, ticket
 `dashboard-pinata-key`). The devbox drops app secrets, so a devbox notebook
 still has no public tier.
 
-**The terminal gets it too.** The proxy scrubs secret-shaped vars from the
-dropdown terminal's env (`_shell_env` in `app/proxy.py`), and it named
-`PINATA_JWT` as one, so the SDK and the agent in the terminal would still
-have had no public tier. The key is now let through by name; every other
-var with a secret-shaped suffix is still dropped. Found while verifying: the
-first in-pod check read the env through the terminal and saw no key
-(2026-10-18).
+**The terminal doesn't get it.** The proxy scrubs secret-shaped vars from
+the dropdown terminal's env (`_shell_env` in `app/proxy.py`), and it names
+`PINATA_JWT` as one. A first version let the key through (`eea1456`); it was
+reverted on review (`f941beb`, decided 2026-10-18). An agent running `env`
+in the terminal would put the key in its context, the likeliest way for it
+to leak by accident. The scrub is tidiness, not a boundary: any notebook
+could already get the key through a task that declares the secret (under
+Verified).
 
 ## Pieces
 
 - [x] `app/per_notebook.py`: the secret on the notebook env. A test in
       `tests/unit/test_per_notebook.py`: the built env declares `PINATA_JWT`
       as a secret, and no env var holds it.
-- [x] `app/proxy.py`: the terminal keeps `PINATA_JWT`.
-      `test_shell_env_keeps_the_pinata_key` in `tests/unit/test_proxy.py`
-      replaces the test that it was scrubbed.
+- [x] ~~`app/proxy.py`: the terminal keeps `PINATA_JWT`.~~ Reverted: the
+      terminal still scrubs it, and `test_shell_env_scrubs_named_secrets` is
+      back.
 - [x] Docstrings and docs that say notebook pods carry no credential:
       `app/per_notebook.py`, `app/config.py`,
       `docs/architecture/configuration.md`,
