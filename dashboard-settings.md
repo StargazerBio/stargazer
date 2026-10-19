@@ -3,8 +3,6 @@ title: A Settings section on the dashboard, starting with the save interval
 status: backlog
 priority: normal
 created: 2026-10-18
-blocked_by:
-  - save-whole-workspace
 ---
 
 The dashboard gets a Settings section for the user's own preferences, and the

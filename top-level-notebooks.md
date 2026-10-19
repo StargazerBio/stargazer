@@ -3,8 +3,6 @@ title: The scRNA notebook moves to a top-level notebooks folder
 status: backlog
 priority: normal
 created: 2026-10-17
-blocked_by:
-  - save-whole-workspace
 ---
 
 Notebooks that aren't SDK tutorials live in the repo, in a top-level
