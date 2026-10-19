@@ -284,6 +284,13 @@ One thing seen: a launch straight after a dashboard redeploy reached the old
 revision, so the pod got the old interval. Relaunching after the new
 revision was ready fixed it. In the feature file's gotchas.
 
+Rechecked at `d83b9b0`, after the deploy setting came out, deployed with
+`STARGAZER_SAVE_INTERVAL_SECONDS=0` still in the shell: the pod had no
+`SG_SAVE_INTERVAL_SECONDS`, saved files within 10 s, skipped `.env`,
+`__marimo__/` and a 150 MB file, restored everything at its path after Stop
+and a relaunch, and passed deletes to the store within 10 s. A long probe
+name never launched, a separate bug (ticket `long-notebook-names`).
+
 ## Open questions
 
 - [x] **Q1. Save only at scale-down, or keep the 5 s pass too?** Decided
