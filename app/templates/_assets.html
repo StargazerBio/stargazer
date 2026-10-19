@@ -1127,13 +1127,6 @@ async function doUpload() {
 const upSubmit = $("up-submit");
 if (upSubmit) upSubmit.addEventListener("click", doUpload);
 
-// Close the user menu when clicking outside.
-document.addEventListener("click", (e) => {
-    document.querySelectorAll("details.user-menu[open]").forEach((d) => {
-        if (!d.contains(e.target)) d.removeAttribute("open");
-    });
-});
-
 // ---- boot ----------------------------------------------------------------
 
 (async function boot() {
