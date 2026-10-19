@@ -74,7 +74,17 @@ dashboard decides where it goes:
   from how Knative scales). If the dashboard restarts mid-upload, the upload
   starts again from zero. Keeping state across restarts can come later, if
   it's needed.
-- **Where the bytes land** is Q1.
+- **Where the bytes land:** where they were uploaded, and the index row's
+  `uri` points there (Q1, decided 2026-10-18). The upload goes to
+  `users/<owner>/uploads/<upload id>/<name>`, so a crash leaves nothing at a
+  path that looks like a stored asset. If the CID is already in the user's
+  index when the last chunk arrives, the upload is deleted and the existing
+  row stays as it is.
+- **`StorageClient.upload` checks the row before the path.** Today it skips
+  the transfer when a file exists at the CID path. With uploads elsewhere,
+  the same bytes uploaded again from the SDK would be stored a second time
+  and the row repointed, leaving the first copy unreferenced. It skips the
+  transfer when the CID already has a row whose `uri` exists instead.
 - **Abandoned uploads.** An unfinished multipart upload keeps its parts, and
   they're billed, until it's aborted. The dashboard aborts an upload idle for
   an hour, and every open one at shutdown. One left behind by a crash stays
@@ -82,24 +92,17 @@ dashboard decides where it goes:
 
 ## Open questions
 
-- [ ] **Q1. Where the file lands.** A stored file's path contains its CID
+- [x] **Q1. Where the file lands.** A stored file's path contains its CID
       (`users/<owner>/assets/<cid>/<name>`), which is only known after the
-      last chunk. Options:
-  - Upload to a temporary key, then copy to the CID path. S3 copies up to
-    5 GB in one call. Above that it takes a multipart copy, and whether
-    obstore's `copy` does one is unchecked.
-  - Leave the bytes where they were uploaded, and point the index row's
-    `uri` there. If the same bytes are already stored, delete the upload and
-    point at the existing file. This relies on every reader going through
-    the row's `uri`, as `StorageClient.download` does. Not checked for every
-    caller.
-  - Compute the CID in the browser first, so the multipart upload goes
-    straight to its final key, and have the dashboard check it as the bytes
-    pass. That's a second implementation of the CID, in JavaScript, which
-    has to match bit for bit.
-
-  Recommendation: leave the bytes in place, once a search confirms nothing
-  finds files by their path.
+      last chunk. Decided 2026-10-18: leave the bytes where they were
+      uploaded and point the index row's `uri` there. Copying to the CID
+      path would need a multipart copy above 5 GB, and computing the CID in
+      the browser is a second implementation that has to match bit for bit.
+      A search on 2026-10-18 found one place that builds the path,
+      `StorageClient.upload` (`src/stargazer/utils/storage.py`), and every
+      reader going through the row: `StorageClient.download` and `delete`,
+      and the asset page's private download (ticket
+      `asset-manager-on-index`).
 - [ ] **Q2. Does the tenant bucket abort unfinished multipart uploads?**
       Check its lifecycle rules with the read-only AWS access
       (`get-bucket-lifecycle-configuration`). Union manages the bucket, so
@@ -112,10 +115,17 @@ dashboard decides where it goes:
       fed in uneven chunk sizes (one byte, a prime number of bytes, 48 MB),
       it gives the CIDs the existing tests already pin, which Pinata
       assigned: the empty file, one leaf, two levels, and three levels.
+- [ ] `StorageClient.upload` skips the transfer when the CID has a row
+      whose `uri` exists. A test in `tests/utils/test_storage.py`: a row
+      pointing at a file outside the CID path, then `upload` of the same
+      bytes → nothing written at the CID path, and the row's `uri`
+      unchanged.
 - [ ] The TUS routes. Tests in `tests/unit/test_assets_routes.py`, against a
       `file://` store in a temp dir and a `SqliteIndex`:
   - create, then three `PATCH`es → an index row whose CID is
     `compute_cid` of the file, and a download returns the same bytes
+  - the same file uploaded twice → one row, and the second upload's bytes
+    are deleted
   - `HEAD` after the first chunk → its offset, and finishing from there
     gives the same CID
   - a `PATCH` at the wrong offset → 409
