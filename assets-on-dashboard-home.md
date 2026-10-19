@@ -1,8 +1,9 @@
 ---
 title: The asset browser moves onto the dashboard home
-status: doing
+status: review
 priority: high
 created: 2026-10-18
+pr: 53
 ---
 
 **The dashboard becomes an asset explorer and notebook launcher** (decided
@@ -23,16 +24,32 @@ this ticket and `public-notebooks` lands second makes the browser leave out
 
 ## Pieces
 
-- [ ] Move the browser onto the dashboard's home page, below the notebook
+- [x] Move the browser onto the dashboard's home page, below the notebook
       sections: the Graph and List views, the detail card and the upload
       panel. The routes stay under `/assets/*`. The `/assets` page and its
       link in the avatar menu go.
-- [ ] If `public-notebooks` has landed, the browser leaves out
+- [ ] (`public-notebooks` is still in backlog, so not yet.) If `public-notebooks` has landed, the browser leaves out
       `asset=notebook` rows. Test it: a notebook row in the index → it isn't
       in the browser's listing.
-- [ ] Docs: `docs/architecture/app.md` and
+- [x] Docs: `docs/architecture/app.md` and
       `.opencode/reference/architecture/app_internals.md`, the Asset Manager
       section as part of the dashboard home rather than a page of its own.
-- [ ] Verify on the test account's Union dashboard: on the home page,
+- [x] Verify on the test account's Union dashboard: on the home page,
       upload, list, download and edit, and the notebook tiles still launch.
       Stop every app the check started.
+
+## Verified (2026-10-19)
+
+Test account's Union dashboard, deployed from `93129c4`, in Chrome as the
+test account: the Assets section is below Tutorials; the Private graph and
+List show the account's rows; a row opens the detail card (metadata, CID,
+linked source) with Download pointing at
+`/assets/download/<cid>?network=private`; Edit metadata opens and cancels;
+the asset type select re-renders the typed fields; the Public tab lists the
+shared records; the avatar menu has no Assets link; no console errors. The
+Tasks tutorial, launched through `/launch`, showed "Open: Edit Mode" and Stop
+on its tile after a reload; stopped after. Not run through the page: an
+actual upload, a metadata Save and a Download, which are form submissions or
+file downloads on the hosted dashboard and wait on the user's OK. The owner-
+only private routes refuse the admin CLI token, so they weren't driven from
+the CLI either.
