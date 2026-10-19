@@ -1,6 +1,6 @@
 ---
 title: Work out a CID from bytes as they arrive
-status: review
+status: done
 priority: normal
 created: 2026-10-18
 pr: 45
@@ -41,3 +41,13 @@ now. A 10 GB file is about 41,000 leaves, a few megabytes of state.
 - **Speed on a 1 GiB random file:** `main`'s `compute_cid` took 0.51 s and
   0.49 s, the branch's 0.48 s and 0.48 s, and the builder fed 48 MiB pieces
   0.55 s. All gave the same CID.
+
+## Outcome
+
+Merged in #45 (2026-10-18). `CidBuilder` works out a file's CID from bytes
+fed in pieces of any size, and `compute_cid` is the builder fed a file.
+Verified with the unit tier, the Pinata drift test against the real API
+(4 of 4), and a 1 GiB timing at the same speed as before (above).
+
+Left: nothing uses the builder yet. Ticket `tus-browser-uploads` will, to
+work out an upload's CID as its chunks pass through the dashboard.
