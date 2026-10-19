@@ -23,9 +23,11 @@ repos:
         language: system
         pass_filenames: false
         files: ^(src/stargazer/(tasks|workflows|assets|bundles)/.*\.py|src/stargazer/bundles/.*\.yaml|docs/gen_catalog\.py)$
+      # Only a check: the docs workflow builds and publishes the site from main,
+      # so the build's output and cache are removed, keeping the build's status.
       - id: zensical-build
         name: zensical build (docs compile check)
-        entry: uv run zensical build --clean
+        entry: bash -c 'uv run zensical build --clean; status=$?; rm -rf site .cache; exit $status'
         language: system
         pass_filenames: false
         files: ^(docs/.*\.md|src/.*\.py|app/.*\.py|zensical\.toml|pyproject\.toml)$
