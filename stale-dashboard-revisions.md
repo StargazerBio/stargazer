@@ -1,6 +1,6 @@
 ---
 title: Old dashboard revisions keep running after a redeploy
-status: backlog
+status: next
 priority: high
 created: 2026-10-08
 ---

@@ -1,6 +1,6 @@
 ---
 title: Per-user storage isolation
-status: backlog
+status: maybe
 priority: high
 created: 2026-10-05
 ---
