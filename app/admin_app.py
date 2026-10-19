@@ -416,7 +416,7 @@ def _invalid_slug(slug: str) -> JSONResponse | None:
 
 @asgi_app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, user: CurrentUser):
-    """Render the owner's dashboard."""
+    """Render the owner's dashboard: their notebooks, then the asset browser."""
     workspace = await _workspace_tiles(user) if _store_ready() else []
     return templates.TemplateResponse(
         request,
@@ -435,6 +435,9 @@ async def dashboard(request: Request, user: CurrentUser):
             ],
             "workspace": workspace,
             "version": config.VERSION,
+            # The asset browser compares `_owner` against the visitor.
+            "username": user.subject,
+            "pinata_configured": bool(os.environ.get("PINATA_JWT")),
         },
     )
 

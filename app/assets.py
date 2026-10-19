@@ -1,7 +1,8 @@
 """
-### Asset manager page and API routes.
+### Asset browser API routes.
 
-APIRouter included by the dashboard serving `/assets`, over two networks:
+APIRouter included by the dashboard, serving the asset browser on its home
+page (`templates/_assets.html`) over two networks:
 
 - **Private** is the dashboard owner's own asset index and store, the same
   ones their tasks write to. Uploads stream through the dashboard into the
@@ -13,8 +14,8 @@ APIRouter included by the dashboard serving `/assets`, over two networks:
   so the bytes never transit the dashboard, and downloads redirect to the
   gateway. Pinata's private network is never used: with a shared key it
   would keep nothing private. Without a key (the devbox, which drops app
-  secrets, or a local run with none) the public routes 503 and the page's
-  Public tab says shared data isn't available.
+  secrets, or a local run with none) the public routes 503 and the
+  browser's Public tab says shared data isn't available.
 
 Auth model: Union's login sits in front of these routes, so on the hosted
 deploy every request is a signed-in user. The routes still degrade for an
@@ -43,7 +44,6 @@ from fastapi.responses import RedirectResponse, StreamingResponse
 from app import config
 from app.identity import User, user_from_request
 from app.index_api import _get_index
-from app.templates import templates
 from stargazer.assets import ASSET_REGISTRY, build_asset
 from stargazer.assets.asset import _BASE_FIELDS
 from stargazer.utils.pinata import PinataClient, _stamp_owner
@@ -143,23 +143,6 @@ async def _public_records() -> list[dict]:
                 records = await _pinata().query({})
                 _public_cache = (time.monotonic(), records)
     return _public_cache[1]
-
-
-@router.get("/assets")
-async def assets_page(request: Request):
-    """Render the asset manager. Anonymous visitors get the public tab."""
-    user: User | None = user_from_request(request)
-    return templates.TemplateResponse(
-        request,
-        "assets.html",
-        {
-            "title": "Assets",
-            "user": user,
-            # The owner key the page compares `_owner` against.
-            "username": user.subject if user else "",
-            "pinata_configured": bool(os.environ.get("PINATA_JWT")),
-        },
-    )
 
 
 @router.get("/assets/schema")

@@ -63,7 +63,7 @@ Gateway downloads use aiohttp directly: `flyte.io.File.download()` can't read an
 
 ## The public tier
 
-Shared data — bundles, reference genomes — is public data on Pinata's public network: anyone can read it, and `_owner` records who uploaded it. The SDK reads Pinata's public index (which needs `PINATA_JWT` even for public files) and downloads public bytes from `PINATA_GATEWAY`. Nothing uses Pinata's private network: the asset-manager page's Private tab is the user's own index and store, and its Public tab calls Pinata's public network directly. Hosted dashboards get the key as a Flyte secret, which keeps its value out of the app's spec.
+Shared data — bundles, reference genomes — is public data on Pinata's public network: anyone can read it, and `_owner` records who uploaded it. The SDK reads Pinata's public index (which needs `PINATA_JWT` even for public files) and downloads public bytes from `PINATA_GATEWAY`. Nothing uses Pinata's private network: the asset browser's Private tab is the user's own index and store, and its Public tab calls Pinata's public network directly. Hosted dashboards get the key as a Flyte secret, which keeps its value out of the app's spec.
 
 **Publishing moves a stored asset into the public tier.** `StorageClient.publish(cid)` uploads one of the user's stored files to Pinata with its index row's keyvalues, `_owner` restamped. The CID has to come back the same: ours is computed with Pinata's parameters, so a different one raises instead of passing quietly. The user's row stays, so the asset is in both tiers, and queries keep the row over the public duplicate. Companions aren't published with their asset. The MCP server exposes it as `publish_file`.
 
@@ -99,8 +99,8 @@ Every `PinataClient` call is on the public network (`NETWORK`). `query(keyvalues
 returns its matching records.
 
 `create_signed_upload_url(filename, keyvalues, ...)` mints a signed
-URL with the filename and keyvalues fixed at mint time — used by the admin
-asset page so a browser can upload bytes directly to Pinata without the
+URL with the filename and keyvalues fixed at mint time — used by the
+dashboard's asset browser so a browser can upload bytes directly to Pinata without the
 metadata ever passing through (or being chooseable at) the upload client.
 `_owner` attribution and the size cap are baked in there too — see
 [App → Asset Manager](app.md#asset-manager).

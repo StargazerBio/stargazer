@@ -209,6 +209,45 @@ def test_dashboard_shows_its_release_version(client, monkeypatch):
     assert "18fbabe-dirty" in client.get("/").text
 
 
+def test_home_page_carries_the_asset_browser(client, monkeypatch):
+    """The asset browser is on the dashboard's home page, below the notebook
+    sections: graph and list, both networks, and the upload panel."""
+    monkeypatch.setenv("PINATA_JWT", "test-jwt")
+    _as(client)
+    html = client.get("/").text
+    assert html.index("Tutorials") < html.index('id="graph-host"')
+    assert 'data-network="private"' in html
+    assert 'data-view="list"' in html
+    assert 'id="upload-panel"' in html
+    assert 'value="public"' in html
+    # The page knows who's looking: it drives which public records they can edit.
+    assert f'USERNAME = "{ALICE}"' in html
+
+
+def test_home_page_without_a_pinata_key_offers_only_private_data(client, monkeypatch):
+    """With no shared key the Public tab says so, without naming the service."""
+    monkeypatch.delenv("PINATA_JWT", raising=False)
+    _as(client)
+    html = client.get("/").text
+    assert 'data-network="private"' in html
+    assert 'value="public"' not in html
+    assert "Shared data isn't available on this deployment." in html
+    assert "PINATA" not in html
+
+
+def test_the_upload_warning_shows_once(client):
+    """The alpha note is on the page once, not again inside the upload panel."""
+    _as(client)
+    assert client.get("/").text.count("Stargazer is alpha software.") == 1
+
+
+def test_the_separate_asset_page_is_gone(client):
+    """No /assets page, and no link to it in the avatar menu."""
+    _as(client)
+    assert client.get("/assets").status_code == 404
+    assert 'href="/assets"' not in client.get("/").text
+
+
 def test_dashboard_lists_only_the_users_notebooks(client):
     """Each user sees their own workspace, never another's."""
     _put(ALICE, "qc-run.py")

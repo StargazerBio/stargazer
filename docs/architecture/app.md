@@ -71,7 +71,7 @@ sequenceDiagram
 
 **Saving just works.** A user's workspace lives in the workspace store: object storage, one object per file at its path, under the user's subject. Notebooks are files like any other, and so is whatever the user keeps beside them: data, helper modules, outputs. There's no opt-in and no setup. The store is the durable copy and pods are working copies. A pod loads its owner's whole workspace when it starts and writes changed files back every 5 seconds. A file deleted in the pod is deleted from the store. The pod does a final save when it scales to zero. A pod that dies without warning loses what changed since its last save. Each pod writes only the files it changed, so two running notebooks overwrite each other's work only when both change the same file. Dotfiles and Python's and marimo's caches aren't saved.
 
-**Big files belong in the asset store.** A file over 100 MB isn't saved with the workspace. It stays on the pod's disk until the pod stops, and the notebook page names it, with a cell that stores it as an asset straight from the pod, which has no size limit. The limit matches the asset page's upload limit, and it keeps the final save small enough to finish before the pod is killed.
+**Big files belong in the asset store.** A file over 100 MB isn't saved with the workspace. It stays on the pod's disk until the pod stops, and the notebook page names it, with a cell that stores it as an asset straight from the pod, which has no size limit. The limit matches the asset browser's upload limit, and it keeps the final save small enough to finish before the pod is killed.
 
 **Sharing upstream is a download.** Any workspace notebook can be downloaded as its `.py` file and contributed to the repository like any other change. The app tier has no GitHub integration.
 
@@ -93,8 +93,9 @@ See [Configuration](configuration.md) for the storage model and `.opencode/refer
 
 ## Asset Manager
 
-The dashboard also hosts `/assets` — a browse-and-upload surface with two
-tabs. Routes live in `app/assets.py`; mechanics and the route table are in
+The dashboard's home page holds the asset browser, below the notebook
+sections: a browse-and-upload surface with two tabs. Routes live in
+`app/assets.py`; mechanics and the route table are in
 `.opencode/reference/architecture/app_internals.md`.
 
 **Private is the user's own index and store**, the same ones their tasks
@@ -136,7 +137,7 @@ drives default filtering, not access control; anyone holding the key can
 still edit or delete any record. See [Types → Ownership](types.md#ownership-_owner).
 
 **Reading public data needs no ownership.** Public-network bytes are world-readable on
-IPFS, and a local run serves the page anonymously. The listing is served
+IPFS, and the public routes answer an anonymous request (a local run). The listing is served
 from a short in-process TTL cache (a semi-static mirror, not a per-request
 proxy to the Pinata API), and every download, anonymous or not, redirects to
 `PINATA_GATEWAY`, the account's dedicated gateway, which meters bandwidth.
@@ -144,9 +145,9 @@ Free public gateways rate-limit full downloads, and `dweb.link` no longer
 serves files. `_owner` is stamped on uploads as a publisher byline. Rate
 limiting of the anonymous surface is deferred.
 
-**The page lives in the dashboard's box.** `assets.html` renders in the same
-glassy card as the notebook dashboard (reached from the avatar menu's
-**Assets** link), and the reactive starfield background is left untouched —
+**The browser sits on the dashboard's home page**, below the Workflows,
+Workspace and Tutorials sections and in the same glassy card, and the
+reactive starfield background is left untouched —
 the asset graph is a separate foreground canvas. The browse surface offers two
 interchangeable renderings of the same listing, switched by a Graph/List
 toggle (Graph is the default):
