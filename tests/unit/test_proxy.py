@@ -434,6 +434,12 @@ def test_interval_from_env_saves_while_serving(pod_dirs, monkeypatch):
         assert (stored / "live.py").read_text() == "# live\n"
 
 
+def test_interval_defaults_to_five_seconds(monkeypatch):
+    """With nothing setting the interval, as now, a pod saves every 5 seconds."""
+    monkeypatch.delenv("SG_SAVE_INTERVAL_SECONDS", raising=False)
+    assert proxy._save_interval() == 5.0
+
+
 def test_interval_zero_saves_only_at_shutdown(pod_dirs, monkeypatch):
     """An interval of 0 turns the periodic save off; shutdown still saves."""
     workspace, stored = pod_dirs
