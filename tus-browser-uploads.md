@@ -110,11 +110,8 @@ dashboard decides where it goes:
 
 ## Pieces
 
-- [ ] An incremental CID builder in `src/stargazer/utils/cid.py`, with
-      `compute_cid` built on it. Tests first, in `tests/utils/test_cid.py`:
-      fed in uneven chunk sizes (one byte, a prime number of bytes, 48 MB),
-      it gives the CIDs the existing tests already pin, which Pinata
-      assigned: the empty file, one leaf, two levels, and three levels.
+- [ ] An incremental CID builder in `src/stargazer/utils/cid.py`: its own
+      ticket, `incremental-cid` (split out 2026-10-18).
 - [ ] `StorageClient.upload` skips the transfer when the CID has a row
       whose `uri` exists. A test in `tests/utils/test_storage.py`: a row
       pointing at a file outside the CID path, then `upload` of the same
