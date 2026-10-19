@@ -3,9 +3,6 @@ title: The asset browser moves onto the dashboard home
 status: next
 priority: high
 created: 2026-10-18
-blocked_by:
-  - asset-manager-on-index
-  - save-whole-workspace
 ---
 
 **The dashboard becomes an asset explorer and notebook launcher** (decided

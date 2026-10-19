@@ -4,8 +4,7 @@ status: backlog
 priority: normal
 created: 2026-06-10
 blocked_by:
-  - asset-manager-on-index
-  - dashboard-pinata-key
+  - assets-on-dashboard-home
 ---
 
 Uploading a file from your machine goes up to 10 GB, private or public, and
@@ -20,6 +19,10 @@ chunks go by and passes each one on to a backend (decided 2026-10-18):
 One path from the client to the dashboard, and backends added behind it as
 they're needed. The store backend comes first; public uploads keep today's
 100 MB signed-URL path until the Pinata backend replaces it.
+
+Waits on ticket `assets-on-dashboard-home` (decided 2026-10-18): that moves
+the upload form onto the dashboard's home page, and this rewrites it, so
+this goes second.
 
 ## Why
 
