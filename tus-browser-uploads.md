@@ -138,8 +138,19 @@ dashboard decides where it goes:
     objects are deleted. Resumes survive a dashboard restart. A crash in the
     seconds the copy takes still leaves an upload nothing can abort.
 
-  Recommendation: ask Union for the lifecycle rule. It's one setting and
-  covers every case.
+  - **The lifecycle rule, set by us.** The AWS account is ours, so its admin
+    can add the rule without Union. The catch: Union's Terraform owns the
+    bucket's lifecycle. CloudTrail shows `union-ai-admin` creating the bucket
+    and setting its versioning and lifecycle with Terraform on 2026-09-29,
+    with no lifecycle change since. A re-apply of their Terraform would put
+    their configuration back and drop ours (inferred from how Terraform
+    treats a lifecycle configuration). `put-bucket-lifecycle-configuration`
+    replaces every rule, so the existing one has to be sent with it.
+
+  Recommendation: set the rule ourselves, check it's still there with the
+  read-only access after Union touches the dataplane, and tell Union so
+  their Terraform keeps it. 1 day also bounds how long a paused TUS upload
+  can be resumed.
 
 ## Pieces
 
