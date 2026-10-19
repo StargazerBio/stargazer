@@ -2,9 +2,9 @@
 # (`notebook_app_img_recipe` in `app/per_notebook.py`) as a `docker run`.
 # marimo edits behind the same proxy, so the dropdown terminal (Ctrl+`) has
 # Claude Code in it, and `/stargazer` is the SDK that each notebook's
-# `[tool.uv.sources]` resolves in its sandbox venv. Keep the two recipes in
-# step; they differ only where a local container must: multi-arch downloads
-# here, and no Flyte-injected runtime or platform login.
+# `[tool.uv.sources]` resolves in its sandbox venv. Nothing ties the two
+# recipes together, so pins here can lag; they differ on purpose only in
+# multi-arch downloads and in having no Flyte-injected runtime or platform login.
 FROM python:3.13-slim-bookworm
 
 RUN apt-get update \

@@ -142,4 +142,4 @@ Tag it with the published `ghcr.io/stargazerbio/...` URL even though you're not 
 docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/stargazerbio/stargazer-note:latest --push .
 ```
 
-The hosted notebook pods run `notebook-app`, built by the onboarding command (`stargazer-users`) — see [App → Images](../architecture/app.md#images). The `Dockerfile` copies its recipe by hand, so a change to `notebook_app_img_recipe` in `app/per_notebook.py` is made in both.
+The hosted notebook pods run `notebook-app`, built by the onboarding command (`stargazer-users`) — see [App → Images](../architecture/app.md#images). The `Dockerfile` mirrors that recipe but shares no code with it, so the two can drift (tool versions, pins); bring it up to date when you bump one in `notebook_app_img_recipe` (`app/per_notebook.py`).
