@@ -142,14 +142,14 @@ def test_non_html_request_gets_plain_503_while_marimo_is_cold(owner_client, upst
 # ---------------------------------------------------------------------------
 
 
-def test_shell_env_keeps_the_pinata_key(monkeypatch):
-    """The org's Pinata key reaches the shell, as it reaches the notebook."""
+def test_shell_env_scrubs_named_secrets(monkeypatch):
+    """Named secrets stay out of the interactive shell's environment."""
     monkeypatch.setenv("PINATA_JWT", "pinata-secret")
-    monkeypatch.setenv("PINATA_GATEWAY", "https://dweb.link")
+    monkeypatch.setenv("PINATA_GATEWAY", "https://dweb.link")  # not a secret
 
     env = proxy._shell_env()
 
-    assert env.get("PINATA_JWT") == "pinata-secret"
+    assert "PINATA_JWT" not in env
     assert env["PINATA_GATEWAY"] == "https://dweb.link"
 
 
