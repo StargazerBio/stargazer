@@ -1,6 +1,6 @@
 ---
 title: Give notebook pods the Pinata key as a secret
-status: review
+status: done
 priority: normal
 created: 2026-10-18
 pr: 44
@@ -73,3 +73,19 @@ Verified).
     SDK's query returned the public record.
   - The spec only references the secret.
 - Everything started was stopped; no live runs.
+
+## Outcome
+
+Merged in #44 (2026-10-18). Hosted notebook pods declare the org's
+`PINATA_JWT` as a Flyte secret, as dashboards and every task environment
+do, so notebook code and tasks run inside a notebook see the public tier and
+can publish. The dropdown terminal still scrubs it: a first version let it
+through, and that was reverted on review (`f941beb`). Verified on Union
+(above): the notebook process had the key and a public query returned the
+public record; the terminal showed it unset; the app's spec only references
+the secret.
+
+The key was never out of reach: on `main` before this, notebook code got it
+through a ten-line task declaring the secret (run `ujgbbqc4xtlwgbb2hjst`).
+Keeping it private would mean the dashboard alone holding it, with tasks
+losing it and no user code in the dashboard; no ticket for that yet.

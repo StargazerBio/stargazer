@@ -1,6 +1,6 @@
 ---
 title: Publish an asset to the public tier
-status: review
+status: done
 priority: normal
 created: 2026-10-06
 pr: 43
@@ -59,5 +59,17 @@ Pinata. Branch `feat/publish-asset`, PR #43.
 Found along the way: hosted notebook pods hold no Pinata key (measured
 2026-10-17), so `publish` in a hosted notebook raises. It works in tasks, on
 the dashboard and locally with a key. The Publish buttons will run on the
-dashboard. Notebook pods and their terminals get the key in ticket
-`notebook-pinata-key` (PR #44, decided 2026-10-18).
+dashboard. Notebook pods get the key in ticket `notebook-pinata-key` (PR
+#44, decided 2026-10-18); their terminals still scrub it.
+
+## Outcome
+
+Merged in #43 (2026-10-18). `StorageClient.publish(cid)` uploads one of the
+user's stored files to Pinata's public network with its index row's
+keyvalues, `_owner` restamped, and raises if Pinata's CID differs from
+ours. The MCP server exposes it as `publish_file`. Verified with the unit
+tier and against the real Pinata API (above).
+
+Left: the Publish buttons on the dashboard (ticket `assets-on-dashboard-home`)
+and publishing a notebook (ticket `public-notebooks`). Companions aren't
+published with their asset.

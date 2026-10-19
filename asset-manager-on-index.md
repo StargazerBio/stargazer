@@ -1,6 +1,6 @@
 ---
 title: The asset page's Private tab on the user's index and store
-status: review
+status: done
 priority: high
 created: 2026-10-06
 pr: 42
@@ -153,3 +153,23 @@ Branch `feat/asset-manager-on-index`.
   the store in chunks: ticket `tus-browser-uploads`. It replaces the earlier
   idea of a presigned `PUT` straight from the browser, which needed a CORS
   rule on the bucket.
+
+## Outcome
+
+Merged in #42 (2026-10-18). The asset page's Private tab is the dashboard
+owner's own index and store, the same ones their tasks write to: listing,
+upload streamed through the dashboard into the store, download streamed
+back, and metadata edits on the index row. Only the owner reaches it;
+anyone else signed in gets a 403. The Public tab is Pinata's public network.
+`PinataClient` lost its private network. Private downloads stream through
+the dashboard rather than redirecting to a presigned URL, so one path serves
+a local store and the bucket.
+
+Verified on the test account's dashboard (above): a non-owner gets 403, and
+upload, download with the same bytes, and a metadata edit all work in
+Chrome. A task pod found the uploaded file through `assemble()`. Pinata tier
+12 of 12.
+
+Left: private uploads stay capped at 100 MB until ticket
+`tus-browser-uploads` (Q1 here). The dashboard's home page as an asset
+explorer is ticket `assets-on-dashboard-home`.
