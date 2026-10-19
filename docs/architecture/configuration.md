@@ -105,32 +105,31 @@ metadata ever passing through (or being chooseable at) the upload client.
 
 ## Container Images
 
-Stargazer has four container images. They split along a sharp line: **task images** (run only by Flyte) are declared as `flyte.Image`s on the `TaskEnvironment`s in `src/stargazer/config.py`; **human-runnable images** (used via `docker run`) are built from the project's multi-stage `Dockerfile`.
+Stargazer has three container images. They split along a sharp line: **task images** (run only by Flyte) are declared as `flyte.Image`s on the `TaskEnvironment`s in `src/stargazer/config.py`; **human-runnable images** (used via `docker run`) are built from the project's multi-stage `Dockerfile`.
 
 | Image | Source | Type | Where it runs |
 |-------|--------|------|---------------|
 | `stargazer-scrna` | `config.py` (`scrna_env`) | `flyte.TaskEnvironment` | scRNA-seq tasks (`tasks/scrna/`) |
 | `stargazer-gatk` | `config.py` (`gatk_env`) | `flyte.TaskEnvironment` | GATK + alignment tasks (`tasks/gatk/`, `tasks/general/`) |
-| `stargazer-note` | `Dockerfile` (`--target note`) | Marimo notebook | Local `docker run` exploration only |
-| `stargazer-chat` | `Dockerfile` (`--target chat`) | Claude Code + OpenCode + the MCP server | Local `docker run` only |
+| `stargazer-note` | `Dockerfile` | The hosted notebook image: marimo behind the terminal proxy, Claude Code, the bioconda tools | Local `docker run` only |
 
-Why the split: task images need nothing but Flyte's contract (an entrypoint Flyte injects, a content-hash tag Flyte pins by) — perfectly served by the SDK. Human-runnable images need a real `ENTRYPOINT`, baked-in source, and a stable `:latest` tag — none of which the Flyte Image SDK exposes. Rather than reinvent the Dockerfile via post-build wrapping, we just use a Dockerfile.
+Why the split: task images need nothing but Flyte's contract (an entrypoint Flyte injects, a content-hash tag Flyte pins by) — perfectly served by the SDK. A human-runnable image needs a real `ENTRYPOINT`, baked-in source, and a stable `:latest` tag — none of which the Flyte Image SDK exposes. Rather than reinvent the Dockerfile via post-build wrapping, we just use a Dockerfile.
 
 Both task images install the stargazer package itself, not only its dependencies. A task pod finds the tasks a workflow calls by their installed module names, so without the package a workflow's child tasks can't load, wherever the run was submitted from. Your own tasks and workflows still travel in each run's code bundle. Since the package is in the image, a change to the project's source builds new task images; `.dockerignore` keeps docs, tests and local caches out of the build context, so they don't.
 
 Every image Flyte builds — the task images, the dashboard, the notebook image — is built for `linux/amd64` only, the architecture Union runs. GATK's GenomicsDB, which joint calling uses, has no arm64 build. On an Apple-silicon devbox the cluster itself runs natively and these pods run under emulation. A devbox build pushes a plain image rather than a multi-platform index (`FLYTE_DOCKER_BUILD_EXTRA_ARGS` defaults to `--provenance=false` there), since an arm64 node won't pull an index with no arm64 entry.
 
-The two `Dockerfile` images are published for both `linux/amd64` and `linux/arm64`, so they run natively on Apple silicon. Both carry the `mcp` and `bio` extras and the bioconda tools, and a Flyte config that runs workflows in the container. Because GenomicsDB has no arm64 build, joint calling works only in the amd64 variant.
+The `Dockerfile` image is published for both `linux/amd64` and `linux/arm64`, so it runs natively on Apple silicon. It carries the bioconda tools and a Flyte config that runs workflows in the container; a notebook's own dependencies come from its PEP 723 header, as in a hosted pod. Because GenomicsDB has no arm64 build, joint calling works only in the amd64 variant.
 
-Hosted notebook pods use a separate image, **`notebook-app`**, defined programmatically in `app/per_notebook.py` and built by onboarding (`stargazer-users`) — it is not `stargazer-note`. See [App → Images](app.md#images).
+Hosted notebook pods run **`notebook-app`**, defined programmatically in `app/per_notebook.py` and built by onboarding (`stargazer-users`). `stargazer-note` is a hand-kept copy of that recipe, because a published, multi-arch image needs a real `ENTRYPOINT` and a stable tag the Flyte Image SDK doesn't expose. See [App → Images](app.md#images).
 
 ### Building locally
 
-The Flyte task images build the first time a run needs them, tagged by content hash, with the builder selected in the Flyte config: `local` needs a working Docker daemon, `remote` (Union only) builds on the cluster. They are pushed to `STARGAZER_REGISTRY`, which on `devbox` defaults to the devbox's own registry (`localhost:30000`) and on `union` is left to the remote builder, which pushes to Union's registry. The human-runnable images build from the Dockerfile and are tagged with their published `ghcr.io/stargazerbio` URLs even when local-only, so docker resolves them from the local cache by name; nothing publishes them automatically. Commands in [Contributing → Building Images](../guides/contributing.md#building-images).
+The Flyte task images build the first time a run needs them, tagged by content hash, with the builder selected in the Flyte config: `local` needs a working Docker daemon, `remote` (Union only) builds on the cluster. They are pushed to `STARGAZER_REGISTRY`, which on `devbox` defaults to the devbox's own registry (`localhost:30000`) and on `union` is left to the remote builder, which pushes to Union's registry. The human-runnable image builds from the Dockerfile and are tagged with its published `ghcr.io/stargazerbio` URL even when local-only, so docker resolves them from the local cache by name; nothing publishes it automatically. Commands in [Contributing → Building Images](../guides/contributing.md#building-images).
 
 ### Adding a tool
 
-When a new Flyte task wraps a new CLI tool, layer it onto the image of the `TaskEnvironment` it is decorated against in `config.py` — via `with_apt_packages`, `with_commands`, or the bioconda install block. A tool notebooks should reach directly goes in the bioconda block of the hosted notebook image (`notebook_app_img_recipe` in `app/per_notebook.py`), and, for the local note/chat images, in the Dockerfile's `base` stage. See [Writing a Task](../guides/writing-a-task.md).
+When a new Flyte task wraps a new CLI tool, layer it onto the image of the `TaskEnvironment` it is decorated against in `config.py` — via `with_apt_packages`, `with_commands`, or the bioconda install block. A tool notebooks should reach directly goes in the bioconda block of the hosted notebook image (`notebook_app_img_recipe` in `app/per_notebook.py`), and in the Dockerfile's matching bioconda line. See [Writing a Task](../guides/writing-a-task.md).
 
 ## Resource Bundles
 

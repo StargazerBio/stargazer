@@ -1,31 +1,24 @@
 # Getting Started
 
-Stargazer installs as a Python package, and the repository's `Dockerfile` builds two end-user Docker images:
+Stargazer installs as a Python package, and the repository's `Dockerfile` builds one end-user Docker image, **`stargazer-note`**, for running pipelines and exploring data in a notebook with an AI agent alongside.
 
-- **`stargazer-note`** — for running pipelines and exploring data in a notebook
-- **`stargazer-chat`** — Claude Code and OpenCode, for driving Stargazer through an AI agent
+If you want to add tasks or workflows to Stargazer itself, see [Contributing](guides/contributing.md) for the native setup. The image below is for using Stargazer, not editing it.
 
-If you want to add tasks or workflows to Stargazer itself, see [Contributing](guides/contributing.md) for the native setup. The two images below are for using Stargazer, not editing it.
-
-## Note — Notebook Interface
+## Notebook Interface
 
 ```bash
 docker run -p 8080:8080 ghcr.io/stargazerbio/stargazer-note
 ```
 
-Opens the Assets tutorial, a [Marimo](https://marimo.io/) notebook, at `http://localhost:8080` in edit mode. From there you can import stargazer tasks, run workflows, and visualize results interactively. The published tag can lag the source; [Contributing → Building Images](guides/contributing.md#building-images) builds it from a checkout under the same name. (The hosted notebook dashboard uses a separate, richer image — see [Notebooks](architecture/notebook.md) for the notebook types and [App](architecture/app.md) for hosting.)
+Opens the Assets tutorial, a [Marimo](https://marimo.io/) notebook, at `http://localhost:8080` in edit mode. From there you can import stargazer tasks, run workflows, and visualize results interactively. The published tag can lag the source; [Contributing → Building Images](guides/contributing.md#building-images) builds it from a checkout under the same name. It is the image hosted notebooks run on (see [Notebooks](architecture/notebook.md) for the notebook types and [App](architecture/app.md) for hosting).
 
-## Chat — Agentic Interface
+## Agent — Claude Code in the Notebook
 
-```bash
-docker run -it ghcr.io/stargazerbio/stargazer-chat
-```
-
-Starts Claude Code in the image's Stargazer install (`/stargazer`), with OpenCode installed alongside. The MCP server is installed and configured (`.mcp.json`), along with the tools the bundled workflows call, so the agent can run them for you.
+Press Ctrl+` in the notebook to drop down a terminal, and run `claude` to log in and start Claude Code. It opens in the notebook's working directory, with the Stargazer SDK installed at `/stargazer` and the tools the bundled workflows call (GATK, samtools, BWA) on the `PATH`, so the agent can run them for you.
 
 ## MCP Client Configuration
 
-Outside the chat image, the MCP server runs from a source install with the `mcp` extra. Point your MCP client at the `stargazer` command:
+The MCP server runs from a source install with the `mcp` extra. Point your MCP client at the `stargazer` command:
 
 **Claude Code** — add to `.mcp.json`:
 
