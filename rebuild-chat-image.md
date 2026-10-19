@@ -1,6 +1,6 @@
 ---
 title: Rebuild the stargazer-chat image with the new gateway default
-status: backlog
+status: done
 priority: normal
 created: 2026-10-15
 ---
@@ -18,3 +18,7 @@ The image is pushed by hand: `docs/guides/contributing.md` has the multi-arch
 says and fetching the bundle.
 
 Found while closing ticket `default-ipfs-gateway`.
+
+## Outcome
+
+Moot. The chat image is gone: PR #47 folds it into the single `stargazer-note` image, so there is no `stargazer-chat` to rebuild. The one image bakes in the source too, so it still has to be built and pushed from `main` for the quickstart's bundle download to get the new gateway default, and the README quickstart still names `stargazer-chat`. Neither was verified here.
