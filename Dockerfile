@@ -8,7 +8,7 @@
 FROM python:3.13-slim-bookworm
 
 RUN apt-get update \
-    && apt-get install -y ca-certificates curl git bzip2 \
+    && apt-get install -y build-essential ca-certificates curl git bzip2 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash flyte
 
@@ -56,6 +56,7 @@ RUN mkdir -p /workspace /snapshots \
 
 ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONPATH="/usr/local/lib" \
+    UV_LINK_MODE="copy" \
     DISABLE_AUTOUPDATER="1"
 
 # Runs are local, their records in SQLite for the TUI. The config lands in the
