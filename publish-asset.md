@@ -59,4 +59,5 @@ Pinata. Branch `feat/publish-asset`, PR #43.
 Found along the way: hosted notebook pods hold no Pinata key (measured
 2026-10-17), so `publish` in a hosted notebook raises. It works in tasks, on
 the dashboard and locally with a key. The Publish buttons will run on the
-dashboard.
+dashboard. Notebook pods and their terminals get the key in ticket
+`notebook-pinata-key` (PR #44, decided 2026-10-18).
