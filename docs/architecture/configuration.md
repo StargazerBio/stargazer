@@ -35,6 +35,8 @@ All env var defaults are set in `config.py`. If set (even to empty string), the 
 
 `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` are forwarded into task pods only when set explicitly. A pod can't use the local default store or index, so a remote run submitted locally with the defaults has nowhere shared to write. Local-to-cluster storage is tracked on the roadmap.
 
+On Union, `PINATA_JWT` is a Flyte secret that every task environment, dashboard and notebook pod declares, so the key is set wherever Stargazer runs and its value never appears in a task's or an app's spec.
+
 ## Writing and reading
 
 ```mermaid

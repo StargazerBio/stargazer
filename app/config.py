@@ -10,8 +10,8 @@ defaults across modules.
 What does **not** live here:
 
 - **Secrets.** A dashboard's or notebook pod's owner can read its app spec,
-  so nothing secret is baked into one. The dashboard gets the Pinata key as a
-  Flyte secret instead (`admin_app`).
+  so nothing secret is baked into one. Both get the Pinata key as a Flyte
+  secret instead (`admin_app`, `per_notebook`).
 - **The per-notebook proxy** (`app/proxy.py`) — it's baked into the notebook
   image as a *standalone* module with no `app` package on its path, so it can't
   import this; it re-reads the few env vars it needs (mirroring the values here).
