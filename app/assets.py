@@ -1,42 +1,53 @@
 """
 ### Asset manager page and API routes.
 
-APIRouter included by the dashboard serving `/assets`: the registry schema
-for the dynamic upload form, listing of Pinata's public network, signed-URL
-minting for direct browser→Pinata uploads (bytes never transit the dashboard
-pod), and download redirects.
+APIRouter included by the dashboard serving `/assets`, over two networks:
 
-Public only. The dashboard holds the org's shared Pinata key (a Flyte secret,
-`app.admin_app`), so Pinata's private network would keep nothing private
-from anyone else who can reach that key. A request for it is a 400. Private
-assets come back on the user's own store (ticket `asset-manager-on-index`).
-Without a key (the devbox, which drops app secrets, or a local run with
-none) the page says asset storage isn't available and the API routes 503.
+- **Private** is the dashboard owner's own asset index and store, the same
+  ones their tasks write to. Uploads stream through the dashboard into the
+  store (`StorageClient.upload`: the CID, the stored file, the index row),
+  downloads stream back out, and metadata edits merge onto the index row.
+  Only the owner reaches them: another signed-in user gets a 403.
+- **Public** is Pinata's public network, through the org's shared key (a
+  Flyte secret, `app.admin_app`). Uploads go browser→Pinata on a signed URL,
+  so the bytes never transit the dashboard, and downloads redirect to the
+  gateway. Pinata's private network is never used: with a shared key it
+  would keep nothing private. Without a key (the devbox, which drops app
+  secrets, or a local run with none) the public routes 503 and the page's
+  Public tab says shared data isn't available.
 
 Auth model: Union's login sits in front of these routes, so on the hosted
 deploy every request is a signed-in user. The routes still degrade for an
-anonymous request (a local run): browsing works, while minting and edits
-401. The listing is served from an in-process TTL cache so the dashboard
-acts as a semi-static read-only mirror rather than an open proxy to the
-Pinata API. Edits fail closed: only a record's `_owner` may change it.
+anonymous request (a local run): public browsing works, while private
+routes, minting and edits 401. The public listing is served from an
+in-process TTL cache so the dashboard acts as a semi-static read-only mirror
+rather than an open proxy to the Pinata API. Public edits fail closed: only
+a record's `_owner` may change it.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import asyncio
 import dataclasses
+import json
 import os
+import tempfile
 import time
+from pathlib import Path
 from typing import get_type_hints
 
+import flyte.storage
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 
+from app import config
 from app.identity import User, user_from_request
+from app.index_api import _get_index
 from app.templates import templates
 from stargazer.assets import ASSET_REGISTRY, build_asset
 from stargazer.assets.asset import _BASE_FIELDS
-from stargazer.utils.pinata import PinataClient
+from stargazer.utils.pinata import PinataClient, _stamp_owner
+from stargazer.utils.storage import StorageClient
 
 router = APIRouter()
 
@@ -44,7 +55,8 @@ router = APIRouter()
 # a fetch() upload — is capped at 100MB; larger files require the TUS
 # resumable endpoint (ticket tus-browser-uploads). Mirroring the cap into the
 # signed URL turns an opaque mid-upload failure into a mint-time error the
-# form can explain.
+# form can explain. Private uploads share it for now: they stream to the
+# dashboard's disk, whose ephemeral-storage limit hasn't been checked.
 MAX_UPLOAD_BYTES = 100 * 1024**2
 
 # The anonymous public tab reads this cache, refreshed lazily — stale
@@ -75,12 +87,32 @@ def _require_user(request: Request) -> User:
     return user
 
 
-def _require_public(network: str) -> None:
-    """Raise 400 for any network but public; see the module docstring."""
-    if network != "public":
+def _require_owner(request: Request) -> User:
+    """The signed-in user if they own this dashboard, else a 401 or 403.
+
+    Locally, with no owner baked in (`SG_OWNER_SUBJECT`), any signed-in
+    user is the owner.
+    """
+    user = _require_user(request)
+    if config.OWNER_SUBJECT and user.subject != config.OWNER_SUBJECT:
         raise HTTPException(
-            status_code=400, detail="Only public assets are available here."
+            status_code=403,
+            detail="Only this dashboard's owner can reach its private assets.",
         )
+    return user
+
+
+def _require_network(network: str) -> None:
+    """Raise 400 for a network that isn't `private` or `public`."""
+    if network not in ("private", "public"):
+        raise HTTPException(
+            status_code=400, detail="network must be 'private' or 'public'"
+        )
+
+
+def _size(n: int) -> str:
+    """A byte count in the unit the upload form states its cap in."""
+    return f"{n // 1024**2} MB" if n % 1024**2 == 0 else f"{n} bytes"
 
 
 def _require_pinata() -> None:
@@ -108,7 +140,7 @@ async def _public_records() -> list[dict]:
     if not _fresh():
         async with _public_cache_lock:
             if not _fresh():
-                records = await _pinata().query({}, network="public")
+                records = await _pinata().query({})
                 _public_cache = (time.monotonic(), records)
     return _public_cache[1]
 
@@ -156,13 +188,18 @@ async def assets_schema() -> dict:
 
 @router.get("/assets/list")
 async def assets_list(request: Request):
-    """List public assets, filtered by keyvalue query params.
+    """List assets on one network, filtered by keyvalue query params.
 
-    Anonymous, served from the TTL cache with filters applied in-process.
+    Private: the owner's index rows, newest first. Public: anonymous, served
+    from the TTL cache with filters applied in-process.
     """
-    _require_pinata()
     params = dict(request.query_params)
-    _require_public(params.pop("network", "public"))
+    network = params.pop("network", "public")
+    _require_network(network)
+    if network == "private":
+        _require_owner(request)
+        return await _get_index().query(params)
+    _require_pinata()
     records = await _public_records()
     return [
         r for r in records if all(r["keyvalues"].get(k) == v for k, v in params.items())
@@ -184,7 +221,11 @@ async def assets_sign(request: Request):
 
     body = await request.json()
     filename = body.get("filename", "")
-    _require_public(body.get("network", "public"))
+    if body.get("network", "public") != "public":
+        raise HTTPException(
+            status_code=400,
+            detail="Signed uploads are public; private ones post to /assets/upload.",
+        )
     if not filename:
         raise HTTPException(status_code=400, detail="filename is required")
     try:
@@ -198,7 +239,6 @@ async def assets_sign(request: Request):
         url = await _pinata().create_signed_upload_url(
             filename=filename,
             keyvalues=keyvalues,
-            network="public",
             max_file_size=MAX_UPLOAD_BYTES,
         )
     except ValueError as exc:
@@ -218,19 +258,24 @@ async def assets_update(request: Request):
     existing keyvalues (the CID and bytes are untouched, so provenance edges
     survive). A key or value past Pinata's length limit is a 400, raised
     before the request. SDK/MCP edits stay unenforced by design (shared JWT).
+    A private record is the owner's index row instead (`_update_private`).
     """
-    _require_pinata()
-    user = _require_user(request)
-
     body = await request.json()
     cid = body.get("cid", "")
-    _require_public(body.get("network", "public"))
+    network = body.get("network", "public")
+    _require_network(network)
+    if network == "private":
+        if not cid:
+            raise HTTPException(status_code=400, detail="cid is required")
+        return await _update_private(request, cid, body.get("keyvalues") or {})
+    _require_pinata()
+    user = _require_user(request)
     if not cid:
         raise HTTPException(status_code=400, detail="cid is required")
 
     # Fail-closed: only the owner of record may edit it. Read fresh (not the
     # public TTL cache) so a mutation never decides off stale ownership.
-    records = await _pinata().query({}, network="public")
+    records = await _pinata().query({})
     current = next((r for r in records if r["cid"] == cid), None)
     if current is None or current["keyvalues"].get("_owner") != user.subject:
         raise HTTPException(status_code=403, detail="you can only edit assets you own")
@@ -243,18 +288,107 @@ async def assets_update(request: Request):
     patch = dict(body.get("keyvalues") or {})
     patch["_owner"] = user.subject
     try:
-        return await _pinata().update_metadata(cid, patch, network="public")
+        return await _pinata().update_metadata(cid, patch)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("/assets/download/{cid}")
 async def assets_download(request: Request, cid: str):
-    """Redirect to the file bytes — they never transit the dashboard pod.
+    """Hand back a file's bytes.
 
     Public files live on world-readable IPFS, so anyone gets a redirect to
-    PINATA_GATEWAY, signed in or not.
+    PINATA_GATEWAY, signed in or not, and the bytes never transit the pod.
+    Private files stream from the owner's store (`_download_private`).
     """
-    _require_public(request.query_params.get("network", "public"))
+    network = request.query_params.get("network", "public")
+    _require_network(network)
+    if network == "private":
+        return await _download_private(request, cid)
     gateway = os.environ["PINATA_GATEWAY"]
     return RedirectResponse(f"{gateway}/ipfs/{cid}", status_code=302)
+
+
+async def _download_private(request: Request, cid: str) -> StreamingResponse:
+    """Stream one of the owner's stored files back as an attachment.
+
+    Streamed through the dashboard rather than redirected to a presigned
+    store URL: the same code serves a local store and the bucket, and needs
+    nothing beyond the read the pod's role already has.
+    """
+    _require_owner(request)
+    row = await _get_index().get(cid)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"no private asset {cid}")
+
+    async def body():
+        """The stored file's bytes, chunk by chunk."""
+        async for chunk in flyte.storage.get_stream(row["uri"]):
+            yield chunk
+
+    name = row["name"].replace('"', "")
+    return StreamingResponse(
+        body(),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+async def _update_private(request: Request, cid: str, keyvalues: dict) -> dict:
+    """Merge a validated patch onto the owner's index row, restamping `_owner`."""
+    _require_owner(request)
+    try:
+        build_asset(keyvalues)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    try:
+        return await _get_index().merge(cid, _stamp_owner(dict(keyvalues)))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.post("/assets/upload")
+async def assets_upload(request: Request, filename: str = "", keyvalues: str = "{}"):
+    """Store the request body as a private asset in the owner's store and index.
+
+    The keyvalues (a JSON object in the query string) are checked with
+    `build_asset()` before any of the body is read. The body streams to a temp
+    file, refused past `MAX_UPLOAD_BYTES`, then `StorageClient.upload` works
+    out the CID, stores the file and writes the index row, stamping `_owner`.
+    Returns the row.
+    """
+    _require_owner(request)
+    if not filename or Path(filename).name != filename:
+        raise HTTPException(status_code=400, detail="filename is required")
+    try:
+        parsed = json.loads(keyvalues)
+    except ValueError:
+        parsed = None
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=400, detail="keyvalues must be a JSON object")
+    try:
+        asset = build_asset(parsed)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / filename
+        size = 0
+        with path.open("wb") as fh:
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Uploads are capped at {_size(MAX_UPLOAD_BYTES)}.",
+                    )
+                fh.write(chunk)
+        # The client's cache sits in the temp dir too, so nothing it links
+        # outlives the request on the dashboard's small disk.
+        client = StorageClient(
+            local_dir=Path(tmp) / "cache",
+            store_root=os.environ["STARGAZER_STORE_ROOT"],
+            index=_get_index(),
+        )
+        await client.upload(asset, path)
+    return await _get_index().get(asset.cid)

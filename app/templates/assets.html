@@ -280,6 +280,8 @@
 .kv-row { display: flex; gap: 0.5rem; align-items: center; }
 .kv-row input { flex: 1; }
 .kv-row button { background: transparent; border: 1px solid var(--border); color: var(--text-dim); border-radius: 6px; cursor: pointer; padding: 0.3rem 0.55rem; }
+.upload-net { display: inline-flex; gap: 1rem; align-items: center; font-size: 0.82rem; }
+.upload-net label { display: inline-flex; gap: 0.3rem; align-items: center; cursor: pointer; color: var(--text-dim); }
 .upload-note { font-size: 0.78rem; color: var(--text-dim); }
 .upload-status { font-size: 0.82rem; }
 .upload-status.err { color: var(--danger); }
@@ -308,18 +310,12 @@
         <span class="section-tag">Browse, graph, and upload files in the asset store.</span>
     </h2>
 
-    {% if not pinata_configured %}
-    <div class="notice">
-        <p class="notice-head">Asset storage isn't available yet</p>
-        <p class="section-desc">
-            Browsing and uploading assets from the dashboard isn't
-            available on this deployment yet.
-        </p>
-    </div>
-    {% else %}
     <div class="assets-controls">
         <div class="seg" id="network-tabs" role="tablist" aria-label="Network">
-            <button data-network="public" role="tab" aria-selected="true">Public</button>
+            <button data-network="public" role="tab" aria-selected="false">Public</button>
+            {% if username %}
+            <button data-network="private" role="tab" aria-selected="true">Private</button>
+            {% endif %}
         </div>
         <div class="seg" id="view-toggle" role="tablist" aria-label="View">
             <button data-view="graph" role="tab" aria-selected="true">Graph</button>
@@ -393,9 +389,13 @@
                 <div><button type="button" class="btn btn-muted" id="add-kv">+ Add field</button></div>
             </div>
 
-            <p class="upload-note">
-                Uploads are public: <strong>anyone on the internet</strong> can browse them.
-            </p>
+            <div class="upload-net">
+                <span>Network:</span>
+                <label><input type="radio" name="net" value="private" checked /> Private, in your own storage</label>
+                {% if pinata_configured %}
+                <label><input type="radio" name="net" value="public" /> Public — <strong>anyone on the internet</strong> can browse it</label>
+                {% endif %}
+            </div>
 
             <p class="upload-note">
                 Uploads are capped at <strong>100&nbsp;MB</strong>.
@@ -409,18 +409,18 @@
         </div>
     </details>
     {% endif %}
-    {% endif %}
 </div>
 {% endblock %} {% block scripts %}
-{% if pinata_configured %}
 <script src="/static/cytoscape.min.js"></script>
 <script>
 const AUTHED = {{ 'true' if username else 'false' }};
 const USERNAME = {{ username | tojson }};
+// Public data needs a Pinata key; private data is the dashboard's own store.
+const PUBLIC_ON = {{ 'true' if pinata_configured else 'false' }};
 
 const NODE_CAP = 150;
 const state = {
-    network: "public",
+    network: AUTHED ? "private" : "public",
     view: "graph",
     filters: {},
     records: [],
@@ -433,7 +433,8 @@ const $ = (id) => document.getElementById(id);
 const shortCid = (c) => (c && c.length > 14 ? c.slice(0, 8) + "…" + c.slice(-4) : c || "");
 const assetType = (r) => (r.keyvalues && r.keyvalues.asset) || "(bare)";
 const owner = (r) => (r.keyvalues && r.keyvalues._owner) || "shared";
-// Flag records the signed-in user owns so they read green.
+// On the public tab, flag records the signed-in user owns so they read green.
+// (Private is already all-yours, so it gets no green — that would be noise.)
 const ownedByUser = (r) => state.network === "public" && !!USERNAME && owner(r) === USERNAME;
 // Relationship keys: companion_of, and any keyvalue ending in _cid, with a
 // non-empty value. Bare "cid" is excluded (no underscore before the suffix).
@@ -463,6 +464,13 @@ function listParams() {
 
 async function fetchRecords() {
     setRegionMessage(null);
+    if (state.network === "public" && !PUBLIC_ON) {
+        state.records = [];
+        renderView();
+        renderDetail();
+        setRegionMessage("Shared data isn't available on this deployment.");
+        return;
+    }
     try {
         const resp = await fetch("/assets/list?" + listParams().toString(), {
             headers: { Accept: "application/json" },
@@ -502,6 +510,8 @@ function renderView() {
         setRegionMessage(
             filtered
                 ? "No assets match this filter."
+                : state.network === "private"
+                ? "No private assets yet. Upload one below, or run a task that stores one."
                 : "No public assets on this network yet."
         );
         return;
@@ -1054,11 +1064,26 @@ async function doUpload() {
     let keyvalues;
     try { keyvalues = collectKeyvalues(); }
     catch (err) { status.textContent = err.message; status.className = "upload-status err"; return; }
+    const network = document.querySelector('input[name="net"]:checked').value;
     const btn = $("up-submit");
     btn.disabled = true;
-    status.textContent = "Validating…";
+    status.textContent = network === "private" ? "Uploading…" : "Validating…";
 
-    // Phase 1: mint. Single-use URL, so a mint pairs with exactly one PUT.
+    // Private: the dashboard stores the bytes in the user's own store and
+    // indexes them. One request, checked before any bytes are read.
+    async function uploadPrivate() {
+        const params = new URLSearchParams({ filename: file.name, keyvalues: JSON.stringify(keyvalues) });
+        const resp = await fetch("/assets/upload?" + params.toString(), {
+            method: "POST",
+            headers: { "Content-Type": "application/octet-stream", Accept: "application/json" },
+            body: file,
+        });
+        const body = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(body.detail || "HTTP " + resp.status);
+        return body;
+    }
+
+    // Public phase 1: mint. Single-use URL, so a mint pairs with exactly one PUT.
     async function mint() {
         const resp = await fetch("/assets/sign", {
             method: "POST",
@@ -1071,6 +1096,17 @@ async function doUpload() {
     }
 
     try {
+        if (network === "private") {
+            const rec = await uploadPrivate();
+            if (state.network === "private" && !state.records.some((r) => r.cid === rec.cid)) {
+                state.records = [rec, ...state.records];
+                renderView();
+            }
+            status.className = "upload-status ok";
+            status.textContent = "Uploaded ✓ " + shortCid(rec.cid);
+            $("up-file").value = "";
+            return;
+        }
         let minted = await mint();
         status.textContent = "Uploading…";
         const fd = new FormData();
@@ -1094,7 +1130,7 @@ async function doUpload() {
             keyvalues: rec.keyvalues || minted.keyvalues,
             network: "public",
         };
-        if (!state.records.some((r) => r.cid === optimistic.cid)) {
+        if (state.network === "public" && !state.records.some((r) => r.cid === optimistic.cid)) {
             state.records = [optimistic, ...state.records];
             renderView();
         }
@@ -1131,5 +1167,4 @@ document.addEventListener("click", (e) => {
     await fetchRecords();
 })();
 </script>
-{% endif %}
 {% endblock %}

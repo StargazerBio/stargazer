@@ -150,7 +150,7 @@ class _CountingPublic:
     def __init__(self):
         self.queries = []
 
-    async def query(self, keyvalues, network="public"):
+    async def query(self, keyvalues):
         self.queries.append(dict(keyvalues))
         return []
 

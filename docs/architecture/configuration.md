@@ -61,7 +61,7 @@ Gateway downloads use aiohttp directly: `flyte.io.File.download()` can't read an
 
 ## The public tier
 
-Shared data — bundles, reference genomes — is public data on Pinata's public network: anyone can read it, and `_owner` records who uploaded it. The SDK reads Pinata's public index (which needs `PINATA_JWT` even for public files) and downloads public bytes from `PINATA_GATEWAY`. Nothing uses Pinata's private network; the asset-manager page calls Pinata's public network directly. Hosted dashboards get the key as a Flyte secret, which keeps its value out of the app's spec.
+Shared data — bundles, reference genomes — is public data on Pinata's public network: anyone can read it, and `_owner` records who uploaded it. The SDK reads Pinata's public index (which needs `PINATA_JWT` even for public files) and downloads public bytes from `PINATA_GATEWAY`. Nothing uses Pinata's private network: the asset-manager page's Private tab is the user's own index and store, and its Public tab calls Pinata's public network directly. Hosted dashboards get the key as a Flyte secret, which keeps its value out of the app's spec.
 
 ### Pinata upload paths
 
@@ -91,10 +91,10 @@ edited onto a record could also be uploaded with it. A list stored as one
 value reaches it first: a cohort's `source_samples` passes 250 characters at
 about 20 sample IDs. The user's own index has no such limit.
 
-`query(keyvalues, network=)` queries one network, the public one unless
-told otherwise; each record carries the network it was found on.
+Every `PinataClient` call is on the public network (`NETWORK`). `query(keyvalues)`
+returns its matching records.
 
-`create_signed_upload_url(filename, keyvalues, network, ...)` mints a signed
+`create_signed_upload_url(filename, keyvalues, ...)` mints a signed
 URL with the filename and keyvalues fixed at mint time — used by the admin
 asset page so a browser can upload bytes directly to Pinata without the
 metadata ever passing through (or being chooseable at) the upload client.

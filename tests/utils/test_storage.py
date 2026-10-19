@@ -168,8 +168,7 @@ async def test_query_merges_public_tier(tmp_path, monkeypatch):
         def __init__(self):
             self.shared_cid = ""
 
-        async def query(self, keyvalues, network=None):
-            assert network == "public"
+        async def query(self, keyvalues):
             return [
                 {
                     "cid": "bafyPublic",

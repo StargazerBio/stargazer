@@ -112,7 +112,6 @@ async def test_create_signed_upload_url_end_to_end(tmp_path):
             "purpose": "signed-url-test",
             "_owner": "integration-test",
         },
-        network="public",
         expires=120,
         max_file_size=1024,
     )
@@ -172,7 +171,6 @@ async def test_update_metadata_merges(tmp_path):
     url = await client.create_signed_upload_url(
         filename="update_meta_test.txt",
         keyvalues={"asset": "never_registered_key", "stage": "before", "keep": "me"},
-        network="public",
         expires=120,
         max_file_size=1024,
     )
