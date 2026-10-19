@@ -57,6 +57,14 @@ the app on one side, tasks and workflows in the SDK on the other.
   replacing the 2026-10-16 plan to publish them. Notebooks in the repo aren't
   published, since GitHub already makes them public.
 
+2026-10-18:
+
+- **The deployment setting comes out before merge.** The interval becomes a
+  per-user setting on the dashboard (ticket `dashboard-settings`), so
+  `STARGAZER_SAVE_INTERVAL_SECONDS` isn't shipped only to be removed. Pods
+  still read `SG_SAVE_INTERVAL_SECONDS`, 5 s when unset, and nothing sets it
+  until then.
+
 ## Measured (2026-10-16)
 
 Measured locally with the image's marimo (0.23.6) and the pod's layout: the
@@ -129,10 +137,10 @@ a plain mirror would then wipe the store.
 its path under `/workspace`. `/snapshots` goes.
 
 **When it saves.** On an interval, and once more at scale-down. The interval
-is `SG_SAVE_INTERVAL_SECONDS` on the pod, which the dashboard sets at launch
-from its own `STARGAZER_SAVE_INTERVAL_SECONDS`. The default is 5 s, as now,
-and 0 turns the interval off, so the pod saves only at scale-down. It's set
-per deployment, not per user or notebook. A pass writes only the files that
+is `SG_SAVE_INTERVAL_SECONDS` on the pod, 5 s when unset, as now, and 0
+turns the interval off, so the pod saves only at scale-down. Nothing sets it
+in this ticket (decided 2026-10-18); ticket `dashboard-settings` sets it per
+user. A pass writes only the files that
 changed.
 
 The proxy already saves at scale-down: on Knative's SIGTERM, the proxy's
@@ -191,7 +199,8 @@ download. Download is still how a notebook is shared, until Publish.
       the index row and the stored bytes.
 - [x] Dashboard: `STARGAZER_SAVE_INTERVAL_SECONDS` in `app/config.py`, passed
       to each pod as `SG_SAVE_INTERVAL_SECONDS` in `per_notebook_env`. A
-      test: set to 60 → the built environment carries `60`.
+      test: set to 60 → the built environment carries `60`. Removed again
+      in `d83b9b0` (decided 2026-10-18).
 - [x] `app/workspace_store.py`: the `workspace/` prefix. A test: a nested
       `lib/helpers.py` and `data/counts.csv` under the prefix → not listed as
       notebooks.
@@ -281,7 +290,9 @@ revision was ready fixed it. In the feature file's gotchas.
       2026-10-17: the interval is configurable, 5 s by default, and 0 saves
       only at scale-down. A pod that dies without SIGTERM loses everything
       since the last pass, so the longer the interval, the more the first
-      piece's proof of the scale-down save matters.
+      piece's proof of the scale-down save matters. On 2026-10-18 the
+      setting moved from the deployment to the user (ticket
+      `dashboard-settings`).
 
 ## Related tickets
 
