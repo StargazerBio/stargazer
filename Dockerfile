@@ -1,4 +1,4 @@
-# The one human-runnable image: `stargazer-note`, the hosted notebook image
+# The one human-runnable image: `stargazer`, the hosted notebook image
 # (`notebook_app_img_recipe` in `app/per_notebook.py`) as a `docker run`.
 # marimo edits behind the same proxy, so the dropdown terminal (Ctrl+`) has
 # Claude Code in it, and `/stargazer` is the SDK that each notebook's

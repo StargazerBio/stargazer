@@ -47,7 +47,7 @@ See [MCP Server](mcp-server.md) for the full server specification.
 
 The marimo notebook is the primary user surface. The hosted app serves a per-user dashboard of three notebook types — Tutorials, Workflows, Workspace — and notebooks are also where new tasks are prototyped before being promoted into the SDK. See [Notebooks](notebook.md) for the taxonomy, user archetypes, and promotion paths, and [App](app.md) for the hosting machinery.
 
-For local use, the repository's Dockerfile builds one end-user Docker image, **`stargazer-note`**: a Marimo notebook in edit mode for running pipelines and exploring data locally, with Claude Code in its dropdown terminal. It is the hosted notebook image run locally — see [App → Images](app.md#images).
+For local use, the repository's Dockerfile builds one end-user Docker image, **`stargazer`**: a Marimo notebook in edit mode for running pipelines and exploring data locally, with Claude Code in its dropdown terminal. It is the hosted notebook image run locally — see [App → Images](app.md#images).
 
 The MCP server runs over stdio from a source install with the `mcp` extra; any MCP client connects to `stargazer`. Tasks and workflows can also be managed directly via the [Flyte CLI](cli.md#flyte-cli). Source contributors install natively — see [Contributing](../guides/contributing.md).
 

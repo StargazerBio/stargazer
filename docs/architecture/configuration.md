@@ -111,7 +111,7 @@ Stargazer has three container images. They split along a sharp line: **task imag
 |-------|--------|------|---------------|
 | `stargazer-scrna` | `config.py` (`scrna_env`) | `flyte.TaskEnvironment` | scRNA-seq tasks (`tasks/scrna/`) |
 | `stargazer-gatk` | `config.py` (`gatk_env`) | `flyte.TaskEnvironment` | GATK + alignment tasks (`tasks/gatk/`, `tasks/general/`) |
-| `stargazer-note` | `Dockerfile` | The hosted notebook image: marimo behind the terminal proxy, Claude Code, the bioconda tools | Local `docker run` only |
+| `stargazer` | `Dockerfile` | The hosted notebook image: marimo behind the terminal proxy, Claude Code, the bioconda tools | Local `docker run` only |
 
 Why the split: task images need nothing but Flyte's contract (an entrypoint Flyte injects, a content-hash tag Flyte pins by) — perfectly served by the SDK. A human-runnable image needs a real `ENTRYPOINT`, baked-in source, and a stable `:latest` tag — none of which the Flyte Image SDK exposes. Rather than reinvent the Dockerfile via post-build wrapping, we just use a Dockerfile.
 
@@ -121,7 +121,7 @@ Every image Flyte builds — the task images, the dashboard, the notebook image 
 
 The `Dockerfile` image is published for both `linux/amd64` and `linux/arm64`, so it runs natively on Apple silicon. It carries the bioconda tools and a Flyte config that runs workflows in the container; a notebook's own dependencies come from its PEP 723 header, as in a hosted pod. Because GenomicsDB has no arm64 build, joint calling works only in the amd64 variant.
 
-Hosted notebook pods run **`notebook-app`**, defined programmatically in `app/per_notebook.py` and built by onboarding (`stargazer-users`). `stargazer-note` mirrors that recipe in the `Dockerfile` without sharing code with it (version pins can lag), because a published, multi-arch image needs a real `ENTRYPOINT` and a stable tag the Flyte Image SDK doesn't expose. See [App → Images](app.md#images).
+Hosted notebook pods run **`notebook-app`**, defined programmatically in `app/per_notebook.py` and built by onboarding (`stargazer-users`). `stargazer` mirrors that recipe in the `Dockerfile` without sharing code with it (version pins can lag), because a published, multi-arch image needs a real `ENTRYPOINT` and a stable tag the Flyte Image SDK doesn't expose. See [App → Images](app.md#images).
 
 ### Building locally
 

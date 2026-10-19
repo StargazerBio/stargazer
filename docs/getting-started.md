@@ -1,13 +1,13 @@
 # Getting Started
 
-Stargazer installs as a Python package, and the repository's `Dockerfile` builds one end-user Docker image, **`stargazer-note`**, for running pipelines and exploring data in a notebook with an AI agent alongside.
+Stargazer installs as a Python package, and the repository's `Dockerfile` builds one end-user Docker image, **`stargazer`**, for running pipelines and exploring data in a notebook with an AI agent alongside.
 
 If you want to add tasks or workflows to Stargazer itself, see [Contributing](guides/contributing.md) for the native setup. The image below is for using Stargazer, not editing it.
 
 ## Notebook Interface
 
 ```bash
-docker run -p 8080:8080 ghcr.io/stargazerbio/stargazer-note
+docker run -p 8080:8080 ghcr.io/stargazerbio/stargazer
 ```
 
 Opens the Assets tutorial, a [Marimo](https://marimo.io/) notebook, at `http://localhost:8080` in edit mode. From there you can import stargazer tasks, run workflows, and visualize results interactively. The published tag can lag the source; [Contributing → Building Images](guides/contributing.md#building-images) builds it from a checkout under the same name. It is the image hosted notebooks run on (see [Notebooks](architecture/notebook.md) for the notebook types and [App](architecture/app.md) for hosting).
@@ -46,7 +46,7 @@ Set environment variables to control storage behavior (with `-e` for a container
 | **Your own storage location** — keep files elsewhere, or in a bucket | `STARGAZER_STORE_ROOT`, `STARGAZER_INDEX_URL` |
 
 ```bash
-docker run -p 8080:8080 -e PINATA_JWT=your_jwt ghcr.io/stargazerbio/stargazer-note:latest
+docker run -p 8080:8080 -e PINATA_JWT=your_jwt ghcr.io/stargazerbio/stargazer:latest
 ```
 
 See [Configuration](architecture/configuration.md) for details.
