@@ -88,7 +88,9 @@ _SKIPPED_DIRS = {"__pycache__", "__marimo__"}
 MAX_SAVED_BYTES = 100 * 1024**2
 
 # Env keys never handed to the interactive shell. The suffix list catches future
-# secret-shaped vars without an explicit entry per name.
+# secret-shaped vars without an explicit entry per name. The org's Pinata key is
+# in the notebook's env on purpose, but kept from the shell, where an agent's
+# `env` would put it in the agent's context.
 _TERM_SECRET_KEYS = {"PINATA_JWT"}
 _TERM_SECRET_SUFFIXES = ("_SECRET", "_TOKEN", "_JWT", "_KEY", "_PASSWORD")
 

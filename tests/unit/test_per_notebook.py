@@ -1,5 +1,7 @@
 """Tests for `per_notebook_env`: resources, auth, and what reaches the pod's env."""
 
+import flyte
+
 from app import config
 from app.notebook_meta import NotebookResources
 from app.per_notebook import WORKSPACE_NOTEBOOK_DIR, per_notebook_env
@@ -87,3 +89,10 @@ def test_pod_env_names_the_deployed_image_even_on_a_declared_one():
     declared = notebook_image_base(config.NOTEBOOK_IMAGE).with_apt_packages("tabix")
     env = _env(image=declared)
     assert env.env_vars["STARGAZER_NOTEBOOK_IMAGE"] == "test.example/notebook-app:unit"
+
+
+def test_pod_gets_the_pinata_key_as_a_secret():
+    """The org's Pinata key reaches the pod as a secret, never in the spec's env."""
+    env = _env()
+    assert env.secrets == [flyte.Secret(key="PINATA_JWT", as_env_var="PINATA_JWT")]
+    assert "PINATA_JWT" not in env.env_vars

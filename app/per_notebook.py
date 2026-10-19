@@ -43,8 +43,9 @@ the pod scales to zero. No PVC: pod-local disk plus the object store is
 cheaper and faster.
 
 Auth: pods run `requires_auth=True`, so access control is the platform's alone;
-`SG_OWNER_SUBJECT` only keys the pod's workspace store. No credential of any
-kind is baked into the pod env.
+`SG_OWNER_SUBJECT` only keys the pod's workspace store. No credential is baked
+into the pod env: the org's Pinata key arrives as a Flyte secret, as on the
+dashboard and in tasks.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -62,7 +63,12 @@ from flyteidl2.common import identifier_pb2, list_pb2
 
 from app import config
 from app.notebook_meta import NotebookResources
-from stargazer.config import IMAGE_PLATFORM, PROJECT_ROOT, STARGAZER_ENV_VARS
+from stargazer.config import (
+    IMAGE_PLATFORM,
+    PROJECT_ROOT,
+    STARGAZER_ENV_VARS,
+    STARGAZER_SECRETS,
+)
 
 # Bake the proxy as a TOP-LEVEL module (not under `app/`) because Flyte's
 # loaded_modules code bundle ships an `app/` package into the pod's cwd
@@ -198,7 +204,9 @@ def per_notebook_env(
     `index_url` is the dashboard's in-cluster address, where the pod and the
     runs it starts index their assets (`STARGAZER_INDEX_URL`); the assets
     themselves go under the workspace root (`STARGAZER_STORE_ROOT`). No
-    credential is baked into the env: notebook code can read it.
+    credential is baked into the env, since the owner can read the app's
+    spec. The Pinata key comes as a secret instead, which the spec only
+    references.
 
     `resources` is the notebook's declared `[tool.stargazer]` spec, honored
     as-authored (no ceiling). When None — image-baked tutorials and workflows
@@ -266,6 +274,8 @@ def per_notebook_env(
                 else {}
             ),
         },
+        # The devbox drops app secrets, so a devbox notebook has no public tier.
+        secrets=STARGAZER_SECRETS,
     )
 
 
