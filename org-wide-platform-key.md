@@ -30,6 +30,10 @@ the dashboard's login gate.
   (inferred).
 - Task pods get it as `_UNION_EAGER_API_KEY`, and the in-cluster client
   calls as it: `User.get()` returns `393067446845621194`.
+- Notebook pods carry it too, as `_UNION_EAGER_API_KEY` in the marimo
+  process's env, so a notebook cell can read it (measured 2026-10-18 in
+  `nb-key-probe-edit`, ticket `notebook-pinata-key`). The terminal's env
+  scrub drops it by its `_KEY` suffix; that's tidiness, not a boundary.
 - The dashboard launches notebooks as this key. `creator` is application
   `393067446845621194` on all five `nb-*` apps in `u-pryce`. The dashboard
   itself shows the admin who deployed it.
