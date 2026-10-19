@@ -17,6 +17,7 @@
 - Commit on the branch as the work progresses; no need to ask first. Never force-push `main`
 - When the change is done (tests pass, verified on its real surface), push the branch and open a PR against `main` with `gh pr create`. The description says what changed and why, the verification evidence, and anything deferred
 - The PR is where human review happens. Never merge a PR yourself — the user reviews and merges it. Review feedback is addressed with further commits on the same branch
+- A PR description stays true to its branch. Whenever pushes make it drift (the image's name, what was verified, what's deferred, the list of changes), rewrite it in the same step with `gh pr edit --body-file`, from the branch's current state. Don't post PR comments or replies; explanations of a change belong in its commit message
 - Once the PR is merged, remove its worktree (`git worktree remove .claude/worktrees/<slug>`), delete the branch, and `git pull` in the main checkout. New worktrees branch from `origin/main` and don't need it, but sessions started in the main checkout read this file and the skills from it
 
 **Positioning**
