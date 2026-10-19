@@ -10,15 +10,16 @@ blocked_by:
 
 Uploading a file from your machine goes up to 10 GB, private or public, and
 a dropped upload picks up where it stopped (decided 2026-10-17). The browser
-sends every upload in chunks over the TUS resumable-upload protocol, and the
-dashboard decides where it goes:
+sends every upload, private or public, in chunks over the TUS
+resumable-upload protocol to the dashboard, which works out the CID as the
+chunks go by and passes each one on to a backend (decided 2026-10-18):
 
-- **Private:** to the dashboard, which passes each chunk on to the user's
-  store as one part of a multipart upload, and works out the CID as the
-  chunks go by.
-- **Public:** to a signed Pinata upload URL that the dashboard mints, as
-  public uploads do today. The bytes go straight to Pinata, and Pinata works
-  out the CID.
+- **Private:** the user's store, each chunk one part of a multipart upload.
+- **Public:** Pinata, each chunk one `PATCH` of a Pinata TUS upload.
+
+One path from the client to the dashboard, and backends added behind it as
+they're needed. The store backend comes first; public uploads keep today's
+100 MB signed-URL path until the Pinata backend replaces it.
 
 ## Why
 
@@ -34,25 +35,27 @@ dashboard decides where it goes:
   size cap from minting inside the signature. Hosted dashboards can mint them
   once they have the key (ticket `dashboard-pinata-key`).
 - **The browser can't upload straight to the bucket.** It has no CORS rule
-  (measured 2026-10-07, in `asset-manager-on-index`). Going through the
-  dashboard needs none.
+  (measured 2026-10-07, in `asset-manager-on-index`, and again 2026-10-18).
+  Going through the dashboard needs none.
+- **Direct to the bucket was considered and not taken** (2026-10-18): a CORS
+  rule we'd add ourselves, part URLs the dashboard signs, and the CID worked
+  out by reading the file back. It's a second client path, and it only works
+  for S3 stores. Everything through the dashboard is one client path, with
+  the backends behind it.
 - **A big file already in a notebook's workspace doesn't need this.** The
   pod uploads it itself (ticket `save-whole-workspace`).
 
 ## Design
 
-- **Client.** `tus-js-client`, pinned, from a CDN, in the upload form. Only
-  the endpoint differs: `/assets/tus` for a private upload, a signed URL for
-  a public one. It sends 48 MB chunks, which fit every limit: S3 needs at
-  least 5 MB per part except the last, Pinata takes under 50 MB, and one
+- **Client.** `tus-js-client`, pinned, from a CDN, in the upload form. One
+  endpoint, `/assets/tus`, for both networks; the network rides in
+  `Upload-Metadata`. It sends 48 MB chunks, which fit every limit: S3 needs
+  at least 5 MB per part except the last, Pinata takes under 50 MB, and one
   chunk at a time fits the dashboard's memory.
-- **Public uploads** mint the signed URL as `/assets/sign` does now, with
-  the size cap raised to 10 GB. A resumable upload expires with the signed
-  URL it was created from, so the expiry has to cover a slow 10 GB upload.
-- **Private uploads: the server.** The core TUS protocol on the dashboard,
-  under `/assets/tus`.
+- **The server.** The core TUS protocol on the dashboard, under
+  `/assets/tus`.
   `POST` creates an upload from `Upload-Length` and `Upload-Metadata` (the
-  filename and the keyvalues), `HEAD` reports how much has arrived, and
+  filename, the network and the keyvalues), `HEAD` reports how much has arrived, and
   `PATCH` appends at that offset. The keyvalues are checked with
   `build_asset()` when the upload is created, so a bad one fails before any
   bytes move. The same owner gate as the other private routes.
@@ -177,11 +180,15 @@ dashboard decides where it goes:
     written
   - a signed-in user who isn't the owner → 403; anonymous → 401
   - an upload idle past its timeout → aborted, and a `PATCH` to it → 404
-- [ ] Public signing: `/assets/sign` accepts up to 10 GB. Tests: a 5 GB
-      size → a signed URL whose size cap is 10 GB and whose expiry is the
-      long one; over 10 GB → 413.
-- [ ] The upload form sends every upload with `tus-js-client`, to the
-      dashboard or to the signed URL, and shows a 10 GB limit.
+- [ ] The upload form sends private uploads with `tus-js-client` to
+      `/assets/tus`, and shows a 10 GB limit for them.
+- [ ] The Pinata backend: a public upload's `POST` creates a Pinata TUS
+      upload, each chunk is passed on as a `PATCH`, and Pinata's CID has to
+      equal the builder's, as `StorageClient.publish` checks. Then the form
+      sends public uploads to `/assets/tus` too, and `/assets/sign` and the
+      browser→Pinata upload go. Tests against a fake Pinata TUS endpoint:
+      three chunks passed on in order, a CID mismatch → an error and no
+      record kept.
 - [ ] Docs: `docs/architecture/app.md` and
       `.opencode/reference/architecture/app_internals.md` (the upload path),
       and the upload limit in the user guides, in product terms.
