@@ -130,18 +130,16 @@ See [Configuration → Container Images](../architecture/configuration.md#contai
 
 **Flyte task images (`stargazer-scrna`, `stargazer-gatk`)** build themselves. Each is tagged by a hash of its recipe and the project's source, so a change to either builds a new one the first time something needs it: a run on the devbox or Union, or the tasks test tier, which builds into your local docker without pushing anywhere. `image.builder` in the Flyte config picks `local` (needs a working Docker daemon) or `remote` (Union only, builds on the cluster). Runs push to `STARGAZER_REGISTRY` — the devbox's own registry by default when targeting the devbox.
 
-**Human-runnable images (`stargazer-note`, `stargazer-chat`)** build from the `Dockerfile` when you change it or want the current source in them:
+**The human-runnable image (`stargazer`)** builds from the `Dockerfile` when you change it or want the current source in it:
 
 ```bash
-docker build --target note -t ghcr.io/stargazerbio/stargazer-note:latest .
-docker build --target chat -t ghcr.io/stargazerbio/stargazer-chat:latest .
+docker build -t ghcr.io/stargazerbio/stargazer:latest .
 ```
 
-Tag both with the published `ghcr.io/stargazerbio/...` URL even though you're not pushing — `docker run` resolves them from the local cache by that name. Nothing publishes them automatically. A maintainer publishes both platforms with buildx, logged in to `ghcr.io` with a token that has `write:packages`:
+Tag it with the published `ghcr.io/stargazerbio/...` URL even though you're not pushing — `docker run` resolves it from the local cache by that name. Nothing publishes it automatically. A maintainer publishes both platforms with buildx, logged in to `ghcr.io` with a token that has `write:packages`:
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 --target note -t ghcr.io/stargazerbio/stargazer-note:latest --push .
-docker buildx build --platform linux/amd64,linux/arm64 --target chat -t ghcr.io/stargazerbio/stargazer-chat:latest --push .
+docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/stargazerbio/stargazer:latest --push .
 ```
 
-The hosted notebook pods use a different image, `notebook-app`, built by the onboarding command (`stargazer-users`) — see [App → Images](../architecture/app.md#images). The shared `base` stage (bioconda CLIs + uv + project venv) is reused between targets, so the second `docker build` is mostly cache hits.
+The hosted notebook pods run `notebook-app`, built by the onboarding command (`stargazer-users`) — see [App → Images](../architecture/app.md#images). The `Dockerfile` mirrors that recipe but shares no code with it, so the two can drift (tool versions, pins); bring it up to date when you bump one in `notebook_app_img_recipe` (`app/per_notebook.py`).
