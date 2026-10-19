@@ -122,7 +122,10 @@ dashboard decides where it goes:
   Stargazer runs can find it or remove it. The same goes for any large
   `flyte.storage.put` that fails partway today (inferred: the store's
   client uploads big files in parts).
-- [ ] **Q3. How abandoned uploads get cleaned up.** Union manages the
+- [ ] **Q3. How abandoned uploads get cleaned up.** Set aside for now
+      (decided 2026-10-18): the buckets held no unfinished uploads when
+      checked that day, so the rule is preventive. Revisit before TUS
+      uploads ship. Union manages the
       bucket and the role, so either fix is a request to them. Options:
   - **A lifecycle rule** on `union-us-west-2-stargazerbio`:
     `AbortIncompleteMultipartUpload` with `DaysAfterInitiation: 1`, for the
