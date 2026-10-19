@@ -334,6 +334,23 @@ def test_create_rejects_reserved_name(client):
     )
 
 
+def test_create_takes_the_longest_name_that_launches(client):
+    """A 22-character name makes `nb-<slug>-edit` exactly Flyte's 30."""
+    _as(client)
+    resp = client.post("/workspace/create", data={"name": "interval probe 2026101"})
+    assert resp.status_code == 200
+    assert resp.json()["slug"] == "interval-probe-2026101"
+
+
+def test_create_refuses_a_name_too_long_to_launch(client):
+    """One character more and the notebook's app could never be deployed."""
+    _as(client)
+    resp = client.post("/workspace/create", data={"name": "interval probe 20261018"})
+    assert resp.status_code == 400
+    assert resp.json()["error"] == "Notebook names can be at most 22 characters."
+    assert _get(ALICE, "interval-probe-20261018.py") is None
+
+
 def test_create_without_store_is_503(client, monkeypatch):
     """With no store configured, writes say so instead of crashing."""
     monkeypatch.setattr(config, "WORKSPACE_ROOT", "")
@@ -572,6 +589,23 @@ def test_launch_refuses_when_the_image_fails_to_build(
     resp = _launch(client, "qc-run", "workspace")
     assert resp.status_code == 422
     assert "Build failed" in resp.json()["error"]
+
+
+def test_launch_reports_why_the_app_was_never_created(client, served, monkeypatch):
+    """A deploy the platform refused is a failure, not a pod still starting."""
+
+    async def refused_aio(env):
+        raise flyte.errors.DeploymentError("app.metadata.id.name: too long")
+
+    monkeypatch.setattr(
+        "flyte.with_servecontext",
+        lambda **_kw: SimpleNamespace(serve=SimpleNamespace(aio=refused_aio)),
+    )
+    _put(ALICE, "qc-run.py")
+    _as(client)
+    resp = _launch(client, "qc-run", "workspace")
+    assert resp.status_code == 502
+    assert resp.json()["error"] == "app.metadata.id.name: too long"
 
 
 # ---------------------------------------------------------------------------

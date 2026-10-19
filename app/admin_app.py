@@ -90,6 +90,7 @@ from app.notebooks import (
     slugify,
 )
 from app.per_notebook import (
+    NOTEBOOK_SLUG_MAX,
     WORKSPACE_NOTEBOOK_DIR,
     list_project_apps,
     per_notebook_env,
@@ -468,7 +469,8 @@ async def workspace_create(
     its `[tool.stargazer]` header, then returns the rendered tile. Resources
     (and the tile blurb) are edited afterward via the tile's gear → settings
     modal (`/workspace/settings`). Create stays a pure "add a notebook"
-    action: no launch, no navigation.
+    action: no launch, no navigation. A name whose slug is over
+    `NOTEBOOK_SLUG_MAX` is refused, since its app could never be deployed.
     """
     if not _store_ready():
         return _store_off()
@@ -478,6 +480,11 @@ async def workspace_create(
     if slug is None:
         return JSONResponse(
             {"error": f"invalid or reserved notebook name: {name!r}"}, status_code=400
+        )
+    if len(slug) > NOTEBOOK_SLUG_MAX:
+        return JSONResponse(
+            {"error": f"Notebook names can be at most {NOTEBOOK_SLUG_MAX} characters."},
+            status_code=400,
         )
 
     # The title the user typed, preserved verbatim (whitespace collapsed) for
@@ -762,7 +769,8 @@ async def launch(
     # is slow to schedule/boot. That's not a real failure: the route (and
     # `App.endpoint`) exist as soon as the app is admitted, and the pod shows
     # its own starting page. So on a watch error, recover the endpoint and
-    # hand it back anyway; only error out if the app genuinely isn't there.
+    # hand it back anyway. An app that isn't there was refused outright, and
+    # retrying won't change that, so the serve error goes back as the reason.
     try:
         deployment = await flyte.with_servecontext(
             project=project, domain=config.FLYTE_DOMAIN
@@ -782,9 +790,9 @@ async def launch(
             app = await App.get.aio(
                 name=f"nb-{slug}-{mode}", project=project, domain=config.FLYTE_DOMAIN
             )
-            endpoint = app.endpoint
         except Exception:
-            endpoint = None
+            return JSONResponse({"error": str(exc)}, status_code=502)
+        endpoint = app.endpoint
         if not endpoint:
             return JSONResponse(
                 {"error": "notebook is still starting; please retry in a moment"},
