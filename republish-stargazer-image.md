@@ -13,8 +13,7 @@ automatically.
 
 Rebuild both platforms from `main` and push, with the `docker buildx`
 command in `docs/guides/contributing.md`, logged in to `ghcr.io` with a token
-that has `write:packages`. Waits for ticket `notebooks-staging` so the
-published image has its `Dockerfile`.
+that has `write:packages`.
 
 Verify by pulling the pushed image on a clean cache and running the README's
 command: `http://localhost:8080` serves marimo's notebook list with
