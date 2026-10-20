@@ -1,8 +1,9 @@
 ---
 title: Notebooks with long names never launch
-status: doing
+status: review
 priority: normal
 created: 2026-10-18
+pr: 55
 ---
 
 A workspace notebook with a long name is created fine but never launches, and
