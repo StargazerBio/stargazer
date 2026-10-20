@@ -113,6 +113,27 @@ recreated the secret an hour later.
   `CreateSecret`/`UpdateSecret`). That's why the 10-17 probe's copy
   survived its delete, and why the console shows only `PINATA_JWT`.
 
+- [x] The org secret came back. `EAGER_API_KEY-union-us-west-2` was
+  created again at 10:10:04 PDT, holding the original key
+  `393067446845621194`. The write came through the control plane:
+  CloudTrail shows `adminflyterole`, under the same session that wrote the
+  project secrets, so it doesn't say who asked. It wins over the project
+  secrets, so from then on pods called Union as the org key again. Nothing
+  failed; the isolation was silently gone.
+- [ ] Find out what recreated it (the user, Union, or the operator's
+  bootstrap loop) and stop it.
+- [ ] Cross-project writes under the project key. The read check passed
+  (`ACTION_VIEW` refused on other projects), but the write probe (run
+  `urdpj55wqsm25nbs7r5t`: register a task, start a run and serve an app in
+  `flytesnacks` from a `u-pryce` pod) ran after 10:10. All three
+  succeeded, and the app's `creator` was the org key, so it says nothing
+  about the project key. Rerun once the org secret stays gone (script:
+  a task that calls `flyte.deploy`, `with_runcontext(project=…).run` and
+  `with_servecontext(project=…).serve` for another project).
+- [x] Pods can't read other projects' secrets from AWS: `GetSecretValue`
+  is implicitDeny for the pod role `userflyterole` and every node role,
+  and the user-workload nodes set the metadata hop limit to 1.
+
 ## The project key (branch `fix/org-wide-platform-key`)
 
 `onboard` gives each user's project API key `stargazer-<project>`. The key
