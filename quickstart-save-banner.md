@@ -1,8 +1,9 @@
 ---
 title: The docker quickstart crashes on start and opens outside the workspace
-status: doing
+status: review
 priority: high
 created: 2026-10-20
+pr: 56
 ---
 
 `docker run -p 8080:8080 -it ghcr.io/stargazerbio/stargazer`, the Getting

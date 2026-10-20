@@ -1,8 +1,9 @@
 ---
 title: The asset index runs on Postgres as well as SQLite
-status: doing
+status: review
 priority: high
 created: 2026-10-20
+pr: 54
 ---
 
 The first of three steps toward the hosted index on Aurora DSQL (ticket
@@ -30,8 +31,7 @@ container (Postgres 16, the version DSQL is compatible with).
 
 Done on `feat/postgres-index` (worktree `.claude/worktrees/postgres-index`),
 one commit, rebased onto `main` after #53 (`ed60f91`). Unit (497) and
-postgres (10) tiers pass after the rebase. Not pushed: the push and the PR
-wait for the user's go. The devbox step (ticket `devbox-postgres-index`)
+postgres (10) tiers pass after the rebase. PR #54. The devbox step (ticket `devbox-postgres-index`)
 starts after this merges.
 
 ## Verified (2026-10-20, branch `feat/postgres-index`)
