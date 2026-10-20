@@ -9,7 +9,7 @@ created: 2026-10-20
 `X | NoneType` on Python 3.13, where the hint is a `types.UnionType` with no
 `__origin__`. On 3.14 the same hint has `__origin__ = typing.Union`, so it
 takes the generic branch and renders `Union[X, NoneType]`. Measured
-2026-10-20: `docs/gen_catalog.py` run from a 3.14.7 venv rewrote five rows of
+2026-10-20: `docs/gen_catalog.py` run from a 3.14.7 venv rewrote four rows of
 `docs/reference/catalog.md` (`apply_vqsr`, `bwa_mem`, `bwa_mem2_mem`,
 `joint_call_gvcfs`) that a 3.13.4 venv leaves unchanged.
 
