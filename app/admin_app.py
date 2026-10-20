@@ -261,6 +261,16 @@ def _store_off() -> JSONResponse:
     return JSONResponse({"error": _STORE_OFF}, status_code=503)
 
 
+def _failed(action: str, exc: Exception) -> JSONResponse:
+    """The 500 a route returns when the store or control plane fails it.
+
+    Not a 502, though the failure is upstream: Cloudflare, in front of every
+    Union app, replaces a 502's (or 504's) body with its own error page, so
+    the reason would never reach the page. A 500's body passes through.
+    """
+    return JSONResponse({"error": f"{action} failed: {exc}"}, status_code=500)
+
+
 def _parse_nb_name(name: str) -> tuple[str, str] | None:
     """Split a per-notebook app name `nb-{slug}-{mode}` into `(slug, mode)`.
 
@@ -504,7 +514,7 @@ async def workspace_create(
         )
     except Exception as exc:
         logger.error(f"Notebook create failed for {filename!r}: {exc}")
-        return JSONResponse({"error": f"create failed: {exc}"}, status_code=502)
+        return _failed("create", exc)
 
     tile = _workspace_tile_dict(
         slug, resources.cpu, memory_to_gib(resources.memory), "", name=display_name
@@ -568,7 +578,7 @@ async def workspace_copy(
         )
     except Exception as exc:
         logger.error(f"Notebook copy failed for {slug!r} from {section}: {exc}")
-        return JSONResponse({"error": f"copy failed: {exc}"}, status_code=502)
+        return _failed("copy", exc)
 
     tile = _workspace_tile_dict(
         target_slug, resources.cpu, memory_to_gib(resources.memory), desc, name=title
@@ -616,7 +626,7 @@ async def workspace_settings(
         await store.update_workspace_notebook(user.subject, filename, content)
     except Exception as exc:
         logger.error(f"Notebook settings update failed for {filename!r}: {exc}")
-        return JSONResponse({"error": f"update failed: {exc}"}, status_code=502)
+        return _failed("update", exc)
 
     return JSONResponse(
         {
@@ -644,7 +654,7 @@ async def workspace_delete(user: CurrentUser, slug: str = Form(...)):
         await store.delete_workspace_notebook(user.subject, f"{slug}.py")
     except Exception as exc:
         logger.error(f"Notebook delete failed for {slug!r}: {exc}")
-        return JSONResponse({"error": f"delete failed: {exc}"}, status_code=502)
+        return _failed("delete", exc)
     return JSONResponse({"status": "deleted", "slug": slug})
 
 
@@ -814,7 +824,7 @@ async def stop(user: CurrentUser, slug: str = Form(...), mode: str = Form(...)):
         await app.deactivate.aio()
     except Exception as exc:
         logger.error(f"Stop failed for {name!r} in {project!r}: {exc}")
-        return JSONResponse({"error": f"stop failed: {exc}"}, status_code=502)
+        return _failed("stop", exc)
     return JSONResponse({"stopped": True})
 
 
@@ -873,7 +883,7 @@ async def workspace_cleanup(user: CurrentUser):
         apps = await list_project_apps(project, domain=config.FLYTE_DOMAIN)
     except Exception as exc:
         logger.error(f"cleanup listing failed for {project!r}: {exc}")
-        return JSONResponse({"error": f"cleanup failed: {exc}"}, status_code=502)
+        return _failed("cleanup", exc)
 
     names = [app.name for app in apps if app.name.startswith("nb-")]
 
