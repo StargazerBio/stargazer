@@ -144,7 +144,7 @@ On Union each user's index is a SQLite file on their dashboard, served to their 
 
 **Workaround:** Keep `outer-coordinator + concurrent children ≤ ~7.5 GiB`. The scRNA pipeline runs sequentially so a single child at `memory=("2Gi", "6Gi")` fits. Parallel fan-outs need smaller per-child limits.
 
-Scheduling counts requests, not limits, and a coordinator holds its request while it waits on its children. About 2 GiB is already requested by the cluster's own pods and the dashboard (2,094 Mi measured 2026-10-14), plus 128 Mi for the index's Postgres, leaving ~5.7 GiB. The germline workflow holds three `gatk_env` pods at once (the workflow, `prepare_reference` or `preprocess_sample`, and the tool), so `gatk_env` requests 1 GiB: at 2 GiB the third pod wouldn't fit.
+Scheduling counts requests, not limits, and a coordinator holds its request while it waits on its children. About 1.7 GiB is already requested by the cluster's own pods, the dashboard and the index's Postgres (1,710 Mi measured 2026-10-20, 1,070 Mi of it before the dashboard and Postgres), leaving ~6 GiB. The germline workflow holds three `gatk_env` pods at once (the workflow, `prepare_reference` or `preprocess_sample`, and the tool), so `gatk_env` requests 1 GiB: at 2 GiB the third pod wouldn't fit.
 
 ---
 

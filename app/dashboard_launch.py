@@ -63,10 +63,9 @@ def replica_url(env: dict) -> str | None:
 
     Needs a bucket store root (`s3://…`), the dashboard's owner, and an index
     that is a SQLite file: a Postgres index (the devbox's) is durable on its
-    own server. The
-    bucket's region rides on the URL (`?region=`), taken from `AWS_REGION`,
-    `AWS_DEFAULT_REGION` or `STARGAZER_STORE_REGION`. It has to be given:
-    without it Litestream looks the region up, which needs
+    own server. The bucket's region rides on the URL (`?region=`), taken from
+    `AWS_REGION`, `AWS_DEFAULT_REGION` or `STARGAZER_STORE_REGION`. It has to
+    be given: without it Litestream looks the region up, which needs
     `s3:GetBucketLocation`, and the tenant's pod role doesn't grant it
     (measured: the restore failed with AccessDenied). An S3-compatible store's
     address rides on it too (`?endpoint=`, from `FLYTE_AWS_ENDPOINT`).
