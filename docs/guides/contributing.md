@@ -25,23 +25,23 @@ Use `flyte start devbox` to spin up a local Flyte cluster for development. See t
 
 Stargazer's images are built for x86_64 only, like the machines they run on in production. On Apple silicon the devbox itself runs natively and Stargazer's pods run under emulation, so they're slower than on Union. Docker Desktop runs them through Rosetta, so keep its Rosetta setting enabled.
 
-This environment is much closer to production and lets you actually test your task and app environments. After every fresh devbox, apply the cluster-side fixes, then deploy a dashboard to hold the asset index:
+This environment is much closer to production and lets you actually test your task and app environments. After every fresh devbox, apply the cluster-side fixes, which also start the Postgres server that holds the devbox's asset index. Then deploy a dashboard if you want one:
 
 ```bash
 cli/devbox-setup.sh                      # prints the one-time DNS steps for your machine too
 uv run --all-extras python cli/devbox_dashboard.py
 ```
 
-The dashboard opens at `http://dashboard-flytesnacks-development.devbox.stargazer.bio:30081` as a stand-in user, `devbox-user`. To have runs you submit store their assets there, export these first and keep the storage port-forward open while submitting:
+The dashboard opens at `http://dashboard-flytesnacks-development.devbox.stargazer.bio:30081` as a stand-in user, `devbox-user`, and its asset browser lists what that user has stored. To have runs you submit store their assets on the devbox, export these first and keep the storage port-forward open while submitting:
 
 ```bash
 export STARGAZER_STORE_ROOT=s3://flyte-data/stargazer
-export STARGAZER_INDEX_URL=http://dashboard-flytesnacks-development.flyte.svc.cluster.local
+export STARGAZER_INDEX_URL=postgresql://stargazer:stargazer@postgres.stargazer.svc.cluster.local:5432/stargazer
 export STARGAZER_OWNER=devbox-user
 kubectl port-forward -n flyte svc/rustfs-svc 9000:9000
 ```
 
-The devbox tests (`uv run --all-extras pytest -m devbox`, see [Running Tests](#running-tests)) check that whole path: they deploy the dashboard, store and find assets across pods, and run the germline workflow.
+The devbox tests (`uv run --all-extras pytest -m devbox`, see [Running Tests](#running-tests)) check that whole path: they deploy the dashboard, store and find assets across pods, check the index survives a restart of its Postgres server, and run the germline workflow.
 
 ## Running Tests
 

@@ -22,6 +22,10 @@
 #   5. The PINATA_JWT task secret every task environment declares (Union has
 #      it org-wide). Its value comes from $PINATA_JWT, else the repo's .env,
 #      else it's empty and task pods run without the public tier.
+#   6. The asset index: a Postgres 16 server in the `stargazer` namespace, on
+#      a volume, which the dashboard and every pod reach at
+#      postgres.stargazer.svc.cluster.local:5432 (INDEX_URL in
+#      cli/devbox_dashboard.py names the same user, password and database).
 #
 # What it does NOT do (already handled in app code — see the workarounds doc):
 #   - init_in_cluster in App pods (app/init.py); SDK-over-CLI project
@@ -198,6 +202,99 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 6. The asset index's Postgres server. The volume keeps the index through a
+#    pod restart (the devbox wipes it with the rest of its state on
+#    recreate). Requests stay small: the node's memory is tight (see the
+#    workarounds doc). Applied on every run; an unchanged spec is a no-op.
+# ---------------------------------------------------------------------------
+log "Applying the asset index's Postgres server (namespace stargazer)"
+if [ "$DRY_RUN" = 1 ]; then
+    printf '   %s[dry-run]%s kubectl apply namespace/stargazer, pvc+deployment+service postgres
+' "$c_yellow" "$c_off"
+else
+    docker exec -i "$CONTAINER" kubectl apply -f - <<'YAML'
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: stargazer
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: stargazer
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: stargazer
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_USER
+              value: stargazer
+            - name: POSTGRES_PASSWORD
+              value: stargazer
+            - name: POSTGRES_DB
+              value: stargazer
+          ports:
+            - containerPort: 5432
+          # Over TCP: the first-boot init server listens on the socket only.
+          readinessProbe:
+            exec:
+              command: [pg_isready, -h, 127.0.0.1, -U, stargazer, -d, stargazer]
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: stargazer
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+YAML
+    kc rollout status deployment/postgres -n stargazer --timeout=180s \
+        || warn "Postgres rollout slow/incomplete — check 'kubectl get pods -n stargazer'"
+    ok "Postgres applied (postgres.stargazer.svc.cluster.local:5432)"
+fi
+
+# ---------------------------------------------------------------------------
 # Verify (read-only)
 # ---------------------------------------------------------------------------
 if [ "$DRY_RUN" = 0 ]; then
@@ -208,6 +305,8 @@ if [ "$DRY_RUN" = 0 ]; then
         && ok "coredns-custom present" || warn "coredns-custom missing"
     flyte_cli get secret 2>/dev/null | grep -q PINATA_JWT \
         && ok "PINATA_JWT secret present" || warn "PINATA_JWT secret missing — task pods will be rejected"
+    [ "$(kc get deployment postgres -n stargazer -o jsonpath='{.status.readyReplicas}' 2>/dev/null)" = 1 ] \
+        && ok "Postgres ready" || warn "Postgres not ready — runs can't index their assets"
 
     if [ "$VERIFY_POD" = 1 ]; then
         log "Throwaway-pod DNS/HTTP check (may take ~30s)"

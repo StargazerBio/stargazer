@@ -4,7 +4,7 @@
 
 When you hit a deploy/runtime issue against devbox that takes more than one round-trip to diagnose, append it here with a one-line description and the minimum the next session needs to know.
 
-**Automation:** the *cluster-side* workarounds below (signed-URL endpoint, serving domain off `.localhost`, CoreDNS wildcard, the restarts that race the addon controller, and the `PINATA_JWT` task secret) are applied to a fresh devbox by [`cli/devbox-setup.sh`](../../cli/devbox-setup.sh) — run it once after recreating the container (`./cli/devbox-setup.sh`, or `--dry-run` to preview, `--laptop` to also apply the macOS DNS steps, `--domain` to override). It's idempotent; `--verify-pod` also resolves and calls the devbox dashboard from a throwaway pod. The remaining entries are app-code/design (already in the codebase), not scriptable; keep this file and the script in sync when you add a new cluster-side quirk.
+**Automation:** the *cluster-side* workarounds below (signed-URL endpoint, serving domain off `.localhost`, CoreDNS wildcard, the restarts that race the addon controller, the `PINATA_JWT` task secret, and the asset index's Postgres server) are applied to a fresh devbox by [`cli/devbox-setup.sh`](../../cli/devbox-setup.sh) — run it once after recreating the container (`./cli/devbox-setup.sh`, or `--dry-run` to preview, `--laptop` to also apply the macOS DNS steps, `--domain` to override). It's idempotent; `--verify-pod` also resolves and calls the devbox dashboard from a throwaway pod. The remaining entries are app-code/design (already in the codebase), not scriptable; keep this file and the script in sync when you add a new cluster-side quirk.
 
 ---
 
@@ -105,16 +105,17 @@ The app tier is built for Union, where onboarding gives each user a project and 
 
 - **Project and owner.** The default project (`flytesnacks`) and a stand-in owner, `devbox-user`, which is also the asset owner (`STARGAZER_OWNER`) and the folder in the store.
 - **A stand-in user (`SG_STAND_IN_SUBJECT=devbox-user`).** Symptom without it: every dashboard page answers `401 not signed in` (`/health` and the index routes still work). The dashboard reads the user from `X-User-Subject`, which only Union's login sets. `app.identity` treats a request with no subject as the stand-in. `app.config.stand_in_subject` ignores the variable when `STARGAZER_TARGET=union`, and the script refuses to run off the devbox, so it can't reach Union. A real subject header still wins.
-- **The store root, `s3://flyte-data/stargazer`.** `flyte-data` is the devbox's bucket, served by rustfs. Assets land under `stargazer/users/devbox-user/assets/<cid>/<name>` and the index replica under `stargazer/users/devbox-user/index`.
+- **The store root, `s3://flyte-data/stargazer`.** `flyte-data` is the devbox's bucket, served by rustfs. Assets land under `stargazer/users/devbox-user/assets/<cid>/<name>`.
+- **The index, the devbox's Postgres server** (`STARGAZER_INDEX_URL`, `INDEX_URL` in the script; next section). With a Postgres URL the dashboard's asset browser reads that database, the notebook pods it launches get the same URL rather than the dashboard's address (`app.admin_app._index_url`), and its launcher skips Litestream, which has no file to replicate.
 - **A storage port-forward while it deploys.** See "Storage signed URLs use `localhost`" above: the code bundle uploads to `rustfs-svc.flyte:9000`. The script holds `kubectl port-forward -n flyte svc/rustfs-svc 9000:9000` open, or reuses one already listening.
 
-The dashboard ends up at `http://dashboard-flytesnacks-development.devbox.stargazer.bio:30081`. Its in-cluster address comes from the `INTERNAL_APP_ENDPOINT_PATTERN` the devbox gives app pods (`http://{app_fqdn}-flytesnacks-development.flyte.svc.cluster.local`), so pods index at `http://dashboard-flytesnacks-development.flyte.svc.cluster.local`.
+The dashboard ends up at `http://dashboard-flytesnacks-development.devbox.stargazer.bio:30081`.
 
-**Runs submitted from the laptop** store into it when these are exported (`stargazer.config` forwards them into every pod), with the port-forward open for the code-bundle upload:
+**Runs submitted from the laptop** store into the devbox's bucket and index when these are exported (`stargazer.config` forwards them into every pod), with the port-forward open for the code-bundle upload. They don't need the dashboard deployed:
 
 ```bash
 export STARGAZER_STORE_ROOT=s3://flyte-data/stargazer
-export STARGAZER_INDEX_URL=http://dashboard-flytesnacks-development.flyte.svc.cluster.local
+export STARGAZER_INDEX_URL=postgresql://stargazer:stargazer@postgres.stargazer.svc.cluster.local:5432/stargazer
 export STARGAZER_OWNER=devbox-user
 kubectl port-forward -n flyte svc/rustfs-svc 9000:9000
 ```
@@ -123,13 +124,15 @@ The `verify-stargazer` skill's devbox recipe (`features/devbox-asset-storage.md`
 
 ---
 
-## Litestream can't reach the devbox store without its endpoint and keys
+## The asset index is a Postgres server
 
-**Symptom:** The devbox dashboard crash-loops before uvicorn starts. Its log shows `litestream restore` failing with `s3: cannot lookup bucket region: operation error S3: GetBucketLocation, get identity: get credentials: failed to refresh cached credentials, no EC2 IMDS role found` (measured 2026-10-08).
+On Union each user's index is a SQLite file on their dashboard, served to their pods over HTTP. The devbox instead runs a Postgres 16 server (the version Aurora DSQL is compatible with), which the dashboard, task pods and notebook pods all reach through `PostgresIndex` at `postgresql://stargazer:stargazer@postgres.stargazer.svc.cluster.local:5432/stargazer`. Nothing on the devbox calls the dashboard's `/index` routes.
 
-**Cause:** rustfs is S3-compatible but not AWS. Given a bare `s3://flyte-data/…` URL, Litestream talks to AWS, finds no region and no credentials, and the launcher stops the dashboard on the failed restore. Flyte gives app pods the store's address and keys as `FLYTE_AWS_ENDPOINT`, `FLYTE_AWS_ACCESS_KEY_ID` and `FLYTE_AWS_SECRET_ACCESS_KEY` (from `internalApps.defaultEnvVars`), names Litestream doesn't read.
+**Setup (automated):** `cli/devbox-setup.sh` applies a Deployment, Service and PersistentVolumeClaim (`postgres`, `postgres-data`) in the `stargazer` namespace, and `INDEX_URL` in `cli/devbox_dashboard.py` names the same user, password and database (all `stargazer`; it's a local cluster). The claim is on k3s's `local-path` class, so the index survives the pod being restarted or evicted, and the devbox tests check that. Recreating the devbox wipes it along with the store. The pod requests 50m CPU and 128 Mi and is limited to 256 Mi (53 Mi idle, measured 2026-10-20). Its readiness probe runs `pg_isready` over TCP, because the image's first-boot init server listens on its socket only.
 
-**Fix (in code, target-agnostic):** `app.dashboard_launch` puts `FLYTE_AWS_ENDPOINT` on the replica URL as `?endpoint=` (Litestream then defaults to path-style addressing) and copies the `FLYTE_AWS_*` keys to `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` unless those are already set. On Union neither variable is set and the pod's role supplies credentials.
+**Not Flyte's own Postgres.** The devbox already runs a Postgres for flyte-binary's metadata, embedded in the devbox container and exposed as `postgresql.flyte` (NodePort 30001). The index stays off it, so it doesn't depend on how the devbox image keeps Flyte's state.
+
+**From this machine:** `kubectl port-forward -n stargazer svc/postgres 15432:5432`, then connect to `postgresql://stargazer:stargazer@127.0.0.1:15432/stargazer`. The devbox tests read what pods stored this way (`index_query` in `tests/devbox/conftest.py`). A forward dies with the pod it reached, so reopen it after a restart.
 
 ---
 
@@ -141,7 +144,7 @@ The `verify-stargazer` skill's devbox recipe (`features/devbox-asset-storage.md`
 
 **Workaround:** Keep `outer-coordinator + concurrent children ≤ ~7.5 GiB`. The scRNA pipeline runs sequentially so a single child at `memory=("2Gi", "6Gi")` fits. Parallel fan-outs need smaller per-child limits.
 
-Scheduling counts requests, not limits, and a coordinator holds its request while it waits on its children. About 2 GiB is already requested by the cluster's own pods and the dashboard (2,094 Mi measured 2026-10-14), leaving ~5.8 GiB. The germline workflow holds three `gatk_env` pods at once (the workflow, `prepare_reference` or `preprocess_sample`, and the tool), so `gatk_env` requests 1 GiB: at 2 GiB the third pod wouldn't fit.
+Scheduling counts requests, not limits, and a coordinator holds its request while it waits on its children. About 2 GiB is already requested by the cluster's own pods and the dashboard (2,094 Mi measured 2026-10-14), plus 128 Mi for the index's Postgres, leaving ~5.7 GiB. The germline workflow holds three `gatk_env` pods at once (the workflow, `prepare_reference` or `preprocess_sample`, and the tool), so `gatk_env` requests 1 GiB: at 2 GiB the third pod wouldn't fit.
 
 ---
 

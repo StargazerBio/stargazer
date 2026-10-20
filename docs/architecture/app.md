@@ -89,6 +89,8 @@ Each dashboard also holds its user's **asset index**: the metadata behind `assem
 
 The dashboard can scale to zero, so its disk isn't durable. Litestream copies every change to the bucket, at `<root>/users/<subject>/index`. At startup the dashboard restores the file before serving; at scale-to-zero it syncs one last time after the web server stops. Redeploying a dashboard briefly runs the old and new versions side by side, and a write the old one accepts after the new one has restored would be lost, so a dashboard isn't redeployed while its owner has runs going. `stargazer-users upgrade` goes one user at a time and comes back for busy users until every dashboard is done; one user's runs never hold up another's.
 
+The devbox keeps its index on a Postgres server instead, which the dashboard, its notebook pods and every task pod reach directly, so no index call goes through the dashboard there and nothing needs Litestream.
+
 See [Configuration](configuration.md) for the storage model and `.opencode/reference/architecture/app_internals.md` for the mechanics.
 
 ## Asset Manager
@@ -183,6 +185,6 @@ Both images are content-hashed, so a release builds each once however many users
 
 ## Deploy Targets
 
-One switch, `STARGAZER_TARGET`, picks the backend: `devbox` (the default, a local cluster for lightweight testing) or `union` (the hosted tenant). The app tier is built around the platform's login, which the devbox doesn't have, so the devbox gets one dashboard for a stand-in user instead of per-user onboarding: enough to test the asset index, asset storage and the dashboard locally. The stand-in is never honored on Union. Setup and rationale are in `.opencode/reference/devbox_workarounds.md`. It selects the deployer's Flyte config and where images are pushed. The Flyte domain is set separately, so the same target can serve a development or a production deployment. The per-target table is in `.opencode/reference/architecture/app_internals.md`.
+One switch, `STARGAZER_TARGET`, picks the backend: `devbox` (the default, a local cluster for lightweight testing) or `union` (the hosted tenant). The app tier is built around the platform's login, which the devbox doesn't have, so the devbox gets one dashboard for a stand-in user instead of per-user onboarding, and a Postgres server for the asset index: enough to test asset storage and the dashboard locally. The stand-in is never honored on Union. Setup and rationale are in `.opencode/reference/devbox_workarounds.md`. It selects the deployer's Flyte config and where images are pushed. The Flyte domain is set separately, so the same target can serve a development or a production deployment. The per-target table is in `.opencode/reference/architecture/app_internals.md`.
 
 The project `Dockerfile`'s `stargazer` is the hosted notebook image's recipe as a local `docker run`, defined separately in the `Dockerfile`; it is not the hosted build. Build/publish detail in `.opencode/reference/architecture/app_internals.md`.

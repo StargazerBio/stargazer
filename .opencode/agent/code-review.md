@@ -42,7 +42,7 @@ You MUST scrutinize how code handles these environment-driven behaviors (see `co
 PINATA_JWT                  → Turns on the public tier (Pinata's public network; no default)
 PINATA_GATEWAY              → Download gateway URL (default: https://dweb.link)
 STARGAZER_STORE_ROOT        → Object-store root for asset bytes (default: ~/.stargazer/store)
-STARGAZER_INDEX_URL         → Asset index: SQLite path or dashboard URL (default: ~/.stargazer/index.db)
+STARGAZER_INDEX_URL         → Asset index: SQLite path, postgresql:// URL, or dashboard URL (default: ~/.stargazer/index.db)
 STARGAZER_LOCAL             → Scratch space and download cache (default: ~/.stargazer/local)
 ```
 

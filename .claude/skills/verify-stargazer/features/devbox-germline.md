@@ -11,12 +11,12 @@
 
 ## How to get to it (user POV)
 
-- With the devbox up and the dashboard deployed (see [Asset storage on the devbox](./devbox-asset-storage.md)), export the three devbox storage settings and keep the store port-forward open, as in `docs/guides/contributing.md` → Running on the Devbox.
+- With the devbox up and `cli/devbox-setup.sh` applied (see [Asset storage on the devbox](./devbox-asset-storage.md)), export the three devbox storage settings and keep the store port-forward open, as in `docs/guides/contributing.md` → Running on the Devbox.
 - Store a reference with `build` set and a sample's R1 and R2 under one `sample_id`, then call `flyte.run(germline_short_variant_discovery, build=..., sample_ids=[...], cohort_id=...)`.
 
 ## Driving it
 
-Driven by the devbox test tier, `tests/devbox/test_germline.py`. The session deploys the dashboard and passes the devbox storage settings to every run, so nothing needs exporting first.
+Driven by the devbox test tier, `tests/devbox/test_germline.py`. The session passes the devbox storage settings to every run, so nothing needs exporting first, and these tests don't need the dashboard.
 
 Preconditions: the same as [Asset storage on the devbox](./devbox-asset-storage.md).
 

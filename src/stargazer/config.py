@@ -18,8 +18,9 @@ Rules:
 - STARGAZER_STORE_ROOT: Where asset bytes are stored — a local directory or a
   bucket URI (e.g. `s3://union-us-west-2-stargazerbio/stargazer`). Defaults
   to ~/.stargazer/store.
-- STARGAZER_INDEX_URL: The asset index — a SQLite file path, or a user's
-  dashboard URL on Union. Defaults to ~/.stargazer/index.db.
+- STARGAZER_INDEX_URL: The asset index — a SQLite file path, a
+  `postgresql://` URL (the devbox's), or a user's dashboard URL on Union.
+  Defaults to ~/.stargazer/index.db.
 - STARGAZER_OWNER: The Union subject that owns new assets (their folder in
   the store, and `_owner`). Unset locally.
 - STARGAZER_TARGET: Which Flyte backend images and deploys aim at — `devbox`
