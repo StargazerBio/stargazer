@@ -167,8 +167,6 @@ Asset-manager routes are a separate router (`app/assets.py`, `include_router`ed 
 | `POST /assets/update` | public: signed in + record **owner** / private: **owner** | Public: fail-closed ownership (record's `_owner` must equal the user's subject, read fresh) → `build_asset()` validate patch → re-stamp `_owner` → `PinataClient.update_metadata()` merge → updated record. A key or value over `MAX_KEYVALUE_CHARS` (250) is a 400, raised before the PUT, which would otherwise answer 256+ with a bare "malformed" 400. Private: `build_asset()` validate → `index.merge` with `_owner` restamped (404 for an unknown CID) |
 | `GET /assets/download/{cid}?network=` | public: none / private: **owner** | Public: 302 redirect to `PINATA_GATEWAY`. Private: the row's `uri` streamed back through the dashboard as an attachment (`flyte.storage.get_stream`), not a presigned redirect: one path for a local store and the bucket |
 
-The separate `GET /assets` page is gone with ticket `assets-on-dashboard-home` (a test asserts the 404); the browser renders on `/`.
-
 **Owner** on the private routes is the dashboard's: the signed-in subject must equal `SG_OWNER_SUBJECT` (403 otherwise, 401 anonymous). Locally, with no owner baked in, any signed-in user passes. A `network` other than `private` or `public` is a 400. `/assets/sign` mints public URLs only.
 
 ## Asset Manager (mechanics)
