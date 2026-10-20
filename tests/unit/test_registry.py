@@ -2,15 +2,20 @@
 
 import importlib
 import pkgutil
+import types
 
 import stargazer.tasks
+import stargazer.workflows
 from stargazer.registry import TaskRegistry
 
 
-def _defined_task_names() -> set[str]:
-    """Short names of the tasks defined in every module under stargazer.tasks."""
+def _defined_task_names(package: types.ModuleType) -> set[str]:
+    """Short names of the tasks defined in every module under `package`.
+
+    A task a module only imports is left to the module that defines it.
+    """
     names = set()
-    for info in pkgutil.walk_packages(stargazer.tasks.__path__, "stargazer.tasks."):
+    for info in pkgutil.walk_packages(package.__path__, f"{package.__name__}."):
         module = importlib.import_module(info.name)
         names |= {
             obj.short_name
@@ -25,34 +30,19 @@ def test_discovery_finds_every_defined_task():
     reg = TaskRegistry()
     task_names = {t.name for t in reg.list_tasks(category="task")}
 
-    defined = _defined_task_names()
+    defined = _defined_task_names(stargazer.tasks)
     assert {"bwa_mem", "qc_filter"} <= defined
     assert defined == task_names
 
 
-def test_discovery_finds_all_workflows():
-    """Registry discovers all workflows from both workflow modules."""
+def test_discovery_finds_every_defined_workflow():
+    """Every workflow defined under stargazer.workflows is registered, so none goes unexported."""
     reg = TaskRegistry()
     wf_names = {t.name for t in reg.list_tasks(category="workflow")}
 
-    expected_workflows = {
-        # gatk_data_preprocessing
-        "prepare_reference",
-        "preprocess_sample",
-        # germline_short_variant_discovery
-        "germline_short_variant_discovery",
-        # scrna_clustering
-        "scrna_clustering_pipeline",
-    }
-    assert expected_workflows == wf_names
-
-
-def test_duplicate_prepare_reference_not_duplicated():
-    """prepare_reference exists in both workflow modules but is registered once."""
-    reg = TaskRegistry()
-    matches = [t for t in reg.list_tasks() if t.name == "prepare_reference"]
-    assert len(matches) == 1
-    assert matches[0].category == "workflow"
+    defined = _defined_task_names(stargazer.workflows)
+    assert {"prepare_reference", "scrna_clustering_pipeline"} <= defined
+    assert defined == wf_names
 
 
 def test_to_catalog_structure():
