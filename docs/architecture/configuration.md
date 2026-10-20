@@ -24,7 +24,7 @@ All env var defaults are set in `config.py`. If set (even to empty string), the 
 | Variable | Purpose | Default | Required |
 |----------|---------|---------|----------|
 | `STARGAZER_STORE_ROOT` | Object-store root: a directory or a bucket URI | `~/.stargazer/store` | No |
-| `STARGAZER_INDEX_URL` | Index: a SQLite file path, or a dashboard URL | `~/.stargazer/index.db` | No |
+| `STARGAZER_INDEX_URL` | Index: a SQLite file path, a `postgresql://` URL, or a dashboard URL | `~/.stargazer/index.db` | No |
 | `STARGAZER_LOCAL` | Scratch space for task outputs, and the download cache | `~/.stargazer/local` | No |
 | `STARGAZER_OWNER` | Owner of new assets: their folder in the store, and `_owner` | None (unset → `local`) | No |
 | `PINATA_JWT` | Turns on the public tier | None (unset) | Only for public data |
@@ -33,7 +33,7 @@ All env var defaults are set in `config.py`. If set (even to empty string), the 
 | `STARGAZER_REGISTRY` | Image push registry | `localhost:30000` on `devbox`; unset on `union` (the builder's own registry) | No |
 | `FLYTE_DOCKER_BUILD_EXTRA_ARGS` | Extra flags for local image builds | `--provenance=false` on `devbox` | No |
 
-`STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` are forwarded into task pods only when set explicitly. A pod can't use the local default store or index, so a remote run submitted locally with the defaults has nowhere shared to write. Local-to-cluster storage is tracked on the roadmap.
+`STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` are forwarded into task pods only when set explicitly. A pod can't use the local default store or index, so a remote run submitted locally with the defaults has nowhere shared to write.
 
 On Union, `PINATA_JWT` is a Flyte secret that every task environment, dashboard and notebook pod declares, so the key is set wherever Stargazer runs and its value never appears in a task's or an app's spec.
 

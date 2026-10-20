@@ -15,6 +15,7 @@ dependencies = [
     "loguru>=0.7.3",
     "pyyaml>=6.0.3",
     "httpx>=0.27,<1",
+    "psycopg[binary]>=3.2,<4",
 ]
 
 [project.optional-dependencies]
@@ -73,6 +74,7 @@ markers = [
     "tasks: tests/tasks; each task's image, via cli/docker_task_tests.py",
     "devbox: tests/devbox; the local devbox, with -m devbox",
     "pinata: tests/pinata; the real Pinata API (uploads up to ~100 MB), with -m pinata",
+    "postgres: tests/postgres; a throwaway Postgres container via Docker, with -m postgres",
 ]
 filterwarnings = [
     # Ignore Pydantic deprecation warnings from flyte package (third-party)

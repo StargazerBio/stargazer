@@ -184,7 +184,8 @@ The project follows this structure:
   - `unit/` - Unit tests for the rest: the app tier (`app/`), registry, MCP marshalling, bundles, `Asset` itself
   - `devbox/` - The devbox tier: dashboard deploy, asset storage across pods, the germline workflow. `pod_tasks.py` holds what runs in their pods
   - `pinata/` - The pinata tier: the Pinata client against the real API
-  - Each top-level directory here belongs to exactly one tier, and its tests carry that tier's marker (`TIERS` in `conftest.py`; `.opencode/agent/test.md` → Test Tiers). `unit` (`assets/`, `notebooks/`, `unit/`, `utils/`) is a bare `uv run --all-extras pytest` and runs in pre-commit on every commit; `tasks` (`tasks/`) runs in each task's image via `cli/docker_task_tests.py`; `devbox` runs against the local devbox with `-m devbox`; `pinata` calls the real Pinata API with `-m pinata`. A new directory needs a tier in `TIERS`. A test never skips: outside its tier it's deselected, inside it a missing tool or service fails
+  - `postgres/` - The postgres tier: the index tests against a throwaway Postgres container
+  - Each top-level directory here belongs to exactly one tier, and its tests carry that tier's marker (`TIERS` in `conftest.py`; `.opencode/agent/test.md` → Test Tiers). `unit` (`assets/`, `notebooks/`, `unit/`, `utils/`) is a bare `uv run --all-extras pytest` and runs in pre-commit on every commit; `tasks` (`tasks/`) runs in each task's image via `cli/docker_task_tests.py`; `devbox` runs against the local devbox with `-m devbox`; `pinata` calls the real Pinata API with `-m pinata`; `postgres` runs the index tests against a Postgres container with `-m postgres`. A new directory needs a tier in `TIERS`. A test never skips: outside its tier it's deselected, inside it a missing tool or service fails
 - `docs/` - Project documentation
   - `architecture/` - System design and contracts
   - `guides/` - Step-by-step walkthroughs with code examples
