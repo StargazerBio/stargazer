@@ -8,7 +8,7 @@
 # stargazer = { path = "/stargazer", editable = true }
 # ///
 """
-### Workspace template — barebones notebook skeleton.
+### Basic template — barebones notebook skeleton.
 
 A choose-your-own-adventure scaffold for authoring your own notebook from
 scratch: pick the image it runs on, ingest a file, define an asset for it,

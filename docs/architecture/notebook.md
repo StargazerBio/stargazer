@@ -125,7 +125,7 @@ A notebook runs in one mode at a time — see [App → Core Concepts](app.md#cor
 
 ## Adding Notebooks
 
-- **Workspace notebooks** are created from the dashboard (blank or template seed) and live in the user's workspace store — no repo change involved.
+- **Workspace notebooks** are created from the dashboard (the blank or basic template in `notebooks/templates/`) and live in the user's workspace store — no repo change involved.
 - **Tutorials and Workflow notebooks** ship in the image: add the `.py` file (standard marimo format, importing only `stargazer` public APIs) under `src/stargazer/notebooks/tutorials/` or `notebooks/workflows/`, register a tile in the `NOTEBOOKS` tuple in `app/notebooks.py`, and it lands when onboarding next builds the `notebook-app` image (`stargazer-users upgrade`).
 
 ## In-Notebook AI

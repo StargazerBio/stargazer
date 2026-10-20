@@ -308,13 +308,13 @@ def test_create_writes_a_seeded_notebook_to_the_users_store(client):
     assert _get(BOB, "my-qc.py") is None
 
 
-def test_create_from_template_uses_the_template_seed(client):
-    """The template seed is a different notebook from the blank one."""
+def test_create_from_basic_uses_the_basic_template(client):
+    """The basic template is a different notebook from the blank one."""
     _as(client)
     client.post("/workspace/create", data={"name": "a", "source": "blank"})
-    client.post("/workspace/create", data={"name": "b", "source": "template"})
+    client.post("/workspace/create", data={"name": "b", "source": "basic"})
     assert "### Blank workspace notebook." in _get(ALICE, "a.py")
-    assert "### Workspace template" in _get(ALICE, "b.py")
+    assert "### Basic template" in _get(ALICE, "b.py")
 
 
 def test_create_conflict_is_409(client):
@@ -329,9 +329,7 @@ def test_create_conflict_is_409(client):
 def test_create_rejects_reserved_name(client):
     """Seed names can't be used for user notebooks."""
     _as(client)
-    assert (
-        client.post("/workspace/create", data={"name": "template"}).status_code == 400
-    )
+    assert client.post("/workspace/create", data={"name": "basic"}).status_code == 400
 
 
 def test_create_without_store_is_503(client, monkeypatch):

@@ -58,15 +58,12 @@ COPY --chown=flyte:flyte app/ /stargazer/app/
 RUN mkdir -p /workspace /snapshots /home/flyte/.stargazer \
     && chown -R flyte:flyte /workspace /snapshots /home/flyte/.stargazer
 
-# The notebooks a new /workspace starts with: the SDK's tutorials and pipeline
-# notebooks in their folders, and its workspace seeds (blank, template) at the
-# top, where the user's own notebooks go. Without the package files.
-RUN mkdir /opt/notebooks \
-    && cp -r /stargazer/src/stargazer/notebooks/tutorials \
-        /stargazer/src/stargazer/notebooks/workflows \
-        /stargazer/src/stargazer/notebooks/workspace/. /opt/notebooks/ \
-    && rm -rf /opt/notebooks/__init__.py /opt/notebooks/*/__init__.py \
-        /opt/notebooks/__pycache__ /opt/notebooks/*/__pycache__
+# What a new /workspace starts with: the SDK's whole notebooks folder
+# (templates, tutorials, workflows), without the package files.
+RUN mkdir /opt/workspace \
+    && cp -r /stargazer/src/stargazer/notebooks /opt/workspace/ \
+    && find /opt/workspace \( -name __init__.py -o -name __pycache__ \) \
+        -prune -exec rm -rf {} +
 
 ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONPATH="/usr/local/lib" \
@@ -86,4 +83,4 @@ RUN flyte create config --local-persistence -o /home/flyte/.flyte/config.yaml
 # runs in a sandbox built from its own header. A file already there is the
 # user's and is left alone (`cp -n`).
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "cp -rn /opt/notebooks/. /workspace/ && echo 'Stargazer notebooks: http://localhost:8080' && exec launch-notebook.sh edit /workspace"]
+ENTRYPOINT ["sh", "-c", "cp -rn /opt/workspace/. /workspace/ && echo 'Stargazer notebooks: http://localhost:8080' && exec launch-notebook.sh edit /workspace"]

@@ -27,14 +27,14 @@ NOTEBOOKS_PKG_DIR = Path(stargazer.notebooks.__file__).parent
 _IMAGE_NOTEBOOKS_PREFIX = f"{IMAGE_WORKDIR}/src/stargazer/notebooks/"
 
 
-# Seed notebooks shipped at `notebooks/workspace/{slug}.py`.
+# Seed notebooks shipped at `notebooks/templates/{slug}.py`.
 # `/workspace/create` copies one of these under the user's chosen name. They
 # are NOT rendered as dashboard tiles (only user-created notebooks are): the
-# template is linked from the Workspace description, and both slugs are
+# basic template is linked from the Workspace description, and both slugs are
 # reserved create names + filtered out of the tile listing.
-TEMPLATE_SLUG = "template"
+BASIC_SLUG = "basic"
 BLANK_SLUG = "blank"
-SEED_SLUGS = frozenset({TEMPLATE_SLUG, BLANK_SLUG})
+SEED_SLUGS = frozenset({BASIC_SLUG, BLANK_SLUG})
 
 
 @dataclass(frozen=True)
@@ -132,8 +132,8 @@ def shipped_source(path_in_image: str) -> str | None:
 
 
 def seed_source(seed: str) -> str | None:
-    """The source of a create seed (`blank` or `template`), or None."""
+    """The source of a create seed (`blank` or `basic`), or None."""
     if seed not in SEED_SLUGS:
         return None
-    path = NOTEBOOKS_PKG_DIR / "workspace" / f"{seed}.py"
+    path = NOTEBOOKS_PKG_DIR / "templates" / f"{seed}.py"
     return path.read_text() if path.is_file() else None
