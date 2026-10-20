@@ -23,8 +23,9 @@ and the keys are copied to the `AWS_*` names Litestream reads. Without them
 the pod's role supplies credentials.
 
 Without a bucket root or an owner (local development, a deploy with no
-store) there is nowhere durable to replicate to, and the launcher execs
-uvicorn directly.
+store) there is nowhere durable to replicate to, and with a Postgres index
+(the devbox's) there is no file to replicate: the launcher execs uvicorn
+directly.
 
 The exec chain matters as much as in the notebook pods (see
 `app/launch-notebook.sh`): the AppEnvironment args start with `exec`, Python
@@ -52,11 +53,17 @@ SERVER = [
 
 _REGION_KEYS = ("AWS_REGION", "AWS_DEFAULT_REGION", "STARGAZER_STORE_REGION")
 
+# `stargazer.utils.index.POSTGRES_SCHEMES`, spelled out so the launcher
+# imports nothing from stargazer before it execs.
+_POSTGRES = ("postgresql://", "postgres://")
+
 
 def replica_url(env: dict) -> str | None:
     """The bucket location the index replicates to, or None without one.
 
-    Needs a bucket store root (`s3://…`) and the dashboard's owner. The
+    Needs a bucket store root (`s3://…`), the dashboard's owner, and an index
+    that is a SQLite file: a Postgres index (the devbox's) is durable on its
+    own server. The
     bucket's region rides on the URL (`?region=`), taken from `AWS_REGION`,
     `AWS_DEFAULT_REGION` or `STARGAZER_STORE_REGION`. It has to be given:
     without it Litestream looks the region up, which needs
@@ -66,7 +73,8 @@ def replica_url(env: dict) -> str | None:
     """
     root = env.get("STARGAZER_STORE_ROOT", "")
     owner = env.get("SG_OWNER_SUBJECT", "")
-    if not root.startswith("s3://") or not owner:
+    index = env.get("STARGAZER_INDEX_URL", "")
+    if not root.startswith("s3://") or not owner or index.startswith(_POSTGRES):
         return None
     url = f"{root.rstrip('/')}/users/{owner}/index"
     query = {}

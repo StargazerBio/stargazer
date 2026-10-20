@@ -5,7 +5,9 @@ On Union each user's dashboard owns their asset index: a SQLite file on the
 dashboard pod (`STARGAZER_INDEX_URL`, a local path there), kept durable in the
 bucket by Litestream. This router exposes it to the user's task and notebook
 pods, which reach the dashboard at its in-cluster address and call it through
-`stargazer.utils.index.HttpIndex`.
+`stargazer.utils.index.HttpIndex`. On the devbox the index is a Postgres
+database that pods reach directly; the dashboard opens it too, for the asset
+browser, and nothing calls these routes there.
 
 The routes run `SqliteIndex`'s operations and nothing else:
 
@@ -32,13 +34,13 @@ import os
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 
-from stargazer.utils.index import SqliteIndex
+from stargazer.utils.index import HttpIndex, PostgresIndex, SqliteIndex
 from stargazer.utils.storage import make_index
 
 router = APIRouter()
 
 # The dashboard's index, opened on first use; tests swap in their own.
-_index: SqliteIndex | None = None
+_index: SqliteIndex | PostgresIndex | None = None
 
 
 class Record(BaseModel):
@@ -62,15 +64,19 @@ class Patch(BaseModel):
     keyvalues: dict[str, str]
 
 
-def _get_index() -> SqliteIndex:
-    """The dashboard's own SQLite index (`STARGAZER_INDEX_URL`, a local path)."""
+def _get_index() -> SqliteIndex | PostgresIndex:
+    """The dashboard's own index (`STARGAZER_INDEX_URL`).
+
+    A local SQLite file on Union, a Postgres database on the devbox. Never a
+    dashboard URL: the dashboard would be calling itself.
+    """
     global _index
     if _index is None:
         index = make_index(os.environ["STARGAZER_INDEX_URL"])
-        if not isinstance(index, SqliteIndex):
+        if isinstance(index, HttpIndex):
             raise HTTPException(
                 status_code=500,
-                detail="the dashboard's STARGAZER_INDEX_URL must be a local file",
+                detail="the dashboard's STARGAZER_INDEX_URL can't be a dashboard",
             )
         _index = index
     return _index

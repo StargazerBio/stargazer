@@ -22,7 +22,8 @@ _spec.loader.exec_module(devbox_dashboard)
 
 def test_deploys_the_dashboard_for_a_stand_in_on_the_devbox_store(monkeypatch):
     """One dashboard in the default project for a stand-in user, on the
-    devbox's bucket, with the storage port-forward open while it uploads."""
+    devbox's bucket and Postgres index, with the storage port-forward open
+    while it uploads."""
     served, steps = {}, []
 
     def fake_servecontext(**ctx):
@@ -57,6 +58,7 @@ def test_deploys_the_dashboard_for_a_stand_in_on_the_devbox_store(monkeypatch):
             "STARGAZER_OWNER",
             "STARGAZER_WORKSPACE_ROOT",
             "STARGAZER_STORE_ROOT",
+            "STARGAZER_INDEX_URL",
         )
     } == {
         "SG_STAND_IN_SUBJECT": "devbox-user",
@@ -64,6 +66,10 @@ def test_deploys_the_dashboard_for_a_stand_in_on_the_devbox_store(monkeypatch):
         "STARGAZER_OWNER": "devbox-user",
         "STARGAZER_WORKSPACE_ROOT": "s3://flyte-data/stargazer",
         "STARGAZER_STORE_ROOT": "s3://flyte-data/stargazer",
+        "STARGAZER_INDEX_URL": (
+            "postgresql://stargazer:stargazer@"
+            "postgres.stargazer.svc.cluster.local:5432/stargazer"
+        ),
     }
 
 

@@ -31,6 +31,8 @@ integration. It has three jobs:
 The dashboard also owns the user's asset index (`app.index_api`): a SQLite
 file on its own disk, served to the user's task and notebook pods at the
 dashboard's in-cluster address, and kept durable in the bucket by Litestream.
+On the devbox the index is a Postgres server instead, which the dashboard
+and its pods all reach directly.
 
 The asset manager (`app.assets`) reaches Pinata with the org's key, which the
 dashboard gets as a Flyte secret: injected into the pod, never in the app
@@ -103,6 +105,7 @@ from stargazer.config import (
     STARGAZER_SECRETS,
     logger,
 )
+from stargazer.utils.index import POSTGRES_SCHEMES
 
 # ---------------------------------------------------------------------------
 # Flyte AppEnvironment for the dashboard itself.
@@ -238,12 +241,18 @@ _STORE_OFF = "saving notebooks isn't available on this deployment"
 
 
 def _index_url() -> str:
-    """This dashboard's in-cluster address, where pods send index calls.
+    """Where this dashboard's notebook pods, and the runs they start, index.
 
-    App pods get `INTERNAL_APP_ENDPOINT_PATTERN` from the platform; outside
-    one, the address is built from the dashboard's project and domain the
-    same way (`<app>.<project>-<domain>.svc.cluster.local`).
+    A Postgres index (the devbox's) is a server every pod reaches, so pods
+    get the dashboard's own URL. A SQLite index is a file on the dashboard's
+    disk, so pods get the dashboard's in-cluster address: App pods get
+    `INTERNAL_APP_ENDPOINT_PATTERN` from the platform; outside one, the
+    address is built from the dashboard's project and domain the same way
+    (`<app>.<project>-<domain>.svc.cluster.local`).
     """
+    own = os.environ.get("STARGAZER_INDEX_URL", "")
+    if own.startswith(POSTGRES_SCHEMES):
+        return own
     pattern = os.environ.get("INTERNAL_APP_ENDPOINT_PATTERN") or (
         f"http://{{app_fqdn}}.{config.FLYTE_PROJECT}-{config.FLYTE_DOMAIN}"
         ".svc.cluster.local"
