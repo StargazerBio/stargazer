@@ -452,7 +452,7 @@ def _():
         FAI, BED + index. Stargazer handles this with a convention:
 
         > A companion asset stores the parent's CID in `companion_of`.
-        > `parent.fetch()` queries for assets whose `companion_of` is
+        > `parent.fetch()` finds the assets whose `companion_of` is
         > its CID and downloads them too.
 
         Real example from `src/stargazer/assets/reference.py`:
@@ -475,12 +475,16 @@ def _():
         does:
 
         1. Download the FASTA itself
-        2. `assemble(companion_of=ref.cid)`
+        2. Find every asset in your storage whose `companion_of` is
+           `ref.cid`, or the public ones if you have none
         3. Download every match into the same folder
         4. Return the FASTA's local path
 
         So the BAI lands next to the BAM, the FAI next to the FASTA,
-        without each task having to know about the pairing.
+        without each task having to know about the pairing. Your own
+        companions and public ones are never mixed: a public
+        reference you haven't indexed gets the public index, and one
+        you have indexed gets only yours.
 
         A `<parent>_cid` field is a different link: it records which
         asset this one was made from, and

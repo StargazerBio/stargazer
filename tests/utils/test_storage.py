@@ -7,19 +7,29 @@ from flyte.io import File
 from flyte.types import TypeEngine
 
 import stargazer.utils.storage as storage_mod
-from stargazer.assets import R1, Alignment, Reference, ReferenceIndex, assemble
+from stargazer.assets import (
+    R1,
+    AlignerIndex,
+    Alignment,
+    Reference,
+    ReferenceIndex,
+    assemble,
+)
 from stargazer.utils.cid import compute_cid
 from stargazer.utils.index import SqliteIndex
 from stargazer.utils.storage import StorageClient
 
 
-def _client(root: Path, cache: str = "cache", public=None) -> StorageClient:
+def _client(
+    root: Path, cache: str = "cache", public=None, gateway: str | None = None
+) -> StorageClient:
     """A client on a local store and index under `root`, with its own cache dir."""
     return StorageClient(
         local_dir=root / cache,
         store_root=str(root / "store"),
         index=SqliteIndex(root / "index.db"),
         public=public,
+        gateway=gateway,
     )
 
 
@@ -155,6 +165,93 @@ async def test_fetch_resolves_a_bare_cid_through_the_index(
 
     assert local.name == "s1.bam"
     assert local.read_bytes() == b"BAM\x07"
+
+
+class _PublicCompanions:
+    """A public tier whose files sit in a local gateway dir; it records each query."""
+
+    def __init__(self, gateway: Path):
+        self.gateway = gateway
+        self.records = []
+        self.queries = []
+
+    def add(self, name: str, data: bytes, **keyvalues: str) -> None:
+        """Publish `data` as `name`, served at <gateway>/ipfs/<cid>."""
+        staged = _write(self.gateway / "staging" / name, data)
+        cid = compute_cid(staged)
+        staged.rename(_write(self.gateway / "ipfs" / cid, b""))
+        self.records.append({"cid": cid, "name": name, "keyvalues": keyvalues})
+
+    async def query(self, keyvalues):
+        self.queries.append(dict(keyvalues))
+        return [
+            r
+            for r in self.records
+            if all(r["keyvalues"].get(k) == v for k, v in keyvalues.items())
+        ]
+
+
+def _listing(directory: Path) -> dict[str, bytes]:
+    """Every file in `directory`, name to bytes."""
+    return {p.name: p.read_bytes() for p in directory.iterdir()}
+
+
+@pytest.mark.asyncio
+async def test_fetch_keeps_own_companions_unmixed_with_public_ones(
+    tmp_path, monkeypatch
+):
+    """A user with companions gets only theirs, and Pinata isn't asked.
+
+    The public tier holds a differently built bwa index for the same
+    reference: a `ref.fa.bwt` with other bytes and a `ref.fa.sa` the user
+    doesn't have. Mixing them would hand bwa an index from two builds.
+    """
+    public = _PublicCompanions(tmp_path / "gateway")
+    c = _client(tmp_path, public=public, gateway=str(public.gateway))
+    monkeypatch.setattr(storage_mod, "default_client", c)
+    ref = Reference()
+    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
+    await AlignerIndex().update(
+        _write(tmp_path / "w" / "ref.fa.bwt", b"my bwt"),
+        aligner="bwa",
+        build="T",
+        companion_of=ref.cid,
+    )
+    public.add("ref.fa.bwt", b"public bwt", companion_of=ref.cid)
+    public.add("ref.fa.sa", b"public sa", companion_of=ref.cid)
+
+    pod = _client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
+    monkeypatch.setattr(storage_mod, "default_client", pod)
+    local = await ref.fetch()
+
+    assert _listing(local.parent) == {
+        "ref.fa": b">chr1\nACGT\n",
+        "ref.fa.bwt": b"my bwt",
+    }
+    assert public.queries == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_fills_in_public_companions_when_the_user_has_none(
+    tmp_path, monkeypatch
+):
+    """A private copy of a public reference, with no companions of its own, gets the public ones."""
+    public = _PublicCompanions(tmp_path / "gateway")
+    c = _client(tmp_path, public=public, gateway=str(public.gateway))
+    monkeypatch.setattr(storage_mod, "default_client", c)
+    ref = Reference()
+    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
+    public.add("ref.fa.fai", b"chr1\t4\t6\t4\t5\n", companion_of=ref.cid)
+
+    pod = _client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
+    monkeypatch.setattr(storage_mod, "default_client", pod)
+    local = await ref.fetch()
+
+    assert _listing(local.parent) == {
+        "ref.fa": b">chr1\nACGT\n",
+        "ref.fa.fai": b"chr1\t4\t6\t4\t5\n",
+    }
+    assert public.queries == [{"companion_of": ref.cid}]
 
 
 @pytest.mark.asyncio

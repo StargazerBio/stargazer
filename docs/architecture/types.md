@@ -70,7 +70,7 @@ A bare `Asset` (no `_asset_key`) carries a free-form `keyvalues` dict, serialize
 
 ### Core Methods
 
-- `fetch()` — downloads self, then every asset with `companion_of = self.cid` into the same directory; returns the local path
+- `fetch()` — downloads self, then every asset with `companion_of = self.cid` into the same directory (the user's own, or the public tier's when the user has none); returns the local path
 - `update(path, **kwargs)` — sets the given attributes, stores the file, and sets `cid` and `path`
 - `to_dict()` / `from_dict()` — JSON serialization
 
@@ -83,7 +83,7 @@ See the [Catalog](../reference/catalog.md#asset-types) for a complete list of re
 A companion is a file a tool expects beside another, such as an index or a sequence dictionary. It records that file's CID in its `companion_of` keyvalue. When `fetch()` is called on an asset:
 
 1. Downloads the asset itself
-2. Queries for assets whose `companion_of` equals this asset's CID
+2. Queries for assets whose `companion_of` equals this asset's CID: the user's own, or the public tier's when the user has none, never a mix of the two
 3. Downloads them into the same directory, so tools find an index next to its file
 4. Returns the asset's local path
 
