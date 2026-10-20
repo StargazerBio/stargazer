@@ -34,6 +34,7 @@ for the token gate, and not to the `Dockerfile` (measured: built and ran it).
 - [x] Open the tutorial from `/workspace`: the image copies `assets.py` there unless one exists, so it shows in the Files sidebar and edits land in a mount. The Flyte config moves to `~/.flyte`, out of the sidebar and out from under a `/workspace` mount
 - [x] Serve every SDK notebook: the tutorials and workflow notebooks are copied into `/workspace/{tutorials,workflows}/` (existing files kept) and marimo serves the directory, each notebook in a sandbox from its own header
 - [x] The `blank` and `template` seeds land at the top of `/workspace`; Getting Started says to start notebooks from them
+- [x] The SDK's seeds move to `notebooks/templates/` (`template.py` → `basic.py`, dashboard slug and option follow), and the image copies the whole `notebooks/` folder to `/workspace/notebooks/`
 - [ ] Republish `ghcr.io/stargazerbio/stargazer:latest` (multi-arch, `docs/guides/contributing.md`)
 
 ## Verification
@@ -70,3 +71,11 @@ Fourth round, measured 2026-10-20: `/workspace` starts with `blank.py`,
 notebook from marimo's "Create a new notebook" fails `import stargazer`
 with `ModuleNotFoundError`, and marimo offers to install `stargazer` from
 PyPI, which isn't this project.
+
+Fifth round, measured 2026-10-20: `/workspace` starts with
+`notebooks/{templates,tutorials,workflows}/` and nothing else; each
+notebook serves by its new path. In Chrome, Run all on
+`notebooks/templates/basic.py` rendered its first sections with 0 errors.
+The dashboard's create flow is covered by the unit tests
+(`test_create_from_basic_uses_the_basic_template`, reserved name `basic`),
+not driven on a deployed dashboard.
