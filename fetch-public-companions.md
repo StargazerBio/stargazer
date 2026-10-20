@@ -64,3 +64,18 @@ user's own index holds none for its CID (`StorageClient.companions`).
 
 A related case this decision doesn't change is ticket
 `stale-companion-cache`.
+
+## Verification (on `fix/fetch-public-companions`)
+
+- Unit tests `test_fetch_keeps_own_companions_unmixed_with_public_ones`
+  (failed before the fix on the mixed `ref.fa.sa`, passes after) and
+  `test_fetch_fills_in_public_companions_when_the_user_has_none`
+  (mutation-checked); unit tier 504 passed.
+- Real Pinata API and gateway, isolated store, one throwaway public
+  companion deleted afterwards: with no companions of its own the parent
+  gets the public `.fai` (1 Pinata query); with its own `.fai` it gets only
+  that, 0 Pinata queries (1 on `main`).
+- Tasks tier: gatk and general 39 passed, scrna 16 passed.
+- Tutorials `assets` and `tasks` export headless with exit 0; the execution
+  tutorial's local `audit_cohorts` run stores 3 summaries from fetched
+  sheets.
