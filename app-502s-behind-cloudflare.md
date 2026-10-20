@@ -1,6 +1,6 @@
 ---
 title: Dashboard errors sent as 502 never reach the page
-status: next
+status: doing
 priority: normal
 created: 2026-10-19
 ---
