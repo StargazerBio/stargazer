@@ -22,7 +22,24 @@ FileNotFoundError: [Errno 2] No such file or directory: '/usr/local/lib/save_ban
 The published `:latest` (built 2026-10-19) has the new proxy without the file
 (measured: the container's log above, reproduced with the published image).
 
-- [ ] Copy `app/save_banner.html` to `/usr/local/lib/` in the `Dockerfile`
-- [ ] A unit test that the `Dockerfile` ships every file the proxy reads beside itself
-- [ ] Build the image and run the quickstart command against it: the notebook serves on 8080 with the banner spliced in
+With the banner in place the proxy got one line further and died on
+`import jwt`: `1875752` added `pyjwt[crypto]` to the recipe's pip packages
+for the token gate, and not to the `Dockerfile` (measured: built and ran it).
+
+- [x] Copy `app/save_banner.html` to `/usr/local/lib/` in the `Dockerfile`
+- [x] Install `pyjwt[crypto]>=2.8,<3` in the `Dockerfile`'s venv
+- [x] `tests/unit/test_dockerfile.py`: the `Dockerfile` ships every file the proxy reads beside itself, and installs every pip package `notebook_app_img_recipe` pins. Each failed before its fix
+- [x] Build the image and run the quickstart command against it: the notebook serves on 8080 with the banner spliced in
 - [ ] Republish `ghcr.io/stargazerbio/stargazer:latest` (multi-arch, `docs/guides/contributing.md`)
+
+## Verification
+
+Measured 2026-10-20, arm64 build from the branch, tagged
+`ghcr.io/stargazerbio/stargazer:latest` and run with
+`docker run -d -it -p 8080:8080 ghcr.io/stargazerbio/stargazer`:
+`GET /` served the Assets tutorial (200, `<title>assets</title>`) after the
+sandbox venv built, with both `save_banner.html` and `terminal_overlay.html`
+spliced into the page; `GET /__sg__/save-status` returned
+`{"limit_bytes":104857600,"unsaved":[]}`; `import jwt` works in `/opt/venv`
+(pyjwt 2.15.1); gatk, samtools, bwa and claude are on the `PATH`. The
+amd64 build isn't run.
