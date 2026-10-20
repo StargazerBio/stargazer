@@ -3,8 +3,6 @@ title: The devbox's asset index moves to a Postgres pod
 status: next
 priority: high
 created: 2026-10-20
-blocked_by:
-  - postgres-index
 ---
 
 The second of three steps toward the hosted index on Aurora DSQL (ticket

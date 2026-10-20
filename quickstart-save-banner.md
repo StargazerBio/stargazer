@@ -1,6 +1,6 @@
 ---
 title: The docker quickstart crashes on start and opens outside the workspace
-status: review
+status: done
 priority: high
 created: 2026-10-20
 pr: 56
@@ -80,3 +80,30 @@ notebook serves by its new path. In Chrome, Run all on
 The dashboard's create flow is covered by the unit tests
 (`test_create_from_basic_uses_the_basic_template`, reserved name `basic`),
 not driven on a deployed dashboard.
+
+## Outcome
+
+Shipped in #56 (merged 2026-10-20, `2b96e0e`, the branch at `4b7bb01`). The
+image starts: it ships `save_banner.html` and `pyjwt`, and
+`tests/unit/test_dockerfile.py` fails when the `Dockerfile` misses a file
+the proxy reads at startup or a pip package of the hosted recipe. marimo
+runs with `-q` and the image prints `http://localhost:8080`. The Flyte
+config is in `~/.flyte`. The SDK's notebooks folder is copied to
+`/workspace/notebooks/` and marimo serves the directory, each notebook in a
+sandbox from its own header. The create seeds moved to
+`notebooks/templates/`, `template.py` renamed `basic.py`, and the dashboard
+follows. Verified on local arm64 builds and in Chrome (rounds above).
+
+Left:
+
+- The published `:latest` still crashes on start until it's rebuilt and
+  pushed (ticket `republish-stargazer-image`).
+- `41c03a4`, staging the notebooks as `/opt/notebooks` without a wrapper
+  folder, was committed after the branch was pushed and missed the merge. It
+  is on `fix/notebooks-staging` (ticket `notebooks-staging`).
+- The amd64 build wasn't run.
+- marimo warns "Failed to add marimo to script metadata" on each notebook:
+  the headers say `requires-python >=3.11`, stargazer needs 3.13.
+- The README names opencode, which the image doesn't install.
+- Ticket `top-level-notebooks` still plans moving the seeds to `app/` from
+  `notebooks/workspace/`; left as is for now (2026-10-20).

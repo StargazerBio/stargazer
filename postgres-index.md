@@ -1,6 +1,6 @@
 ---
 title: The asset index runs on Postgres as well as SQLite
-status: review
+status: done
 priority: high
 created: 2026-10-20
 pr: 54
@@ -27,13 +27,6 @@ container (Postgres 16, the version DSQL is compatible with).
 - [x] `make_index` dispatch for `postgresql://`
 - [x] Docs: `configuration.md`, the index module's docstring
 
-## State
-
-Done on `feat/postgres-index` (worktree `.claude/worktrees/postgres-index`),
-one commit, rebased onto `main` after #53 (`ed60f91`). Unit (497) and
-postgres (10) tiers pass after the rebase. PR #54. The devbox step (ticket `devbox-postgres-index`)
-starts after this merges.
-
 ## Verified (2026-10-20, branch `feat/postgres-index`)
 
 - **Postgres tier:** 10 passed against `postgres:16-alpine`, after the same
@@ -50,3 +43,12 @@ starts after this merges.
 - **Devbox dashboard and asset storage:** 5 passed (`pytest -m devbox
   tests/devbox/test_dashboard.py tests/devbox/test_asset_storage.py`). The
   dashboard serves its index from the refactored `SqliteIndex`.
+
+## Outcome
+
+Shipped in #54 (merged 2026-10-20, `587e6bc`): `PostgresIndex` beside
+`SqliteIndex` on one SQL implementation, `make_index` dispatch for
+`postgresql://`, and the `postgres` test tier. Verified as above. Local
+users see no change. Left: the devbox's index on a Postgres pod (ticket
+`devbox-postgres-index`), then the hosted index on DSQL (ticket
+`dsql-asset-index`).
