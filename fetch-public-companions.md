@@ -35,3 +35,32 @@ case. Both change what users get, so it's a decision first:
   companions.
 - **One source per filename:** a public companion is dropped when the user
   has one with the same filename.
+
+## Decision: fill gaps only
+
+`fetch()` asks the public tier for an asset's companions only when the
+user's own index holds none for its CID (`StorageClient.companions`).
+`query()` keeps merging both tiers for every other `assemble()` caller.
+
+- The common case, a user's own asset with its own companions, makes no
+  Pinata call.
+- A user's companions and public ones are never mixed, so a tool can't
+  read an index from two builds.
+- A private copy of a public reference with no companions of its own still
+  gets the public `.fai`, `.dict` and aligner index.
+- Accepted cost: a user with only some companions gets no public ones for
+  the rest. The task that needs a missing one raises, naming it, per the
+  rule that a task never makes up for a missing input.
+
+## Repro (measured, unit test and script against `main`)
+
+- Same filename only (user's `ref.fa.bwt`, a public `ref.fa.bwt` with
+  other bytes): no overwrite. The user's bytes land, because `query()`
+  lists the user's rows first and `_materialize` keeps an existing file.
+  Pinata is still queried once.
+- Partial overlap (user's `ref.fa.bwt`; public `ref.fa.bwt` and
+  `ref.fa.sa`): the directory gets `my bwt` beside `public sa`, an index
+  mixed from two builds. This is the bug that reproduced.
+
+A related case this decision doesn't change is ticket
+`stale-companion-cache`.
