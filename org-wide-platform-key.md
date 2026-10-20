@@ -1,6 +1,6 @@
 ---
 title: Org-wide platform key in every pod
-status: backlog
+status: doing
 priority: high
 created: 2026-10-05
 ---
@@ -64,6 +64,22 @@ the dashboard's login gate.
     cleanup still gets the org key (`usbrm9csdrwbx56v7fpx`).
   - App pods weren't probed.
 
+## Dashboard key (2026-10-20)
+
+Onboarding makes API key `stargazer-<project>` (client id
+`395972033688678521` for `u-pryce`) with Union's default policies skipped,
+assigns it the user's `stargazer-<project>` contributor policy, and stores
+it as the project secret `STARGAZER_PROJECT_API_KEY`. Measured on `u-pryce`
+after onboarding it from the branch:
+
+- The key's only policy is `stargazer-u-pryce`. The secret is scoped to
+  `u-pryce/development` and isn't found from `flytesnacks`.
+- A notebook the redeployed dashboard launched (`nb-tasks-run`) has the
+  new key as its `creator`. Every earlier launch shows the org key
+  `393067446845621194`.
+- `/launch/status` lists apps under the key: it showed the notebook once
+  it was active, in step with the admin's view.
+
 ## Union's answer (2026-10-20)
 
 - Per-project injected keys aren't possible today. Delegated auth
@@ -101,10 +117,14 @@ turning `injectSecret` off or shipping delegated auth.
 
 ## Our side, once the org key is gone
 
-- [ ] `stargazer-users onboard` creates the user's key, its policy, and
-  a project-scoped secret holding it; `offboard` removes them.
-- [ ] The dashboard and notebooks get the key as `FLYTE_API_KEY`, which
-  `app/init.py` already prefers.
+- [x] `stargazer-users onboard` creates the user's key, its policy, and
+  a project-scoped secret holding it; `offboard` removes them. `upgrade`
+  makes the key for any dashboard without one. Branch
+  `fix/org-wide-platform-key`.
+- [x] The dashboard gets the key as `FLYTE_API_KEY`, which `app/init.py`
+  prefers over the injected org key, so this works before the org key is
+  gone.
+- [ ] Notebook pods get the key as `FLYTE_API_KEY` too.
 - [ ] Task envs declare the secret as `_UNION_EAGER_API_KEY`. Without the
   injected value colliding with it, the SDK should pick it up (inferred
   from the declared-secret probe).
