@@ -85,6 +85,10 @@ _LAUNCH_BIN = "/usr/local/bin"
 # dashboard builds `notebook_path` from it; the proxy mirrors it.
 WORKSPACE_NOTEBOOK_DIR = "/workspace"
 
+# Flyte refuses to deploy an app whose name is over 30 characters, whatever
+# the project, and a notebook's app is `nb-<slug>-<mode>`, longest in `edit`.
+NOTEBOOK_SLUG_MAX = 30 - len("nb--edit")
+
 
 # Layered build recipe. Consumed only by the deployer's build step
 # (`onboard.build_notebook_image`), which bakes the built, content-hashed URI
