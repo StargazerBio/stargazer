@@ -91,7 +91,7 @@ WORKSPACE_DIR = Path("/workspace")
 _SKIPPED_DIRS = {"__pycache__", "__marimo__"}
 # A file over this isn't saved with the workspace: big data belongs in the asset
 # store, and the save at SIGTERM has to fit in the pod's grace period. The same
-# limit as an upload through the dashboard's asset page.
+# limit as an upload through the dashboard's asset browser.
 MAX_SAVED_BYTES = 100 * 1024**2
 
 # Env keys never handed to the interactive shell. The suffix list catches future

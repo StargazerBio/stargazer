@@ -1,5 +1,7 @@
-{% extends "base.html" %} {% block extra_css %}
-/* Asset manager — lives in the same .dashboard box as the notebook dashboard
+{# The asset browser on the dashboard's home page. dashboard.html imports this
+   with context and calls style(), panel() and script() in its own blocks. #}
+{% macro style() %}
+/* Asset browser — lives in the same .dashboard box as the notebook sections
    and reuses base.html's tokens/buttons. The reactive starfield (#sky) is
    untouched; the asset graph is a separate foreground SVG inside the card. */
 .assets-controls {
@@ -286,25 +288,8 @@
 .upload-status { font-size: 0.82rem; }
 .upload-status.err { color: var(--danger); }
 .upload-status.ok { color: var(--green); }
-{% endblock %} {% block body %}
-<div class="dashboard">
-    <header class="dash-header">
-        <a href="/" class="dash-brand" aria-label="Stargazer home">
-            <img src="/static/8-bit_stargazer_no-bg.jpg" alt="Stargazer" />
-        </a>
-        {% if user %}
-        <details class="user-menu">
-            <summary aria-label="User menu">
-                <span class="avatar-initial">{{ user.initial }}</span>
-            </summary>
-            <div class="menu">
-                <div class="menu-user">Signed in as <strong>{{ user.display }}</strong></div>
-                <a class="menu-item" href="/">Dashboard</a>
-            </div>
-        </details>
-        {% endif %}
-    </header>
-
+{% endmacro %} {% macro panel() %}
+<section>
     <h2>
         Assets
         <span class="section-tag">Browse, graph, and upload files in the asset store.</span>
@@ -313,9 +298,7 @@
     <div class="assets-controls">
         <div class="seg" id="network-tabs" role="tablist" aria-label="Network">
             <button data-network="public" role="tab" aria-selected="false">Public</button>
-            {% if username %}
             <button data-network="private" role="tab" aria-selected="true">Private</button>
-            {% endif %}
         </div>
         <div class="seg" id="view-toggle" role="tablist" aria-label="View">
             <button data-view="graph" role="tab" aria-selected="true">Graph</button>
@@ -352,7 +335,6 @@
         Select an asset node or row to see its metadata and download it.
     </div>
 
-    {% if username %}
     <details class="asset-upload" id="upload-panel" open>
         <summary>Upload an asset</summary>
         <div class="upload-body">
@@ -400,7 +382,6 @@
             <p class="upload-note">
                 Uploads are capped at <strong>100&nbsp;MB</strong>.
             </p>
-            {% include "_alpha_note.html" %}
 
             <div class="upload-row">
                 <button type="button" class="btn btn-notebook" id="up-submit">Upload</button>
@@ -408,19 +389,17 @@
             </div>
         </div>
     </details>
-    {% endif %}
-</div>
-{% endblock %} {% block scripts %}
+</section>
+{% endmacro %} {% macro script() %}
 <script src="/static/cytoscape.min.js"></script>
 <script>
-const AUTHED = {{ 'true' if username else 'false' }};
 const USERNAME = {{ username | tojson }};
 // Public data needs a Pinata key; private data is the dashboard's own store.
 const PUBLIC_ON = {{ 'true' if pinata_configured else 'false' }};
 
 const NODE_CAP = 150;
 const state = {
-    network: AUTHED ? "private" : "public",
+    network: "private",
     view: "graph",
     filters: {},
     records: [],
@@ -435,7 +414,7 @@ const assetType = (r) => (r.keyvalues && r.keyvalues.asset) || "(bare)";
 const owner = (r) => (r.keyvalues && r.keyvalues._owner) || "shared";
 // On the public tab, flag records the signed-in user owns so they read green.
 // (Private is already all-yours, so it gets no green — that would be noise.)
-const ownedByUser = (r) => state.network === "public" && !!USERNAME && owner(r) === USERNAME;
+const ownedByUser = (r) => state.network === "public" && owner(r) === USERNAME;
 // Relationship keys: companion_of, and any keyvalue ending in _cid, with a
 // non-empty value. Bare "cid" is excluded (no underscore before the suffix).
 function relKeys(kv) {
@@ -803,7 +782,7 @@ function renderDetail() {
     }
     // Editing is owner-only and server-enforced (fail-closed 403); only show
     // the affordance when the signed-in user owns this record.
-    const canEdit = AUTHED && owner(rec) === USERNAME && USERNAME;
+    const canEdit = owner(rec) === USERNAME;
     el.innerHTML =
         `<div class="detail-head"><h3>${esc(rec.name || "(unnamed)")}</h3><span class="badge type">${esc(assetType(rec))}</span><span class="badge">${esc(owner(rec))}</span></div>` +
         `<div class="detail-cid">${esc(rec.cid)} <button class="copy-cid" data-copy="${esc(rec.cid)}" title="Copy CID">⧉</button></div>` +
@@ -1148,13 +1127,6 @@ async function doUpload() {
 const upSubmit = $("up-submit");
 if (upSubmit) upSubmit.addEventListener("click", doUpload);
 
-// Close the user menu when clicking outside.
-document.addEventListener("click", (e) => {
-    document.querySelectorAll("details.user-menu[open]").forEach((d) => {
-        if (!d.contains(e.target)) d.removeAttribute("open");
-    });
-});
-
 // ---- boot ----------------------------------------------------------------
 
 (async function boot() {
@@ -1167,4 +1139,4 @@ document.addEventListener("click", (e) => {
     await fetchRecords();
 })();
 </script>
-{% endblock %}
+{% endmacro %}
