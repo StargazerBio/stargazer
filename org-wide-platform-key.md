@@ -5,10 +5,9 @@ priority: high
 created: 2026-10-05
 ---
 
-Every app and task pod authenticates as `stargazerbio-EAGER_API_KEY-union-us-west-2`, which
-holds org-wide `contributor`, so code in any notebook can act in any
-project. Ask Union whether an app can run without it or with a key we
-supply.
+Every app and task pod authenticated as `stargazerbio-EAGER_API_KEY-union-us-west-2`, which
+holds org-wide `contributor`, so code in any notebook could act in any
+project.
 
 Union can't scope or replace the key today (support ticket 7183). Their
 proper fix is per-user identity for task pods, written up in
@@ -64,22 +63,6 @@ the dashboard's login gate.
     cleanup still gets the org key (`usbrm9csdrwbx56v7fpx`).
   - App pods weren't probed.
 
-## Dashboard key (2026-10-20)
-
-Onboarding makes API key `stargazer-<project>` (client id
-`395972033688678521` for `u-pryce`) with Union's default policies skipped,
-assigns it the user's `stargazer-<project>` contributor policy, and stores
-it as the project secret `STARGAZER_PROJECT_API_KEY`. Measured on `u-pryce`
-after onboarding it from the branch:
-
-- The key's only policy is `stargazer-u-pryce`. The secret is scoped to
-  `u-pryce/development` and isn't found from `flytesnacks`.
-- A notebook the redeployed dashboard launched (`nb-tasks-run`) has the
-  new key as its `creator`. Every earlier launch shows the org key
-  `393067446845621194`.
-- `/launch/status` lists apps under the key: it showed the notebook once
-  it was active, in step with the admin's view.
-
 ## Union's answer (2026-10-20)
 
 - Per-project injected keys aren't possible today. Delegated auth
@@ -95,37 +78,62 @@ after onboarding it from the branch:
 - Union would rather we wait for delegated auth, and isolation between
   users isn't guaranteed until then.
 
-## Experiment: delete the org key
+## Experiment: delete the org key (2026-10-20)
 
-- [ ] Before deleting, record the org secret's metadata and the key's
-  app id (`393067446845621194`) and roles, so it can be recreated.
-- [ ] Delete the org secret `EAGER_API_KEY-union-us-west-2`.
-- [ ] A task run in `u-pryce`: does the pod start, or does the webhook
-  reject it? If it starts, is `_UNION_EAGER_API_KEY` absent, or set from
-  a declared project secret?
-- [ ] An app deploy and a notebook launch from the dashboard: same
-  questions for app pods, which weren't probed before.
-- [ ] Wait out the operator's bootstrap loop (`operator.apiKey.enabled`)
-  and check whether it recreated the secret.
-- [ ] Image builds still work.
-- [ ] Rollback if pods won't start: create a new key with org
-  `contributor` via `ApiKey.create` and store it as the org secret
-  `EAGER_API_KEY-union-us-west-2`, then confirm a baseline run gets it.
+The user deleted the org secret `EAGER_API_KEY-union-us-west-2`. The
+key it held (`393067446845621194`) still exists, and the operator hadn't
+recreated the secret an hour later.
 
-If pods can't start without the injected secret, this waits on Union
-turning `injectSecret` off or shipping delegated auth.
+- [x] A project with no `EAGER_API_KEY` at any scope can't start pods:
+  *"admission webhook "flyte-pod-webhook.flyte.org" denied the request:
+  none of the secret managers injected secret [key:"EAGER_API_KEY"]"*
+  (run `uvld5kwd76ppkp66f4qk` in `flytesnacks`). That's every project
+  that isn't onboarded, including Union's own `default`, `system` and
+  `union-health-monitoring`.
+- [x] With the org secret gone, the webhook injects a project-scoped
+  secret named `EAGER_API_KEY`. The 10-17 probe's copy in
+  `u-pryce/development` had stayed in AWS Secrets Manager after the SDK
+  delete, and pods got its dead key (`invalid_client`, run
+  `ud4f96qvcj2564zv7pc9`). Writing the secret again replaced it.
+- [x] App pods follow the same rule: the dashboard and notebook pods in
+  `u-pryce` carry the project's key as `_UNION_EAGER_API_KEY` (read from
+  the pod specs with kubectl, client ids only).
+- [x] Image builds run as task pods in the deployer's project
+  (`flytesnacks`), so that project needs its own key. With one, the
+  notebook and dashboard images built.
+- [ ] Ask Union whether `default`, `system` and
+  `union-health-monitoring` need a key, or whether they'd rather have the
+  org secret back.
 
-## Our side, once the org key is gone
+## The project key (branch `fix/org-wide-platform-key`)
+
+`onboard` gives each user's project API key `stargazer-<project>`. The key
+is created without Union's default policies and assigned the user's
+`stargazer-<project>` policy, which holds `contributor` on each of the
+project's three domains. It's stored as `EAGER_API_KEY` in each domain,
+because neither a secret nor a role binding can name a project without a
+domain. `upgrade` does the same for any project that lacks a key, and
+both commands key the deployer's build project first. `offboard` deletes
+the secrets and the key.
+
+Measured on 2026-10-20 after onboarding the test account from the branch:
+
+- Task pods in `u-pryce` (`development` and `staging`) and in
+  `flytesnacks` got their own project's key and could call Union. They
+  were refused `ACTION_VIEW_FLYTE_EXECUTIONS` on every other project (runs
+  `utssqhldj9tvq9zkzxlh`, `ut474sn9pcdnrbf5bzt7`).
+- A notebook launched from the dashboard for the first time
+  (`nb-assets-run`) records the `u-pryce` key (`395974305206254348`) as its
+  `creator`. `/launch/status` lists apps under it.
+- `u-pryce`'s policy was migrated by hand from a `development`-only
+  binding to all three domains. It's the only project that had the old
+  binding.
+
+## Our side
 
 - [x] `stargazer-users onboard` creates the user's key, its policy, and
-  a project-scoped secret holding it; `offboard` removes them. `upgrade`
-  makes the key for any dashboard without one. Branch
-  `fix/org-wide-platform-key`.
-- [x] The dashboard gets the key as `FLYTE_API_KEY`, which `app/init.py`
-  prefers over the injected org key, so this works before the org key is
-  gone.
-- [ ] Notebook pods get the key as `FLYTE_API_KEY` too.
-- [ ] Task envs declare the secret as `_UNION_EAGER_API_KEY`. Without the
-  injected value colliding with it, the SDK should pick it up (inferred
-  from the declared-secret probe).
+  the project secrets holding it. `offboard` removes them, and `upgrade`
+  creates them for any project without them.
+- [x] Dashboard, notebook and task pods get the key from Union's injection,
+  with nothing declared on their envs.
 - [ ] `pause` / `resume` in `stargazer-users`.
