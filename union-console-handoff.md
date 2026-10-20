@@ -3,6 +3,8 @@ title: Union console handoff (per-user project access)
 status: backlog
 priority: normal
 created: 2026-09-29
+blocked_by:
+  - app-502s-behind-cloudflare
 ---
 
 Add a link from each user's dashboard to the Union console, deep-linked to
