@@ -3,6 +3,8 @@ title: Open a notebook from GitHub in the workspace
 status: backlog
 priority: normal
 created: 2026-10-17
+blocked_by:
+  - top-level-notebooks
 ---
 
 Notebooks in the repo's top-level `notebooks/` folder (ticket

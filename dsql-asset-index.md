@@ -1,6 +1,6 @@
 ---
 title: The hosted asset index moves to Aurora DSQL
-status: backlog
+status: next
 priority: high
 created: 2026-10-20
 blocked_by:
