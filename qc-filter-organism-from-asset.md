@@ -1,6 +1,6 @@
 ---
 title: qc_filter takes organism separately from its input asset
-status: backlog
+status: doing
 priority: low
 created: 2026-10-14
 ---
