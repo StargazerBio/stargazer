@@ -4,7 +4,6 @@ status: backlog
 priority: high
 created: 2026-10-20
 blocked_by:
-  - assets-on-dashboard-home
   - devbox-postgres-index
 ---
 
