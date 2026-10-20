@@ -1,6 +1,6 @@
 ---
 title: Notebooks with long names never launch
-status: review
+status: done
 priority: normal
 created: 2026-10-18
 pr: 55
@@ -74,3 +74,13 @@ the project) was wrong.
 - The create box still lets you type 60 characters. The page's own check
   would need the limit in the dashboard's template context, which PR #53
   also edits, and the server's refusal already says what the limit is.
+
+## Outcome
+
+Shipped in #55 (merged 2026-10-20, `c08cb45`): create refuses a name whose
+slug is over 22 characters, and `/launch` returns the deploy's error as a 422
+instead of "still starting". Verified on Union before the rebase onto #53
+(above); the unit tier passed after it (500), and the tenant check wasn't
+repeated. Left: the create box still accepts 60 characters as you type, and
+a 502's body is still replaced by Cloudflare's (ticket
+`app-502s-behind-cloudflare`).

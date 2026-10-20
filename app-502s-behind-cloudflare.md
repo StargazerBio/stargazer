@@ -3,8 +3,6 @@ title: Dashboard errors sent as 502 never reach the page
 status: next
 priority: normal
 created: 2026-10-19
-blocked_by:
-  - long-notebook-names
 ---
 
 Cloudflare sits in front of every Union app and replaces the body of a 502
