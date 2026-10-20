@@ -59,11 +59,14 @@ RUN mkdir -p /workspace /snapshots /home/flyte/.stargazer \
     && chown -R flyte:flyte /workspace /snapshots /home/flyte/.stargazer
 
 # The notebooks a new /workspace starts with: the SDK's tutorials and pipeline
-# notebooks, in their folders, without the package files.
+# notebooks in their folders, and its workspace seeds (blank, template) at the
+# top, where the user's own notebooks go. Without the package files.
 RUN mkdir /opt/notebooks \
     && cp -r /stargazer/src/stargazer/notebooks/tutorials \
-        /stargazer/src/stargazer/notebooks/workflows /opt/notebooks/ \
-    && rm -rf /opt/notebooks/*/__init__.py /opt/notebooks/*/__pycache__
+        /stargazer/src/stargazer/notebooks/workflows \
+        /stargazer/src/stargazer/notebooks/workspace/. /opt/notebooks/ \
+    && rm -rf /opt/notebooks/__init__.py /opt/notebooks/*/__init__.py \
+        /opt/notebooks/__pycache__ /opt/notebooks/*/__pycache__
 
 ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONPATH="/usr/local/lib" \
