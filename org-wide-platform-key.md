@@ -82,7 +82,12 @@ the dashboard's login gate.
 
 Set aside by the user while the org secret keeps coming back. Branch
 `fix/org-wide-platform-key` holds the per-project key code, unpushed in its
-worktree. It's harmless while the org secret exists, since that one wins.
+worktree, rebased onto `main` at `2b96e0e` on 2026-10-20 (unit tier 508
+passed). It also carries a rider from ticket `quickstart-save-banner`, which
+its PR lists under its own heading: "Stage the image's notebooks as
+/opt/notebooks and copy the folder itself" (`Dockerfile` only; the image's
+`/workspace/notebooks/` comes out the same, verified on its original
+commit `41c03a4`). It's harmless while the org secret exists, since that one wins.
 Its `app/onboard.py` changes overlap `dsql-asset-index`'s onboarding piece,
 so whichever of the two lands second rebases on the other.
 
