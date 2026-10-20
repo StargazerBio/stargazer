@@ -62,6 +62,20 @@ to name, and makes CORS, versioning, lifecycle, cost and deletion per user.
 - **D6. Keep `users/<subject>/` inside a per-user bucket?** Redundant there,
   but one layout for local and hosted.
 
+**Measured 2026-10-20** (read-only, for ticket `dsql-asset-index`):
+
+- **D2: yes.** Task pods and app pods (dashboard, notebooks) both run as their
+  namespace's `default` service account. In every `u-*` namespace it is
+  annotated with the shared `userflyterole`, and pods get the IRSA token
+  (`AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`).
+- **A per-user role needs no Union step to exist.** A role trusting
+  `system:serviceaccount:<project>-<domain>:default` can be assumed from that
+  namespace's token, and only from there. That's how `dsql-asset-index` gets
+  per-user database access. It doesn't isolate storage, though: pods keep
+  the shared role as their default credentials, and that role reaches the
+  whole bucket. Withdrawing the shared role's access is what needs Union,
+  since the service-account annotation is theirs. So D1 stands.
+
 **Outline:** by hand for the test account first (bucket with Block Public
 Access, versioning, encryption, CORS and a noncurrent-version expiry; role;
 Union binding), measure that its pods reach their bucket and get AccessDenied

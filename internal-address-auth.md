@@ -1,6 +1,6 @@
 ---
 title: App internal addresses skip Union's login
-status: review
+status: done
 priority: high
 created: 2026-10-06
 pr: 51
@@ -47,8 +47,8 @@ project check never runs.
 - The dashboard checks in `app.identity`.
 - Notebook pods check in the proxy's `_TokenGate`, on every HTTP and
   websocket request.
-- `/index/*` stays open: tasks and notebooks call it with no token. That's
-  ticket `index-api-auth`.
+- `/index/*` stays open: tasks and notebooks call it with no token. It goes
+  away with ticket `dsql-asset-index`.
 
 ## Verified (2026-10-18, PR #51)
 
@@ -64,3 +64,14 @@ Test dashboard deployed from `1875752`, my subject in
   terminal opens.
 - **Chrome as the test account:** dashboard 200, private assets 200,
   notebook cells loaded, the terminal ran a command.
+
+## Outcome
+
+Merged as PR #51 (2026-10-19). On Union the dashboard and notebook pods take
+identity from Union's signed token alone, and admit the owner or a subject in
+`STARGAZER_ADMIN_SUBJECTS`. Verified on the tenant as above: forged headers
+from another project get 401, someone else's genuine token gets 403, and the
+owner and an admin get through. Left: `/index/*` is still open on the
+in-cluster address until ticket `dsql-asset-index` removes it, and code in any
+pod can still act in any project with the org key (ticket
+`org-wide-platform-key`).
