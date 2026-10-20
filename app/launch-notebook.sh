@@ -5,6 +5,9 @@
 #
 #     /usr/local/bin/launch-notebook.sh <mode> <notebook_path>
 #
+# The `stargazer` image (Dockerfile) passes a directory as <notebook_path>,
+# which marimo serves as a notebook list.
+#
 # Three things happen on startup:
 #
 #   1. Hydrate: copy the owner's whole workspace from the workspace store into

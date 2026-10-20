@@ -6,8 +6,8 @@
 # code: tests/unit/test_dockerfile.py checks that this one has the proxy's pip
 # packages and the files it reads beside itself, and the tool versions are kept
 # in step by hand. They differ on purpose only in multi-arch downloads, in
-# having no Flyte-injected runtime or platform login, and in where the
-# tutorial opens from (see ENTRYPOINT).
+# having no Flyte-injected runtime or platform login, and in serving a
+# directory of notebooks instead of one (see ENTRYPOINT).
 FROM python:3.13-slim-bookworm
 
 RUN apt-get update \
@@ -58,6 +58,13 @@ COPY --chown=flyte:flyte app/ /stargazer/app/
 RUN mkdir -p /workspace /snapshots /home/flyte/.stargazer \
     && chown -R flyte:flyte /workspace /snapshots /home/flyte/.stargazer
 
+# The notebooks a new /workspace starts with: the SDK's tutorials and pipeline
+# notebooks, in their folders, without the package files.
+RUN mkdir /opt/notebooks \
+    && cp -r /stargazer/src/stargazer/notebooks/tutorials \
+        /stargazer/src/stargazer/notebooks/workflows /opt/notebooks/ \
+    && rm -rf /opt/notebooks/*/__init__.py /opt/notebooks/*/__pycache__
+
 ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONPATH="/usr/local/lib" \
     UV_LINK_MODE="copy" \
@@ -70,8 +77,10 @@ USER flyte
 WORKDIR /workspace
 RUN flyte create config --local-persistence -o /home/flyte/.flyte/config.yaml
 
-# There's no dashboard to launch notebooks from, so the tutorial opens from a
-# copy in /workspace: it shows in the file explorer, and edits to it land in a
-# mounted directory. An existing copy is the user's and is left alone.
+# There's no dashboard to launch notebooks from, so the notebooks are copied
+# into /workspace and marimo serves the directory: they show in its notebook
+# list and file explorer, edits land in a mounted directory, and each notebook
+# runs in a sandbox built from its own header. A file already there is the
+# user's and is left alone (`cp -n`).
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "[ -e /workspace/assets.py ] || cp /stargazer/src/stargazer/notebooks/tutorials/assets.py /workspace/ && echo 'Stargazer notebook: http://localhost:8080' && exec launch-notebook.sh edit /workspace/assets.py"]
+ENTRYPOINT ["sh", "-c", "cp -rn /opt/notebooks/. /workspace/ && echo 'Stargazer notebooks: http://localhost:8080' && exec launch-notebook.sh edit /workspace"]
