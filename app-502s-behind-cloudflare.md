@@ -1,6 +1,6 @@
 ---
 title: Dashboard errors sent as 502 never reach the page
-status: backlog
+status: next
 priority: normal
 created: 2026-10-19
 blocked_by:

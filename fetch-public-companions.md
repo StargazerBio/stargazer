@@ -1,8 +1,10 @@
 ---
 title: fetch() asks Pinata for companions on every call
-status: backlog
+status: next
 priority: normal
 created: 2026-10-20
+blocked_by:
+  - postgres-index
 ---
 
 `Asset.fetch()` looks up the asset's companions with

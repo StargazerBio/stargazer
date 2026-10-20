@@ -1,6 +1,6 @@
 ---
 title: Org-wide platform key in every pod
-status: doing
+status: backlog
 priority: high
 created: 2026-10-05
 ---
@@ -77,6 +77,14 @@ the dashboard's login gate.
   experiment is ours to run.
 - Union would rather we wait for delegated auth, and isolation between
   users isn't guaranteed until then.
+
+## Parked (2026-10-20)
+
+Set aside by the user while the org secret keeps coming back. Branch
+`fix/org-wide-platform-key` holds the per-project key code, unpushed in its
+worktree. It's harmless while the org secret exists, since that one wins.
+Its `app/onboard.py` changes overlap `dsql-asset-index`'s onboarding piece,
+so whichever of the two lands second rebases on the other.
 
 ## Experiment: delete the org key (2026-10-20)
 
