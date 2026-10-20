@@ -8,6 +8,13 @@ import stargazer.utils.storage as _storage
 from stargazer.assets.scrna import AnnData
 from stargazer.config import logger, scrna_env
 
+# Mitochondrial prefix, ribosomal prefixes and hemoglobin pattern per organism.
+# Mouse gene symbols are title case, human ones upper case.
+GENE_PATTERNS = {
+    "human": ("MT-", ("RPS", "RPL"), "^HB[^(P)]"),
+    "mouse": ("mt-", ("Rps", "Rpl"), "^Hb[^(p)]"),
+}
+
 
 @scrna_env.task
 async def qc_filter(
@@ -16,12 +23,13 @@ async def qc_filter(
     min_cells: int = 3,
     max_pct_mt: float = 20.0,
     batch_key: str = "",
-    organism: str = "human",
 ) -> AnnData:
     """Filter low-quality cells and genes from raw scRNA-seq data.
 
     Applies standard QC filters: minimum gene/cell thresholds, mitochondrial
-    gene percentage, and scrublet doublet detection.
+    gene percentage, and scrublet doublet detection. The mitochondrial,
+    ribosomal and hemoglobin genes are picked by the input asset's
+    `organism` ("human" or "mouse", any case).
 
     Args:
         adata: Raw AnnData asset (.h5ad)
@@ -29,34 +37,36 @@ async def qc_filter(
         min_cells: Minimum number of cells a gene must be expressed in
         max_pct_mt: Maximum mitochondrial gene percentage allowed per cell
         batch_key: Column in .obs to use as batch for scrublet (empty = no batch)
-        organism: Organism name ("human" or "mouse") for gene prefix selection
 
     Returns:
         Filtered AnnData asset with QC metrics in .obs
+
+    Raises:
+        ValueError: If the asset's `organism` is empty or not a supported one.
     """
     import scanpy as sc
 
     logger.info(adata.to_dict())
+    patterns = GENE_PATTERNS.get(adata.organism.lower())
+    if patterns is None:
+        raise ValueError(
+            f"AnnData {adata.sample_id!r} has organism {adata.organism!r}; "
+            f"set its organism field to one of: {', '.join(GENE_PATTERNS)}"
+        )
+    mt, ribo, hb = patterns
     ad = sc.read_h5ad(await adata.fetch())
 
     sc.pp.filter_cells(ad, min_genes=min_genes)
     sc.pp.filter_genes(ad, min_cells=min_cells)
 
-    # Annotate mitochondrial, ribosomal, and hemoglobin genes (organism-aware)
-    if organism.lower() == "mouse":
-        ad.var["mt"] = ad.var_names.str.startswith("mt-")
-        ad.var["ribo"] = ad.var_names.str.startswith(("Rps", "Rpl"))
-        ad.var["hb"] = ad.var_names.str.contains("^Hb[^(p)]")
-    else:
-        ad.var["mt"] = ad.var_names.str.startswith("MT-")
-        ad.var["ribo"] = ad.var_names.str.startswith(("RPS", "RPL"))
-        ad.var["hb"] = ad.var_names.str.contains("^HB[^(P)]")
+    ad.var["mt"] = ad.var_names.str.startswith(mt)
+    ad.var["ribo"] = ad.var_names.str.startswith(ribo)
+    ad.var["hb"] = ad.var_names.str.contains(hb)
 
     sc.pp.calculate_qc_metrics(
         ad, qc_vars=["mt", "ribo", "hb"], inplace=True, log1p=True
     )
 
-    # Doublet detection
     scrublet_kwargs = {}
     if batch_key:
         scrublet_kwargs["batch_key"] = batch_key

@@ -6,7 +6,9 @@ Assembles a raw AnnData from storage by sample_id, then runs the full
 preprocessing and clustering stack.
 
 Prerequisites:
-    A raw .h5ad file must be uploaded to storage with asset="anndata" and stage="raw".
+    A raw .h5ad file must be uploaded to storage with asset="anndata",
+    stage="raw" and organism set to "human" or "mouse", which picks the
+    mitochondrial, ribosomal and hemoglobin genes QC filters on.
 
 Reference:
     https://scanpy.readthedocs.io/en/stable/tutorials/basics/clustering.html
@@ -30,7 +32,6 @@ from stargazer.tasks.scrna import (
 @scrna_env.task(cache="disable")
 async def scrna_clustering_pipeline(
     sample_id: str,
-    organism: str = "human",
     n_top_genes: int = 2000,
     resolution: float = 0.5,
     max_pct_mt: float = 20.0,
@@ -42,7 +43,6 @@ async def scrna_clustering_pipeline(
 
     Args:
         sample_id: Sample identifier used to look up the raw AnnData in storage
-        organism: Organism name (e.g. "human", "mouse")
         n_top_genes: Number of highly variable genes to select
         resolution: Leiden clustering resolution (higher = more clusters)
         max_pct_mt: Maximum mitochondrial gene percentage per cell
@@ -56,11 +56,12 @@ async def scrna_clustering_pipeline(
     if not assets:
         raise ValueError(
             f"No raw AnnData found for sample_id={sample_id!r}. "
-            "Upload a .h5ad file with asset='anndata' and stage='raw' first."
+            "Upload a .h5ad file with asset='anndata', stage='raw' and its "
+            "organism first."
         )
     raw = assets[0]
 
-    filtered = await qc_filter(adata=raw, max_pct_mt=max_pct_mt, organism=organism)
+    filtered = await qc_filter(adata=raw, max_pct_mt=max_pct_mt)
     normalized = await normalize(adata=filtered)
     featured = await select_features(adata=normalized, n_top_genes=n_top_genes)
     reduced = await reduce_dimensions(adata=featured)

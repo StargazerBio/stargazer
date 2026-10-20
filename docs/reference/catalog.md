@@ -21,7 +21,7 @@
 | `mark_duplicates` | Mark duplicate reads in a BAM file. | `alignment` (`Alignment`) |
 | `merge_bam_alignment` | Merge alignment data from aligned BAM with data in unmapped BAM. | `aligned_bam` (`Alignment`), `unmapped_bam` (`Alignment`), `ref` (`Reference`) |
 | `normalize` | Normalize counts and apply log1p transformation. | `adata` (`AnnData`) |
-| `qc_filter` | Filter low-quality cells and genes from raw scRNA-seq data. | `adata` (`AnnData`), `min_genes` (`int`), `min_cells` (`int`), `max_pct_mt` (`float`), `batch_key` (`str`), `organism` (`str`) |
+| `qc_filter` | Filter low-quality cells and genes from raw scRNA-seq data. | `adata` (`AnnData`), `min_genes` (`int`), `min_cells` (`int`), `max_pct_mt` (`float`), `batch_key` (`str`) |
 | `reduce_dimensions` | Compute PCA, k-nearest neighbor graph, and UMAP embedding. | `adata` (`AnnData`), `n_pcs` (`int`), `n_neighbors` (`int`) |
 | `samtools_faidx` | Create a FASTA index (.fai file) using samtools faidx. | `ref` (`Reference`) |
 | `select_features` | Select highly variable genes for dimensionality reduction. | `adata` (`AnnData`), `n_top_genes` (`int`), `batch_key` (`str`) |
@@ -35,7 +35,7 @@
 | `germline_short_variant_discovery` | End-to-end germline short variant discovery from raw reads. | `build` (`str`), `sample_ids` (`list[str]`), `cohort_id` (`str`) |
 | `prepare_reference` | Prepare reference genome for alignment and variant calling. | `build` (`str`) |
 | `preprocess_sample` | Pre-process a single sample's reads for variant calling. | `build` (`str`), `sample_id` (`str`) |
-| `scrna_clustering_pipeline` | End-to-end scRNA-seq clustering pipeline. | `sample_id` (`str`), `organism` (`str`), `n_top_genes` (`int`), `resolution` (`float`), `max_pct_mt` (`float`) |
+| `scrna_clustering_pipeline` | End-to-end scRNA-seq clustering pipeline. | `sample_id` (`str`), `n_top_genes` (`int`), `resolution` (`float`), `max_pct_mt` (`float`) |
 
 ## Asset Types
 
