@@ -26,6 +26,14 @@ container (Postgres 16, the version DSQL is compatible with).
 - [x] `make_index` dispatch for `postgresql://`
 - [x] Docs: `configuration.md`, the index module's docstring
 
+## State
+
+Done on `feat/postgres-index` (worktree `.claude/worktrees/postgres-index`),
+one commit, rebased onto `main` after #53 (`ed60f91`). Unit (497) and
+postgres (10) tiers pass after the rebase. Not pushed: the push and the PR
+wait for the user's go. The devbox step (ticket `devbox-postgres-index`)
+starts after this merges.
+
 ## Verified (2026-10-20, branch `feat/postgres-index`)
 
 - **Postgres tier:** 10 passed against `postgres:16-alpine`, after the same

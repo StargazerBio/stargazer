@@ -1,6 +1,6 @@
 ---
 title: The asset browser moves onto the dashboard home
-status: review
+status: done
 priority: high
 created: 2026-10-18
 pr: 53
@@ -53,3 +53,16 @@ on its tile after a reload; stopped after. Then, with the user's OK, through the
 added `checked_on = home-page` with Edit metadata and Save, which persisted
 across a reload; downloaded it from the detail card, SHA-256 matching the
 upload. The probe asset stays in the test account's index. Torn down after.
+
+## Outcome
+
+Merged as PR #53 (2026-10-20). The dashboard's home page carries the asset
+browser below the notebook sections: the Graph and List views, the detail
+card with download and metadata edits, and the upload panel. The `/assets`
+page and its avatar-menu link are gone, and the routes stay under
+`/assets/*`. Verified on the test account's Union dashboard in Chrome:
+browsing, a private upload, a metadata edit and a download whose SHA-256
+matched, with notebook tiles still launching. The unit tier passed. Left:
+leaving `asset=notebook` rows out of the browser moves to ticket
+`public-notebooks`. Review added the `AGENTS.md` rule that durable docs
+describe the present, with no log of what changed.

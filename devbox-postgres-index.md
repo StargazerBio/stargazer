@@ -5,7 +5,6 @@ priority: high
 created: 2026-10-20
 blocked_by:
   - postgres-index
-  - assets-on-dashboard-home
 ---
 
 The second of three steps toward the hosted index on Aurora DSQL (ticket
@@ -22,5 +21,4 @@ through `PostgresIndex` (ticket `postgres-index`).
   local container, if that turns out useful
 
 Union keeps the dashboard-served index until `dsql-asset-index`, so nothing
-is removed here. Blocked by `assets-on-dashboard-home` because both change
-`devbox_workarounds.md`.
+is removed here.

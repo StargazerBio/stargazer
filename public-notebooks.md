@@ -32,3 +32,10 @@ Hosted dashboards have the Pinata key as a secret (ticket
 `dashboard-pinata-key`, merged as #40), so they can read Pinata's public
 index. Union injects app secrets without putting the value in the app record
 (measured 2026-10-17).
+
+## The dashboard's asset browser
+
+Once notebooks are stored as `asset=notebook` rows, the asset browser on the
+dashboard's home page leaves them out, since notebooks have their own
+sections there. Test it: a notebook row in the index isn't in the browser's
+listing. Carried over from ticket `assets-on-dashboard-home`.
