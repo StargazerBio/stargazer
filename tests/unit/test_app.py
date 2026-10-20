@@ -701,6 +701,70 @@ def test_stop_requires_identity(client):
     assert client.post("/stop", data={"slug": "a", "mode": "edit"}).status_code == 401
 
 
+async def _unreachable(*_args, **_kwargs):
+    """A store or control-plane call that fails."""
+    raise OSError("unreachable")
+
+
+@pytest.mark.parametrize(
+    ("path", "data", "broken", "replacement", "error"),
+    [
+        (
+            "/workspace/create",
+            {"name": "x"},
+            "app.workspace_store.create_workspace_notebook",
+            _unreachable,
+            "create failed: unreachable",
+        ),
+        (
+            "/workspace/copy",
+            {"slug": "scrna-pipeline", "section": "workflows"},
+            "app.workspace_store.create_workspace_notebook",
+            _unreachable,
+            "copy failed: unreachable",
+        ),
+        (
+            "/workspace/settings",
+            {"slug": "qc-run", "cpu": "1", "memory": "2"},
+            "app.workspace_store.update_workspace_notebook",
+            _unreachable,
+            "update failed: unreachable",
+        ),
+        (
+            "/workspace/delete",
+            {"slug": "qc-run"},
+            "app.workspace_store.delete_workspace_notebook",
+            _unreachable,
+            "delete failed: unreachable",
+        ),
+        (
+            "/stop",
+            {"slug": "qc-run", "mode": "edit"},
+            "app.admin_app.App",
+            SimpleNamespace(get=SimpleNamespace(aio=_unreachable)),
+            "stop failed: unreachable",
+        ),
+        (
+            "/workspace/cleanup",
+            {},
+            "app.admin_app.list_project_apps",
+            _unreachable,
+            "cleanup failed: unreachable",
+        ),
+    ],
+)
+def test_a_failed_action_is_a_500_with_its_reason(
+    client, monkeypatch, path, data, broken, replacement, error
+):
+    """Not a 502: Cloudflare, in front of Union apps, replaces a 502's body."""
+    _put(ALICE, "qc-run.py")
+    monkeypatch.setattr(broken, replacement)
+    _as(client)
+    resp = client.post(path, data=data)
+    assert resp.status_code == 500
+    assert resp.json() == {"error": error}
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
