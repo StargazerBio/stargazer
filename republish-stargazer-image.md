@@ -1,6 +1,6 @@
 ---
 title: Republish the stargazer image so the quickstart starts
-status: next
+status: doing
 priority: high
 created: 2026-10-20
 ---
