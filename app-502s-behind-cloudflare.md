@@ -18,6 +18,22 @@ Cloudflare's text instead of what went wrong.
 - The same happened to `/launch` while it briefly answered 502. A 503 and
   4xx bodies from the same dashboard passed through untouched.
 
+## Measured (2026-10-20, probe app `cf-status-probe` in `u-pryce`)
+
+A FastAPI probe on the dashboard image answered `GET /status/<code>` with
+that status and `{"error": "probe says <code>: the app's own message"}`,
+fetched through its public URL with the admin's bearer token:
+
+| Status | What arrived |
+|---|---|
+| 500 | the app's JSON, untouched (`content-type: application/json`, `content-length: 49`, `x-envoy-upstream-service-time` present) |
+| 502 | Cloudflare's HTML "unionai.cloud \| 502: Bad gateway" page (6641 bytes, `retry-after: 60`) |
+| 503 | the app's JSON, untouched |
+| 504 | Cloudflare's HTML "504: Gateway time-out" page (`retry-after: 120`) |
+
+A plain-text 500 and an unhandled exception's "Internal Server Error" also
+passed through. So 500 it is.
+
 ## Routes affected
 
 All in `app/admin_app.py`, each a 502 with an `error` message: create, copy,
