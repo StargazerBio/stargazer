@@ -48,7 +48,9 @@ python -c "import sg_proxy; sg_proxy.hydrate()" \
 # launched in it — open here.
 cd "${WORKSPACE_DIR}" 2>/dev/null || true
 
-marimo "${MODE}" --sandbox "${NOTEBOOK_PATH}" \
+# `-q`: marimo's banner advertises its own port, 8081, which only the proxy
+# can reach.
+marimo -q "${MODE}" --sandbox "${NOTEBOOK_PATH}" \
   --port 8081 --host 127.0.0.1 --headless --no-token &
 
 # `--timeout-graceful-shutdown` is required for the shutdown flush to run, not

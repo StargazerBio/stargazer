@@ -5,8 +5,9 @@
 # `[tool.uv.sources]` resolves in its sandbox venv. The two recipes share no
 # code: tests/unit/test_dockerfile.py checks that this one has the proxy's pip
 # packages and the files it reads beside itself, and the tool versions are kept
-# in step by hand. They differ on purpose only in multi-arch downloads and in
-# having no Flyte-injected runtime or platform login.
+# in step by hand. They differ on purpose only in multi-arch downloads, in
+# having no Flyte-injected runtime or platform login, and in where the
+# tutorial opens from (see ENTRYPOINT).
 FROM python:3.13-slim-bookworm
 
 RUN apt-get update \
@@ -62,11 +63,15 @@ ENV PATH="/opt/venv/bin:${PATH}" \
     UV_LINK_MODE="copy" \
     DISABLE_AUTOUPDATER="1"
 
-# Runs are local, their records in SQLite for the TUI. The config lands in the
-# notebook's working directory.
+# Runs are local, their records in SQLite for the TUI. The config is in ~/.flyte,
+# Flyte's last lookup, so it stays out of the file explorer and a directory
+# mounted at /workspace doesn't hide it.
 USER flyte
 WORKDIR /workspace
-RUN flyte create config --local-persistence
+RUN flyte create config --local-persistence -o /home/flyte/.flyte/config.yaml
 
+# There's no dashboard to launch notebooks from, so the tutorial opens from a
+# copy in /workspace: it shows in the file explorer, and edits to it land in a
+# mounted directory. An existing copy is the user's and is left alone.
 EXPOSE 8080
-ENTRYPOINT ["launch-notebook.sh", "edit", "/stargazer/src/stargazer/notebooks/tutorials/assets.py"]
+ENTRYPOINT ["sh", "-c", "[ -e /workspace/assets.py ] || cp /stargazer/src/stargazer/notebooks/tutorials/assets.py /workspace/ && echo 'Stargazer notebook: http://localhost:8080' && exec launch-notebook.sh edit /workspace/assets.py"]

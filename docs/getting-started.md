@@ -20,7 +20,7 @@ Mount a directory at `/workspace`, the notebook's working directory:
 docker run -p 8080:8080 -v "$PWD/data":/workspace ghcr.io/stargazerbio/stargazer
 ```
 
-Its files show up in the notebook's file explorer and in the dropdown terminal, so a notebook reads them by relative path (`pd.read_csv("reads/sample.csv")`). It is the same place a hosted notebook keeps the files beside it. On Linux the container runs as user 1000, so the directory must be writable by that user.
+Its files show up in the notebook's file explorer and in the dropdown terminal, so a notebook reads them by relative path (`pd.read_csv("reads/sample.csv")`). It is the same place a hosted notebook keeps the files beside it. The Assets tutorial is copied there when the container starts, unless the directory already has an `assets.py`, so your edits to it are kept with your files. On Linux the container runs as user 1000, so the directory must be writable by that user.
 
 To keep assets between runs, mount a volume at `/home/flyte/.stargazer`, which holds the asset store, its index and the download cache:
 

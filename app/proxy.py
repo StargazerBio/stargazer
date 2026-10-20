@@ -246,7 +246,7 @@ async def hydrate_async() -> None:
     WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
     prefix = _user_prefix("workspace")
     if prefix is None:
-        print("[sg] workspace store not configured; starting with an empty workspace")
+        print("[sg] workspace store not configured; nothing to load")
         return
     _init_storage()
     n = await _download_prefix(prefix, WORKSPACE_DIR)
