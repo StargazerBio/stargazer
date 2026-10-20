@@ -105,6 +105,14 @@ recreated the secret an hour later.
   `union-health-monitoring` need a key, or whether they'd rather have the
   org secret back.
 
+- [x] Union's control plane hides every secret named `EAGER_API_KEY`:
+  `Secret.get` and `Secret.delete` are `NOT_FOUND` and `listall` and the
+  console leave it out, even right after it's written. Other names read
+  back at once. The secrets are still in AWS Secrets Manager and injected,
+  and writing one again overwrites it (CloudTrail shows only
+  `CreateSecret`/`UpdateSecret`). That's why the 10-17 probe's copy
+  survived its delete, and why the console shows only `PINATA_JWT`.
+
 ## The project key (branch `fix/org-wide-platform-key`)
 
 `onboard` gives each user's project API key `stargazer-<project>`. The key
@@ -113,8 +121,10 @@ is created without Union's default policies and assigned the user's
 project's three domains. It's stored as `EAGER_API_KEY` in each domain,
 because neither a secret nor a role binding can name a project without a
 domain. `upgrade` does the same for any project that lacks a key, and
-both commands key the deployer's build project first. `offboard` deletes
-the secrets and the key.
+both commands key the deployer's build project first. Since the secrets
+can't be read back, an existing key is what says a project is done.
+Re-running keeps it, measured by key ids before and after. `offboard`
+deletes the key, and its secrets stay behind holding a dead key.
 
 Measured on 2026-10-20 after onboarding the test account from the branch:
 
