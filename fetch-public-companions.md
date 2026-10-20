@@ -1,6 +1,6 @@
 ---
 title: fetch() asks Pinata for companions on every call
-status: next
+status: doing
 priority: normal
 created: 2026-10-20
 ---
