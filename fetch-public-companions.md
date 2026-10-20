@@ -1,8 +1,9 @@
 ---
 title: fetch() asks Pinata for companions on every call
-status: doing
+status: review
 priority: normal
 created: 2026-10-20
+pr: 58
 ---
 
 `Asset.fetch()` looks up the asset's companions with
