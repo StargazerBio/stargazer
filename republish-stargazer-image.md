@@ -3,8 +3,6 @@ title: Republish the stargazer image so the quickstart starts
 status: next
 priority: high
 created: 2026-10-20
-blocked_by:
-  - notebooks-staging
 ---
 
 The README and Getting Started run `ghcr.io/stargazerbio/stargazer`. The
