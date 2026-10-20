@@ -142,4 +142,4 @@ Tag it with the published `ghcr.io/stargazerbio/...` URL even though you're not 
 docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/stargazerbio/stargazer:latest --push .
 ```
 
-The hosted notebook pods run `notebook-app`, built by the onboarding command (`stargazer-users`) — see [App → Images](../architecture/app.md#images). The `Dockerfile` mirrors that recipe but shares no code with it, so the two can drift (tool versions, pins); bring it up to date when you bump one in `notebook_app_img_recipe` (`app/per_notebook.py`).
+The hosted notebook pods run `notebook-app`, built by the onboarding command (`stargazer-users`) — see [App → Images](../architecture/app.md#images). The `Dockerfile` mirrors that recipe but shares no code with it. A unit test fails when the `Dockerfile` is missing a pip package of the recipe's or a file the proxy reads at startup; tool versions can still drift, so bring them up to date when you bump one in `notebook_app_img_recipe` (`app/per_notebook.py`).

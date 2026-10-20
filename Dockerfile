@@ -2,9 +2,11 @@
 # (`notebook_app_img_recipe` in `app/per_notebook.py`) as a `docker run`.
 # marimo edits behind the same proxy, so the dropdown terminal (Ctrl+`) has
 # Claude Code in it, and `/stargazer` is the SDK that each notebook's
-# `[tool.uv.sources]` resolves in its sandbox venv. Nothing ties the two
-# recipes together, so pins here can lag; they differ on purpose only in
-# multi-arch downloads and in having no Flyte-injected runtime or platform login.
+# `[tool.uv.sources]` resolves in its sandbox venv. The two recipes share no
+# code: tests/unit/test_dockerfile.py checks that this one has the proxy's pip
+# packages and the files it reads beside itself, and the tool versions are kept
+# in step by hand. They differ on purpose only in multi-arch downloads and in
+# having no Flyte-injected runtime or platform login.
 FROM python:3.13-slim-bookworm
 
 RUN apt-get update \
@@ -40,7 +42,7 @@ RUN mkdir -p /opt/claude-cli \
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir \
         "flyte>=2.0.3" marimo==0.23.6 "fastapi>=0.115" "uvicorn>=0.34" \
-        "httpx>=0.27" "websockets>=12"
+        "httpx>=0.27" "websockets>=12" "pyjwt[crypto]>=2.8,<3"
 
 COPY app/proxy.py /usr/local/lib/sg_proxy.py
 COPY app/terminal_overlay.html app/save_banner.html /usr/local/lib/
