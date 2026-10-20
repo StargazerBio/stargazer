@@ -43,11 +43,13 @@ Every top-level directory under `tests/` belongs to exactly one tier, and its te
 | Tasks | `tasks` | `tasks/` | Each task's image, x86_64 | When you add or change a task | `uv run --all-extras python cli/docker_task_tests.py` |
 | Devbox | `devbox` | `devbox/` | The local devbox | When a change reaches the cluster | `uv run --all-extras pytest -m devbox` |
 | Pinata | `pinata` | `pinata/` | Against the real Pinata API | When the Pinata client changes | `uv run --all-extras pytest -m pinata` |
+| Postgres | `postgres` | `postgres/` | Against a throwaway Postgres container (Docker) | When the index changes | `uv run --all-extras pytest -m postgres` |
 
 - **Unit:** cheap tests that run on Python alone: the asset types, the app tier, storage and the index, the notebook smoke tests. `--all-extras` because the notebook smoke tests need the `notebook` extra and the app tests `landing`.
 - **Tasks:** every test of a task, in the image that task runs in. `tests/tasks/<domain>` runs in its domain's image (`IMAGES` in `cli/docker_task_tests.py`): `gatk/` and `general/` in `gatk_env`'s, which carries gatk, bwa, bwa-mem2 and samtools, and `scrna/` in `scrna_env`'s. So a task test checks what a pod gets, and no one installs the tools. The runner builds each image as a task pod gets it, with the project installed, and mounts only `tests/` and `pyproject.toml`, so a source change builds the images again before the tests run. x86_64 like Union, emulated on Apple silicon.
 - **Devbox:** anything that needs a cluster: deploying the dashboard, running workflows across pods, the devbox's object store and index. The session deploys the dashboard itself and passes the devbox storage settings to each run. It needs the devbox up, with `cli/devbox-setup.sh` applied. Pod-side tasks live in `tests/devbox/pod_tasks.py`, which imports only what the task image carries.
 - **Pinata:** calls the real API with the key in `tests/.secrets/pinata_jwt` (`tests/pinata/conftest.py`), and fails without it. Pinata-client tests that don't call the API are in `tests/utils/`.
+- **Postgres:** the index tests from `tests/utils/test_index.py`, imported by `tests/postgres/test_index.py` and run against a Postgres 16 container (the version Aurora DSQL is compatible with) that `tests/postgres/conftest.py` starts once per session and removes. Its `index` fixture overrides the SQLite one, and each test starts from a dropped table. A test that depends on SQLite's own behaviour, like its file lock, stays out of the import list. Fails without Docker.
 
 A test never skips for a missing tool or service. Outside its tier it's deselected; inside it, a missing tool or an unreachable devbox fails the test, so a run can't pass by testing nothing. Running a workflow locally, outside the tests, needs its tools on your own PATH; nothing here requires them.
 
@@ -66,7 +68,8 @@ tests/
 │   ├── general/
 │   └── scrna/
 ├── devbox/          # devbox: dashboard, asset storage across pods, the germline workflow
-└── pinata/          # pinata: the real Pinata API
+├── pinata/          # pinata: the real Pinata API
+└── postgres/        # postgres: the index tests against a Postgres container
 ```
 
 ## Isolation (`tests/conftest.py`)
@@ -156,7 +159,7 @@ docker run --rm --platform linux/amd64 -v "$PWD/tests/fixtures/general:/data" <g
 
 ## Pytest Configuration
 
-`pyproject.toml` sets `asyncio_mode = "auto"`, `--strict-markers`, and `-m unit` as the default selection. The only markers are the four tiers (`unit`, `tasks`, `devbox`, `pinata`), applied by directory; an unregistered marker such as `slow` is an error.
+`pyproject.toml` sets `asyncio_mode = "auto"`, `--strict-markers`, and `-m unit` as the default selection. The only markers are the five tiers (`unit`, `tasks`, `devbox`, `pinata`, `postgres`), applied by directory; an unregistered marker such as `slow` is an error.
 
 ## Assertions Guidelines
 
