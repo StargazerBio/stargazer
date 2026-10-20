@@ -12,6 +12,11 @@ supply.
 
 Waiting on Union (2026-10-18).
 
+It also limits the per-user index isolation in ticket `dsql-asset-index`:
+a pod can start a run in another user's project, and that run's pods carry
+that project's service-account token, which is what the user's index role
+trusts.
+
 ## Direction
 
 Replace the org key with one key per user, each holding `contributor` on
