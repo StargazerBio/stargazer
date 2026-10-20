@@ -32,6 +32,7 @@ for the token gate, and not to the `Dockerfile` (measured: built and ran it).
 - [x] Build the image and run the quickstart command against it: the notebook serves on 8080 with the banner spliced in
 - [x] Don't advertise port 8081: marimo runs with `-q` (its banner named its own port, which only the proxy reaches) and the image prints `Stargazer notebook: http://localhost:8080`
 - [x] Open the tutorial from `/workspace`: the image copies `assets.py` there unless one exists, so it shows in the Files sidebar and edits land in a mount. The Flyte config moves to `~/.flyte`, out of the sidebar and out from under a `/workspace` mount
+- [x] Serve every SDK notebook: the tutorials and workflow notebooks are copied into `/workspace/{tutorials,workflows}/` (existing files kept) and marimo serves the directory, each notebook in a sandbox from its own header
 - [ ] Republish `ghcr.io/stargazerbio/stargazer:latest` (multi-arch, `docs/guides/contributing.md`)
 
 ## Verification
@@ -54,3 +55,10 @@ file API (`/api/files/list_files` through the proxy) returns root
 `/home/flyte/.flyte/config.yaml`. With a host directory mounted at
 `/workspace`, the first start copied `assets.py` in beside the existing
 file, and a line appended to it on the host survived a restart.
+
+Third round, measured 2026-10-20: the server answers in ~4 s and marimo's
+notebook list shows `tutorials/` and `workflows/`. In Chrome, Run all on
+`tutorials/execution.py` ran with 0 errors (matplotlib imported, the local
+run returned 3 `CohortSummary` results, local CIDs == remote CIDs, chart
+cell rendered). Opening `workflows/scrna_pipeline.py` built its own
+sandbox, which has scanpy and anndata; `execution.py`'s doesn't.
