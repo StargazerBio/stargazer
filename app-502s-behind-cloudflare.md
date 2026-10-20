@@ -1,8 +1,9 @@
 ---
 title: Dashboard errors sent as 502 never reach the page
-status: doing
+status: review
 priority: normal
 created: 2026-10-19
+pr: 57
 ---
 
 Cloudflare sits in front of every Union app and replaces the body of a 502
@@ -46,3 +47,12 @@ for "the store or control plane failed", but whether Cloudflare passes a 500's
 body through is unmeasured: check it on the tenant first, and fall back to
 503 if it doesn't. `/launch`'s refused deploy already went to 422 (ticket
 `long-notebook-names`).
+
+## Verification (2026-10-20, PR #57)
+
+Deployed the branch (`c0e3f25`) to the test account's dashboard with
+`stargazer-users onboard --email pryce@stargazer.bio`. `POST /stop` for a
+notebook with no app, through the public URL, answered `500` with
+`{"error":"stop failed: entry not found"}`, both with the admin's bearer
+token and from the test account's browser session. The probe app and the
+dashboard were deactivated afterwards.
