@@ -50,16 +50,16 @@ flowchart TD
     G([Asset.fetch]) --> H{In the cache?}
     H -->|Yes| L([Return the local path])
     H -->|No| D("Download from the store, or the gateway for public files") --> L
-    L --> M("Link companions into the same directory")
+    L --> M("Link companions into the same directory: the user's own, or public ones if there are none")
 ```
 
-`fetch()` returns the local path. Companions — assets whose `companion_of` is this asset's CID, such as an index or dictionary — land in the same directory, where tools like GATK look for them. An asset built from a local file that was never stored is used in place. An asset known only by its CID is located through the index, then the public gateway.
+`fetch()` returns the local path. Companions — assets whose `companion_of` is this asset's CID, such as an index or dictionary — land in the same directory, where tools like GATK look for them. They come from the user's own index; the public tier is asked only when that holds none for the CID. A private copy of a public reference shares its CID, so with no companions of its own it gets the public index and dictionary. A user who has companions gets only theirs, so files from two builds, such as a bwa `.bwt` from one and a `.sa` from another, never land side by side, and the lookup makes no Pinata call. A user with only some companions gets no public ones for the rest: the task that needs a missing one raises, naming it. An asset built from a local file that was never stored is used in place. An asset known only by its CID is located through the index, then the public gateway.
 
 Gateway downloads use aiohttp directly: `flyte.io.File.download()` can't read an `https://` path.
 
 ## Querying
 
-`assemble(**filters)` asks the storage client for every record matching all the filters. Every key must match exactly; a list value matches any of its entries, in one query. With a Pinata key, Pinata's public records join the user's rows, deduplicated by CID, with the user's own row winning.
+`assemble(**filters)` asks the storage client for every record matching all the filters. Every key must match exactly; a list value matches any of its entries, in one query. With a Pinata key, Pinata's public records join the user's rows, deduplicated by CID, with the user's own row winning. `fetch()`'s companion lookup is the exception: it uses the user's companions or the public ones, never both (see [Writing and reading](#writing-and-reading)).
 
 ## The public tier
 

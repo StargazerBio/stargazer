@@ -177,17 +177,21 @@ class Asset:
         The asset lands at `<STARGAZER_LOCAL>/<cid>/<name>`, and every asset
         with ``companion_of`` set to its CID (an index, a sequence
         dictionary) lands in the same directory, where tools look for it.
-        Outputs that record it as an input under another key, such as an
-        Alignment's ``reference_cid``, stay behind. An asset built from a
-        local file that was never uploaded is returned in place. Copies
-        already on disk are reused.
+        Companions come from the user's own storage; only when it holds none
+        are the public tier's used, so the two are never mixed (see
+        `StorageClient.companions`). Outputs that record it as an input
+        under another key, such as an Alignment's ``reference_cid``, stay
+        behind. An asset built from a local file that was never uploaded is
+        returned in place. Copies already on disk are reused.
         """
         import stargazer.utils.storage as _storage
+        from stargazer.assets import specialize
 
-        local = await _storage.default_client.download(self)
+        client = _storage.default_client
+        local = await client.download(self)
         if self.cid:
-            for companion in await assemble(companion_of=self.cid):
-                await _storage.default_client.download(companion, local.parent)
+            for record in await client.companions(self.cid):
+                await client.download(specialize(record), local.parent)
         return local
 
     async def update(self, path: Path, **kwargs) -> None:
