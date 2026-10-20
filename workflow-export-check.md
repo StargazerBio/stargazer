@@ -1,6 +1,6 @@
 ---
 title: Check workflow exports against the workflow modules
-status: backlog
+status: doing
 priority: low
 created: 2026-10-15
 ---
