@@ -10,7 +10,7 @@ If you want to add tasks or workflows to Stargazer itself, see [Contributing](gu
 docker run -p 8080:8080 ghcr.io/stargazerbio/stargazer
 ```
 
-Opens the Assets tutorial, a [Marimo](https://marimo.io/) notebook, at `http://localhost:8080` in edit mode. From there you can import stargazer tasks, run workflows, and visualize results interactively. The published tag can lag the source; [Contributing → Building Images](guides/contributing.md#building-images) builds it from a checkout under the same name. It is the image hosted notebooks run on (see [Notebooks](architecture/notebook.md) for the notebook types and [App](architecture/app.md) for hosting).
+Serves [Marimo](https://marimo.io/) notebooks at `http://localhost:8080` in edit mode, from a `notebooks/` folder: `tutorials/`, in reading order Assets, Tasks, Workflows and Execution, `workflows/`, and `templates/` with `blank.py` and `basic.py` to start your own from. Each runs with the packages its own header declares. Start a notebook of your own by copying a template rather than with marimo's *Create a new notebook*, whose notebooks don't have Stargazer installed. From there you can import stargazer tasks, run workflows, and visualize results interactively. The published tag can lag the source; [Contributing → Building Images](guides/contributing.md#building-images) builds it from a checkout under the same name. It is the image hosted notebooks run on (see [Notebooks](architecture/notebook.md) for the notebook types and [App](architecture/app.md) for hosting).
 
 ## Use Your Own Files
 
@@ -20,7 +20,7 @@ Mount a directory at `/workspace`, the notebook's working directory:
 docker run -p 8080:8080 -v "$PWD/data":/workspace ghcr.io/stargazerbio/stargazer
 ```
 
-Its files show up in the notebook's file explorer and in the dropdown terminal, so a notebook reads them by relative path (`pd.read_csv("reads/sample.csv")`). It is the same place a hosted notebook keeps the files beside it. On Linux the container runs as user 1000, so the directory must be writable by that user.
+Its files show up in the notebook's file explorer and in the dropdown terminal, so a notebook reads them by relative path (`pd.read_csv("reads/sample.csv")`). It is the same place a hosted notebook keeps the files beside it. The `notebooks/` folder is copied there when the container starts, skipping any file the directory already has, so your edits to them are kept with your files. On Linux the container runs as user 1000, so the directory must be writable by that user.
 
 To keep assets between runs, mount a volume at `/home/flyte/.stargazer`, which holds the asset store, its index and the download cache:
 
@@ -32,7 +32,7 @@ A file in `/workspace` isn't an asset until a notebook stores it with `await ass
 
 ## Agent — Claude Code in the Notebook
 
-Press Ctrl+` in the notebook to drop down a terminal, and run `claude` to log in and start Claude Code. It opens in the notebook's working directory, with the Stargazer SDK installed at `/stargazer` and the tools the bundled workflows call (GATK, samtools, BWA) on the `PATH`, so the agent can run them for you.
+Press ++ctrl+grave++ in the notebook to drop down a terminal, and run `claude` to log in and start Claude Code. It opens in the notebook's working directory, with the Stargazer SDK installed at `/stargazer` and the tools the bundled workflows call (GATK, samtools, BWA) on the `PATH`, so the agent can run them for you.
 
 ## MCP Client Configuration
 

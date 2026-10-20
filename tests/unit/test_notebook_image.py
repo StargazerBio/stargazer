@@ -68,9 +68,9 @@ def test_extract_of_unparseable_source_is_none():
     assert extract_main_img("with app.setup:\n    main_img = (\n") is None
 
 
-def test_template_declares_an_image_on_notebook_base(union):
-    """Notebooks created from the template start with a working `main_img`."""
-    expr = extract_main_img(seed_source("template"))
+def test_basic_template_declares_an_image_on_notebook_base(union):
+    """Notebooks created from the basic template start with a working `main_img`."""
+    expr = extract_main_img(seed_source("basic"))
     assert expr == "notebook_base.with_apt_packages('bcftools')"
     assert evaluate_main_img(expr).base_image == config.NOTEBOOK_IMAGE
 

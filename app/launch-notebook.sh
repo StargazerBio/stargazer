@@ -5,6 +5,9 @@
 #
 #     /usr/local/bin/launch-notebook.sh <mode> <notebook_path>
 #
+# The `stargazer` image (Dockerfile) passes a directory as <notebook_path>,
+# which marimo serves as a notebook list.
+#
 # Three things happen on startup:
 #
 #   1. Hydrate: copy the owner's whole workspace from the workspace store into
@@ -48,7 +51,9 @@ python -c "import sg_proxy; sg_proxy.hydrate()" \
 # launched in it — open here.
 cd "${WORKSPACE_DIR}" 2>/dev/null || true
 
-marimo "${MODE}" --sandbox "${NOTEBOOK_PATH}" \
+# `-q`: marimo's banner advertises its own port, 8081, which only the proxy
+# can reach.
+marimo -q "${MODE}" --sandbox "${NOTEBOOK_PATH}" \
   --port 8081 --host 127.0.0.1 --headless --no-token &
 
 # `--timeout-graceful-shutdown` is required for the shutdown flush to run, not

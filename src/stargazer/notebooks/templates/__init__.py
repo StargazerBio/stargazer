@@ -1,7 +1,7 @@
 """
-### Workspace notebooks — seeds for user-authored work.
+### Notebook templates — seeds for user-authored work.
 
-Ships only the `blank` and `template` seeds that `/workspace/create`
+Ships only the `blank` and `basic` templates that `/workspace/create`
 copies. Users' own notebooks live in the workspace store, keyed by their
 account, and the dashboard lists them from there at render time.
 
