@@ -43,7 +43,7 @@ RUN python -m venv /opt/venv \
         "httpx>=0.27" "websockets>=12"
 
 COPY app/proxy.py /usr/local/lib/sg_proxy.py
-COPY app/terminal_overlay.html /usr/local/lib/
+COPY app/terminal_overlay.html app/save_banner.html /usr/local/lib/
 COPY app/launch-notebook.sh /usr/local/bin/
 # Owned by the runtime user: each sandbox builds `stargazer` from this tree
 # and writes its egg-info here.
