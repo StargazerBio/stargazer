@@ -1,10 +1,11 @@
 ---
 title: The hosted asset index moves to Aurora DSQL
-status: next
+status: backlog
 priority: high
 created: 2026-10-20
 blocked_by:
   - assets-on-dashboard-home
+  - devbox-postgres-index
 ---
 
 On Union each user's asset index is a SQLite file on their dashboard pod,
@@ -18,7 +19,9 @@ DSQL, and the dashboard drops out of the index path.
 
 Locally nothing changes: `SqliteIndex` and `~/.stargazer/index.db` stay. The
 devbox gets a plain Postgres pod. Local-to-cluster promotion stays out of
-scope.
+scope. The work goes in three steps: the shared SQL index (ticket
+`postgres-index`), the devbox's Postgres pod (ticket
+`devbox-postgres-index`), then this ticket, Union.
 
 ## Why DSQL
 
@@ -123,17 +126,10 @@ another user's project, and that run carries that project's token (ticket
   - The shared role can't log in as `u-pryce`'s database role.
   - Confirm `INSERT … ON CONFLICT` and `->>` filters behave as in SQLite.
   - Time the assume, token and connect steps a task pays per call.
-- [ ] **The index class:** one class for DSQL and Postgres in
-  `stargazer.utils.index`, with the same five calls as `SqliteIndex`. It
-  retries serialization errors and reconnects when a connection times out.
-- [ ] **`make_index` dispatch** on the new URL forms.
-- [ ] **Shared index tests:** 9 of the 10 tests in
-  `tests/utils/test_index.py` run against both backends, SQLite in the unit
-  tier and Postgres in the devbox tier. The write-lock test stays
-  SQLite-only.
-- [ ] **Devbox:** a Postgres deployment in `cli/devbox-setup.sh`, with an
-  entry in `devbox_workarounds.md`. The devbox asset-storage and germline
-  tests pass on it.
+- [ ] **DSQL on `PostgresIndex`** (ticket `postgres-index`): connecting with
+  a token from the assumed per-user role, retrying serialization errors, and
+  reconnecting when a connection times out. `make_index` accepts the DSQL
+  URL form.
 - [ ] **Onboarding:**
   - `stargazer-users onboard` creates, on every call and safely when it
     already exists, the IAM role (trust as above, `dsql:DbConnect` on the
