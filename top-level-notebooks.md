@@ -1,6 +1,6 @@
 ---
 title: The scRNA notebook moves to a top-level notebooks folder
-status: next
+status: doing
 priority: normal
 created: 2026-10-17
 blocked_by:
