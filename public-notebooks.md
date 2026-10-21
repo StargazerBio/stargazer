@@ -23,8 +23,9 @@ from the notebook's header when it's published. Nothing else creates one.
 **They aren't published** (decided 2026-10-17, replacing the 2026-10-16 plan
 to publish the tutorials and the scRNA notebook). GitHub already makes them
 public. The tutorials stay in the SDK and the dashboard's Tutorials section,
-and the scRNA notebook moves to a top-level `notebooks/` folder (ticket
-`top-level-notebooks`). Publish is for workspace notebooks only.
+and the scRNA notebook stays in the SDK and the Workflows section (moving it
+to a top-level `notebooks/` folder, ticket `top-level-notebooks`, is shelved
+as of 2026-10-21). Publish is for workspace notebooks only.
 
 ## Reading the public tier
 

@@ -1,9 +1,8 @@
 ---
 title: The scRNA notebook moves to a top-level notebooks folder
-status: review
+status: maybe
 priority: normal
 created: 2026-10-17
-pr: 69
 blocked_by:
   - hosted-notebook-flyte-init
 ---
@@ -15,10 +14,16 @@ come. The scRNA notebook is the first to move. The workspace seeds move to
 `app/`, which leaves `stargazer.notebooks` with the tutorials and
 `notebook_base`.
 
-Blocked by `save-whole-workspace` only because that branch rewrites the same
-dashboard code and docs.
+Blocked by `hosted-notebook-flyte-init` only because both change the scRNA
+notebook's init line.
 
 ## Decided
+
+2026-10-21:
+
+- **Shelved: the notebooks stay in the SDK for now.** PR #69 was closed
+  unmerged. Its branch, `refactor/top-level-notebooks`, holds the move with
+  every piece below done and verified, cut from `main` before #67 and #68.
 
 2026-10-17:
 
