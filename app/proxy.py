@@ -23,7 +23,7 @@ one object per file at its path, under
 `app.workspace_store` owns (mirrored here because this module can't import the
 `app` package). At launch, `hydrate()` copies the owner's whole workspace into
 `/workspace`. While the pod runs, a background loop saves every file whose size
-or modification time changed, every `SG_SAVE_INTERVAL_SECONDS` (5 by default,
+or modification time changed, every `SG_SAVE_INTERVAL_SECONDS` (30 by default,
 0 for none), and deletes from the store the files deleted from `/workspace`. The `lifespan` shutdown hook
 does a final pass when the pod scales to zero. Dotfiles, `__pycache__/`,
 `__marimo__/` and files over `MAX_SAVED_BYTES` are never saved.
@@ -337,12 +337,12 @@ async def sync_once() -> list[str]:
 def _save_interval() -> float:
     """Seconds between save passes, from the pod's env; 0 means none.
 
-    The dashboard sets it at launch from the owner's settings, 5 unless they
+    The dashboard sets it at launch from the owner's settings, 30 unless they
     changed it. The pass reads only files whose size or mtime changed, so a
     short interval costs little and bounds what a pod that dies without
     SIGTERM loses.
     """
-    return float(os.environ.get("SG_SAVE_INTERVAL_SECONDS", "5"))
+    return float(os.environ.get("SG_SAVE_INTERVAL_SECONDS", "30"))
 
 
 async def _sync_loop(interval: float) -> None:

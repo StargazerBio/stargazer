@@ -40,7 +40,7 @@ _FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*\.py$")
 
 # A user's settings before they save any. Pods save their workspace every
 # `save_interval_seconds`, and 0 saves only when the pod stops.
-DEFAULT_SETTINGS = {"save_interval_seconds": 5}
+DEFAULT_SETTINGS = {"save_interval_seconds": 30}
 
 
 class NotebookExistsError(Exception):

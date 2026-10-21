@@ -17,7 +17,7 @@
 #   2. Start marimo on 127.0.0.1:8081 in sandbox mode (notebook's PEP 723
 #      header drives the venv).
 #   3. Start the reverse proxy on 0.0.0.0:8080 (the public port).
-#      It also writes changed files back to the store every few seconds.
+#      It also writes changed files back to the store on an interval.
 #
 # Pending workspace edits are saved one last time before Knative idles the pod
 # by the proxy's FastAPI shutdown hook, which fires on SIGTERM. For that to

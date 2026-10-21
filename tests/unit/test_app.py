@@ -609,7 +609,7 @@ def test_launch_workspace_serves_the_owners_pod(client, served):
     assert served["env"].env_vars == {
         "FLYTE_PROJECT": PROJECT,
         "STARGAZER_OWNER": ALICE,
-        "SG_SAVE_INTERVAL_SECONDS": "5",
+        "SG_SAVE_INTERVAL_SECONDS": str(ws.DEFAULT_SETTINGS["save_interval_seconds"]),
     }
     assert served["servecontext"] == {"project": PROJECT, "domain": "development"}
 

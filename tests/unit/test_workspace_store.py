@@ -101,16 +101,16 @@ def test_workspace_uri_layout():
     assert ws.workspace_uri(ALICE) == f"{config.WORKSPACE_ROOT}/users/{ALICE}/workspace"
 
 
-async def test_settings_of_a_new_user_save_every_5_seconds():
-    """A user who never saved settings gets the 5 s save interval."""
-    assert (await ws.get_settings(ALICE))["save_interval_seconds"] == 5
+async def test_settings_of_a_new_user_are_the_defaults():
+    """A user who never saved settings gets the default settings."""
+    assert await ws.get_settings(ALICE) == ws.DEFAULT_SETTINGS
 
 
 async def test_saved_settings_read_back():
     """A saved interval reads back, and only for that user."""
     await ws.put_settings(ALICE, {"save_interval_seconds": 60})
     assert (await ws.get_settings(ALICE))["save_interval_seconds"] == 60
-    assert (await ws.get_settings(BOB))["save_interval_seconds"] == 5
+    assert await ws.get_settings(BOB) == ws.DEFAULT_SETTINGS
 
 
 async def test_settings_are_not_in_the_workspace(tmp_path):
