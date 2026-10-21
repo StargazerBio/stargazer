@@ -1,6 +1,6 @@
 ---
 title: Hosted notebook kernels never reach the cluster
-status: next
+status: doing
 priority: high
 created: 2026-10-20
 blocked_by:
