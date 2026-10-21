@@ -1,6 +1,6 @@
 ---
 title: Union console handoff (per-user project access)
-status: review
+status: done
 priority: normal
 created: 2026-09-29
 pr: 66
@@ -32,3 +32,11 @@ Verified 2026-10-21 (PR #66): the link on `u-pryce`'s dashboard is
 and clicking it as the test account opened `u-pryce`'s runs in Development,
 signed in. The host comes from the app pod's `_U_EP_OVERRIDE`, measured as
 the bare tenant host. The devbox shows no link.
+
+## Outcome
+
+Shipped in PR #66 (merge `1d55737`): the dashboard header links to its own project's runs in the Union console, with the host from the app pod's `_U_EP_OVERRIDE`. No link off Union.
+
+Verified (measured): unit tier 519 passed, with the new tests failing first. On the test account's deployed dashboard, the link opened `u-pryce`'s runs in Development, signed in. The dashboard was deactivated afterwards, with nothing left running in `u-pryce` or `flytesnacks`.
+
+Left: the sign-in redirect on a deep link wasn't exercised, since the browser was already signed in. No new tickets.

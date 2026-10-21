@@ -4,7 +4,6 @@ status: next
 priority: high
 created: 2026-10-20
 blocked_by:
-  - production-context-files
   - notebook-pod-ephemeral-storage
 ---
 

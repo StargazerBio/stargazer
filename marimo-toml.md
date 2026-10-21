@@ -1,6 +1,6 @@
 ---
 title: Cohesive marimo.toml integration
-status: review
+status: done
 priority: low
 created: 2026-06-10
 pr: 63
@@ -15,3 +15,7 @@ in a notebook pod run in the terminal overlay with a full agent harness, so
 marimo's own MCP client isn't needed (decided 2026-10-14).
 
 Decided 2026-10-20: no marimo-config surface. `marimo.toml` held only the `[ai] rules`, so it's deleted in PR #63 (ticket `production-context-files`), leaving `app/notebook_agent.md` as the one condensed context.
+
+## Outcome
+
+Shipped in PR #63 (merge `956ea36`): `marimo.toml` is deleted, and `app/notebook_agent.md` is the one condensed context, baked as `/workspace/AGENTS.md` (ticket `production-context-files`). Verified: nothing else in the repo read the file. Left: marimo's own AI chat panel gets no Stargazer rules when run from a checkout.
