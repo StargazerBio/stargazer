@@ -1,6 +1,6 @@
 ---
 title: qc_filter takes organism separately from its input asset
-status: review
+status: done
 priority: low
 created: 2026-10-14
 pr: 61
@@ -52,3 +52,11 @@ Branch `fix/qc-filter-organism-from-asset`, PR #61. Measured 2026-10-20.
   the repo produces (bundle, test fixtures, verify seed) is already labeled.
 
 Found along the way: ticket `registry-type-names-py314`.
+
+## Outcome
+
+PR #61 (`36ea20f`, merged 2026-10-21). `qc_filter` takes the organism from
+its input `AnnData` and raises on an unlabeled or unsupported one; the
+pipeline no longer passes `organism=`. Verified as above. Its PR also
+carried the AGENTS.md rule to answer a merged PR's comments (`1140e8e`).
+No comments were left on it. Left: ticket `registry-type-names-py314`.
