@@ -1,8 +1,9 @@
 ---
 title: Curate which public companions a popular asset gets
-status: backlog
+status: review
 priority: normal
 created: 2026-10-20
+pr: 74
 ---
 
 Any user can publish a public file with `companion_of` set to someone
@@ -31,3 +32,10 @@ Needs a curation rule before the code. Options to weigh:
 
 Pinata caps new files at 9 keyvalues, so a new keyvalue on companions
 needs counting against the assets that are already near the cap.
+
+## Decided (2026-10-21, best assumption)
+
+One publisher per parent: public companions count only when their `_owner`
+also published the parent (`PinataClient.get` by CID); with no public parent,
+none are taken. Gating at publish can't be enforced with a shared key, and a
+curation keyvalue costs one of Pinata's 9 slots.
