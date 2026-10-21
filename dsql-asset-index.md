@@ -158,6 +158,414 @@ another user's project, and that run carries that project's token (ticket
   none reach the dashboard.
 - A task in another project is refused on the user's schema.
 
+### Piece 0 runbook
+
+For the user's admin profile (`pryce`), in zsh, from any directory outside
+the repo. Every value that exists before the cluster is filled in, read
+2026-10-21 with `AWS_PROFILE=claude` (read-only). It takes minutes, plus one
+image build on the first `flyte run`.
+
+**Read first: DSQL allows 10 schemas in a database, and a cluster has one
+database.** The quotas page lists the 10 as not configurable; awslabs' DSQL
+agent skill measured it as 10 not counting `public` and `sys`. One schema
+per user caps a cluster at 10 users. The runbook still uses schema
+`u_pryce`, because what it tests (an IAM-mapped database role, refused
+wherever it holds no grant) carries over. Pick the layout before Piece 1:
+- a table per user in one shared schema, isolated by table grants (1,000
+  tables per database); the probe checks that refusal too;
+- a cluster per user (20 per region by default, raisable), keeping `assets`;
+- one shared table with an owner column, giving up database-enforced
+  isolation (`CREATE POLICY` isn't in DSQL's supported-SQL list).
+
+**Filled in, measured read-only:**
+- Account `791359099513`. OIDC provider
+  `arn:aws:iam::791359099513:oidc-provider/oidc.eks.us-west-2.amazonaws.com/id/21AC1CCD151FDBB6668C69B23D6ED9E1`:
+  the account's only one (`aws iam list-open-id-connect-providers`), the
+  issuer `aws eks describe-cluster` gives, client ID `sts.amazonaws.com`.
+- Task pods in `u-pryce-development` run as service account `default`, with
+  a projected token for audience `sts.amazonaws.com` at
+  `/var/run/secrets/eks.amazonaws.com/serviceaccount/token`,
+  `AWS_REGION=us-west-2` and `AWS_STS_REGIONAL_ENDPOINTS=regional` (EKS
+  audit log: the `create` record of task pod `u2xmf4gdfvr4xltxqhnd-a0-0`,
+  2026-10-21 01:07 UTC).
+- The shared role gets implicitDeny for `dsql:DbConnect` and
+  `dsql:DbConnectAdmin` (`aws iam simulate-principal-policy`).
+- Not there yet: any DSQL cluster in us-west-2, the role
+  `stargazer-index-u-pryce`, a DSQL service-linked role.
+- `u-pryce` and `flytesnacks` both hold a `development` `EAGER_API_KEY`
+  (Secrets Manager names), so pods start in both.
+- `psql` isn't installed locally, so the runbook runs it in Docker.
+
+**0. Shell.**
+
+```bash
+aws sso login --profile pryce
+export AWS_PROFILE=pryce AWS_REGION=us-west-2
+REPO=~/Desktop/projects/stargazer
+ROLE=stargazer-index-u-pryce
+ROLE_ARN=arn:aws:iam::791359099513:role/$ROLE
+mkdir -p /tmp/dsql-probe && cd /tmp/dsql-probe
+dsql_psql() { docker run --rm -i -e PGPASSWORD -e PGSSLMODE=require postgres:17-alpine psql -h "$DSQL_ENDPOINT" -d postgres -v ON_ERROR_STOP=1 "$@"; }
+```
+
+**1. The cluster:** single-region (no `--multi-region-properties`),
+deletion protection on. Flags checked against the CLI reference and `aws
+dsql help` (CLI 2.37.13).
+
+```bash
+CLUSTER_ID=$(aws dsql create-cluster --deletion-protection-enabled --tags Name=stargazer-index --query identifier --output text)
+aws dsql wait cluster-active --identifier "$CLUSTER_ID"
+DSQL_ENDPOINT=$(aws dsql get-cluster --identifier "$CLUSTER_ID" --query endpoint --output text)
+CLUSTER_ARN=$(aws dsql get-cluster --identifier "$CLUSTER_ID" --query arn --output text)
+echo "$CLUSTER_ID $DSQL_ENDPOINT $CLUSTER_ARN"
+```
+
+The endpoint is `<id>.dsql.us-west-2.on.aws`; set it by hand if
+`get-cluster` prints `None`.
+
+**2. The IAM role for `u-pryce`:** assumable only with a token whose `sub`
+is `u-pryce-development`'s `default` service account and whose `aud` is
+STS, allowed only `dsql:DbConnect` on this cluster.
+
+```bash
+cat > trust.json <<'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {"Federated": "arn:aws:iam::791359099513:oidc-provider/oidc.eks.us-west-2.amazonaws.com/id/21AC1CCD151FDBB6668C69B23D6ED9E1"},
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "oidc.eks.us-west-2.amazonaws.com/id/21AC1CCD151FDBB6668C69B23D6ED9E1:sub": "system:serviceaccount:u-pryce-development:default",
+          "oidc.eks.us-west-2.amazonaws.com/id/21AC1CCD151FDBB6668C69B23D6ED9E1:aud": "sts.amazonaws.com"
+        }
+      }
+    }
+  ]
+}
+EOF
+cat > connect.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [{"Effect": "Allow", "Action": "dsql:DbConnect", "Resource": "${CLUSTER_ARN}"}]
+}
+EOF
+aws iam create-role --role-name "$ROLE" --assume-role-policy-document file://trust.json --description "Stargazer asset index: u-pryce's DSQL login" --query Role.Arn --output text
+aws iam put-role-policy --role-name "$ROLE" --policy-name dsql-connect --policy-document file://connect.json
+```
+
+Both files were written by these heredocs in zsh and parsed as JSON
+locally.
+
+**3. Database objects, as the DSQL admin.** psql autocommits each
+statement, so every DDL statement is its own transaction (DSQL allows one
+per transaction). `u-pryce` becomes `u_pryce`, since an unquoted identifier
+can't hold `-`.
+
+```bash
+export PGPASSWORD=$(aws dsql generate-db-connect-admin-auth-token --hostname "$DSQL_ENDPOINT" --region us-west-2 --expires-in 3600)
+dsql_psql -U admin <<'EOF'
+CREATE SCHEMA u_pryce;
+CREATE TABLE u_pryce.assets (cid TEXT PRIMARY KEY, uri TEXT NOT NULL, name TEXT NOT NULL, keyvalues JSONB NOT NULL, created_at TEXT NOT NULL);
+CREATE ROLE u_pryce WITH LOGIN;
+AWS IAM GRANT u_pryce TO 'arn:aws:iam::791359099513:role/stargazer-index-u-pryce';
+GRANT USAGE ON SCHEMA u_pryce TO u_pryce;
+GRANT SELECT, INSERT, UPDATE, DELETE ON u_pryce.assets TO u_pryce;
+CREATE TABLE public.other_user_assets (cid TEXT PRIMARY KEY);
+GRANT USAGE ON SCHEMA public TO u_pryce;
+SELECT pg_role_name, arn FROM sys.iam_pg_role_mappings;
+SELECT nspname FROM pg_namespace ORDER BY 1;
+EOF
+```
+
+- The table is `SqliteIndex`'s, keyvalues as `JSONB` (DSQL stores `jsonb`
+  up to 1 MiB a value and can't index it; `cid` is the key).
+- `other_user_assets` is a decoy for the table-per-user layout: `u_pryce`
+  holds `USAGE` on its schema and no grant on the table.
+- Each statement follows DSQL's docs or the examples in awslabs' DSQL
+  skill; none has run on DSQL yet. If one is refused, note it and go on.
+
+Then check that the role mapping alone refuses an unmapped identity. The
+admin holds `dsql:DbConnect` but isn't mapped to `u_pryce`, so expect a
+refusal:
+
+```bash
+(export PGPASSWORD=$(aws dsql generate-db-connect-auth-token --hostname "$DSQL_ENDPOINT" --region us-west-2); dsql_psql -U u_pryce -c 'SELECT 1')
+```
+
+**4. The probe from task pods.** Save the block below as
+`/tmp/dsql-probe/dsql_probe.py` (copy it, then `pbpaste > dsql_probe.py`).
+Its image is Flyte's Debian base plus boto3, psycopg (`PostgresIndex`'s
+driver) and certifi; Union's remote builder builds it on the first run.
+
+```python
+"""Piece 0 probe for ticket dsql-asset-index: per-user DSQL access from a task pod."""
+
+import base64
+import json
+import os
+import sqlite3
+import time
+from pathlib import Path
+
+import boto3
+import certifi
+import flyte
+import psycopg
+from botocore.exceptions import ClientError
+
+REGION = "us-west-2"
+env = flyte.TaskEnvironment(
+    name="dsql_probe",
+    image=flyte.Image.from_debian_base(name="dsql-probe", platform=("linux/amd64",))
+    .with_pip_packages("boto3>=1.35,<2", "psycopg[binary]>=3.2,<4", "certifi"),
+    resources=flyte.Resources(cpu=1, memory="512Mi"),
+)
+
+# SqliteIndex's and PostgresIndex's SQL (src/stargazer/utils/index.py).
+COLS = "cid, uri, name, keyvalues, created_at"
+SCHEMA = ("CREATE TABLE IF NOT EXISTS assets (cid TEXT PRIMARY KEY, uri TEXT NOT NULL, "
+          "name TEXT NOT NULL, keyvalues {json} NOT NULL, created_at TEXT NOT NULL)")
+UPSERT = (f"INSERT INTO assets ({COLS}) VALUES (?, ?, ?, CAST(? AS {{json}}), ?) "
+          "ON CONFLICT (cid) DO UPDATE SET uri = excluded.uri, name = excluded.name, "
+          f"keyvalues = excluded.keyvalues RETURNING {COLS}")
+MERGE = f"UPDATE assets SET keyvalues = {{merge}} WHERE cid = ? RETURNING {COLS}"
+QUERY = f"SELECT {COLS} FROM assets WHERE {{kv}} = ? AND {{kv}} IN (?, ?)"
+ENGINES = {
+    "pg": {"json": "JSONB", "merge": "keyvalues || CAST(? AS JSONB)",
+           "kv": "(keyvalues ->> CAST(? AS TEXT))"},
+    "sqlite": {"json": "TEXT", "merge": "json_patch(keyvalues, ?)",
+               "kv": "json_extract(keyvalues, ?)"},
+}
+
+
+def _row(r: tuple) -> dict:
+    """A result row as a dict, keyvalues parsed (SQLite returns JSON text)."""
+    kv = r[3] if isinstance(r[3], dict) else json.loads(r[3])
+    return dict(zip(COLS.split(", "), [*r[:3], kv, r[4]], strict=True))
+
+
+def _calls(run, engine: str) -> dict:
+    """Insert, upsert on conflict, merge, query by keyvalue, delete: what each gave."""
+    key = (lambda k: k) if engine == "pg" else (lambda k: f'$."{k}"')
+    kv1 = json.dumps({"asset": "dsql_probe", "sample_id": "S1"})
+    kv2 = json.dumps({"asset": "dsql_probe", "sample_id": "S2", "build": "GRCh38"})
+    find = [key("asset"), "dsql_probe", key("sample_id")]
+    steps = {
+        "insert": (UPSERT, ["c1", "s3://b/1", "a.txt", kv1, "2026-01-01"]),
+        "conflict": (UPSERT, ["c1", "s3://b/2", "b.txt", kv2, "2026-02-02"]),
+        "merge": (MERGE, [json.dumps({"sample_id": "S3"}), "c1"]),
+        "query_hit": (QUERY, [*find, "S3", "S9"]),
+        "query_miss": (QUERY, [*find, "S1", "S9"]),
+        "delete": ("DELETE FROM assets WHERE cid = ?", ["c1"]),
+        "after_delete": (f"SELECT {COLS} FROM assets WHERE cid = ?", ["c1"]),
+    }
+    out = {}
+    for name, (sql, params) in steps.items():
+        cur = run(sql.format(**ENGINES[engine]), params)
+        out[name] = [_row(r) for r in cur.fetchall()] if cur.description else "done"
+    return out
+
+
+def _token(session, endpoint: str, admin: bool = False) -> str:
+    """A DSQL auth token signed with the session's credentials (no AWS call)."""
+    dsql = session.client("dsql", region_name=REGION)
+    if admin:
+        return dsql.generate_db_connect_admin_auth_token(endpoint, REGION)
+    return dsql.generate_db_connect_auth_token(endpoint, REGION)
+
+
+def _connect(endpoint: str, user: str, token: str, verify: bool = True):
+    """An autocommit psycopg connection, PostgresIndex's driver."""
+    ssl = {"sslmode": "require"}
+    if verify:
+        ssl = {"sslmode": "verify-full", "sslrootcert": certifi.where()}
+        if psycopg.pq.version() >= 170000:
+            ssl["sslnegotiation"] = "direct"
+    return psycopg.connect(host=endpoint, port=5432, dbname="postgres", user=user,
+                           password=token, connect_timeout=15, autocommit=True, **ssl)
+
+
+def _try(fn) -> str:
+    """'ok', or the error fn raised."""
+    try:
+        fn()
+        return "ok"
+    except (psycopg.Error, ClientError) as err:
+        return f"{type(err).__name__} {getattr(err, 'sqlstate', None) or '-'}: {err}"
+
+
+def _as_db_role(conn, db_role: str) -> dict:
+    """What the database role can do on one connection, and the index SQL's results."""
+    who = "SELECT current_user, current_schema(), current_setting('search_path')"
+    out = {"whoami": conn.execute(who).fetchone()}
+    if out["whoami"][1] != db_role:
+        out["set_search_path"] = _try(lambda: conn.execute(f"SET search_path = {db_role}"))
+    ddl = SCHEMA.format(json="JSONB")
+    out["create_table_if_not_exists"] = _try(lambda: conn.execute(ddl))
+    other = "SELECT count(*) FROM public.other_user_assets"
+    out["read_other_table"] = _try(lambda: conn.execute(other))
+    try:
+        pg = _calls(lambda sql, p: conn.execute(sql.replace("?", "%s"), p), "pg")
+    except psycopg.Error as err:
+        pg = f"{type(err).__name__} {err.sqlstate}: {err}"
+    lite = sqlite3.connect(":memory:")
+    lite.execute(SCHEMA.format(json="TEXT"))
+    return out | {"index_calls": pg, "same_as_sqlite": pg == _calls(lite.execute, "sqlite")}
+
+
+@env.task
+def probe(endpoint: str, role_arn: str, db_role: str = "u_pryce") -> str:
+    """Assume the per-user role, log in as its database role, run the index SQL."""
+    ns = Path("/var/run/secrets/kubernetes.io/serviceaccount/namespace").read_text()
+    web_token = Path(os.environ["AWS_WEB_IDENTITY_TOKEN_FILE"]).read_text()
+    claims = json.loads(base64.urlsafe_b64decode(web_token.split(".")[1] + "=="))
+    report = {"namespace": ns, "sub": claims["sub"], "aud": claims["aud"]}
+    shared = boto3.Session(region_name=REGION)  # the pod's default: the shared role
+    report["shared_role_as_db_role"] = _try(
+        lambda: _connect(endpoint, db_role, _token(shared, endpoint), False).close())
+    sts = boto3.client("sts", region_name=REGION)
+    report["timings_ms"], verify = [], True
+    for _ in range(3):
+        t0 = time.perf_counter()
+        try:
+            creds = sts.assume_role_with_web_identity(
+                RoleArn=role_arn, RoleSessionName="dsql-probe", WebIdentityToken=web_token
+            )["Credentials"]
+        except ClientError as err:
+            report["assume"] = f"refused: {err}"
+            break
+        t1 = time.perf_counter()
+        user = boto3.Session(aws_access_key_id=creds["AccessKeyId"],
+                             aws_secret_access_key=creds["SecretAccessKey"],
+                             aws_session_token=creds["SessionToken"])
+        token = _token(user, endpoint)
+        t2 = time.perf_counter()
+        try:
+            conn = _connect(endpoint, db_role, token, verify)
+        except psycopg.OperationalError as err:
+            report["verify_full_error"], verify = str(err), False
+            conn = _connect(endpoint, db_role, token, verify)
+        t3 = time.perf_counter()
+        conn.execute("SELECT 1").fetchone()
+        t4 = time.perf_counter()
+        conn.close()
+        ms = [round((b - a) * 1000) for a, b in [(t0, t1), (t1, t2), (t2, t3), (t3, t4)]]
+        report["timings_ms"].append(dict(zip(["assume", "token", "connect", "select_1"], ms)))
+    else:
+        report["assume"] = "ok"
+        report["tls"] = "verify-full" if verify else "require"
+        with _connect(endpoint, db_role, token, verify) as conn:
+            report |= _as_db_role(conn, db_role)
+        report["user_role_as_admin"] = _try(
+            lambda: _connect(endpoint, "admin", _token(user, endpoint, True), False).close())
+    print(json.dumps(report, indent=2))
+    return json.dumps(report)
+```
+
+```bash
+flyte_probe() { uv run --project "$REPO" --with 'boto3>=1.35,<2' --with certifi python -c 'import sys; from flyte.cli.main import main; sys.argv[0] = "flyte"; main()' --config "$REPO/.flyte/union.yaml" "$@"; }
+flyte_probe run --follow -p u-pryce -d development dsql_probe.py probe --endpoint "$DSQL_ENDPOINT" --role_arn "$ROLE_ARN"
+flyte_probe run --follow -p flytesnacks -d development dsql_probe.py probe --endpoint "$DSQL_ENDPOINT" --role_arn "$ROLE_ARN"
+flyte_probe get run --in-phase running -p u-pryce -d development
+flyte_probe get run --in-phase running -p flytesnacks -d development
+```
+
+`flyte run` imports the file locally, and the repo's venv has no boto3 or
+certifi. `flyte_probe` adds them with `uv run --with` and calls the CLI from
+Python, because the venv's `flyte` script can't see `--with` packages
+(measured: `ModuleNotFoundError: No module named 'boto3'`). Through it,
+`--help` resolves the task's `--endpoint`, `--role_arn` and `--db_role`
+(measured; nothing was run). The last two commands confirm both runs ended.
+
+Each run prints a JSON report and returns it as its output. What to expect:
+- Both: `sub` is `system:serviceaccount:<project>-development:default`,
+  `aud` is `sts.amazonaws.com`, and `shared_role_as_db_role` is refused (the
+  shared role has no `dsql:DbConnect`).
+- `flytesnacks`: `assume` is refused (`AccessDenied`) and the report stops.
+- `u-pryce`: `assume: ok`, then:
+  - `timings_ms`, three rounds: `assume` (the STS call), `token` (a DSQL
+    client plus local signing), `connect` (TLS and IAM auth), `select_1`.
+  - `tls`: `verify-full` against certifi's bundle, which carries Amazon Root
+    CA 1, or `require` with `verify_full_error`.
+  - `whoami`: `["u_pryce", "u_pryce", "\"$user\", public"]` if DSQL keeps
+    Postgres's default search path, so `PostgresIndex`'s unqualified
+    `assets` needs no `SET`. Otherwise `set_search_path` says whether `SET`
+    works.
+  - `create_table_if_not_exists`: Postgres 16 refuses it with `42501
+    permission denied for schema u_pryce` although the table exists. If
+    DSQL does too, `PostgresIndex`'s constructor can't run as a user's
+    role: Piece 1 skips the DDL on DSQL, or onboarding grants `CREATE` on
+    the schema.
+  - `read_other_table`: `42501 permission denied for table
+    other_user_assets`.
+  - `same_as_sqlite: true`: the insert, the `ON CONFLICT` update (keeping
+    `created_at`), the `||` merge, a `->>` hit and miss, and the delete
+    return what SQLite returns. `false`, or an error in `index_calls`, most
+    likely means `RETURNING`, which DSQL's supported-SQL page doesn't list.
+  - `user_role_as_admin`: refused (no `dsql:DbConnectAdmin`).
+
+The Postgres 16 values above were measured locally (`postgres:16-alpine`):
+step 3's SQL without the `AWS IAM` line, then the probe's `_as_db_role` as
+`u_pryce`, then the teardown below. Its SQLite side ran on SQLite 3.47.
+
+Then drop the decoy:
+
+```bash
+dsql_psql -U admin <<'EOF'
+DROP TABLE public.other_user_assets;
+REVOKE USAGE ON SCHEMA public FROM u_pryce;
+EOF
+```
+
+**5. Record** under `## Piece 0 results (<date>)`, then tick Piece 0:
+- The cluster ID, ARN and endpoint, and the time to `ACTIVE`.
+- Step 3: any refused statement, the mapping row, the schema list, and the
+  unmapped login's refusal.
+- Both probe reports verbatim, with their run names.
+- Decisions for Piece 1: the layout (10 schemas); skipping the DDL or
+  granting `CREATE`; and, from the timings, whether the client caches the
+  assumed credentials (1 h) and the token (15 min by default, a week at
+  most) per process and reuses connections. DSQL accepts 100 new
+  connections a second per cluster (1,000 burst) and ends each after an
+  hour.
+
+**Teardown, to undo it.** After the decoy is gone (order measured on
+Postgres 16):
+
+```bash
+export PGPASSWORD=$(aws dsql generate-db-connect-admin-auth-token --hostname "$DSQL_ENDPOINT" --region us-west-2 --expires-in 3600)
+dsql_psql -U admin <<'EOF'
+AWS IAM REVOKE u_pryce FROM 'arn:aws:iam::791359099513:role/stargazer-index-u-pryce';
+DROP TABLE u_pryce.assets;
+DROP SCHEMA u_pryce;
+DROP ROLE u_pryce;
+EOF
+aws iam delete-role-policy --role-name "$ROLE" --policy-name dsql-connect
+aws iam delete-role --role-name "$ROLE"
+```
+
+Keep the cluster: the rest of this ticket uses it, and idle it bills only
+storage. To delete it anyway:
+
+```bash
+aws dsql update-cluster --identifier "$CLUSTER_ID" --no-deletion-protection-enabled
+aws dsql delete-cluster --identifier "$CLUSTER_ID"
+aws dsql wait cluster-not-exists --identifier "$CLUSTER_ID"
+```
+
+**Unverified**, because nothing here could run against DSQL; the runbook's
+own output settles each:
+- On DSQL: all of step 3's SQL, and in particular `RETURNING`, the default
+  search path, `CREATE TABLE IF NOT EXISTS` without `CREATE`, `DROP SCHEMA`
+  (the docs mention dropping one) and `DROP ROLE`.
+- From the pod: `verify-full` with certifi's bundle and
+  `sslnegotiation=direct`. From Docker: psql 17's TLS to DSQL.
+- The refusal messages, and whether the remote builder builds the probe
+  image as written.
+
 ## Meanwhile
 
 `main` still has the bug PR #52 fixed. A redeploy runs the old and new
