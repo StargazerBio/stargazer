@@ -1,6 +1,6 @@
 ---
 title: Execution tutorial edit pod evicted for disk use
-status: next
+status: doing
 priority: high
 created: 2026-10-20
 ---
