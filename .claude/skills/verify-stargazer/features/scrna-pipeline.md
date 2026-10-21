@@ -12,7 +12,7 @@ A user picks samples from the `scrna_demo` bundle, sees raw QC histograms, and r
 
 ## How to get to it (user POV)
 
-- Open `src/stargazer/notebooks/workflows/scrna_pipeline.py` in `marimo edit` or `marimo run`. Both samples (`s1d1`, `s1d3`) are picked by default.
+- Open `notebooks/scrna_pipeline.py` in `marimo edit` or `marimo run`. Both samples (`s1d1`, `s1d3`) are picked by default.
 
 ## Driving it with marimo export
 
@@ -23,7 +23,7 @@ Preconditions:
 
 Steps:
 
-- **Run every cell with the default picks.** Run `uv run marimo export html src/stargazer/notebooks/workflows/scrna_pipeline.py -o "$RUN_DIR/evidence/scrna-pipeline.html" > "$RUN_DIR/evidence/scrna-pipeline.log" 2>&1`. This takes about 2 minutes locally. Exit code `0`.
+- **Run every cell with the default picks.** Run `uv run marimo export html notebooks/scrna_pipeline.py -o "$RUN_DIR/evidence/scrna-pipeline.html" > "$RUN_DIR/evidence/scrna-pipeline.log" 2>&1`. This takes about 2 minutes locally. Exit code `0`.
 - **Check every stage's outputs.** Run `uv run python .claude/skills/verify-stargazer/scripts/check_anndata.py | tee "$RUN_DIR/evidence/scrna-pipeline.check.txt"`. Every line reads `ok`, and both samples appear at every stage from `raw` through `annotated`.
 - **Proof.** Keep the HTML, the log, and the check output. The check output is the load-bearing artifact.
 

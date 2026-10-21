@@ -11,14 +11,13 @@ since the in-cluster address skips the login. Whoever gets in sees the
 owner's dashboard. There is no OAuth flow, session cookie, or GitHub
 integration. It has three jobs:
 
-1. **Dashboard.** Renders the notebook tile sections: Workflows and
-   Tutorials (shipped in the per-notebook image), and Workspace (the owner's
-   notebooks). The owner's notebooks live in the workspace store
+1. **Dashboard.** Renders the notebook tile sections: Tutorials (shipped
+   in the per-notebook image) and Workspace (the owner's notebooks). The owner's notebooks live in the workspace store
    (`app.workspace_store`), keyed by their Union subject, so saving needs no
    setup. On Union its header links to the project's runs in the Union
    console (`config.CONSOLE_URL`).
 
-2. **Workspace actions.** Create, settings, delete, copy and download, all
+2. **Workspace actions.** Create, settings, delete and download, all
    against the workspace store.
 
 3. **Launch broker.** `POST /launch` builds a per-notebook AppEnvironment via
@@ -89,7 +88,6 @@ from app.notebooks import (
     by_section,
     by_slug,
     seed_source,
-    shipped_source,
     slugify,
 )
 from app.per_notebook import (
@@ -465,10 +463,6 @@ async def dashboard(request: Request, user: CurrentUser):
                 _tile_dict(n.slug, n.title, n.description, "tutorials")
                 for n in by_section("tutorials")
             ],
-            "workflows": [
-                _tile_dict(n.slug, n.title, n.description, "workflows")
-                for n in by_section("workflows")
-            ],
             "workspace": workspace,
             "version": config.VERSION,
             "console_runs_url": _console_runs_url(),
@@ -544,70 +538,6 @@ async def workspace_create(
         slug, resources.cpu, memory_to_gib(resources.memory), "", name=display_name
     )
     return JSONResponse({"slug": slug, "tile_html": _render_tile(tile)})
-
-
-def _copy_source(slug: str, section: str) -> tuple[str, str, str]:
-    """Resolve a copy source to `(source, default_title, default_description)`.
-
-    Raises `LookupError` when the source doesn't exist and `ValueError` for a
-    section that can't be copied from.
-    """
-    if section == "workflows":
-        nb = by_slug(slug)
-        source = shipped_source(nb.path_in_image) if nb else None
-        if nb is None or nb.section != "workflows" or source is None:
-            raise LookupError(f"unknown workflow: {slug}")
-        return source, nb.title, nb.description
-    raise ValueError(f"cannot copy from section: {section}")
-
-
-@asgi_app.post("/workspace/copy")
-async def workspace_copy(
-    user: CurrentUser, slug: str = Form(...), section: str = Form(...)
-):
-    """Copy a Workflows notebook into the user's workspace.
-
-    The source is a shipped Workflows notebook; it's written as a fresh,
-    editable workspace notebook. The copy keeps the source's `[tool.stargazer]`
-    resources but gets its own name/description so it tiles like any other
-    workspace notebook. The target slug is derived from the source title;
-    like `/workspace/create` it fails with 409 if that name is taken. Returns
-    the rendered Workspace tile.
-    """
-    if not _store_ready():
-        return _store_off()
-    try:
-        source, title, desc = _copy_source(slug, section)
-    except ValueError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
-    except LookupError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=404)
-
-    target_slug = _notebook_slug(title)
-    if target_slug is None:
-        return JSONResponse(
-            {"error": f"could not derive a notebook name from {title!r}"},
-            status_code=400,
-        )
-    filename = f"{target_slug}.py"
-    resources = parse_notebook_resources(source)
-    content = with_stargazer_resources(
-        source, resources, description=desc or None, name=title
-    )
-    try:
-        await store.create_workspace_notebook(user.subject, filename, content)
-    except store.NotebookExistsError:
-        return JSONResponse(
-            {"error": f"notebook already exists: {filename}"}, status_code=409
-        )
-    except Exception as exc:
-        logger.error(f"Notebook copy failed for {slug!r} from {section}: {exc}")
-        return _failed("copy", exc)
-
-    tile = _workspace_tile_dict(
-        target_slug, resources.cpu, memory_to_gib(resources.memory), desc, name=title
-    )
-    return JSONResponse({"slug": target_slug, "tile_html": _render_tile(tile)})
 
 
 @asgi_app.post("/workspace/settings")
@@ -708,7 +638,7 @@ async def workspace_download(user: CurrentUser, slug: str):
 # Launch / stop / status / cleanup
 # ---------------------------------------------------------------------------
 
-_SECTIONS = ("tutorials", "workflows", "workspace")
+_SECTIONS = ("tutorials", "workspace")
 
 
 async def _launch_target(
@@ -717,8 +647,8 @@ async def _launch_target(
     """Resolve a launch to `(notebook_path, resources, main_img)`, or None if unknown.
 
     Workspace notebooks declare resources in their `[tool.stargazer]` header;
-    a missing or unreadable header falls back to the defaults. Tutorials and
-    workflows keep the env's legacy defaults (`resources=None`). Workspace
+    a missing or unreadable header falls back to the defaults. Tutorials keep
+    the env's defaults (`resources=None`). Workspace
     notebooks can also declare their own image (`main_img`, the expression to
     build); every other section runs on the deployed notebook image.
     """

@@ -23,11 +23,10 @@ Context shape consumed by `dashboard.html`:
 - `user` (`app.identity.User`) — the avatar initial and "Signed in as".
 - `workspace_configured` (bool) — whether this deploy can save notebooks;
   False renders a notice in place of the Workspace grid.
-- `workflows`, `workspace`, `tutorials` (list of tile dicts) — each dict
-  has `slug`, `title`, `description`, `section` (plus `cpu`/`memory` for
-  workspace tiles). The dashboard loops and includes `_tile.html` for each.
-  Workflows tiles carry a Copy-to-workspace button; Workspace tiles a
-  Download link.
+- `workspace`, `tutorials` (list of tile dicts) — each dict has `slug`,
+  `title`, `description`, `section` (plus `cpu`/`memory` for workspace
+  tiles). The dashboard loops and includes `_tile.html` for each. Workspace
+  tiles carry a Download link.
 - `version` (str) — the commit the dashboard was deployed from, shown in
   the footer; empty shows nothing.
 

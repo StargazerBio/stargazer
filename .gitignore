@@ -180,8 +180,8 @@ Thumbs.db
 # symlink to the main checkout's copy is ignored too.
 tests/.secrets
 
-# Marimo cache
-src/stargazer/notebooks/**/__marimo__/
+# Marimo cache, wherever a notebook lives
+__marimo__/
 .codex/config.toml
 
 # Frozen v1 snapshot, kept out of the repo. Was tracked reference material;

@@ -94,7 +94,7 @@ Receiving SIGTERM is necessary but not sufficient: uvicorn drains open connectio
 
 ## Creating Notebooks & Per-Notebook Resources
 
-The Workspace section offers a **New notebook** create tile (name + blank|basic seed only — resources and the tile blurb are set afterward). The seeds are real shipped notebooks — `notebooks/templates/blank.py` and `basic.py` — not generated source. `POST /workspace/create` slugifies the name, copies the chosen seed, injects **default** resources into its `[tool.stargazer]` header (`with_stargazer_resources`), writes it to the user's store (`create_workspace_notebook`, no-overwrite → 409), and **returns the rendered tile HTML**. The seeds are read from the installed package, not a checkout. (Notebooks don't pin marimo in their PEP 723 headers — `marimo --sandbox` injects the image launcher's version into each kernel venv, so the two never skew without per-notebook bookkeeping.) Create is a pure "add a notebook" action: the browser drops that tile into the Workspace grid; it does not launch or navigate. Both seed slugs are reserved create names and filtered out of the dashboard's tile listing.
+The Workspace section offers a **New notebook** create tile (name + blank|basic seed only — resources and the tile blurb are set afterward). The seeds are real notebooks — `app/seeds/blank.py` and `basic.py` — not generated source. `POST /workspace/create` slugifies the name, copies the chosen seed, injects **default** resources into its `[tool.stargazer]` header (`with_stargazer_resources`), writes it to the user's store (`create_workspace_notebook`, no-overwrite → 409), and **returns the rendered tile HTML**. The seeds are read from the installed `app` package (`app.notebooks.SEEDS_DIR`), not a checkout. (Notebooks don't pin marimo in their PEP 723 headers — `marimo --sandbox` injects the image launcher's version into each kernel venv, so the two never skew without per-notebook bookkeeping.) Create is a pure "add a notebook" action: the browser drops that tile into the Workspace grid; it does not launch or navigate. Both seed slugs are reserved create names and filtered out of the dashboard's tile listing.
 
 Create refuses a name whose slug is over `NOTEBOOK_SLUG_MAX` (22) with a 400. Flyte won't deploy an app whose name is over 30 characters, and a notebook's app is `nb-<slug>-edit`. The cap is the same in every project: Knative names the service after the app alone, inside a `<project>-<domain>` namespace (measured 2026-10-19 in `u-pryce`: a 31-character name was refused at deploy with `app.metadata.id.name: must be at most 30 characters`, and a 30-character one deployed). When `serve` raises at launch and `App.get` then can't find the app, the deploy was refused, so `/launch` returns the serve error as a 422. Not a 502, whose body Cloudflare replaces (Errors, under Dashboard Routes), nor a 503 "still starting", which would invite retries that can't succeed. A watch error on an app that does exist still hands back its endpoint.
 
@@ -106,7 +106,7 @@ Each Workspace tile carries two corner controls:
 
 Seed slugs are rejected by both. The browser confirms delete, then drops the tile on success.
 
-Resources are honored **as-authored — no ceiling**. At `/launch`, the dashboard reads a workspace notebook's source from the store and `app.notebook_meta.parse_notebook_resources` reads `[tool.stargazer]` (cpu/memory) and passes it to `per_notebook_env(resources=…)`. Parsing is purely textual. Image-baked tutorials/workflows notebooks carry no such block and keep the env's legacy `("2Gi", "6Gi")` default.
+Resources are honored **as-authored — no ceiling**. At `/launch`, the dashboard reads a workspace notebook's source from the store and `app.notebook_meta.parse_notebook_resources` reads `[tool.stargazer]` (cpu/memory) and passes it to `per_notebook_env(resources=…)`. Parsing is purely textual. Image-baked tutorials carry no such block and keep the env's legacy `("2Gi", "6Gi")` default.
 
 ## Notebook-Declared Images (`main_img`)
 
@@ -130,10 +130,6 @@ Tile run-state is unified and authoritative. The dashboard's launch/stop handler
 
 A global **Clean up stopped apps** control (`POST /workspace/cleanup`) deletes (`App.delete`) the deployment records for every *deactivated* `nb-{slug}-{mode}` app in the user's project — Stop deactivates an app but leaves the record; this removes them. Active/idle apps are left alone.
 
-## Copy to workspace
-
-**Copy makes a read-only source editable.** Workflows tiles carry a **Copy to workspace** button → `POST /workspace/copy` (`slug` + `section`). The route resolves the source (`_copy_source`): the Workflows notebook is read from the installed package (`shipped_source`). It then writes it to the workspace via `create_workspace_notebook` and returns the rendered Workspace tile the browser drops before the New-notebook tile. The copy keeps the source's parsed `[tool.stargazer]` resources but gets its own `name`/`description` (the workflow's registry title and blurb) re-injected with `with_stargazer_resources`, so it tiles and launches like any user notebook. The target slug is derived from the source title (`_notebook_slug`); the store's no-overwrite create makes a name collision a **409**, so copy never clobbers an existing notebook. Copy is a pure "add a notebook" action: no launch, no navigation.
-
 ## The Proxy Data Path
 
 - **Proxy:** the standalone `app/proxy.py` (which can't import the app package) keeps one module-local shared client with keep-alive to loopback marimo (`_upstream_client`, closed in the proxy lifespan after the shutdown save). Only `text/html` responses are buffered — for the terminal overlay and save banner splice; everything else (static bundles, API JSON, downloads) **streams** through chunk-by-chunk (`StreamingResponse` over `aiter_raw`, `BackgroundTask(resp.aclose)`) with its original headers, so large bodies never sit in proxy memory. The raw query string passes through untouched (duplicate params intact), hop-by-hop, cookie and `X-User-*` headers are stripped, and the request body is streamed only when one exists (no gratuitous chunked framing on GETs).
@@ -150,7 +146,6 @@ All on `app/admin_app.py` (`app_env`), all behind Union's login. Lifespan runs `
 | `/workspace/create` | Writes a new notebook to the user's store from a seed, returns the rendered tile (409 on name collision) |
 | `/workspace/settings` | Rewrites a workspace notebook's `[tool.stargazer]` header (resources + description) |
 | `/workspace/delete` | Removes a workspace notebook (idempotent); tears down its pods |
-| `/workspace/copy` | *Copies* a Workflows notebook into the workspace as an editable notebook (409 on name collision); returns the rendered tile |
 | `/workspace/download` | A workspace notebook as a `.py` attachment |
 | `/launch` | Serves a per-notebook env into the dashboard's project, owned by its owner, on the notebook's declared image when it has one (422 if that won't evaluate or build); returns its URL |
 | `/launch/status` | Reports active per-notebook apps so the dashboard hydrates running tiles to Open/Stop |

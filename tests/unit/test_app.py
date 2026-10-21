@@ -9,7 +9,6 @@ only control-plane calls (serve, App get/delete/list) are stubbed.
 """
 
 import asyncio
-from pathlib import Path
 from types import SimpleNamespace
 
 import flyte.app
@@ -458,27 +457,6 @@ def test_delete_removes_only_the_users_notebook(client):
     assert _get(BOB, "qc-run.py") == NB_SRC
 
 
-def test_copy_workflow_reads_the_shipped_notebook(client):
-    """Copying a workflow writes the shipped source as an editable notebook."""
-    _as(client)
-    resp = client.post(
-        "/workspace/copy", data={"slug": "scrna-pipeline", "section": "workflows"}
-    )
-    assert resp.status_code == 200
-    assert resp.json()["slug"] == "scrna-seq"
-    stored = _get(ALICE, "scrna-seq.py")
-    assert parse_notebook_name(stored) == "scRNA-seq"
-    shipped = (
-        Path(notebooks.NOTEBOOKS_PKG_DIR) / "workflows" / "scrna_pipeline.py"
-    ).read_text()
-    assert shipped.splitlines()[-1] in stored
-    # A second copy would clobber the first.
-    again = client.post(
-        "/workspace/copy", data={"slug": "scrna-pipeline", "section": "workflows"}
-    )
-    assert again.status_code == 409
-
-
 def test_download_workspace_notebook(client):
     """Download returns the source as an attachment."""
     _put(ALICE, "qc-run.py")
@@ -764,13 +742,6 @@ async def _unreachable(*_args, **_kwargs):
             "app.workspace_store.create_workspace_notebook",
             _unreachable,
             "create failed: unreachable",
-        ),
-        (
-            "/workspace/copy",
-            {"slug": "scrna-pipeline", "section": "workflows"},
-            "app.workspace_store.create_workspace_notebook",
-            _unreachable,
-            "copy failed: unreachable",
         ),
         (
             "/workspace/settings",

@@ -16,7 +16,7 @@ process it with a task, and fan that task out in a workflow. Each section is a T
 template — pair with `assets.py` and `tasks.py` for the
 why and the deeper patterns.
 
-spec: [docs/architecture/notebook.md](../architecture/notebook.md)
+spec: [docs/architecture/notebook.md](../../docs/architecture/notebook.md)
 """
 
 import marimo

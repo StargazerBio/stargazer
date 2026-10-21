@@ -58,12 +58,12 @@ COPY --chown=flyte:flyte app/ /stargazer/app/
 RUN mkdir -p /workspace /snapshots /home/flyte/.stargazer \
     && chown -R flyte:flyte /workspace /snapshots /home/flyte/.stargazer
 
-# What a new /workspace starts with: the SDK's whole notebooks folder
-# (templates, tutorials, workflows), without the package files: the notebooks
-# are in its section directories, and the modules beside them (`ui.py`) aren't.
-RUN mkdir /opt/workspace \
-    && cp -r /stargazer/src/stargazer/notebooks /opt/workspace/ \
-    && find /opt/workspace/notebooks -maxdepth 1 -name '*.py' -delete \
+# What a new /workspace starts with: the SDK's tutorials and the dashboard's
+# create seeds, as notebooks/tutorials/ and notebooks/templates/, without the
+# package files.
+RUN mkdir -p /opt/workspace/notebooks \
+    && cp -r /stargazer/src/stargazer/notebooks/tutorials /opt/workspace/notebooks/ \
+    && cp -r /stargazer/app/seeds /opt/workspace/notebooks/templates \
     && find /opt/workspace \( -name __init__.py -o -name __pycache__ \) \
         -prune -exec rm -rf {} +
 # And the terminal agent's context: Claude Code starts in /workspace and reads

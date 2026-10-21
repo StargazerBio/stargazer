@@ -1,11 +1,11 @@
 """
 ### Notebook registry consumed by the dashboard app.
 
-Curated, hand-maintained tuple of every notebook that ships in the
-`notebook-app` image, plus the helpers that read shipped notebook sources
-(seeds, workflows) out of the installed `stargazer` package. Workspace
-notebooks are NOT here — they live in the workspace store
-(`app.workspace_store`).
+Curated, hand-maintained tuple of every tutorial that ships in the
+`notebook-app` image, plus the helper that reads the create seeds out of
+`app/seeds/`. Workspace notebooks are NOT here — they live in the workspace
+store (`app.workspace_store`). Neither are the repo's own notebooks in the
+top-level `notebooks/` folder, which run from a checkout.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -15,19 +15,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-import stargazer.notebooks
-
 # Image-shipped notebooks live at /stargazer/<src/...> in the notebook pod.
 # (A user's own notebooks are hydrated elsewhere; see `app.per_notebook`.)
 IMAGE_WORKDIR = "/stargazer"
 
-# The installed `stargazer.notebooks` package: the same files the notebook
-# image ships under IMAGE_WORKDIR, readable from the dashboard process.
-NOTEBOOKS_PKG_DIR = Path(stargazer.notebooks.__file__).parent
-_IMAGE_NOTEBOOKS_PREFIX = f"{IMAGE_WORKDIR}/src/stargazer/notebooks/"
+# Seed notebooks at `app/seeds/{slug}.py`, which the dashboard installs.
+SEEDS_DIR = Path(__file__).parent / "seeds"
 
-
-# Seed notebooks shipped at `notebooks/templates/{slug}.py`.
 # `/workspace/create` copies one of these under the user's chosen name. They
 # are NOT rendered as dashboard tiles (only user-created notebooks are): the
 # basic template is linked from the Workspace description, and both slugs are
@@ -50,12 +44,12 @@ class Notebook:
     slug: str
     title: str
     description: str
-    section: Literal["tutorials", "workflows"]
+    section: Literal["tutorials"]
     path_in_image: str
 
 
 # Tutorials are ordered as a reading sequence: assets → tasks → workflows →
-# execution. Workflows (full pipelines) render in their own dashboard section.
+# execution.
 NOTEBOOKS: tuple[Notebook, ...] = (
     Notebook(
         slug="assets",
@@ -85,13 +79,6 @@ NOTEBOOKS: tuple[Notebook, ...] = (
         section="tutorials",
         path_in_image=f"{IMAGE_WORKDIR}/src/stargazer/notebooks/tutorials/execution.py",
     ),
-    Notebook(
-        slug="scrna-pipeline",
-        title="scRNA-seq",
-        description="Multi-sample fan-out, clustering, side-by-side UMAPs.",
-        section="workflows",
-        path_in_image=f"{IMAGE_WORKDIR}/src/stargazer/notebooks/workflows/scrna_pipeline.py",
-    ),
 )
 
 
@@ -118,22 +105,9 @@ def slugify(name: str) -> str:
     return re.sub(r"-+", "-", clean).strip("-")
 
 
-def shipped_source(path_in_image: str) -> str | None:
-    """Read a shipped notebook's source by its path in the notebook image.
-
-    The dashboard has no `/stargazer` checkout, but it installs the same package,
-    so the image path maps onto the installed `stargazer.notebooks`. None if
-    the path is outside it or the file is missing.
-    """
-    if not path_in_image.startswith(_IMAGE_NOTEBOOKS_PREFIX):
-        return None
-    path = NOTEBOOKS_PKG_DIR / path_in_image.removeprefix(_IMAGE_NOTEBOOKS_PREFIX)
-    return path.read_text() if path.is_file() else None
-
-
 def seed_source(seed: str) -> str | None:
     """The source of a create seed (`blank` or `basic`), or None."""
     if seed not in SEED_SLUGS:
         return None
-    path = NOTEBOOKS_PKG_DIR / "templates" / f"{seed}.py"
+    path = SEEDS_DIR / f"{seed}.py"
     return path.read_text() if path.is_file() else None

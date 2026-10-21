@@ -149,8 +149,8 @@ Free public gateways rate-limit full downloads, and `dweb.link` no longer
 serves files. `_owner` is stamped on uploads as a publisher byline. Rate
 limiting of the anonymous surface is deferred.
 
-**The browser sits on the dashboard's home page**, below the Workflows,
-Workspace and Tutorials sections and in the same glassy card, and the
+**The browser sits on the dashboard's home page**, below the Workspace and
+Tutorials sections and in the same glassy card, and the
 reactive starfield background is left untouched —
 the asset graph is a separate foreground canvas. The browse surface offers two
 interchangeable renderings of the same listing, switched by a Graph/List

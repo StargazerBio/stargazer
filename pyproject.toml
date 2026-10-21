@@ -148,6 +148,8 @@ ignore = [
 # A marimo cell ends with a bare expression — that IS the render mechanism, not
 # a useless statement. Applies to every notebook surface.
 "src/stargazer/notebooks/**" = ["B018"]
+"app/seeds/**" = ["B018"]
+"notebooks/**" = ["B018"]
 # The PTY/fork path deliberately uses blocking primitives: the pseudo-terminal
 # master fd is long-lived (no context manager), and reaping the child needs a
 # blocking wait.
