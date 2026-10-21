@@ -1,8 +1,9 @@
 ---
 title: CI publishes the stargazer image when its Dockerfile or baked files change
-status: doing
+status: review
 priority: normal
 created: 2026-10-21
+pr: 70
 ---
 
 `ghcr.io/stargazerbio/stargazer:latest` is what the README and Getting Started `docker run`, and nothing publishes it: it's pushed by hand (ticket `republish-stargazer-image`). So it lags `main` after every change to the image. Measured 2026-10-21: both platforms were built 2026-10-20 ~19:37 UTC on Python 3.13.16, before #65 moved the `Dockerfile` to 3.14. #63 (the Assets landing page, `/workspace/AGENTS.md`, Claude Code 2.1.304) widens the gap once it merges.
@@ -58,6 +59,6 @@ jobs:
 ## Pieces
 
 - [ ] Grant the repo write access to the package: package settings → Manage Actions access → `StargazerBio/stargazer`, role Write. Without it, `GITHUB_TOKEN` gets 403 on push. The packages API shows the package isn't linked to a repo (`"repository": null`), and there's no API for this setting.
-- [ ] `.github/workflows/stargazer-image.yml`, linted (`actionlint`)
-- [ ] `docs/guides/contributing.md` → Building Images and `docs/architecture/configuration.md` → Container Images: CI publishes it, and how to run it by hand. Both currently say nothing publishes it automatically.
+- [x] `.github/workflows/stargazer-image.yml`, linted (`actionlint`)
+- [x] `docs/guides/contributing.md` → Building Images and `docs/architecture/configuration.md` → Container Images: CI publishes it, and how to run it by hand. Both currently say nothing publishes it automatically.
 - [ ] Verify: the merge of this PR touches the workflow file, so it triggers the first run. Check that the run succeeds, that `docker buildx imagetools inspect ghcr.io/stargazerbio/stargazer:latest` shows both platforms with today's build date on Python 3.14, and that the README's `docker run` starts it from a clean cache.
