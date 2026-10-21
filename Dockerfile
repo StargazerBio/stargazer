@@ -33,7 +33,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
 # Claude Code, pinned and installed under a fixed HOME so it sits at stable
 # paths whichever user runs it; the pin only holds with auto-update off.
 RUN mkdir -p /opt/claude-cli \
-    && curl -fsSL https://claude.ai/install.sh | HOME=/opt/claude-cli bash -s 2.1.153 \
+    && curl -fsSL https://claude.ai/install.sh | HOME=/opt/claude-cli bash -s 2.1.304 \
     && chmod -R a+rX /opt/claude-cli \
     && ln -s /opt/claude-cli/.local/bin/claude /usr/local/bin/claude
 
@@ -48,9 +48,6 @@ RUN python -m venv /opt/venv \
 COPY app/proxy.py /usr/local/lib/sg_proxy.py
 COPY app/terminal_overlay.html app/save_banner.html /usr/local/lib/
 COPY app/launch-notebook.sh /usr/local/bin/
-# Claude Code's user-level memory for the flyte user, the terminal agent's
-# context. Not in /workspace, which is the user's own.
-COPY app/notebook_agent.md /home/flyte/.claude/CLAUDE.md
 # Owned by the runtime user: each sandbox builds `stargazer` from this tree
 # and writes its egg-info here.
 COPY --chown=flyte:flyte pyproject.toml README.md /stargazer/
@@ -58,10 +55,8 @@ COPY --chown=flyte:flyte src/ /stargazer/src/
 COPY --chown=flyte:flyte app/ /stargazer/app/
 
 # ~/.stargazer exists so a volume mounted there takes its ownership from it.
-# ~/.claude is where Claude Code also writes its login and sessions.
 RUN mkdir -p /workspace /snapshots /home/flyte/.stargazer \
-    && chown -R flyte:flyte /workspace /snapshots /home/flyte/.stargazer \
-        /home/flyte/.claude
+    && chown -R flyte:flyte /workspace /snapshots /home/flyte/.stargazer
 
 # What a new /workspace starts with: the SDK's whole notebooks folder
 # (templates, tutorials, workflows), without the package files: the notebooks
@@ -71,6 +66,9 @@ RUN mkdir /opt/workspace \
     && find /opt/workspace/notebooks -maxdepth 1 -name '*.py' -delete \
     && find /opt/workspace \( -name __init__.py -o -name __pycache__ \) \
         -prune -exec rm -rf {} +
+# And the terminal agent's context: Claude Code starts in /workspace and reads
+# its AGENTS.md.
+COPY app/notebook_agent.md /opt/workspace/AGENTS.md
 
 ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONPATH="/usr/local/lib" \
