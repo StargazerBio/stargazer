@@ -180,10 +180,11 @@ app_env = flyte.app.AppEnvironment(
     # drops app secrets, so a devbox dashboard has no public tier.
     secrets=STARGAZER_SECRETS,
     # Flyte's loaded_modules bundler ships only the .py files the deployer
-    # imported; HTML and the landing-page logo must be enumerated, and so must
-    # the startup module, which nothing imports. The bundle's `app/` shadows
-    # the installed package in the pod, so a missing module can't be found.
-    include=("templates/", "static/", "dashboard_launch.py"),
+    # imported; HTML, the landing-page logo and the create seeds (read as
+    # text) must be enumerated, and so must the startup module, which nothing
+    # imports. The bundle's `app/` shadows the installed package in the pod,
+    # so a missing file can't be found.
+    include=("templates/", "static/", "seeds/", "dashboard_launch.py"),
 )
 
 
