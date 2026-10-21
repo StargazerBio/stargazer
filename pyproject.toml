@@ -7,7 +7,7 @@ name = "stargazer"
 version = "0.1.0"
 description = "Bioinformatics workflow orchestration on Flyte v2, with assets identified by their IPFS CID"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 dependencies = [
     "aiohttp>=3.9.0",
     "aiofiles>=24.1.0",

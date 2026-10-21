@@ -17,6 +17,10 @@ from typing import Any, get_type_hints
 
 def _type_name(hint: Any) -> str:
     """Convert a type hint to a human-readable string (`list[str]`, `R2 | NoneType`)."""
+    # Before the generic branch: a union has an `__origin__` too.
+    if isinstance(hint, types.UnionType):
+        return " | ".join(_type_name(a) for a in hint.__args__)
+
     origin = getattr(hint, "__origin__", None)
     args = getattr(hint, "__args__", None)
 
@@ -26,9 +30,6 @@ def _type_name(hint: Any) -> str:
             arg_names = ", ".join(_type_name(a) for a in args)
             return f"{origin_name}[{arg_names}]"
         return origin_name
-
-    if isinstance(hint, types.UnionType):
-        return " | ".join(_type_name(a) for a in hint.__args__)
 
     if hasattr(hint, "__name__"):
         return hint.__name__

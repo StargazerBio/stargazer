@@ -67,7 +67,7 @@ def extract_main_img(source: str) -> str | None:
     """
     try:
         tree = ast.parse(source)
-    except (SyntaxError, ValueError):
+    except SyntaxError, ValueError:
         return None
     found = None
     for node in tree.body:

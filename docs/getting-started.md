@@ -71,7 +71,7 @@ See [Configuration](architecture/configuration.md) for details.
 
 ## Installing from Source
 
-**Prerequisites:** Python 3.13+, [uv](https://docs.astral.sh/uv/)
+**Prerequisites:** Python 3.14+, [uv](https://docs.astral.sh/uv/)
 
 ```bash
 git clone https://github.com/StargazerBio/stargazer.git

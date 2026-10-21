@@ -597,7 +597,7 @@ async def term_proxy(websocket: WebSocket) -> None:
                 continue
             try:
                 payload = json.loads(raw)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 continue
             if payload.get("type") == "input":
                 os.write(master_fd, payload.get("data", "").encode())

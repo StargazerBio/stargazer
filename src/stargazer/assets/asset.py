@@ -65,7 +65,7 @@ class Asset:
         aln.keyvalues["lane"] = "3"
     """
 
-    _registry: ClassVar[dict[str, type["Asset"]]] = {}
+    _registry: ClassVar[dict[str, type[Asset]]] = {}
     _asset_key: ClassVar[str] = ""
 
     cid: str = ""
@@ -128,7 +128,7 @@ class Asset:
     @classmethod
     def from_keyvalues(
         cls, kv: dict[str, str], cid: str = "", path: File | Path | str | None = None
-    ) -> "Asset":
+    ) -> Asset:
         """Reconstruct from a storage keyvalues dict.
 
         str fields are assigned directly; all other types are deserialized
@@ -208,7 +208,7 @@ class Asset:
         await _storage.default_client.upload(self, Path(path))
 
 
-async def assemble(**filters: Any) -> list["Asset"]:
+async def assemble(**filters: Any) -> list[Asset]:
     """Query storage by keyvalue filters and return specialized assets.
 
     Every filter must match exactly. A list value matches any of its entries

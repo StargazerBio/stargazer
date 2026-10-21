@@ -66,6 +66,7 @@ def test_to_catalog_structure():
 
     rg_param = next(p for p in bwa_mem_entry["params"] if p["name"] == "read_group")
     assert rg_param["required"] is False
+    assert rg_param["type"] == "dict[str, str] | NoneType"
 
     assert len(bwa_mem_entry["outputs"]) == 1
     assert bwa_mem_entry["outputs"][0]["name"] == "o0"
