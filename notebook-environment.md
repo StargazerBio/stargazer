@@ -3,6 +3,8 @@ title: Notebooks declare their own app environment
 status: backlog
 priority: normal
 created: 2026-10-16
+blocked_by:
+  - production-context-files
 ---
 
 A notebook declares what its pod runs on in two places, in two formats:
