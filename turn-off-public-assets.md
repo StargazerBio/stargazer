@@ -1,6 +1,6 @@
 ---
 title: A config that turns the public tier off in the dashboard
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-20
 ---
