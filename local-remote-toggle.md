@@ -1,6 +1,6 @@
 ---
 title: In-notebook local-vs-remote toggle UI
-status: review
+status: done
 priority: normal
 created: 2026-05-19
 pr: 62
@@ -41,3 +41,11 @@ The scRNA notebook and the `basic` template don't get it here. Neither dispatche
 - [x] Execution tutorial section
 - [x] Docs: `docs/architecture/notebook.md`, API reference (no guide shows the hardcoded dispatch)
 - [x] Verified headless with the control on this machine against an isolated store
+
+## Outcome
+
+Shipped in PR #62 (merge `40c329e`): `stargazer.notebooks.ui` with `run_location()` and `dispatch()`, a closing "Let the Reader Pick" section in the Execution tutorial, and the control described in `docs/architecture/notebook.md`.
+
+Verified: unit tests written first (failed on `NotImplementedError`), with a mutation check on the cluster path's `wait()`; unit tier 504 passed. The Execution tutorial driven headless against an isolated store: the control rendered with "On this machine" as its default, and section 6 returned 3 `CohortSummary` results with the same CIDs as section 3. "On the cluster" with no cluster configured raised at upload rather than running locally.
+
+Left: a real cluster run through the control was not verified (only a patched-runner unit test covers it). The scRNA notebook and the `basic` template move onto the control in ticket `notebook-cluster-runs`. `dispatch` handles one output only and shows no console link for a cluster run.
