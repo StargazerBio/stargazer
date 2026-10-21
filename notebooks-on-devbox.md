@@ -1,6 +1,6 @@
 ---
 title: Notebooks on the devbox
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-08
 ---
