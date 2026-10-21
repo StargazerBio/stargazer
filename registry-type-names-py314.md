@@ -1,8 +1,9 @@
 ---
 title: The registry renders optional types as Union[...] on Python 3.14
-status: doing
+status: review
 priority: low
 created: 2026-10-20
+pr: 65
 ---
 
 `_type_name` in `src/stargazer/registry.py` renders `X | None` as
