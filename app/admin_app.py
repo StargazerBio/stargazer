@@ -70,7 +70,7 @@ from flyte.remote import App
 
 from app import config
 from app import workspace_store as store
-from app.assets import public_assets_on
+from app.assets import TUS_MAX_BYTES, public_assets_on
 from app.assets import router as assets_router
 from app.identity import CurrentUser, User
 from app.index_api import router as index_router
@@ -455,6 +455,7 @@ async def dashboard(request: Request, user: CurrentUser):
             # The asset browser compares `_owner` against the visitor.
             "username": user.subject,
             "pinata_configured": public_assets_on(),
+            "tus_max_bytes": TUS_MAX_BYTES,
         },
     )
 

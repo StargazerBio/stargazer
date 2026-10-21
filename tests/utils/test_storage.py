@@ -469,3 +469,26 @@ async def test_asset_with_file_round_trips_through_flyte():
         "bafyA",
     )
     assert (back.sample_id, back.duplicates_marked) == ("S1", True)
+
+
+@pytest.mark.asyncio
+async def test_upload_skips_bytes_a_row_already_points_at(client, tmp_path):
+    """Bytes already stored elsewhere under a row aren't stored again at the CID path."""
+    data = b"READS\x02"
+    elsewhere = _write(
+        tmp_path / "store" / "users" / "local" / "uploads" / "u1" / "r1.fq", data
+    )
+    cid = compute_cid(elsewhere)
+    await client.index.upsert(
+        {
+            "cid": cid,
+            "uri": str(elsewhere),
+            "name": "r1.fq",
+            "keyvalues": {"asset": "r1"},
+        }
+    )
+
+    await R1().update(_write(tmp_path / "work" / "r1.fq", data), sample_id="S1")
+
+    assert not (tmp_path / "store" / "users" / "local" / "assets" / cid).exists()
+    assert (await client.index.get(cid))["uri"] == str(elsewhere)

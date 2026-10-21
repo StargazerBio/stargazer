@@ -103,11 +103,20 @@ sections: a browse-and-upload surface with two tabs. Routes live in
 `.opencode/reference/architecture/app_internals.md`.
 
 **Private is the user's own index and store**, the same ones their tasks
-and notebooks write to, so the tab shows everything they've stored. Uploads
-stream through the dashboard into the store, which works out the CID and
-writes the index row, and downloads stream back out. Only the dashboard's
-owner reaches them. It works on every dashboard, with or without a Pinata
-key.
+and notebooks write to, so the tab shows everything they've stored. Only the
+dashboard's owner reaches them. It works on every dashboard, with or without
+a Pinata key.
+
+**Private uploads are resumable, up to 10 GB.** The browser sends the file in
+pieces over the TUS protocol, and the dashboard passes each piece straight on
+to the store as one part of a multipart upload, working out the CID as the
+bytes go by, so the file never lands on the dashboard's disk. The last piece
+writes the index row. The file stays where it was uploaded, under the user's
+`uploads/`, and the row points there; the same file uploaded again is
+deleted and the first row kept. An upload in progress lives in the
+dashboard's memory: a dropped connection or a reloaded page resumes from what
+arrived, while a dashboard restart starts it over, and an upload left idle
+for an hour is dropped. Downloads stream back out through the dashboard.
 
 **Public is Pinata's public network**, called directly. The dashboard gets
 the org's Pinata key as a Flyte secret: Union injects it into the pod and
@@ -130,8 +139,9 @@ agree on what a valid upload is. **A registered type's form takes extra
 fields** below its declared ones, stored as text on the typed asset (see
 [Types → Extra keys](types.md#extra-keys)); an upload with more fields than
 a Pinata file holds is refused before the URL is minted. Public downloads redirect the same way: bytes go
-browser↔Pinata, not through the pod. Private uploads use the same validation
-before the dashboard reads any of the file.
+browser↔Pinata, not through the pod, and public uploads are capped at
+100 MB. Private uploads use the same validation before any of the file is
+sent.
 
 **Ownership is server-stamped attribution, not enforcement.** Every hosted
 write path stamps an `_owner` keyvalue (the user's subject) — the page from the signed-in user at sign
