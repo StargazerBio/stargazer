@@ -1,8 +1,9 @@
 ---
 title: A Settings section on the dashboard, starting with the save interval
-status: doing
+status: review
 priority: normal
 created: 2026-10-18
+pr: 71
 ---
 
 The dashboard gets a Settings section for the user's own preferences, and the
@@ -35,16 +36,16 @@ and work since the last save is lost if the notebook stops unexpectedly.
 
 ## Pieces
 
-- [ ] `app/workspace_store.py`: read and write `settings.json`. Tests: no
+- [x] `app/workspace_store.py`: read and write `settings.json`. Tests: no
       file → the default interval; a written 60 → read back as 60.
-- [ ] Dashboard: a Settings section and a route that saves it. Tests in
+- [x] Dashboard: a Settings section and a route that saves it. Tests in
       `tests/unit/test_app.py`: saving 60 → the next launch's pod env carries
       `SG_SAVE_INTERVAL_SECONDS=60`; saving -1 or a non-number → refused, and
       the stored value is unchanged.
-- [ ] Docs: `docs/architecture/app.md` (the dashboard's sections, and the
+- [x] Docs: `docs/architecture/app.md` (the dashboard's sections, and the
       store layout), and `.opencode/reference/architecture/app_internals.md`
       (the route table, the store layout, and Save on an interval).
-- [ ] Verify on Union with the test account: set 60 in Settings, launch a
+- [x] Verify on Union with the test account: set 60 in Settings, launch a
       notebook, and read `SG_SAVE_INTERVAL_SECONDS=60` in the pod's
       terminal. Let the dashboard scale to zero, reopen it, and the setting
       is still 60. Set -1 and get the error. Stop every app the check
