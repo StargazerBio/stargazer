@@ -1,6 +1,6 @@
 ---
 title: Union console handoff (per-user project access)
-status: backlog
+status: doing
 priority: normal
 created: 2026-09-29
 ---
