@@ -130,29 +130,22 @@
      .dashboard its only ancestors are body/html, so it centers on the screen. -->
 <dialog id="settings-modal" class="settings-modal">
     <form id="settings-form" class="settings-form">
-        <h3>Notebook settings</h3>
+        <h3>Notebook setup</h3>
         <p class="settings-target"><code></code></p>
-        <label class="settings-label">
-            Description
-            <input
-                type="text"
-                name="description"
-                maxlength="120"
-                placeholder="What this notebook does"
-            />
-        </label>
-        <div class="settings-res-row">
-            <label class="settings-label">
-                CPU
-                <input type="number" name="cpu" min="1" step="1" required />
-            </label>
-            <label class="settings-label">
-                Memory (GiB)
-                <input type="number" name="memory" min="1" step="1" required />
-            </label>
-        </div>
+        <textarea
+            name="setup"
+            class="settings-editor"
+            spellcheck="false"
+            autocapitalize="off"
+            autocomplete="off"
+            aria-label="Setup block"
+            required
+        ></textarea>
         <p class="settings-note">
-            Resource changes take effect the next time you launch this notebook.
+            <code>main_name</code> and <code>main_description</code> title this
+            tile. <code>main_resources</code> and <code>main_img</code> are the
+            pod's resources and image, and take effect the next time you launch
+            this notebook.
         </p>
         <div class="settings-actions">
             <button type="button" class="btn btn-muted" data-close>
@@ -425,26 +418,45 @@
         copyToWorkspace(btn);
     });
 
-    // Edit a workspace notebook's resources + description via the gear → modal.
-    // The gear carries the current values as data-*; Save POSTs them and
-    // refreshes the tile blurb + the gear's data-* in place — no reload.
+    // Edit a workspace notebook's setup block via the gear → modal. The block
+    // is fetched fresh on open, since an open notebook saves its edits back;
+    // Save POSTs it and retitles the tile in place — no reload.
     const settingsModal = document.getElementById("settings-modal");
     const settingsForm = document.getElementById("settings-form");
     let settingsSlug = null;
 
-    function openSettings(gear) {
-        settingsSlug = gear.dataset.settingsSlug;
-        const desc = gear.dataset.description || "";
-        // The generic placeholder isn't a real description — start blank so the
-        // user types their own rather than editing boilerplate.
-        settingsForm.description.value =
-            desc === "Personal workspace notebook." ? "" : desc;
-        settingsForm.cpu.value = gear.dataset.cpu || "1";
-        settingsForm.memory.value = gear.dataset.memory || "2";
+    async function openSettings(gear) {
+        const slug = gear.dataset.settingsSlug;
+        try {
+            const resp = await fetch(
+                "/workspace/setup?slug=" + encodeURIComponent(slug),
+                { headers: { Accept: "application/json" } },
+            );
+            const payload = await resp.json().catch(() => ({}));
+            if (!resp.ok)
+                throw new Error(payload.error || "HTTP " + resp.status);
+            settingsSlug = slug;
+            settingsForm.setup.value = payload.setup;
+        } catch (err) {
+            alert("Couldn't open the setup block: " + err.message);
+            return;
+        }
         settingsModal.querySelector(".settings-target code").textContent =
             settingsSlug + ".py";
         settingsModal.showModal();
     }
+
+    // Tab indents in the editor (Python), instead of leaving the textarea.
+    settingsForm?.setup.addEventListener("keydown", (e) => {
+        if (e.key !== "Tab" || e.shiftKey) return;
+        e.preventDefault();
+        e.target.setRangeText(
+            "    ",
+            e.target.selectionStart,
+            e.target.selectionEnd,
+            "end",
+        );
+    });
 
     document.addEventListener("click", (e) => {
         const gear = e.target.closest("[data-settings-slug]");
@@ -468,13 +480,11 @@
             saveBtn.disabled = true;
             saveBtn.innerHTML = '<span class="spinner-inline"></span>';
             try {
-                const resp = await fetch("/workspace/settings", {
+                const resp = await fetch("/workspace/setup", {
                     method: "POST",
                     body: new URLSearchParams({
                         slug: settingsSlug,
-                        cpu: settingsForm.cpu.value,
-                        memory: settingsForm.memory.value,
-                        description: settingsForm.description.value,
+                        setup: settingsForm.setup.value,
                     }),
                     headers: { Accept: "application/json" },
                 });
@@ -485,10 +495,9 @@
                     `[data-settings-slug="${settingsSlug}"]`,
                 );
                 if (gear) {
-                    gear.dataset.cpu = payload.cpu;
-                    gear.dataset.memory = payload.memory;
-                    gear.dataset.description = payload.description;
-                    const p = gear.closest(".tile").querySelector("p");
+                    const tile = gear.closest(".tile");
+                    tile.querySelector("h3").textContent = payload.title;
+                    const p = tile.querySelector("p");
                     if (p) p.textContent = payload.description;
                 }
                 settingsModal.close();

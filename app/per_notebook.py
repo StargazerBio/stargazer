@@ -57,6 +57,7 @@ dashboard and in tasks.
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
+import dataclasses
 import os
 from datetime import timedelta
 from typing import Literal
@@ -69,7 +70,6 @@ from flyteidl2.app import app_payload_pb2
 from flyteidl2.common import identifier_pb2, list_pb2
 
 from app import config
-from app.notebook_meta import NotebookResources
 from stargazer.config import (
     IMAGE_PLATFORM,
     PROJECT_ROOT,
@@ -93,6 +93,18 @@ WORKSPACE_NOTEBOOK_DIR = "/workspace"
 # Flyte refuses to deploy an app whose name is over 30 characters, whatever
 # the project, and a notebook's app is `nb-<slug>-<mode>`, longest in `edit`.
 NOTEBOOK_SLUG_MAX = 30 - len("nb--edit")
+
+# The pod's disk holds the kernel's sandbox venv, uv's cache, the hydrated
+# workspace and whatever the notebook writes. Without a limit of its own, the
+# pod's only ephemeral-storage limit is the Knative queue-proxy sidecar's 1Gi,
+# which a notebook with numpy and matplotlib outgrows while its venv installs,
+# and the kubelet evicts the pod. Union turns the request into a limit too.
+NOTEBOOK_DISK = "20Gi"
+
+# What a notebook pod gets for each resource its notebook doesn't declare
+# (`main_resources`). The 6Gi memory limit is the scRNA workflow's, which
+# declares none.
+NOTEBOOK_RESOURCES = flyte.Resources(cpu=1, memory=("2Gi", "6Gi"), disk=NOTEBOOK_DISK)
 
 
 # Layered build recipe. Consumed only by the deployer's build step
@@ -206,7 +218,7 @@ def per_notebook_env(
     owner_subject: str,
     admin_url: str,
     index_url: str,
-    resources: NotebookResources | None = None,
+    resources: flyte.Resources | None = None,
     image: flyte.Image | None = None,
 ) -> flyte.app.AppEnvironment:
     """Build a per-notebook AppEnvironment for one (slug, mode) launch.
@@ -229,10 +241,9 @@ def per_notebook_env(
     spec. The Pinata key comes as a secret instead, which the spec only
     references.
 
-    `resources` is the notebook's declared `[tool.stargazer]` spec, honored
-    as-authored (no ceiling). When None — image-baked tutorials and workflows
-    notebooks — the env falls back to the legacy `("2Gi", "6Gi")`
-    request/limit, which the memory-heavy scRNA notebook depends on.
+    `resources` is the notebook's declared `main_resources`, honored
+    as-authored (no ceiling). Each resource it leaves unset, or all of them
+    when it's None, comes from `NOTEBOOK_RESOURCES`.
 
     `image` is the notebook's own `main_img`, which `serve` builds before it
     deploys, or None to run on the deployed notebook image. The pod's
@@ -244,11 +255,12 @@ def per_notebook_env(
             "STARGAZER_NOTEBOOK_IMAGE is unset: deploy with `stargazer-users`, "
             "which builds the notebook image and bakes its URI in."
         )
-    flyte_resources = (
-        flyte.Resources(cpu=resources.cpu, memory=resources.memory)
+    declared = {
+        field.name: value
+        for field in dataclasses.fields(flyte.Resources)
         if resources is not None
-        else flyte.Resources(memory=("2Gi", "6Gi"))
-    )
+        and (value := getattr(resources, field.name)) is not None
+    }
     return flyte.app.AppEnvironment(
         name=f"nb-{slug}-{mode}",
         description=f"Per-notebook app: {slug} ({mode})",
@@ -273,7 +285,7 @@ def per_notebook_env(
         ],
         port=8080,
         requires_auth=True,
-        resources=flyte_resources,
+        resources=dataclasses.replace(NOTEBOOK_RESOURCES, **declared),
         scaling=flyte.app.Scaling(
             replicas=(0, 1), scaledown_after=timedelta(minutes=30)
         ),

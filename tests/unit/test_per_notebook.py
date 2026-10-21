@@ -3,8 +3,7 @@
 import flyte
 
 from app import config
-from app.notebook_meta import NotebookResources
-from app.per_notebook import WORKSPACE_NOTEBOOK_DIR, per_notebook_env
+from app.per_notebook import NOTEBOOK_DISK, WORKSPACE_NOTEBOOK_DIR, per_notebook_env
 from stargazer.notebooks import notebook_image_base
 
 SUBJECT = "387300641116005877"
@@ -25,17 +24,22 @@ def _env(**overrides):
 
 
 def test_default_resources_preserve_legacy_request_limit():
-    """With no resources, the env keeps the legacy ('2Gi','6Gi') tuple."""
+    """With no resources, the env gets one CPU and the ('2Gi','6Gi') memory tuple."""
     env = _env()
     assert env.resources.memory == ("2Gi", "6Gi")
-    assert env.resources.cpu is None
+    assert env.resources.cpu == 1
 
 
-def test_custom_resources_applied_to_env():
-    """A NotebookResources spec maps onto the env's flyte.Resources."""
-    env = _env(resources=NotebookResources(cpu=2, memory="4Gi"))
-    assert env.resources.cpu == 2
-    assert env.resources.memory == "4Gi"
+def test_declared_resources_applied_to_env():
+    """A notebook's declared resources are the pod's, as written."""
+    env = _env(resources=flyte.Resources(cpu=2, memory="4Gi", disk="50Gi"))
+    assert env.resources == flyte.Resources(cpu=2, memory="4Gi", disk="50Gi")
+
+
+def test_resources_a_notebook_leaves_out_keep_their_defaults():
+    """Declaring only memory still gets the pod a CPU and its disk."""
+    env = _env(resources=flyte.Resources(memory="16Gi"))
+    assert env.resources == flyte.Resources(cpu=1, memory="16Gi", disk=NOTEBOOK_DISK)
 
 
 def test_pod_sits_behind_union_login():

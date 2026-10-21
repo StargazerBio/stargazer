@@ -21,6 +21,7 @@ You're in the terminal of a Stargazer notebook: a container serving one user's m
 - `with app.setup:` holds imports and definitions every cell can use. A cell holding just one function or class, decorated `@app.function` or `@app.class_definition` and using only setup-block names, is importable from the notebook like a module (`from other_notebook import fn`).
 - Python packages go in the PEP 723 header (`# /// script`); each notebook runs in its own environment built from it at start. `stargazer` resolves to `/stargazer` through the header's `[tool.uv.sources]` entry; keep it.
 - System tools go in the image the notebook runs on, declared in the setup block as `main_img = notebook_base.with_apt_packages(...)` (`from stargazer.notebooks import notebook_base`). It takes effect the next time the notebook launches from the dashboard. The line is evaluated on its own, so it can use only `flyte` and `notebook_base`.
+- The pod's CPU, memory and disk are `main_resources = flyte.Resources(...)` in the setup block, and the dashboard tile's title and blurb are `main_name` and `main_description`. The dashboard reads them without running code, so keep their values literal (`cpu=2`, `memory="8Gi"`, plain strings). Resources take effect the next time the notebook launches.
 
 ## Task pattern
 

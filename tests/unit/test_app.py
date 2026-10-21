@@ -12,6 +12,7 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
+import flyte
 import flyte.app
 import flyte.errors
 import pytest
@@ -26,23 +27,38 @@ from app.admin_app import (
     app_env,
     asgi_app,
 )
-from app.notebook_meta import parse_notebook_name, parse_notebook_resources
+from app.notebook_meta import (
+    notebook_description,
+    notebook_name,
+    notebook_resources,
+    setup_body,
+)
 from stargazer.notebooks import notebook_image_base
 
 ALICE = "387300641116005877"
 BOB = "111111111111111111"
 PROJECT = f"u-{ALICE}"
 
+NB_BODY = (
+    "import flyte\n"
+    "\n"
+    'main_name = "QC run"\n'
+    'main_description = "Quality control."\n'
+    'main_resources = flyte.Resources(cpu=4, memory="8Gi")\n'
+)
+
+NB_SETUP = "with app.setup:\n" + "".join(
+    f"    {line}" if line.strip() else line
+    for line in NB_BODY.splitlines(keepends=True)
+)
+
 NB_SRC = (
     "# /// script\n"
     '# dependencies = ["marimo"]\n'
-    "# [tool.stargazer]\n"
-    "# cpu = 4\n"
-    '# memory = "8Gi"\n'
-    '# name = "QC run"\n'
-    '# description = "Quality control."\n'
     "# ///\n"
-    "import marimo\n"
+    "import marimo\n\n"
+    "app = marimo.App()\n\n"
+    f"{NB_SETUP}"
 )
 
 
@@ -335,7 +351,7 @@ def test_dashboard_without_store_says_saving_is_unavailable(client, monkeypatch)
 
 
 # ---------------------------------------------------------------------------
-# Create / settings / delete / copy / download
+# Create / setup / delete / copy / download
 # ---------------------------------------------------------------------------
 
 
@@ -352,7 +368,7 @@ def test_create_writes_a_seeded_notebook_to_the_users_store(client):
     assert resp.json()["slug"] == "my-qc"
     assert "my-qc.py" in resp.json()["tile_html"]
     stored = _get(ALICE, "my-qc.py")
-    assert parse_notebook_name(stored) == "My QC"
+    assert notebook_name(stored) == "My QC"
     assert "import marimo" in stored
     assert _get(BOB, "my-qc.py") is None
 
@@ -405,33 +421,57 @@ def test_create_without_store_is_503(client, monkeypatch):
     assert client.post("/workspace/create", data={"name": "x"}).status_code == 503
 
 
-def test_settings_rewrites_the_header(client):
-    """Settings updates resources + description in the stored notebook."""
+def test_setup_shows_the_notebooks_setup_block(client):
+    """The gear's editor opens on the stored notebook's setup block, flush left."""
+    _put(ALICE, "qc-run.py")
+    _as(client)
+    resp = client.get("/workspace/setup?slug=qc-run")
+    assert resp.status_code == 200
+    assert resp.json() == {"slug": "qc-run", "setup": NB_BODY}
+
+
+def test_setup_save_rewrites_the_block_and_retitles_the_tile(client):
+    """Saving writes the edited block and returns what the tile shows."""
+    _put(ALICE, "qc-run.py")
+    _as(client)
+    body = NB_BODY.replace("cpu=4", "cpu=2").replace("Quality control.", "New")
+    resp = client.post("/workspace/setup", data={"slug": "qc-run", "setup": body})
+    assert resp.status_code == 200
+    assert resp.json() == {"slug": "qc-run", "title": "QC run", "description": "New"}
+    stored = _get(ALICE, "qc-run.py")
+    assert setup_body(stored) == body
+    assert notebook_resources(stored) == flyte.Resources(cpu=2, memory="8Gi")
+
+
+def test_setup_save_takes_the_browsers_line_endings(client):
+    """A textarea posts CRLF; the stored notebook keeps LF."""
+    _put(ALICE, "qc-run.py")
+    _as(client)
+    body = NB_BODY.replace("\n", "\r\n")
+    resp = client.post("/workspace/setup", data={"slug": "qc-run", "setup": body})
+    assert resp.status_code == 200
+    assert _get(ALICE, "qc-run.py") == NB_SRC
+
+
+def test_setup_save_refuses_a_broken_block(client):
+    """A block that won't parse is a 400 with the reason; nothing is written."""
     _put(ALICE, "qc-run.py")
     _as(client)
     resp = client.post(
-        "/workspace/settings",
-        data={"slug": "qc-run", "cpu": "2", "memory": "16", "description": "New"},
+        "/workspace/setup",
+        data={"slug": "qc-run", "setup": "import flyte\nmain_name = (\n"},
     )
-    assert resp.status_code == 200
-    assert resp.json() == {
-        "slug": "qc-run",
-        "cpu": 2,
-        "memory": 16,
-        "description": "New",
-    }
-    stored = _get(ALICE, "qc-run.py")
-    assert parse_notebook_resources(stored).cpu == 2
-    assert parse_notebook_name(stored) == "QC run"
+    assert resp.status_code == 400
+    assert "line 2" in resp.json()["error"]
+    assert _get(ALICE, "qc-run.py") == NB_SRC
 
 
-def test_settings_missing_notebook_is_404(client):
-    """Settings on a notebook the user doesn't have is a 404."""
+def test_setup_missing_notebook_is_404(client):
+    """The setup block of a notebook the user doesn't have is a 404."""
     _put(BOB, "qc-run.py")
     _as(client)
-    resp = client.post(
-        "/workspace/settings", data={"slug": "qc-run", "cpu": "1", "memory": "2"}
-    )
+    assert client.get("/workspace/setup?slug=qc-run").status_code == 404
+    resp = client.post("/workspace/setup", data={"slug": "qc-run", "setup": NB_BODY})
     assert resp.status_code == 404
 
 
@@ -467,7 +507,10 @@ def test_copy_workflow_reads_the_shipped_notebook(client):
     assert resp.status_code == 200
     assert resp.json()["slug"] == "scrna-seq"
     stored = _get(ALICE, "scrna-seq.py")
-    assert parse_notebook_name(stored) == "scRNA-seq"
+    assert notebook_name(stored) == "scRNA-seq"
+    assert (
+        notebook_description(stored) == notebooks.by_slug("scrna-pipeline").description
+    )
     shipped = (
         Path(notebooks.NOTEBOOKS_PKG_DIR) / "workflows" / "scrna_pipeline.py"
     ).read_text()
@@ -551,7 +594,7 @@ def test_launch_workspace_serves_the_owners_pod(client, served):
     assert kw["owner_subject"] == ALICE
     assert kw["slug"] == "qc-run"
     assert kw["mode"] == "edit"
-    assert kw["resources"].cpu == 4
+    assert kw["resources"] == flyte.Resources(cpu=4, memory="8Gi")
     assert served["env"].env_vars == {
         "FLYTE_PROJECT": PROJECT,
         "STARGAZER_OWNER": ALICE,
@@ -610,6 +653,16 @@ def test_launch_refuses_a_broken_main_img(client, served, union):
     resp = _launch(client, "qc-run", "workspace")
     assert resp.status_code == 422
     assert "NameError" in resp.json()["error"]
+    assert "kwargs" not in served
+
+
+def test_launch_refuses_resources_it_cannot_read(client, served):
+    """Resources that aren't literal are a launch error, not a default pod."""
+    _put(ALICE, "qc-run.py", NB_SRC.replace("cpu=4", "cpu=CPUS"))
+    _as(client)
+    resp = _launch(client, "qc-run", "workspace")
+    assert resp.status_code == 422
+    assert "main_resources" in resp.json()["error"]
     assert "kwargs" not in served
 
 
@@ -773,8 +826,8 @@ async def _unreachable(*_args, **_kwargs):
             "copy failed: unreachable",
         ),
         (
-            "/workspace/settings",
-            {"slug": "qc-run", "cpu": "1", "memory": "2"},
+            "/workspace/setup",
+            {"slug": "qc-run", "setup": NB_BODY},
             "app.workspace_store.update_workspace_notebook",
             _unreachable,
             "update failed: unreachable",
