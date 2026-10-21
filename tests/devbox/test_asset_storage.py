@@ -1,9 +1,9 @@
 """Asset storage on the devbox.
 
-Files stored from one pod are found and read back from another, indexed by
-the dashboard under the stand-in user's folder of the devbox bucket, and
-still indexed after the dashboard's pod restarts. A typed asset's extra keys
-travel with it between pods.
+Files stored from one pod are found and read back from another, indexed in
+the devbox's Postgres server under the stand-in user's folder of the devbox
+bucket, listed by the dashboard's asset browser, and still indexed after the
+Postgres pod restarts. A typed asset's extra keys travel with it between pods.
 """
 
 import json
@@ -12,6 +12,7 @@ import time
 import uuid
 
 import httpx
+import psycopg
 import pytest
 
 from . import pod_tasks
@@ -20,22 +21,17 @@ N = 3
 
 
 @pytest.fixture(scope="module")
-def tag(dashboard, devbox_run) -> str:
+def tag(devbox_run) -> str:
     """Store N small files from one pod under a fresh tag; return the tag."""
     tag = uuid.uuid4().hex[:8]
     devbox_run(pod_tasks.produce, n=N, tag=tag)
     return tag
 
 
-def _rows(dashboard: str, tag: str) -> list[dict]:
-    """The dashboard's index rows for the tag, in the order they were written."""
-    response = httpx.post(
-        f"{dashboard}/index/query",
-        json={"filters": {"asset": "devbox_probe", "tag": tag}},
-        timeout=30,
-    )
-    response.raise_for_status()
-    return sorted(response.json(), key=lambda row: row["keyvalues"]["i"])
+def _rows(index_query, tag: str) -> list[dict]:
+    """The index rows for the tag, in the order they were written."""
+    rows = index_query({"asset": "devbox_probe", "tag": tag})
+    return sorted(rows, key=lambda row: row["keyvalues"]["i"])
 
 
 def test_read_back_from_another_pod(tag, devbox_run):
@@ -44,9 +40,9 @@ def test_read_back_from_another_pod(tag, devbox_run):
     assert got == [f"{tag}:{i}" for i in range(N)]
 
 
-def test_indexed_by_the_dashboard(tag, dashboard):
+def test_indexed_in_postgres(tag, index_query):
     """One row per file, under the stand-in user's folder, owned by them."""
-    rows = _rows(dashboard, tag)
+    rows = _rows(index_query, tag)
     assert [row["name"] for row in rows] == [f"probe_{tag}_{i}.txt" for i in range(N)]
     for row in rows:
         assert row["uri"] == (
@@ -56,7 +52,20 @@ def test_indexed_by_the_dashboard(tag, dashboard):
         assert row["keyvalues"]["_owner"] == "devbox-user"
 
 
-def test_extra_keyvalue_travels_between_pods(dashboard, devbox_run):
+def test_dashboard_lists_the_rows(tag, dashboard):
+    """The dashboard's asset browser shows the files: it reads the same index."""
+    response = httpx.get(
+        f"{dashboard}/assets/list",
+        params={"network": "private", "asset": "devbox_probe", "tag": tag},
+        timeout=60,
+    )
+    response.raise_for_status()
+    assert sorted(row["name"] for row in response.json()) == [
+        f"probe_{tag}_{i}.txt" for i in range(N)
+    ]
+
+
+def test_extra_keyvalue_travels_between_pods(devbox_run):
     """An R1's extra key survives a task handoff and an `assemble()` from another pod."""
     lane = uuid.uuid4().hex[:8]
     handed, found = json.loads(
@@ -71,28 +80,25 @@ def test_extra_keyvalue_travels_between_pods(dashboard, devbox_run):
     )
 
 
-def test_index_survives_a_dashboard_restart(tag, dashboard):
-    """After its pod is deleted, the dashboard comes back with the same rows."""
-    before = _rows(dashboard, tag)
-    pods = subprocess.run(
-        ["kubectl", "get", "pods", "-n", "flyte", "-o", "name"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.split()
+def test_index_survives_a_postgres_restart(tag, index_query):
+    """After its pod is deleted, Postgres comes back with the same rows."""
+    before = _rows(index_query, tag)
+    assert len(before) == N
     subprocess.run(
-        ["kubectl", "delete", "-n", "flyte", *[p for p in pods if "dashboard" in p]],
-        capture_output=True,
-        check=True,
-    )
+        [
+            "kubectl", "--context", "flyte-devbox", "delete", "pod",
+            "-n", "stargazer", "-l", "app=postgres", "--wait=true",
+        ],
+        capture_output=True, check=True,
+    )  # fmt: skip
     deadline = time.monotonic() + 300
-    while time.monotonic() < deadline:
+    while True:
         try:
-            if httpx.get(f"{dashboard}/health", timeout=10).status_code == 200:
-                break
-        except httpx.HTTPError:
-            pass  # the new pod isn't serving yet
-        time.sleep(5)
-    else:
-        pytest.fail("the dashboard didn't come back within 5 minutes")
-    assert _rows(dashboard, tag) == before
+            after = _rows(index_query, tag)
+            break
+        except (RuntimeError, psycopg.OperationalError):
+            # No pod to forward to yet, or the server isn't accepting yet.
+            if time.monotonic() > deadline:
+                pytest.fail("Postgres didn't come back within 5 minutes")
+            time.sleep(5)
+    assert after == before

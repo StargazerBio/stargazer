@@ -22,7 +22,7 @@ FIXTURES = PROJECT_ROOT / "tests" / "fixtures" / "general"
 
 
 @pytest.fixture(scope="module")
-def cohort(dashboard, devbox_run) -> tuple[str, Variants]:
+def cohort(devbox_run) -> tuple[str, Variants]:
     """Seed the inputs, run the workflow for a fresh cohort; return its ID and VCF."""
     reference, r1, r2 = [
         File.from_local_sync(str(FIXTURES / name))

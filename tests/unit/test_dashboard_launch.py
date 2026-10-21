@@ -19,6 +19,16 @@ def test_no_durable_store_means_no_litestream():
     assert replica_url({"STARGAZER_STORE_ROOT": "s3://bucket/stargazer"}) is None
 
 
+def test_a_postgres_index_means_no_litestream():
+    """A Postgres index is durable on its own server; there's no file to copy."""
+    env = {
+        "STARGAZER_STORE_ROOT": "s3://flyte-data/stargazer",
+        "SG_OWNER_SUBJECT": "u1",
+        "STARGAZER_INDEX_URL": "postgresql://sg:pw@postgres.stargazer:5432/sg",
+    }
+    assert replica_url(env) is None
+
+
 def test_replica_url_carries_the_region():
     """The bucket's region rides on the replica URL: AWS_REGION, then
     AWS_DEFAULT_REGION, then the deploy's own setting.

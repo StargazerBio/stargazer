@@ -9,6 +9,8 @@ Asset storage has three parts: an **object store** for the bytes, an **index** f
 | Local cache | `~/.stargazer/local` | The pod's disk | `STARGAZER_LOCAL` |
 | Public tier | Off without a key | Pinata's public network | `PINATA_JWT` |
 
+On the devbox, the local cluster for development, the index is a Postgres server that every pod and the dashboard reach directly ([Contributing → Running on the Devbox](../guides/contributing.md#running-on-the-devbox)).
+
 ## Identity and layout
 
 An asset's identity is its **IPFS CID**, computed locally from the bytes with the same parameters Pinata uses, so a file's working CID is the CID it keeps if it's ever published. Each user's files are stored once, at `<store root>/users/<owner>/assets/<cid>/<name>`, where the owner is `STARGAZER_OWNER` (the Union subject) or `local`. An asset's `path` is a `flyte.io.File` naming that stored location, so an asset passed between tasks points somewhere every pod can read.

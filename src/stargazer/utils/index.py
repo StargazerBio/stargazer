@@ -23,9 +23,10 @@ concurrency to the database.
 Re-upserting a CID with different keyvalues replaces them and logs a WARNING:
 the same bytes recorded with new metadata is allowed, but should be visible.
 
-Locally, `SqliteIndex` is the index itself. On Union the user's dashboard
-owns a SQLite file and serves it over HTTP; pods reach it through
-`HttpIndex`, which makes the same calls.
+Locally, `SqliteIndex` is the index itself. On the devbox it's a Postgres
+server that the dashboard and every pod reach through `PostgresIndex`. On
+Union the user's dashboard owns a SQLite file and serves it over HTTP; pods
+reach it through `HttpIndex`, which makes the same calls.
 
 spec: [docs/architecture/types.md](../architecture/types.md)
 """
@@ -45,6 +46,9 @@ import psycopg
 from stargazer.config import logger
 
 T = TypeVar("T")
+
+# The URL schemes `make_index` opens as a `PostgresIndex`.
+POSTGRES_SCHEMES = ("postgresql://", "postgres://")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS assets (

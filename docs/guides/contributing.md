@@ -25,23 +25,23 @@ Use `flyte start devbox` to spin up a local Flyte cluster for development. See t
 
 Stargazer's images are built for x86_64 only, like the machines they run on in production. On Apple silicon the devbox itself runs natively and Stargazer's pods run under emulation, so they're slower than on Union. Docker Desktop runs them through Rosetta, so keep its Rosetta setting enabled.
 
-This environment is much closer to production and lets you actually test your task and app environments. After every fresh devbox, apply the cluster-side fixes, then deploy a dashboard to hold the asset index:
+This environment is much closer to production and lets you actually test your task and app environments. After every fresh devbox, apply the cluster-side fixes, which also start the Postgres server that holds the devbox's asset index. Then deploy a dashboard if you want one:
 
 ```bash
-cli/devbox-setup.sh                      # prints the one-time DNS steps for your machine too
-uv run --all-extras python cli/devbox_dashboard.py
+devbox/setup.sh                          # prints the one-time DNS steps for your machine too
+uv run --all-extras python devbox/dashboard.py
 ```
 
-The dashboard opens at `http://dashboard-flytesnacks-development.devbox.stargazer.bio:30081` as a stand-in user, `devbox-user`. To have runs you submit store their assets there, export these first and keep the storage port-forward open while submitting:
+The dashboard opens at `http://dashboard-flytesnacks-development.devbox.stargazer.bio:30081` as a stand-in user, `devbox-user`, and its asset browser lists what that user has stored. To have runs you submit store their assets on the devbox, export these first and keep the storage port-forward open while submitting:
 
 ```bash
 export STARGAZER_STORE_ROOT=s3://flyte-data/stargazer
-export STARGAZER_INDEX_URL=http://dashboard-flytesnacks-development.flyte.svc.cluster.local
+export STARGAZER_INDEX_URL=postgresql://stargazer:stargazer@postgres.stargazer.svc.cluster.local:5432/stargazer
 export STARGAZER_OWNER=devbox-user
 kubectl port-forward -n flyte svc/rustfs-svc 9000:9000
 ```
 
-The devbox tests (`uv run --all-extras pytest -m devbox`, see [Running Tests](#running-tests)) check that whole path: they deploy the dashboard, store and find assets across pods, and run the germline workflow.
+The devbox tests (`uv run --all-extras pytest -m devbox`, see [Running Tests](#running-tests)) check that whole path: they deploy the dashboard, store and find assets across pods, check the index survives a restart of its Postgres server, and run the germline workflow.
 
 ## Running Tests
 
@@ -57,7 +57,7 @@ uv run --all-extras pytest -m postgres                # the index on Postgres, i
 
 - **Unit** (`tests/assets`, `notebooks`, `unit`, `utils`) is the cheap tests that run on Python alone. Every test gets its own empty store, index and cache under its temp directory, so nothing touches `~/.stargazer`, and runs with no `PINATA_JWT`. Tests that query the fixture files use a store seeded once per session (`tests/fixtures/seed.py`).
 - **Tasks** (`tests/tasks`) runs each task's tests in the image the task runs in, so the GATK and alignment tools never need to be on your machine. Run it when you add or change a task. The runner builds those images as a pod gets them, x86_64 like Union (emulated on Apple silicon), and runs the tests in them. A source change rebuilds the images first. Pass paths or `-k` to run a subset, such as `tests/tasks/gatk/test_sort_sam.py`.
-- **Devbox** (`tests/devbox`) is anything that needs a cluster: deploying the dashboard, workflows across pods, the devbox's store and index. It deploys the dashboard itself; the devbox has to be up with `cli/devbox-setup.sh` applied. Add `-rP` to see each run's URL.
+- **Devbox** (`tests/devbox`) is anything that needs a cluster: deploying the dashboard, workflows across pods, the devbox's store and index. It deploys the dashboard itself; the devbox has to be up with `devbox/setup.sh` applied. Add `-rP` to see each run's URL.
 - **Pinata** (`tests/pinata`) calls the real Pinata API with the key in `tests/.secrets/pinata_jwt`, and fails without it.
 - **Postgres** (`tests/postgres`) runs the index tests against a Postgres 16 container it starts and removes itself, so it needs Docker running. Run it when you change the index.
 

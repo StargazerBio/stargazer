@@ -45,4 +45,4 @@ repos:
         entry: uv run --all-extras pytest -q
         language: system
         pass_filenames: false
-        files: ^(src/|app/|cli/|tests/|pyproject\.toml$|uv\.lock$)
+        files: ^(src/|app/|cli/|devbox/|tests/|pyproject\.toml$|uv\.lock$)

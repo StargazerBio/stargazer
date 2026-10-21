@@ -289,7 +289,7 @@ def deploy_dashboard(
     )
     # The serve watch can report failure on a redeploy that does succeed: it
     # trips on an older failed revision while the new one is still starting
-    # (seen on the tenant, and devbox_workarounds.md). Trust the app's own
+    # (seen on the tenant and the devbox). Trust the app's own
     # state over it, giving the new revision a little time.
     try:
         return ctx.serve(env).endpoint

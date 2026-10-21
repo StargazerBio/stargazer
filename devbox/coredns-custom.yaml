@@ -1,0 +1,32 @@
+# Resolves *.devbox.stargazer.bio to the node's InternalIP inside the cluster,
+# so a pod can call another app at its `App.endpoint`. k3s's CoreDNS imports
+# every `*.server` key of this ConfigMap. devbox/setup.sh replaces NODE_IP
+# with the node's address when it applies this, since it changes whenever the
+# devbox is recreated.
+#
+# The node IP, not kourier's ClusterIP: `App.endpoint` carries the :30081
+# NodePort, which only a node IP serves (the ClusterIP listens on 80). kourier
+# routes by the Host header, so it still finds the app. The AAAA template
+# answers NOERROR with no records, so glibc's AF_UNSPEC lookup falls back to
+# the A record.
+#
+# Keep each `match`/`answer`/`rcode` on its own line. CoreDNS's template
+# syntax is line-based: a one-line `{ match …; answer … }` is rejected, CoreDNS
+# crash-loops, and with cluster DNS down flyte-binary can't start either.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  devbox-domain.server: |
+    devbox.stargazer.bio:53 {
+        template IN A {
+            match .*\.devbox\.stargazer\.bio\.$
+            answer "{{ .Name }} 60 IN A NODE_IP"
+        }
+        template IN AAAA {
+            match .*\.devbox\.stargazer\.bio\.$
+            rcode NOERROR
+        }
+    }

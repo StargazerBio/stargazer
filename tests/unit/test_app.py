@@ -805,6 +805,17 @@ def test_index_url_without_the_pattern(monkeypatch):
     assert _index_url() == "http://dashboard.u-jane-production.svc.cluster.local"
 
 
+def test_index_url_passes_on_a_postgres_index(monkeypatch):
+    """A dashboard on a Postgres index hands pods that index, not its address."""
+    url = "postgresql://sg:pw@postgres.stargazer.svc.cluster.local:5432/stargazer"
+    monkeypatch.setenv("STARGAZER_INDEX_URL", url)
+    monkeypatch.setenv(
+        "INTERNAL_APP_ENDPOINT_PATTERN",
+        "http://{app_fqdn}.u-jane-development.svc.cluster.local",
+    )
+    assert _index_url() == url
+
+
 def test_index_routes_are_mounted(client, tmp_path, monkeypatch):
     """The dashboard serves its index without needing a signed-in user."""
     from app import index_api

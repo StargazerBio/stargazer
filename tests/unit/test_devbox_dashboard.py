@@ -1,4 +1,4 @@
-"""Tests for `cli/devbox_dashboard.py`, the devbox's dashboard deploy.
+"""Tests for `devbox/dashboard.py`, the devbox's dashboard deploy.
 
 The script lives outside the shipped packages, so it's loaded from its path.
 """
@@ -14,7 +14,7 @@ from app import config, onboard
 from stargazer.config import PROJECT_ROOT
 
 _spec = importlib.util.spec_from_file_location(
-    "devbox_dashboard", PROJECT_ROOT / "cli" / "devbox_dashboard.py"
+    "devbox_dashboard", PROJECT_ROOT / "devbox" / "dashboard.py"
 )
 devbox_dashboard = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(devbox_dashboard)
@@ -22,7 +22,8 @@ _spec.loader.exec_module(devbox_dashboard)
 
 def test_deploys_the_dashboard_for_a_stand_in_on_the_devbox_store(monkeypatch):
     """One dashboard in the default project for a stand-in user, on the
-    devbox's bucket, with the storage port-forward open while it uploads."""
+    devbox's bucket and Postgres index, with the storage port-forward open
+    while it uploads."""
     served, steps = {}, []
 
     def fake_servecontext(**ctx):
@@ -57,6 +58,7 @@ def test_deploys_the_dashboard_for_a_stand_in_on_the_devbox_store(monkeypatch):
             "STARGAZER_OWNER",
             "STARGAZER_WORKSPACE_ROOT",
             "STARGAZER_STORE_ROOT",
+            "STARGAZER_INDEX_URL",
         )
     } == {
         "SG_STAND_IN_SUBJECT": "devbox-user",
@@ -64,6 +66,10 @@ def test_deploys_the_dashboard_for_a_stand_in_on_the_devbox_store(monkeypatch):
         "STARGAZER_OWNER": "devbox-user",
         "STARGAZER_WORKSPACE_ROOT": "s3://flyte-data/stargazer",
         "STARGAZER_STORE_ROOT": "s3://flyte-data/stargazer",
+        "STARGAZER_INDEX_URL": (
+            "postgresql://stargazer:stargazer@"
+            "postgres.stargazer.svc.cluster.local:5432/stargazer"
+        ),
     }
 
 

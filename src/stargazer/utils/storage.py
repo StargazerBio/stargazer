@@ -44,7 +44,12 @@ from flyte.io import File
 import stargazer.config  # ensure env var defaults are set  # noqa: F401
 from stargazer.assets.asset import Asset
 from stargazer.utils.cid import compute_cid
-from stargazer.utils.index import HttpIndex, PostgresIndex, SqliteIndex
+from stargazer.utils.index import (
+    POSTGRES_SCHEMES,
+    HttpIndex,
+    PostgresIndex,
+    SqliteIndex,
+)
 from stargazer.utils.pinata import PinataClient, _stamp_owner
 from stargazer.utils.query import generate_query_combinations
 
@@ -336,7 +341,7 @@ def make_index(url: str) -> SqliteIndex | PostgresIndex | HttpIndex:
     `http(s)://` URL is a user's dashboard; anything else is a SQLite file
     path (a `sqlite://` prefix is accepted and stripped, `~` is expanded).
     """
-    if url.startswith(("postgresql://", "postgres://")):
+    if url.startswith(POSTGRES_SCHEMES):
         return PostgresIndex(url)
     if url.startswith(("http://", "https://")):
         return HttpIndex(url)

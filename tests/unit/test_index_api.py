@@ -8,7 +8,7 @@ import stargazer.utils.storage as storage_mod
 from app import index_api
 from stargazer.assets.asset import assemble
 from stargazer.assets.reads import R1, R2
-from stargazer.utils.index import HttpIndex, SqliteIndex
+from stargazer.utils.index import HttpIndex, PostgresIndex, SqliteIndex
 from stargazer.utils.storage import StorageClient
 
 
@@ -159,3 +159,11 @@ async def test_storage_client_through_the_dashboard(served, tmp_path, monkeypatc
 
     assert sorted(type(a).__name__ for a in found) == ["R1", "R2"]
     assert len(await sqlite.query({"sample_id": "S1"})) == 2
+
+
+def test_dashboard_serves_a_postgres_index(monkeypatch):
+    """A dashboard given a Postgres URL uses that database for its index."""
+    postgres = PostgresIndex.__new__(PostgresIndex)  # no server: never connects
+    monkeypatch.setattr(index_api, "_index", None)
+    monkeypatch.setattr(index_api, "make_index", lambda url: postgres)
+    assert index_api._get_index() is postgres
