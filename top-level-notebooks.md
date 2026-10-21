@@ -1,8 +1,9 @@
 ---
 title: The scRNA notebook moves to a top-level notebooks folder
-status: doing
+status: review
 priority: normal
 created: 2026-10-17
+pr: 69
 blocked_by:
   - hosted-notebook-flyte-init
 ---
@@ -41,25 +42,25 @@ dashboard code and docs.
 
 ## Pieces
 
-- [ ] Move `src/stargazer/notebooks/workflows/scrna_pipeline.py` to
+- [x] Move `src/stargazer/notebooks/workflows/scrna_pipeline.py` to
       `notebooks/scrna_pipeline.py` and delete the `workflows/` package.
       Extend the `__marimo__/` line in `.gitignore` and the `B018` per-file
       ignore in `pyproject.toml` to `notebooks/`.
-- [ ] Smoke test: `tests/notebooks/test_notebook_smoke.py` finds notebooks
+- [x] Smoke test: `tests/notebooks/test_notebook_smoke.py` finds notebooks
       through the package, so it also loads `notebooks/*.py` by path. Check:
       `pytest --collect-only tests/notebooks` lists the scRNA notebook.
-- [ ] Seeds: `src/stargazer/notebooks/workspace/` moves to `app/seeds/`, and
+- [x] Seeds: `src/stargazer/notebooks/workspace/` moves to `app/seeds/`, and
       `seed_source` in `app/notebooks.py` reads from there. The folder needs
       an `__init__.py` or a package-data entry to reach the dashboard image.
       The dashboard's GitHub link to `template.py`
       (`app/templates/dashboard.html`) and the seed tests in
       `tests/unit/test_app.py` follow it.
-- [ ] Dashboard: the scRNA entry in `NOTEBOOKS` and the `workflows` section in
+- [x] Dashboard: the scRNA entry in `NOTEBOOKS` and the `workflows` section in
       `app/notebooks.py`, the Workflows section and Copy to workspace in the
       dashboard, and their tests in `tests/unit/test_app.py`.
-- [ ] `docs/reference/api.md` drops `stargazer.notebooks.workflows.scrna_pipeline`.
+- [x] `docs/reference/api.md` drops `stargazer.notebooks.workflows.scrna_pipeline`.
       The `scrna-pipeline` feature in `verify-stargazer` uses the new path.
-- [ ] Docs:
+- [x] Docs:
   - `docs/architecture/notebook.md`: the types table (Workflows leave the
     dashboard), the Analyst archetype, Workflow graduation (a PR into
     `notebooks/`, with no tile and no image release), Copy to workspace, and
@@ -67,7 +68,7 @@ dashboard code and docs.
   - `docs/architecture/overview.md`: the dashboard's notebook types
   - `.opencode/reference/architecture/app_internals.md`: the seeds' path,
     Copy, and the tile registry
-- [ ] Verify on Union with the test account: the dashboard shows Tutorials and
+- [x] Verify on Union with the test account: the dashboard shows Tutorials and
       Workspace and no Workflows, and New with each seed creates a notebook
       with that seed's source. Run the `scrna-pipeline` feature from the new
       path. `uv build --wheel` holds no scRNA notebook and no `notebooks/`.
