@@ -6,8 +6,8 @@
 # code: tests/unit/test_dockerfile.py checks that this one has the proxy's pip
 # packages and the files it reads beside itself, and the tool versions are kept
 # in step by hand. They differ on purpose only in multi-arch downloads, in
-# having no Flyte-injected runtime or platform login, and in serving a
-# directory of notebooks instead of one (see ENTRYPOINT).
+# having no Flyte-injected runtime or platform login, and in what's in
+# /workspace (see ENTRYPOINT).
 FROM python:3.14-slim-bookworm
 
 RUN apt-get update \
@@ -64,9 +64,11 @@ RUN mkdir -p /workspace /snapshots /home/flyte/.stargazer \
         /home/flyte/.claude
 
 # What a new /workspace starts with: the SDK's whole notebooks folder
-# (templates, tutorials, workflows), without the package files.
+# (templates, tutorials, workflows), without the package files: the notebooks
+# are in its section directories, and the modules beside them (`ui.py`) aren't.
 RUN mkdir /opt/workspace \
     && cp -r /stargazer/src/stargazer/notebooks /opt/workspace/ \
+    && find /opt/workspace/notebooks -maxdepth 1 -name '*.py' -delete \
     && find /opt/workspace \( -name __init__.py -o -name __pycache__ \) \
         -prune -exec rm -rf {} +
 
@@ -83,9 +85,10 @@ WORKDIR /workspace
 RUN flyte create config --local-persistence -o /home/flyte/.flyte/config.yaml
 
 # There's no dashboard to launch notebooks from, so the notebooks are copied
-# into /workspace and marimo serves the directory: they show in its notebook
-# list and file explorer, edits land in a mounted directory, and each notebook
-# runs in a sandbox built from its own header. A file already there is the
-# user's and is left alone (`cp -n`).
+# into /workspace and marimo opens on the first tutorial. The launch script
+# starts marimo in /workspace, the root of its file explorer, so every other
+# notebook is in the sidebar and opens from there. Edits land in a mounted
+# directory, and each notebook runs in a sandbox built from its own header. A
+# file already there is the user's and is left alone (`cp -n`).
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "cp -rn /opt/workspace/. /workspace/ && echo 'Stargazer notebooks: http://localhost:8080' && exec launch-notebook.sh edit /workspace"]
+ENTRYPOINT ["sh", "-c", "cp -rn /opt/workspace/. /workspace/ && echo 'Stargazer notebooks: http://localhost:8080' && exec launch-notebook.sh edit /workspace/notebooks/tutorials/assets.py"]
