@@ -1,6 +1,6 @@
 ---
 title: The registry renders optional types as Union[...] on Python 3.14
-status: review
+status: done
 priority: low
 created: 2026-10-20
 pr: 65
@@ -22,3 +22,13 @@ on who commits. The task images are built on a py3.14 base, so the MCP
 consider pinning the dev Python in `.python-version`.
 
 Found while working on ticket `qc-filter-organism-from-asset`.
+
+## Outcome
+
+Merged as #65, reworked before merge: Python is pinned to 3.14 everywhere
+(`.python-version`, `requires-python = ">=3.14"`, the Dockerfile base, the
+docstr-coverage hook, the docs workflow, the notebooks' PEP 723 headers), and
+`_type_name` checks its union branch first, so `X | None` renders as
+`X | NoneType` on 3.14. The `gen-catalog` hook also runs on `registry.py`
+changes. Verified on the branch: catalog identical, unit 512, tasks tier
+39 + 19. Nothing left.
