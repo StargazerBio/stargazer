@@ -228,6 +228,19 @@ async def test_query():
     )
 
 
+@pytest.mark.asyncio
+async def test_get_finds_one_public_file_by_cid():
+    """`get` returns the record for a published CID, and None for one nobody published."""
+    client = PinataClient()
+
+    found = await client.get(CIDS["GRCh38_TP53.fa"])
+    missing = await client.get(compute_cid(FIXTURES_DIR / "upload_delete.txt") + "x")
+
+    assert found["cid"] == CIDS["GRCh38_TP53.fa"]
+    assert found["keyvalues"]["build"] == "GRCh38_TP53"
+    assert missing is None
+
+
 def _unique_file(tmp_path, tag: str):
     """A small file with bytes no other run has uploaded, and the tag in them.
 

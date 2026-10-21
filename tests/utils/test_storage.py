@@ -190,6 +190,9 @@ class _PublicCompanions:
             if all(r["keyvalues"].get(k) == v for k, v in keyvalues.items())
         ]
 
+    async def get(self, cid):
+        return next((r for r in self.records if r["cid"] == cid), None)
+
 
 def _listing(directory: Path) -> dict[str, bytes]:
     """Every file in `directory`, name to bytes."""
@@ -241,7 +244,10 @@ async def test_fetch_fills_in_public_companions_when_the_user_has_none(
     monkeypatch.setattr(storage_mod, "default_client", c)
     ref = Reference()
     await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
-    public.add("ref.fa.fai", b"chr1\t4\t6\t4\t5\n", companion_of=ref.cid)
+    public.add("ref.fa", b">chr1\nACGT\n", asset="reference", _owner="maintainer")
+    public.add(
+        "ref.fa.fai", b"chr1\t4\t6\t4\t5\n", companion_of=ref.cid, _owner="maintainer"
+    )
 
     pod = _client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "default_client", pod)
@@ -252,6 +258,46 @@ async def test_fetch_fills_in_public_companions_when_the_user_has_none(
         "ref.fa.fai": b"chr1\t4\t6\t4\t5\n",
     }
     assert public.queries == [{"companion_of": ref.cid}]
+
+
+@pytest.mark.asyncio
+async def test_public_companions_come_from_the_parents_publisher(tmp_path, monkeypatch):
+    """Another publisher's index for a public reference isn't mixed in."""
+    public = _PublicCompanions(tmp_path / "gateway")
+    c = _client(tmp_path, public=public, gateway=str(public.gateway))
+    monkeypatch.setattr(storage_mod, "default_client", c)
+    ref = Reference()
+    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
+    public.add("ref.fa", b">chr1\nACGT\n", asset="reference", _owner="maintainer")
+    public.add(
+        "ref.fa.bwt", b"maintainer bwt", companion_of=ref.cid, _owner="maintainer"
+    )
+    public.add("ref.fa.bwt", b"other bwt", companion_of=ref.cid, _owner="someone")
+    public.add("ref.fa.sa", b"other sa", companion_of=ref.cid, _owner="someone")
+
+    pod = _client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
+    monkeypatch.setattr(storage_mod, "default_client", pod)
+    local = await ref.fetch()
+
+    assert _listing(local.parent) == {
+        "ref.fa": b">chr1\nACGT\n",
+        "ref.fa.bwt": b"maintainer bwt",
+    }
+
+
+@pytest.mark.asyncio
+async def test_no_public_companions_without_a_public_parent(tmp_path, monkeypatch):
+    """Companions of a file nobody published publicly have no publisher to follow."""
+    public = _PublicCompanions(tmp_path / "gateway")
+    c = _client(tmp_path, public=public, gateway=str(public.gateway))
+    monkeypatch.setattr(storage_mod, "default_client", c)
+    ref = Reference()
+    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
+    public.add(
+        "ref.fa.fai", b"chr1\t4\t6\t4\t5\n", companion_of=ref.cid, _owner="someone"
+    )
+
+    assert await c.companions(ref.cid) == []
 
 
 @pytest.mark.asyncio
