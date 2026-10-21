@@ -28,6 +28,8 @@ Context shape consumed by `dashboard.html`:
   workspace tiles). The dashboard loops and includes `_tile.html` for each.
   Workflows tiles carry a Copy-to-workspace button; Workspace tiles a
   Download link.
+- `settings` (dict) — the user's settings, `save_interval_seconds` filling
+  the Settings section's form.
 - `version` (str) — the commit the dashboard was deployed from, shown in
   the footer; empty shows nothing.
 

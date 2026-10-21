@@ -337,8 +337,8 @@ async def sync_once() -> list[str]:
 def _save_interval() -> float:
     """Seconds between save passes, from the pod's env; 0 means none.
 
-    Nothing sets it yet, so pods save every 5 seconds; ticket
-    `dashboard-settings` has the dashboard set it per user. The pass reads
+    The dashboard sets it at launch from the owner's settings, 5 unless
+    they changed it. The pass reads
     only files whose size or mtime changed, so a short interval costs little
     and bounds what a pod that dies without SIGTERM loses.
     """

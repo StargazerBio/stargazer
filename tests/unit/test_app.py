@@ -609,8 +609,47 @@ def test_launch_workspace_serves_the_owners_pod(client, served):
     assert served["env"].env_vars == {
         "FLYTE_PROJECT": PROJECT,
         "STARGAZER_OWNER": ALICE,
+        "SG_SAVE_INTERVAL_SECONDS": "5",
     }
     assert served["servecontext"] == {"project": PROJECT, "domain": "development"}
+
+
+def _save_settings(client, interval):
+    """POST /settings as the dashboard's Settings form does."""
+    return client.post(
+        "/settings",
+        data={"save_interval_seconds": interval},
+        headers={"Accept": "application/json"},
+    )
+
+
+def test_saved_interval_reaches_the_next_launch(client, served):
+    """The interval a user saves is the one their next notebook pod gets."""
+    _put(ALICE, "qc-run.py")
+    _as(client)
+    assert _save_settings(client, "60").status_code == 200
+    assert _launch(client, "qc-run", "workspace").status_code == 200
+    assert served["env"].env_vars["SG_SAVE_INTERVAL_SECONDS"] == "60"
+
+
+@pytest.mark.parametrize("bad", ["-1", "soon", "1.5", ""])
+def test_bad_interval_is_refused_and_not_stored(client, bad):
+    """Only a whole number of seconds, 0 or more, is saved."""
+    _as(client)
+    assert _save_settings(client, "60").status_code == 200
+    resp = _save_settings(client, bad)
+    assert resp.status_code == 400
+    stored = asyncio.run(ws.get_settings(ALICE))
+    assert stored["save_interval_seconds"] == 60
+
+
+def test_dashboard_shows_the_saved_interval(client):
+    """The Settings section shows what the user saved."""
+    _as(client)
+    _save_settings(client, "45")
+    resp = client.get("/")
+    assert 'name="save_interval_seconds"' in resp.text
+    assert 'value="45"' in resp.text
 
 
 def test_launch_tutorial_uses_the_image_path(client, served):
