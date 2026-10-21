@@ -25,6 +25,7 @@
 ::: stargazer.notebooks.tutorials.execution
 ::: stargazer.notebooks.tutorials.tasks
 ::: stargazer.notebooks.tutorials.workflows
+::: stargazer.notebooks.ui
 ::: stargazer.notebooks.workflows.scrna_pipeline
 
 ## Registry

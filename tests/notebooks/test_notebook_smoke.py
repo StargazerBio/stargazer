@@ -14,12 +14,13 @@ import pytest
 
 import stargazer.notebooks as notebooks_pkg
 
-# Every notebook under the section directories, as a dotted module name.
+# Every notebook under the section directories, as a dotted module name. Modules
+# at the package root (`ui.py`) are helpers notebooks import, not notebooks.
 _NOTEBOOKS_ROOT = Path(notebooks_pkg.__path__[0])
 _notebook_modules = [
     f"{notebooks_pkg.__name__}."
     + ".".join(p.relative_to(_NOTEBOOKS_ROOT).with_suffix("").parts)
-    for p in _NOTEBOOKS_ROOT.rglob("*.py")
+    for p in _NOTEBOOKS_ROOT.glob("*/*.py")
     if p.name != "__init__.py"
 ]
 

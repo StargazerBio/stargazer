@@ -15,7 +15,7 @@ Assumes the asset/task/workflow primitives from the earlier tutorials and
 spends them on the headline lesson: running a workflow first locally,
 then on a remote cluster with no code changes. It imports the very same
 `audit_cohorts` workflow composed in `workflows.py` and runs it both ways,
-charting the result.
+charting the result, then hands the choice to the `run_location()` control.
 
 spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
@@ -53,7 +53,8 @@ def _():
            watch the action as it executes.
 
         No code changes between the two — only the call site. That's the
-        superpower.
+        superpower. At the end, a control hands that choice to whoever
+        runs the notebook.
         """
     )
     return flyte, mo, plt, time
@@ -231,6 +232,52 @@ def _(mo, plt, summaries_remote):
             ),
             _fig,
         ]
+    )
+
+
+@app.cell
+def _(mo):
+    """Section 6 — a control for where the run goes."""
+    from stargazer.notebooks.ui import dispatch, run_location
+
+    where = run_location()
+    mo.vstack(
+        [
+            mo.md(
+                """
+                ## 6. Let the Reader Pick
+
+                Sections 3 and 4 spell out both calls so you can see the
+                difference. In a notebook of your own, whoever runs it
+                usually wants to choose. `run_location()` is a control for
+                that choice, and `dispatch(where, audit_cohorts,
+                sheets=sheets)` makes the section 3 call while it's set to
+                **On this machine** and a cluster run while it's set to
+                **On the cluster**. Either way it waits for the run and
+                hands back the result, as awaiting the workflow would.
+
+                Change the control and the cell below runs again, wherever
+                you picked.
+                """
+            ),
+            where,
+        ]
+    )
+    return dispatch, where
+
+
+@app.cell
+async def _(audit_cohorts, dispatch, mo, sheets, summaries_local, where):
+    """Run audit_cohorts wherever the control says."""
+    with mo.status.spinner(title="Running audit_cohorts..."):
+        _summaries = await dispatch(where, audit_cohorts, sheets=sheets)
+
+    _same = sorted(s.cid for s in _summaries) == sorted(s.cid for s in summaries_local)
+    mo.md(
+        f"""
+        Got back **{len(_summaries)}** `CohortSummary` results.
+        Same CIDs as section 3 → **{_same}**
+        """
     )
 
 
