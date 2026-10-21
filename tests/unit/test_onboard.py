@@ -466,10 +466,12 @@ def test_dashboard_deploy_carries_the_asset_store_and_index(monkeypatch):
     monkeypatch.setattr(config, "WORKSPACE_ROOT", "s3://bucket/stargazer")
     monkeypatch.setenv("STARGAZER_STORE_REGION", "us-west-2")
     monkeypatch.setenv("STARGAZER_ADMIN_SUBJECTS", "391057331988775036")
+    monkeypatch.setenv("STARGAZER_PUBLIC_ASSETS", "off")
     monkeypatch.setattr(onboard.flyte, "with_servecontext", fake_servecontext)
     monkeypatch.setattr(onboard, "_notebook_image", lambda: "reg/notebook-app:h1")
     monkeypatch.setattr(onboard, "get_init_config", lambda: SimpleNamespace(org=None))
     onboard.deploy_dashboard("u-jane", ALICE)
+    assert served["env_vars"]["STARGAZER_PUBLIC_ASSETS"] == "off"
     assert served["env_vars"]["STARGAZER_STORE_REGION"] == "us-west-2"
     assert served["env_vars"]["STARGAZER_ADMIN_SUBJECTS"] == "391057331988775036"
     assert served["env_vars"]["STARGAZER_STORE_ROOT"] == "s3://bucket/stargazer"

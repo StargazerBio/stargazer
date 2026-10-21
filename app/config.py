@@ -68,6 +68,12 @@ def stand_in_subject(env) -> str:
 # login in front of it (`app.identity`). Union's login always forwards one.
 STAND_IN_SUBJECT: str = stand_in_subject(os.environ)
 
+# Whether the dashboard offers public assets: the Public tab, browsing the
+# public network and uploading to it. On by default, wherever the org's Pinata
+# key is; a deploy turns it off with `STARGAZER_PUBLIC_ASSETS=off`, which
+# onboarding passes on to each dashboard. Tasks and notebooks aren't affected.
+PUBLIC_ASSETS: bool = os.environ.get("STARGAZER_PUBLIC_ASSETS", "on") != "off"
+
 # The commit this dashboard was deployed from (`app.onboard.release_version`),
 # shown on its page for debugging. Unset in a bare local run, which shows none.
 VERSION: str = os.environ.get("STARGAZER_VERSION", "")

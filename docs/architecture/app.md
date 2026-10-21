@@ -115,7 +115,10 @@ keeps only a reference in the app's spec, so the user who owns the dashboard
 can't read it there. Pinata's private network is never used: the key is
 shared across the org, and anyone who can run a task can reach it, so it
 would keep nothing private. The devbox drops app secrets, so a devbox
-dashboard's Public tab says shared data isn't available.
+dashboard's Public tab says shared data isn't available. A deploy can also
+turn public assets off for its dashboards: the Public tab says the same, and
+the upload form offers only private storage. That's the dashboard alone; the
+user's tasks and notebooks still read the public tier.
 
 **Public uploads never transit the dashboard pod.** The page validates metadata and
 mints a Pinata **signed upload URL** (`POST /assets/sign`); the browser then

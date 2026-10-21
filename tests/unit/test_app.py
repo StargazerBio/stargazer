@@ -251,6 +251,17 @@ def test_home_page_without_a_pinata_key_offers_only_private_data(client, monkeyp
     assert "PINATA" not in html
 
 
+def test_home_page_with_public_assets_off_offers_only_private_data(client, monkeypatch):
+    """A deploy that turns public assets off hides them though it has a key."""
+    monkeypatch.setenv("PINATA_JWT", "test-jwt")
+    monkeypatch.setattr(config, "PUBLIC_ASSETS", False)
+    _as(client)
+    html = client.get("/").text
+    assert 'data-network="private"' in html
+    assert 'value="public"' not in html
+    assert "Shared data isn't available on this deployment." in html
+
+
 def test_the_upload_warning_shows_once(client):
     """The alpha note is on the page once, not again inside the upload panel."""
     _as(client)
