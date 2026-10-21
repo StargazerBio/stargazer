@@ -3,8 +3,6 @@ title: Public uploads over TUS, up to 10 GB
 status: backlog
 priority: normal
 created: 2026-10-21
-blocked_by:
-  - tus-browser-uploads
 ---
 
 The Pinata half of ticket `tus-browser-uploads`, split out when its store
