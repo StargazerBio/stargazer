@@ -129,7 +129,7 @@ Hosted notebook pods run **`notebook-app`**, defined programmatically in `app/pe
 
 ### Building locally
 
-The Flyte task images build the first time a run needs them, tagged by content hash, with the builder selected in the Flyte config: `local` needs a working Docker daemon, `remote` (Union only) builds on the cluster. They are pushed to `STARGAZER_REGISTRY`, which on `devbox` defaults to the devbox's own registry (`localhost:30000`) and on `union` is left to the remote builder, which pushes to Union's registry. The human-runnable image builds from the Dockerfile and are tagged with its published `ghcr.io/stargazerbio` URL even when local-only, so docker resolves them from the local cache by name; nothing publishes it automatically. Commands in [Contributing → Building Images](../guides/contributing.md#building-images).
+The Flyte task images build the first time a run needs them, tagged by content hash, with the builder selected in the Flyte config: `local` needs a working Docker daemon, `remote` (Union only) builds on the cluster. They are pushed to `STARGAZER_REGISTRY`, which on `devbox` defaults to the devbox's own registry (`localhost:30000`) and on `union` is left to the remote builder, which pushes to Union's registry. The human-runnable image builds from the Dockerfile and is tagged with its published `ghcr.io/stargazerbio` URL even when local-only, so docker resolves it from the local cache by name. CI publishes it when a merge changes the image's own files, and on demand. Commands in [Contributing → Building Images](../guides/contributing.md#building-images).
 
 ### Adding a tool
 

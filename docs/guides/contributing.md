@@ -138,10 +138,12 @@ See [Configuration → Container Images](../architecture/configuration.md#contai
 docker build -t ghcr.io/stargazerbio/stargazer:latest .
 ```
 
-Tag it with the published `ghcr.io/stargazerbio/...` URL even though you're not pushing — `docker run` resolves it from the local cache by that name. Nothing publishes it automatically. A maintainer publishes both platforms with buildx, logged in to `ghcr.io` with a token that has `write:packages`:
+Tag it with the published `ghcr.io/stargazerbio/...` URL even though you're not pushing — `docker run` resolves it from the local cache by that name.
+
+CI publishes it. When a merge to `main` changes the image's own files (the `Dockerfile` and the files it bakes from `app/`: the proxy, its overlay and banner, the launch script and the terminal agent's context), the **Stargazer image** workflow (`.github/workflows/stargazer-image.yml`) builds both platforms and pushes `:latest`. A change to the SDK or the notebooks doesn't trigger it, so to ship one, run the workflow by hand from the repo's Actions tab, or with:
 
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/stargazerbio/stargazer:latest --push .
+gh workflow run stargazer-image.yml
 ```
 
 The hosted notebook pods run `notebook-app`, built by the onboarding command (`stargazer-users`) — see [App → Images](../architecture/app.md#images). The `Dockerfile` mirrors that recipe but shares no code with it. A unit test fails when the `Dockerfile` is missing a pip package of the recipe's or a file the proxy reads at startup; tool versions can still drift, so bring them up to date when you bump one in `notebook_app_img_recipe` (`app/per_notebook.py`).
