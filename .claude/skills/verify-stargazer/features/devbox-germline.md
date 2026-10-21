@@ -5,7 +5,7 @@
 ## Sub-features
 
 - `devbox-germline-seed` stores the TP53 reference and NA12829's paired reads from a pod.
-- `devbox-germline-run` runs the workflow from SDK code on this machine (`flyte.init_from_config()` from the repo root, then `flyte.run(...)`), each step in a pod on `gatk_env`'s image.
+- `devbox-germline-run` runs the workflow from SDK code on this machine (`init_flyte()` from the repo root, then `flyte.run(...)`), each step in a pod on `gatk_env`'s image.
 - `devbox-germline-joint-call` joint-genotypes over every contig in the reference, through GenomicsDB, which runs only on x86_64.
 - `devbox-germline-output` finds the cohort's VCF from another pod and reads it back.
 

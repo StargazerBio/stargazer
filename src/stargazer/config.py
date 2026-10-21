@@ -9,6 +9,10 @@ Also the source of truth for the lean per-task Flyte environments
 (`app.admin_app.app_env`, `app.per_notebook`), next to the FastAPI code they
 deploy.
 
+`init_flyte()` is the one Flyte init for notebooks, the MCP server and the
+tests: an in-cluster client in a hosted notebook pod, the config file anywhere
+else.
+
 Rules:
 - PINATA_JWT: No default — absence means no public tier (Pinata) at all.
 - PINATA_GATEWAY: IPFS gateway for public downloads. Defaults to the project's
@@ -36,6 +40,7 @@ Rules:
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
 
+import contextlib
 import inspect
 import os
 import subprocess
@@ -165,6 +170,30 @@ def log_execution() -> str:
         f"| local_dir={os.environ['STARGAZER_LOCAL']} | target={os.environ['STARGAZER_TARGET']}"
     )
     return execution_id
+
+
+def init_flyte() -> None:
+    """Initialize Flyte wherever Stargazer runs.
+
+    A hosted notebook pod (`_U_EP_OVERRIDE` set) has no config file, but it
+    carries the endpoint, an API key and the owner's org, project and domain,
+    which make an in-cluster client for the owner's project. Its runs bundle
+    code from the directory holding the `stargazer` package, where the SDK and
+    the image-baked notebooks' tasks live. Anywhere else the config file
+    decides, as `flyte.init_from_config()` does: with none, runs stay in the
+    caller's own process.
+    """
+    if not os.environ.get("_U_EP_OVERRIDE"):
+        flyte.init_from_config()
+        return
+    # `init_in_cluster` takes the code bundle's root from the cwd and has no
+    # parameter for it. A pod's cwd is the workspace, which holds no SDK code.
+    with contextlib.chdir(Path(__file__).resolve().parents[1]):
+        flyte.init_in_cluster(
+            org=os.environ.get("FLYTE_ORG"),
+            project=os.environ.get("FLYTE_PROJECT"),
+            domain=os.environ.get("FLYTE_DOMAIN"),
+        )
 
 
 # Both task images install the stargazer package itself, not only its

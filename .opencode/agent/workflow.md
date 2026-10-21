@@ -90,7 +90,7 @@ async def {pipeline_name}(build: str, sample_ids: list[str]) -> list[{OutputType
     )
 ```
 
-Run it from a script or a notebook: `flyte.with_runcontext(mode="local").run({pipeline_name}, build=..., sample_ids=[...])` in-process, or `flyte.run(...)` against the cluster `flyte.init_from_config()` points at. `.outputs()[0]` is the result.
+Run it from a script or a notebook: `flyte.with_runcontext(mode="local").run({pipeline_name}, build=..., sample_ids=[...])` in-process, or `flyte.run(...)` against the cluster `init_flyte()` (`stargazer.config`) points at. `.outputs()[0]` is the result.
 
 ## Key Patterns
 

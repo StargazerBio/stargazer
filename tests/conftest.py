@@ -21,10 +21,10 @@ from pathlib import Path
 # Strip PINATA_JWT before importing stargazer so no client gets a public tier.
 os.environ.pop("PINATA_JWT", None)
 
-import flyte
 import pytest
 
 import stargazer.utils.storage as _storage_mod
+from stargazer.config import init_flyte
 from stargazer.utils.index import SqliteIndex
 from stargazer.utils.storage import StorageClient
 
@@ -78,7 +78,7 @@ def make_client(root: Path) -> StorageClient:
 @pytest.fixture(scope="session", autouse=True)
 def init_flyte_context():
     """Initialize Flyte context for all tests."""
-    flyte.init_from_config()
+    init_flyte()
     yield
 
 

@@ -39,6 +39,10 @@ All env var defaults are set in `config.py`. If set (even to empty string), the 
 
 On Union, `PINATA_JWT` is a Flyte secret that every task environment, dashboard and notebook pod declares, so the key is set wherever Stargazer runs and its value never appears in a task's or an app's spec.
 
+## Connecting to Flyte
+
+Notebooks, the MCP server and the tests connect with `init_flyte()` from `config.py`. Locally it reads `.flyte/config.yaml`, and with no config file runs stay in the caller's own process. A hosted notebook pod has no config file, so there it connects to the owner's project on the cluster the pod runs on. The app tier has its own init (`app.init`), which also accepts an API key, since the SDK never imports the app tier.
+
 ## Writing and reading
 
 ```mermaid

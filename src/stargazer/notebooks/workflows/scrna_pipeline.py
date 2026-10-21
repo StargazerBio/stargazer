@@ -41,7 +41,7 @@ def _():
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from stargazer.notebooks import init_flyte
+    from stargazer.config import init_flyte
 
     init_flyte()
 

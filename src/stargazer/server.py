@@ -4,8 +4,8 @@
 Exposes storage tools and a dynamic task runner via the MCP SDK's
 high-level `MCPServer` (named `FastMCP` before SDK 2.0).
 Tasks and workflows are auto-discovered from the registry and executed
-with `flyte.run`: remotely when `flyte.init_from_config()` finds an
-endpoint in `.flyte/config.yaml`, in-process otherwise.
+with `flyte.run`: remotely when `init_flyte()` finds an endpoint in
+`.flyte/config.yaml`, in-process otherwise.
 
 Usage:
     stargazer              # stdio transport (default)
@@ -25,10 +25,10 @@ import flyte
 from mcp.server import MCPServer
 
 import stargazer.bundles as _bundles
-import stargazer.config  # ensure env var defaults are set  # noqa: F401
 import stargazer.utils.storage as _storage
 from stargazer.assets import build_asset
 from stargazer.assets.asset import Asset, assemble
+from stargazer.config import init_flyte
 from stargazer.marshal import marshal_output
 from stargazer.registry import TaskInfo, TaskRegistry
 
@@ -77,7 +77,7 @@ def _is_list_asset_hint(hint: Any) -> bool:
 
 mcp = MCPServer("stargazer")
 
-flyte.init_from_config()
+init_flyte()
 _registry = TaskRegistry()
 
 # ---------------------------------------------------------------------------

@@ -78,7 +78,7 @@ tests/
 
 Three things hold for every test, so none of them is set up per test:
 
-- **Flyte is initialized once.** A session-scoped autouse fixture calls `flyte.init_from_config()`.
+- **Flyte is initialized once.** A session-scoped autouse fixture calls `init_flyte()` (`stargazer.config`).
 - **No public tier.** `PINATA_JWT` is stripped before anything imports `stargazer`, so no storage client can reach Pinata. The pinata tier's own conftest sets it back from `tests/.secrets/pinata_jwt` for each of its tests.
 - **An empty store per test.** `isolated_storage` (autouse) points `stargazer.utils.storage.default_client` at a `StorageClient` whose store, index and cache live under the test's `tmp_path`, and unsets `STARGAZER_OWNER`. Nothing reads or writes `~/.stargazer`. The devbox tier replaces this fixture with a no-op: its tests store on the devbox.
 
@@ -138,7 +138,7 @@ Some tests need inputs as stored records with real CIDs and companion links: an 
 
 ## Running Through Flyte
 
-Calling a task directly skips Flyte's serialization of its inputs and outputs. To test that path, run the task through Flyte: `flyte.with_runcontext(mode="local").run(task, **inputs)` runs it in this process; `flyte.run(...)` submits it wherever `flyte.init_from_config()` points. Either returns a run; `.wait()` for it, and `.outputs()` is a tuple of the task's outputs, so a single output is `.outputs()[0]`. The devbox tier's `devbox_run` fixture (`tests/devbox/conftest.py`) submits this way with the devbox's storage settings, and raises when the run failed.
+Calling a task directly skips Flyte's serialization of its inputs and outputs. To test that path, run the task through Flyte: `flyte.with_runcontext(mode="local").run(task, **inputs)` runs it in this process; `flyte.run(...)` submits it wherever `init_flyte()` points. Either returns a run; `.wait()` for it, and `.outputs()` is a tuple of the task's outputs, so a single output is `.outputs()[0]`. The devbox tier's `devbox_run` fixture (`tests/devbox/conftest.py`) submits this way with the devbox's storage settings, and raises when the run failed.
 
 ## Workflow Tests
 

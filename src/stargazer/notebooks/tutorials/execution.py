@@ -35,7 +35,7 @@ def _():
     import marimo as mo
     import matplotlib.pyplot as plt
 
-    from stargazer.notebooks import init_flyte
+    from stargazer.config import init_flyte
 
     init_flyte()
 
