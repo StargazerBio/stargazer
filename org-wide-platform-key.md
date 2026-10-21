@@ -1,6 +1,6 @@
 ---
 title: Org-wide platform key in every pod
-status: next
+status: backlog
 priority: high
 created: 2026-10-05
 ---
@@ -85,7 +85,7 @@ the org-wide key goes away. Pods then get only a project-scoped
 `EAGER_API_KEY` (measured during the experiment below), and a project
 without one can't start pods, so onboarding has to create each user's key.
 That's what branch `fix/org-wide-platform-key` does (The project key,
-below).
+below). Parked until the user confirms Union has turned the org key off.
 
 The branch holds the per-project key code, unpushed in its worktree, last
 rebased onto `main` at `2b96e0e` on 2026-10-20 (unit tier 508 passed); it
