@@ -1,6 +1,6 @@
 ---
 title: CI publishes the stargazer image when its Dockerfile or baked files change
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-21
 ---
