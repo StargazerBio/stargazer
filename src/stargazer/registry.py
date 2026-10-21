@@ -101,9 +101,6 @@ class TaskRegistry:
             obj = getattr(workflows_mod, name)
             if not hasattr(obj, "func"):
                 continue
-            # Skip if already registered (e.g. duplicate short_name across modules)
-            if obj.short_name in self._tasks:
-                continue
             self._register(obj.short_name, obj, category="workflow")
 
     def _register(self, name: str, task_obj: Any, category: str):
