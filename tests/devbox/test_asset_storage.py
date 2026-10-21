@@ -96,7 +96,7 @@ def test_index_survives_a_postgres_restart(tag, index_query):
         try:
             after = _rows(index_query, tag)
             break
-        except (RuntimeError, psycopg.OperationalError):
+        except RuntimeError, psycopg.OperationalError:
             # No pod to forward to yet, or the server isn't accepting yet.
             if time.monotonic() > deadline:
                 pytest.fail("Postgres didn't come back within 5 minutes")
