@@ -32,6 +32,7 @@
 - Simple tests will be written before implementation, then implementation follows without pausing for test review. Since no human checks the tests up front, they have to check themselves:
   - Run each new test before implementing and confirm it fails for the expected reason (missing behavior, not an import error or broken fixture)
   - Assert observable behavior against literal expected values. If a test would still pass when the code under test returns `None`, rewrite the assertion or delete the test
+  - Don't restate configuration in a test. A version pin, a resource size or any other chosen value changes with the choice, so a test that hardcodes it only gets edited alongside it. Check what the value does on its real surface instead
   - Prefer no new test over a bad test. When a real test would need heavy mocking, production-only state, or slow infrastructure for a small change, use the closest real check instead (a local Flyte run, a script, a repro command), run it before and after the change, and say so
 - The review checkpoint is the pull request. The user reviews every PR before merging, so tests and implementation are reviewed together in its diff
 - Implementation will be tightly scoped so it can be understood

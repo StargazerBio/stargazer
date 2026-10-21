@@ -52,9 +52,8 @@ def _():
         2. **Remotely**, submitted to the Flyte cluster, with a URL to
            watch the action as it executes.
 
-        No code changes between the two — only the call site. That's the
-        superpower. At the end, a control hands that choice to whoever
-        runs the notebook.
+        No code changes between the two — only the call site. At the
+        end, a control hands that choice to whoever runs the notebook.
         """
     )
     return flyte, mo, plt, time

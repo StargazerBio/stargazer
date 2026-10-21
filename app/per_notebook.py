@@ -30,6 +30,11 @@ The image layers, on top of the Flyte debian base:
   into marimo's HTML responses.
 - `app/launch-notebook.sh` baked at `/usr/local/bin/launch-notebook.sh`,
   invoked by the AppEnvironment `args=[...]`.
+- `app/notebook_agent.md` baked at `/workspace/AGENTS.md`, where the terminal
+  starts Claude Code, so an agent knows where it is and how Stargazer
+  notebooks, tasks and runs work. The proxy records the files already in
+  `/workspace` at startup as saved, so the baked copy stays out of the user's
+  store until they edit it; from then on their copy is the one hydrated.
 
 Stargazer itself is NOT installed at the system level — every notebook
 declares its deps inline via PEP 723 and the sandbox venv resolves them
@@ -132,7 +137,7 @@ notebook_app_img_recipe = (
             # image env below); auth is interactive (`claude` browser login) and
             # ephemeral per the pod's storage.
             "mkdir -p /opt/claude-cli "
-            "&& curl -fsSL https://claude.ai/install.sh | HOME=/opt/claude-cli bash -s 2.1.153 "
+            "&& curl -fsSL https://claude.ai/install.sh | HOME=/opt/claude-cli bash -s 2.1.304 "
             "&& chmod -R a+rX /opt/claude-cli "
             "&& ln -s /opt/claude-cli/.local/bin/claude /usr/local/bin/claude",
         ]
@@ -160,6 +165,12 @@ notebook_app_img_recipe = (
     .with_source_file(PROJECT_ROOT / "app" / "terminal_overlay.html", _PROXY_LIB_DIR)
     .with_source_file(PROJECT_ROOT / "app" / "save_banner.html", _PROXY_LIB_DIR)
     .with_source_file(PROJECT_ROOT / "app" / "launch-notebook.sh", _LAUNCH_BIN)
+    # The terminal agent's context file, renamed to AGENTS.md below. Copied
+    # into a directory, as every other file here is, since the builder takes
+    # the destination as one.
+    .with_source_file(
+        PROJECT_ROOT / "app" / "notebook_agent.md", f"{WORKSPACE_NOTEBOOK_DIR}/"
+    )
     # Bake the stargazer source tree at `/stargazer/` so each notebook's
     # `[tool.uv.sources] stargazer = { path = "/stargazer", editable = true }`
     # resolves inside the marimo --sandbox venv. Image-shipped notebooks live
@@ -172,9 +183,10 @@ notebook_app_img_recipe = (
         [
             f"mv {_PROXY_LIB_DIR}/proxy.py {_PROXY_LIB_DIR}/{_PROXY_MODULE}.py",
             f"chmod +x {_LAUNCH_BIN}/launch-notebook.sh",
-            # Pre-create the hydration target owned by the flyte runtime user
-            # so the launch script can write into it at startup.
-            f"mkdir -p {WORKSPACE_NOTEBOOK_DIR} "
+            # The hydration target, owned by the flyte runtime user so the
+            # launch script can write into it at startup.
+            f"mv {WORKSPACE_NOTEBOOK_DIR}/notebook_agent.md "
+            f"{WORKSPACE_NOTEBOOK_DIR}/AGENTS.md "
             f"&& chown -R flyte:flyte {WORKSPACE_NOTEBOOK_DIR}",
         ]
     )

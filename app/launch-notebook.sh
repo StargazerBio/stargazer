@@ -5,8 +5,8 @@
 #
 #     /usr/local/bin/launch-notebook.sh <mode> <notebook_path>
 #
-# The `stargazer` image (Dockerfile) passes a directory as <notebook_path>,
-# which marimo serves as a notebook list.
+# The `stargazer` image (Dockerfile) passes the Assets tutorial, with the rest
+# of its notebooks beside it in /workspace.
 #
 # Three things happen on startup:
 #
