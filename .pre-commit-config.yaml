@@ -14,6 +14,9 @@ repos:
     rev: v2.3.2
     hooks:
       - id: docstr-coverage
+        # The pinned Python (.python-version): it parses src/ with its own,
+        # and its manifest's `python3` would be whichever is on PATH.
+        language_version: python3.14
         args: [--verbose, "0", --fail-under=100, src/]
   - repo: local
     hooks:

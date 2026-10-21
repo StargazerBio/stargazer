@@ -8,7 +8,7 @@
 # in step by hand. They differ on purpose only in multi-arch downloads, in
 # having no Flyte-injected runtime or platform login, and in serving a
 # directory of notebooks instead of one (see ENTRYPOINT).
-FROM python:3.13-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 RUN apt-get update \
     && apt-get install -y build-essential ca-certificates curl git bzip2 \

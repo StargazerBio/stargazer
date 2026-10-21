@@ -12,19 +12,14 @@ spec: [docs/architecture/mcp-server.md](../architecture/mcp-server.md)
 import inspect
 import types
 from dataclasses import dataclass, field
-from typing import Any, Union, get_args, get_origin, get_type_hints
+from typing import Any, get_type_hints
 
 
 def _type_name(hint: Any) -> str:
-    """Convert a type hint to a human-readable string (`list[str]`, `R2 | NoneType`).
-
-    Every union renders as `A | B`, however it was spelled. Python 3.13 gives
-    `X | None` a `types.UnionType` origin and `Optional[X]` a `typing.Union`
-    one; 3.14 gives both `typing.Union`. Checking for either keeps the catalog
-    the same on every interpreter.
-    """
-    if get_origin(hint) in (types.UnionType, Union):
-        return " | ".join(_type_name(a) for a in get_args(hint))
+    """Convert a type hint to a human-readable string (`list[str]`, `R2 | NoneType`)."""
+    # Before the generic branch: a union has an `__origin__` too.
+    if isinstance(hint, types.UnionType):
+        return " | ".join(_type_name(a) for a in hint.__args__)
 
     origin = getattr(hint, "__origin__", None)
     args = getattr(hint, "__args__", None)

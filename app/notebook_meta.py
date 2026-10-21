@@ -58,7 +58,7 @@ def _coerce_cpu(value: object) -> int:
     """Coerce `value` to an int cpu count, or the default if it isn't one."""
     try:
         return int(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return DEFAULT_RESOURCES.cpu
 
 

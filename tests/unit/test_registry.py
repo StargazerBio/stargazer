@@ -3,13 +3,10 @@
 import importlib
 import pkgutil
 import types
-from typing import Optional, Union
-
-import pytest
 
 import stargazer.tasks
 import stargazer.workflows
-from stargazer.registry import TaskRegistry, _type_name
+from stargazer.registry import TaskRegistry
 
 
 def _defined_task_names(package: types.ModuleType) -> set[str]:
@@ -74,21 +71,6 @@ def test_to_catalog_structure():
     assert len(bwa_mem_entry["outputs"]) == 1
     assert bwa_mem_entry["outputs"][0]["name"] == "o0"
     assert "Alignment" in bwa_mem_entry["outputs"][0]["type"]
-
-
-@pytest.mark.parametrize(
-    "hint",
-    # The old spellings are the point: they build a different object on 3.13.
-    [int | None, Optional[int], Union[int, None]],  # noqa: UP007, UP045
-    ids=["pipe", "Optional", "Union"],
-)
-def test_type_name_renders_optional_as_pipe_union(hint):
-    """Every spelling of an optional renders the same way on every Python.
-
-    3.14 gives `int | None` a `typing.Union` origin, which 3.13 only gives
-    `Optional`/`Union`, so the catalog would change with the interpreter.
-    """
-    assert _type_name(hint) == "int | NoneType"
 
 
 def test_get_returns_none_for_unknown():

@@ -367,7 +367,7 @@ class HttpIndex:
                 if response.status_code < 500:
                     return response
                 response.raise_for_status()
-            except (httpx.TransportError, httpx.HTTPStatusError):
+            except httpx.TransportError, httpx.HTTPStatusError:
                 if attempt == self._attempts:
                     raise
             logger.warning(
