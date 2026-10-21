@@ -1,8 +1,11 @@
 ---
 title: Hosted notebook kernels never reach the cluster
-status: backlog
+status: next
 priority: high
 created: 2026-10-20
+blocked_by:
+  - production-context-files
+  - notebook-pod-ephemeral-storage
 ---
 
 In a hosted notebook pod on Union, `flyte.run(...)` from the kernel quietly runs the task inside the pod. The notebooks' setup blocks call `flyte.init_from_config()` (`tutorials/execution.py:38`, `templates/basic.py:49`, `workflows/scrna_pipeline.py:45`). The pod has no Flyte config file, so that call leaves Flyte with no client, and `flyte.run` falls back to an in-process `_InlineRun`. So the Execution tutorial's "Run Remotely" section runs in the pod and shows a local `/tmp/flyte/metadata/...` path as its console URL. The "On the cluster" choice from ticket `local-remote-toggle` (`stargazer.notebooks.ui.dispatch`, which forces `mode="remote"`, merged in #62) fails outright. The MCP server's `flyte.init_from_config()` (`server.py:80`) is inferred to do the same when it runs in a pod.

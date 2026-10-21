@@ -1,8 +1,10 @@
 ---
 title: Execution tutorial edit pod evicted for disk use
-status: backlog
+status: next
 priority: high
 created: 2026-10-20
+blocked_by:
+  - production-context-files
 ---
 
 On Union, the Execution tutorial's edit pod never opens. Each pod is evicted about a minute after marimo's sandbox venv finishes installing, and the browser gets a Cloudflare 502. Measured 2026-10-20 in `u-pryce` (test account, dashboard at `89e637e`): two pods in a row, `nb-execution-edit-00001-deployment-847cc54fb6-fcp7s` and `-npfsj`, both with status reason `Evicted`, *"Pod ephemeral local storage usage exceeds the total limit of containers 1Gi."* The ReplicaSet was starting a third when the app was stopped. The pod log ends at `Installed 111 packages`, after numpy, matplotlib, pillow and marimo downloads.
