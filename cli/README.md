@@ -79,41 +79,6 @@ uv run python cli/upload_to_pinata.py tests/fixtures/general/new_fixture.fa \
 An entry that already has a CID is left alone, and the script prints the line
 to add by hand.
 
-## devbox-setup.sh
-
-Applies the cluster-side workarounds the local Flyte devbox needs: the storage
-signed-URL endpoint, the serving domain, a CoreDNS wildcard, and the
-`PINATA_JWT` secret every task environment declares. They're lost
-whenever the `flyte-devbox` container is recreated, so re-run it after every
-fresh devbox. It's safe to re-run.
-
-```bash
-cli/devbox-setup.sh [--dry-run] [--laptop] [--verify-pod] [--domain D]
-```
-
-`--laptop` also applies the macOS-side DNS change (needs sudo); without it,
-the script prints the commands. `--verify-pod` checks, from a throwaway pod,
-that the devbox dashboard resolves and answers in-cluster. `--help` prints the full description. Each
-step's rationale is in
-[`.opencode/reference/devbox_workarounds.md`](../.opencode/reference/devbox_workarounds.md).
-
-## devbox_dashboard.py
-
-Deploys a dashboard on the devbox, after `devbox-setup.sh`. The devbox has no
-Union users or login, so it's one dashboard in the default project for a
-stand-in user, `devbox-user`, storing under the devbox's bucket. It holds a
-port-forward to the devbox's object store open while it uploads, and refuses
-to run unless `STARGAZER_TARGET=devbox` (the default).
-
-```bash
-uv run --all-extras python cli/devbox_dashboard.py
-```
-
-It prints the dashboard's URL. What each setting is for, and how to send runs'
-assets to it:
-[`.opencode/reference/devbox_workarounds.md`](../.opencode/reference/devbox_workarounds.md)
-→ Devbox dashboard.
-
 ## docker_task_tests.py
 
 Runs the tasks test tier: `tests/tasks`, each domain's tests in the image

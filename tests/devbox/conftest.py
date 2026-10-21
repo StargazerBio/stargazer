@@ -1,6 +1,6 @@
 """Fixtures for the devbox tier (`uv run --all-extras pytest -m devbox`).
 
-These tests run on the local devbox, so they need it up, `cli/devbox-setup.sh`
+These tests run on the local devbox, so they need it up, `devbox/setup.sh`
 applied since it was created (with its steps for this machine's DNS; it also
 starts the Postgres server that holds the asset index), and kubectl pointed
 at it. The session points Flyte at the devbox, bundling code from the repo
@@ -22,7 +22,7 @@ from stargazer.config import PROJECT_ROOT
 from stargazer.utils.index import PostgresIndex
 
 _spec = importlib.util.spec_from_file_location(
-    "devbox_dashboard", PROJECT_ROOT / "cli" / "devbox_dashboard.py"
+    "devbox_dashboard", PROJECT_ROOT / "devbox" / "dashboard.py"
 )
 devbox_dashboard = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(devbox_dashboard)
@@ -57,7 +57,7 @@ def isolated_storage():
 
 @pytest.fixture(scope="session")
 def dashboard() -> str:
-    """Deploy the dashboard for the stand-in user, as `cli/devbox_dashboard.py` does.
+    """Deploy the dashboard for the stand-in user, as `devbox/dashboard.py` does.
 
     Returns its URL. Deployed once per session, so it runs the current source.
     """

@@ -4,7 +4,7 @@ Task pods on the local devbox store files as assets and find them again from oth
 
 ## Sub-features
 
-- `devbox-dashboard` deploys the dashboard on the devbox with `cli/devbox_dashboard.py` and serves it as the stand-in user.
+- `devbox-dashboard` deploys the dashboard on the devbox with `devbox/dashboard.py` and serves it as the stand-in user.
 - `devbox-store-index` stores files from one pod and indexes them in the devbox's Postgres.
 - `devbox-assemble-fetch` finds those files from a second pod with `assemble()` and reads them back with `fetch()`.
 - `devbox-dashboard-assets` lists those files in the dashboard's asset browser, which reads the same index.
@@ -13,7 +13,7 @@ Task pods on the local devbox store files as assets and find them again from oth
 
 ## How to get to it (user POV)
 
-- After `flyte start devbox`, run `cli/devbox-setup.sh`, which also starts the index's Postgres server. Then `uv run --all-extras python cli/devbox_dashboard.py` prints the dashboard's URL, `http://dashboard-flytesnacks-development.devbox.stargazer.bio:30081`.
+- After `flyte start devbox`, run `devbox/setup.sh`, which also starts the index's Postgres server. Then `uv run --all-extras python devbox/dashboard.py` prints the dashboard's URL, `http://dashboard-flytesnacks-development.devbox.stargazer.bio:30081`.
 - Runs submitted from your machine store into the devbox when these are exported: `STARGAZER_STORE_ROOT=s3://flyte-data/stargazer`, `STARGAZER_INDEX_URL=postgresql://stargazer:stargazer@postgres.stargazer.svc.cluster.local:5432/stargazer`, `STARGAZER_OWNER=devbox-user`. Keep `kubectl port-forward -n flyte svc/rustfs-svc 9000:9000` open while submitting, so the code bundle can upload.
 
 ## Driving it
@@ -22,8 +22,8 @@ Driven by the devbox test tier, `tests/devbox/`. The session deploys the dashboa
 
 Preconditions:
 
-- The devbox is up, and `cli/devbox-setup.sh` has run since it was last created. Its verify step prints `✓ coredns-custom present`, `✓ PINATA_JWT secret present` and `✓ Postgres ready`.
-- `*.devbox.stargazer.bio` and `rustfs-svc.flyte` resolve to `127.0.0.1` on this machine (the steps for this machine that `cli/devbox-setup.sh` prints).
+- The devbox is up, and `devbox/setup.sh` has run since it was last created. Its verify step prints `✓ coredns-custom present`, `✓ PINATA_JWT secret present` and `✓ Postgres ready`.
+- `*.devbox.stargazer.bio` and `rustfs-svc.flyte` resolve to `127.0.0.1` on this machine (the steps for this machine that `devbox/setup.sh` prints).
 - `kubectl config current-context` is `flyte-devbox`.
 
 Steps:
@@ -39,7 +39,7 @@ Steps:
 
 ## Gotchas
 
-- After the devbox is recreated, clear Flyte's local cache before the first run (`.opencode/reference/devbox_workarounds.md`, "Laptop-side Flyte cache"). Otherwise the deploy skips images and code bundles the wipe deleted, and the pod fails on a missing bundle.
+- `devbox/setup.sh` also clears Flyte's local cache in every checkout, so run it after the devbox is recreated, before the first deploy. Otherwise the deploy skips images and code bundles the wipe deleted, and the pod fails on a missing bundle.
 - A deploy or run that logs `Upload failed … All connection attempts failed` couldn't reach the store: Flyte signs upload URLs for `rustfs-svc.flyte:9000`, which needs the port-forward. The tests hold one open; anything else you submit needs your own.
 - The dashboard and the task image carry the project's source, so any source change since the last session builds them again first.
 - What runs in the tests' pods lives in `tests/devbox/pod_tasks.py` and must import only what `gatk_env`'s image carries. Importing `app.admin_app` there fails: it mounts `app/static`, which the installed package doesn't carry.

@@ -11,7 +11,7 @@
 
 ## How to get to it (user POV)
 
-- With the devbox up and `cli/devbox-setup.sh` applied (see [Asset storage on the devbox](./devbox-asset-storage.md)), export the three devbox storage settings and keep the store port-forward open, as in `docs/guides/contributing.md` → Running on the Devbox.
+- With the devbox up and `devbox/setup.sh` applied (see [Asset storage on the devbox](./devbox-asset-storage.md)), export the three devbox storage settings and keep the store port-forward open, as in `docs/guides/contributing.md` → Running on the Devbox.
 - Store a reference with `build` set and a sample's R1 and R2 under one `sample_id`, then call `flyte.run(germline_short_variant_discovery, build=..., sample_ids=[...], cohort_id=...)`.
 
 ## Driving it
@@ -29,8 +29,8 @@ Steps:
 
 ## Gotchas
 
-- Every Stargazer image is built for x86_64 only. On Apple silicon the devbox runs natively and these pods run emulated, which is slower than Union. Don't start the devbox itself as x86_64: no pod ever starts (`.opencode/reference/devbox_workarounds.md`, "Stargazer pods run x86_64 on an arm64 devbox").
+- Every Stargazer image is built for x86_64 only. On Apple silicon the devbox runs natively and these pods run emulated, which is slower than Union. Don't start the devbox itself as x86_64: no pod ever starts (the header of `devbox/setup.sh`).
 - The first run after a source change builds the GATK image under emulation. When only the source changed, that's the project's install layer; a recipe change rebuilds more.
 - The tests bundle code from the repo root, as SDK code does by default. Their pods import `tests.devbox.pod_tasks` from the bundle and `stargazer` from the image.
-- After the devbox is recreated, clear Flyte's local cache before the first run (`.opencode/reference/devbox_workarounds.md`, "Laptop-side Flyte cache"). Each session seeds again, so the store and index needn't survive.
-- A run with no `PINATA_JWT` secret on the devbox fails before any pod starts, with `none of the secret managers injected secret`. `cli/devbox-setup.sh` creates it.
+- `devbox/setup.sh` clears Flyte's local cache, so run it after the devbox is recreated, before the first run. Each session seeds again, so the store and index needn't survive.
+- A run with no `PINATA_JWT` secret on the devbox fails before any pod starts, with `none of the secret managers injected secret`. `devbox/setup.sh` creates it.

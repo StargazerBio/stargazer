@@ -38,4 +38,4 @@ Add a file here once a feature has been driven end to end.
 - **Tutorial notebooks** (`notebooks/tutorials/`). Reachable locally.
 - **MCP server tools** (`list_tasks`, `run_task`, `query_files`). Reachable locally.
 - **Germline variant calling locally** (`workflows/`). Needs `bwa`, `samtools`, and `gatk` on PATH; on the devbox it's mapped above.
-- **Hosted app** (`app/`: notebook launch in general, asset manager). Needs the devbox dashboard (`cli/devbox_dashboard.py`, see [Asset storage on the devbox](./devbox-asset-storage.md)).
+- **Hosted app** (`app/`: notebook launch in general, asset manager). Needs the devbox dashboard (`devbox/dashboard.py`, see [Asset storage on the devbox](./devbox-asset-storage.md)).

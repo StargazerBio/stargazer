@@ -209,8 +209,7 @@ class _RevalidatingStatic(StaticFiles):
     keep serving a stale asset after a redeploy changes it.
     `Cache-Control: no-cache` means "store but always revalidate"; the
     response already carries an ETag, so this is a cheap 304 when unchanged
-    and a fresh 200 once a redeploy changes the file. See
-    devbox_workarounds.md.
+    and a fresh 200 once a redeploy changes the file.
     """
 
     def file_response(self, *args, **kwargs):

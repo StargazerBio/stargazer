@@ -1,51 +1,55 @@
 #!/usr/bin/env bash
 #
-# devbox-setup.sh — apply the known cluster-side Flyte devbox workarounds to a
-# fresh `flyte-devbox` container. Tasks and workflows run here, and
-# `cli/devbox_dashboard.py` deploys a dashboard for a stand-in user (the devbox
-# has no Union login).
+# setup.sh — make a fresh `flyte-devbox` container ready for Stargazer.
+# Tasks and workflows run on the devbox, and devbox/dashboard.py deploys a
+# dashboard there for a stand-in user (the devbox has no Union login).
 #
-# These patches live in the k3s addon manifest (and CoreDNS) and are LOST when
-# the devbox container is recreated, so re-run this after every fresh devbox.
-# The script is idempotent — re-running an already-patched box is a no-op for
-# the edits (the restarts still fire).
+# The devbox is the local Flyte v2 cluster (k3s, flyte-binary, rustfs, Knative
+# and a registry in one Docker container). Most of it behaves like a hosted
+# Flyte deploy; each step below works around one way it doesn't. The changes
+# live in the k3s addon manifest, CoreDNS and the cluster, so they're lost
+# whenever the container is recreated: re-run this after every fresh devbox.
+# Re-running an already set-up box changes nothing, apart from the restarts.
 #
-# Source of truth + rationale for each step:
-#   .opencode/reference/devbox_workarounds.md
+# Steps:
+#   1. Storage signed URLs: localhost:30002 → rustfs-svc.flyte:9000
+#   2. Serving domain: `.localhost` → devbox.stargazer.bio (Knative and Flyte)
+#   3. CoreDNS wildcard: *.devbox.stargazer.bio → the node's IP
+#   4. The PINATA_JWT task secret
+#   5. The asset index's Postgres server (devbox/postgres.yaml)
+#   6. Clearing Flyte's local cache in every checkout
+#   7. Checks, and DNS on this machine (printed; applied with --laptop)
 #
-# What this DOES automate (cluster-side, lost on container recreate):
-#   1. Storage signed-URL endpoint   localhost:30002 → rustfs-svc.flyte:9000
-#   2. Serving domain off `.localhost` → ${DEVBOX_DOMAIN} (Knative + Flyte)
-#   3. CoreDNS wildcard  *.${DEVBOX_DOMAIN} → node InternalIP  (so App.endpoint
-#      resolves in-cluster on the :30081 NodePort)
-#   4. flyte-binary + coredns restarts, racing the addon controller correctly
-#   5. The PINATA_JWT task secret every task environment declares (Union has
-#      it org-wide). Its value comes from $PINATA_JWT, else the repo's .env,
-#      else it's empty and task pods run without the public tier.
-#   6. The asset index: a Postgres 16 server in the `stargazer` namespace, on
-#      a volume, which the dashboard and every pod reach at
-#      postgres.stargazer.svc.cluster.local:5432 (INDEX_URL in
-#      cli/devbox_dashboard.py names the same user, password and database).
-#
-# What it does NOT do (already handled in app code — see the workarounds doc):
-#   - init_in_cluster in App pods (app/init.py); SDK-over-CLI project
-#     creation (app/onboard.py)
-#   - App.endpoint vs App.url, code-bundle include=/naming
-#   - Deploying the dashboard: that's cli/devbox_dashboard.py
+# What it can't fix:
+#   - The devbox drops `secrets=` on an AppEnvironment. flyte-binary never
+#     stamps the secret annotations on app pods, so the secret webhook has
+#     nothing to act on (Union does inject app secrets). Dashboards and
+#     notebook pods go without PINATA_JWT here, so the devbox has no public
+#     tier in the asset browser or in notebooks. Baking the key into
+#     `env_vars` would show it to every user in their app's spec.
+#   - Memory. The node has ~7.75 GiB allocatable, and the cluster's own pods,
+#     the dashboard and the index's Postgres request ~1.7 GiB of it (1,710 Mi
+#     measured 2026-10-20). Scheduling counts requests, and a parent task holds
+#     its request while it waits on its children, so a workflow's pods must fit
+#     together in ~6 GiB. That's why gatk_env requests 1 GiB
+#     (src/stargazer/config.py).
+#   - Architecture. On Apple silicon the node is arm64 (an x86_64 devbox
+#     can't start pods: seccomp is unsupported under emulation). Stargazer's
+#     images are x86_64 only, because GATK's GenomicsDB native library is, so
+#     its pods run emulated (IMAGE_PLATFORM in src/stargazer/config.py).
 #
 # --verify-pod resolves and calls the devbox dashboard from a throwaway pod,
 # so deploy it first.
 #
-# Laptop-side DNS (sudo, macOS) is PRINTED by default; run with --laptop to apply.
-#
 # Usage:
-#   cli/devbox-setup.sh [--dry-run] [--laptop] [--verify-pod] [--domain D]
+#   devbox/setup.sh [--dry-run] [--laptop] [--verify-pod]
 #
 set -euo pipefail
 
 CONTAINER="${DEVBOX_CONTAINER:-flyte-devbox}"
-REPO="$(cd "$(dirname "$0")/.." && pwd)"
-DOMAIN="${DEVBOX_DOMAIN:-devbox.stargazer.bio}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+REPO="$(dirname "$HERE")"
+DOMAIN="devbox.stargazer.bio"
 MANIFEST="/var/lib/rancher/k3s/server/manifests/flyte.yaml"
 DRY_RUN=0
 DO_LAPTOP=0
@@ -66,15 +70,11 @@ while [ $# -gt 0 ]; do
         --dry-run)    DRY_RUN=1 ;;
         --laptop)     DO_LAPTOP=1 ;;
         --verify-pod) VERIFY_POD=1 ;;
-        --domain)     DOMAIN="${2:?--domain needs a value}"; shift ;;
         -h|--help)    usage ;;
         *) die "unknown argument: $1 (try --help)" ;;
     esac
     shift
 done
-
-# Escaped form for the CoreDNS regex (dots literal).
-DOMAIN_RE="${DOMAIN//./\\.}"
 
 dex()  { docker exec "$CONTAINER" "$@"; }
 flyte_cli() { uv run --project "$REPO" flyte --config "$REPO/.flyte/config.yaml" "$@"; }
@@ -89,12 +89,25 @@ command -v docker >/dev/null 2>&1 || die "docker not found on PATH"
 docker ps --format '{{.Names}}' | grep -qx "$CONTAINER" \
     || die "devbox container '$CONTAINER' is not running (set DEVBOX_CONTAINER to override)"
 dex test -f "$MANIFEST" || die "addon manifest not found at $MANIFEST inside $CONTAINER"
-log "Target container=$CONTAINER  domain=$DOMAIN  dry-run=$DRY_RUN"
+log "Target container=$CONTAINER  dry-run=$DRY_RUN"
 
 # ---------------------------------------------------------------------------
-# 1–2. Patch the k3s addon manifest (the ConfigMaps are addon-owned; editing
-#      them directly reverts, so we patch the source manifest and let the
-#      controller re-render).
+# 1–2. Patch the k3s addon manifest. The ConfigMaps are owned by k3s's addon
+#      controller, so editing them directly reverts: patch the source manifest
+#      and let the controller re-render them.
+#
+#   1. flyte-binary hands out signed upload URLs on its configured
+#      `signedURL.endpoint`, localhost:30002. In a pod `localhost` is the pod
+#      itself, so every code-bundle upload from a pod (`flyte.serve` in the
+#      dashboard) fails with "All connection attempts failed". The in-cluster
+#      service name works from pods, as real S3 URLs do in production. This
+#      machine then needs that name too (step 7).
+#   2. Apps are served under `.localhost`, and glibc answers `*.localhost`
+#      without asking any nameserver, so no DNS change makes `App.endpoint`
+#      resolve in a pod. A normal domain fixes it with no devbox branch in the
+#      app code. It needs no public DNS records. kourier routes by Host, so
+#      Knative's route domain (`config-domain`) and Flyte's
+#      `internalApps.baseDomain`, which builds `App.endpoint`, must match.
 # ---------------------------------------------------------------------------
 log "Patching addon manifest ($MANIFEST)"
 run dex sed -i \
@@ -104,11 +117,10 @@ run dex sed -i \
     "$MANIFEST"
 ok "Manifest patched (signed-URL endpoint, Knative domain, baseDomain)"
 
-# ---------------------------------------------------------------------------
-# Wait for the addon controller to re-render the LIVE ConfigMaps. flyte-binary
-# reads config once at startup, so restarting before the ConfigMap is patched
-# boots stale config — the deploy then fails identically and looks unpatched.
-# ---------------------------------------------------------------------------
+# Wait for the addon controller to re-render the live ConfigMaps (about 10 s).
+# flyte-binary reads its config once at startup, so a restart before the
+# ConfigMap changes boots the old config, and the deploy then fails as if
+# nothing had been patched.
 log "Waiting for the k3s addon controller to re-render ConfigMaps"
 if [ "$DRY_RUN" = 1 ]; then
     printf '   %s[dry-run]%s poll flyte-binary-config / config-domain until patched\n' "$c_yellow" "$c_off"
@@ -127,9 +139,8 @@ else
         || warn "ConfigMaps not fully patched after 60s — inspect manually before relying on a deploy"
 fi
 
-# ---------------------------------------------------------------------------
-# Restart flyte-binary so it loads the patched config.
-# ---------------------------------------------------------------------------
+# `App.endpoint` is computed live from baseDomain, so the restart is enough:
+# deployed apps don't need redeploying, and Knative updates its routes itself.
 log "Restarting flyte-binary"
 run kc rollout restart deployment/flyte-binary -n flyte
 # Non-fatal: a slow rollout shouldn't abort the script before later steps run.
@@ -140,35 +151,17 @@ run kc rollout status deployment/flyte-binary -n flyte --timeout=180s \
 ok "flyte-binary restart issued"
 
 # ---------------------------------------------------------------------------
-# 4. CoreDNS wildcard: *.${DOMAIN} → node InternalIP. App.endpoint carries the
-#    :30081 NodePort, only reachable on a node IP (not a ClusterIP). The AAAA
-#    template returns NOERROR-empty so glibc falls back to the A record.
+# 3. CoreDNS wildcard, so pods resolve the domain from step 2
+#    (devbox/coredns-custom.yaml, with this node's IP filled in).
 # ---------------------------------------------------------------------------
 log "Applying coredns-custom for *.$DOMAIN"
 if [ "$DRY_RUN" = 1 ]; then
-    printf '   %s[dry-run]%s kubectl apply coredns-custom (node IP fetched at apply time)\n' "$c_yellow" "$c_off"
+    printf '   %s[dry-run]%s kubectl apply devbox/coredns-custom.yaml (node IP fetched at apply time)\n' "$c_yellow" "$c_off"
 else
     NODEIP="$(kc get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')"
     [ -n "$NODEIP" ] || die "could not determine node InternalIP"
-    docker exec -i "$CONTAINER" kubectl apply -f - <<YAML
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: coredns-custom
-  namespace: kube-system
-data:
-  devbox-domain.server: |
-    ${DOMAIN}:53 {
-        template IN A {
-            match .*\\.${DOMAIN_RE}\\.\$
-            answer "{{ .Name }} 60 IN A ${NODEIP}"
-        }
-        template IN AAAA {
-            match .*\\.${DOMAIN_RE}\\.\$
-            rcode NOERROR
-        }
-    }
-YAML
+    sed "s/NODE_IP/$NODEIP/" "$HERE/coredns-custom.yaml" \
+        | docker exec -i "$CONTAINER" kubectl apply -f -
     ok "coredns-custom applied (*.$DOMAIN → $NODEIP)"
 fi
 log "Restarting coredns"
@@ -178,9 +171,14 @@ run kc rollout status deployment/coredns -n kube-system --timeout=120s \
 ok "coredns restart issued"
 
 # ---------------------------------------------------------------------------
-# 5. The PINATA_JWT secret. Every task environment declares it, and the pod
-#    webhook rejects a task pod whose secret is missing, so without it no
-#    task runs. Replaced on every run, so a changed key takes effect.
+# 4. The PINATA_JWT secret. Every task environment declares it
+#    (STARGAZER_SECRETS), and the pod webhook refuses a pod whose declared
+#    secret doesn't exist ("none of the secret managers injected secret"), so
+#    without it no task runs. Flyte has no optional secrets. Union has it
+#    org-wide; it's created org-wide here too. Its value comes from
+#    $PINATA_JWT, else the repo's .env; with neither it's empty, and task pods
+#    run without the public tier. Replaced on every run, so a changed key takes
+#    effect.
 # ---------------------------------------------------------------------------
 log "Creating the PINATA_JWT task secret"
 jwt="${PINATA_JWT:-}"
@@ -202,97 +200,47 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6. The asset index's Postgres server. The volume keeps the index through a
-#    pod restart (the devbox wipes it with the rest of its state on
-#    recreate). Requests stay small: the node's memory is tight (see the
-#    workarounds doc). Applied on every run; an unchanged spec is a no-op.
+# 5. The asset index's Postgres server. On Union each user's index is a SQLite
+#    file on their dashboard; here one Postgres server serves the dashboard and
+#    every pod. Applied on every run; an unchanged spec is a no-op.
 # ---------------------------------------------------------------------------
-log "Applying the asset index's Postgres server (namespace stargazer)"
+log "Applying the asset index's Postgres server (devbox/postgres.yaml)"
 if [ "$DRY_RUN" = 1 ]; then
-    printf '   %s[dry-run]%s kubectl apply namespace/stargazer, pvc+deployment+service postgres
-' "$c_yellow" "$c_off"
+    printf '   %s[dry-run]%s kubectl apply devbox/postgres.yaml\n' "$c_yellow" "$c_off"
 else
-    docker exec -i "$CONTAINER" kubectl apply -f - <<'YAML'
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: stargazer
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: postgres-data
-  namespace: stargazer
-spec:
-  accessModes: [ReadWriteOnce]
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: postgres
-  namespace: stargazer
-spec:
-  replicas: 1
-  strategy:
-    type: Recreate
-  selector:
-    matchLabels:
-      app: postgres
-  template:
-    metadata:
-      labels:
-        app: postgres
-    spec:
-      containers:
-        - name: postgres
-          image: postgres:16-alpine
-          env:
-            - name: POSTGRES_USER
-              value: stargazer
-            - name: POSTGRES_PASSWORD
-              value: stargazer
-            - name: POSTGRES_DB
-              value: stargazer
-          ports:
-            - containerPort: 5432
-          # Over TCP: the first-boot init server listens on the socket only.
-          readinessProbe:
-            exec:
-              command: [pg_isready, -h, 127.0.0.1, -U, stargazer, -d, stargazer]
-            periodSeconds: 5
-          resources:
-            requests:
-              cpu: 50m
-              memory: 128Mi
-            limits:
-              memory: 256Mi
-          volumeMounts:
-            - name: data
-              mountPath: /var/lib/postgresql/data
-      volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: postgres-data
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: postgres
-  namespace: stargazer
-spec:
-  selector:
-    app: postgres
-  ports:
-    - port: 5432
-      targetPort: 5432
-YAML
+    docker exec -i "$CONTAINER" kubectl apply -f - < "$HERE/postgres.yaml"
     kc rollout status deployment/postgres -n stargazer --timeout=180s \
         || warn "Postgres rollout slow/incomplete — check 'kubectl get pods -n stargazer'"
     ok "Postgres applied (postgres.stargazer.svc.cluster.local:5432)"
 fi
+
+# ---------------------------------------------------------------------------
+# 6. Clear Flyte's local cache. Recreating the devbox wipes its registry and
+#    object store, but the SDK's cache on this machine survives (entries last
+#    a day) and skips work whose artifacts are gone. With a cached image the
+#    build is skipped and the retag fails ("…notebook-app:<hash>: not found").
+#    With a cached code bundle the upload is skipped and the app pod
+#    crash-loops on a 404 for its bundle. The cache sits beside the config
+#    file in use, so every checkout of this repo (each worktree) has its own
+#    .flyte/local-cache, and none is the ~/.flyte/local-cache that
+#    `flyte delete local-cache` clears. This clears them all.
+# ---------------------------------------------------------------------------
+log "Clearing Flyte's local cache in every checkout"
+git -C "$REPO" worktree list --porcelain | sed -n 's/^worktree //p' | while read -r checkout; do
+    cache="$checkout/.flyte/local-cache/cache.db"
+    [ -f "$cache" ] || continue
+    run uv run --project "$REPO" python -c "
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+for table in ('image_cache', 'bundle_cache', 'task_cache', 'runs'):
+    try:
+        db.execute(f'DELETE FROM {table}')
+    except sqlite3.OperationalError:
+        pass
+db.commit()
+" "$cache"
+    ok "Cleared $cache"
+done
 
 # ---------------------------------------------------------------------------
 # Verify (read-only)
@@ -314,16 +262,25 @@ if [ "$DRY_RUN" = 0 ]; then
         kc run sg-devbox-check --rm -i --restart=Never \
             --image=python:3.13-slim --command -- \
             python -c "import socket, urllib.request; print('resolves:', socket.getaddrinfo('$host', 30081)[0][4]); print('health:', urllib.request.urlopen('http://$host:30081/health', timeout=60).status)" \
-            2>/dev/null || warn "pod check failed (is the dashboard deployed? cli/devbox_dashboard.py — non-fatal)"
+            2>/dev/null || warn "pod check failed (is the dashboard deployed? devbox/dashboard.py — non-fatal)"
     fi
 fi
 
 # ---------------------------------------------------------------------------
-# Laptop-side DNS (macOS, sudo). Printed by default; applied with --laptop.
+# 7. DNS on this machine (macOS, sudo), once per machine. Printed by default;
+#    applied with --laptop.
+#
+#    - rustfs-svc.flyte → 127.0.0.1, plus a port-forward to it on :9000, so
+#      code-bundle uploads from here reach the store at the signed-URL host
+#      from step 1. devbox/dashboard.py and the devbox tests hold the forward
+#      open themselves; a `flyte.run` submitted by hand needs it running, or
+#      the upload fails with "ConnectError: All connection attempts failed".
+#    - *.devbox.stargazer.bio → 127.0.0.1, so the browser reaches apps on the
+#      published :30081 port.
 # ---------------------------------------------------------------------------
 laptop_steps() {
     cat <<EOF
-  # 1) Resolve the storage host to a port-forward on :9000 (cli/devbox_dashboard.py opens one while it deploys; run 'kubectl port-forward -n flyte svc/rustfs-svc 9000:9000' when submitting runs yourself):
+  # 1) Resolve the storage host to a port-forward on :9000 (devbox/dashboard.py opens one while it deploys; run 'kubectl port-forward -n flyte svc/rustfs-svc 9000:9000' when submitting runs yourself):
   echo '127.0.0.1 rustfs-svc.flyte' | sudo tee -a /etc/hosts
 
   # 2) Wildcard-resolve *.$DOMAIN → 127.0.0.1 (the published :30081 port is unchanged):
@@ -337,7 +294,7 @@ EOF
 }
 
 if [ "$DO_LAPTOP" = 1 ]; then
-    log "Applying laptop-side DNS (needs sudo + Homebrew)"
+    log "Applying DNS on this machine (needs sudo + Homebrew)"
     command -v brew >/dev/null 2>&1 || die "Homebrew required for --laptop"
     grep -q 'rustfs-svc.flyte' /etc/hosts 2>/dev/null \
         || run bash -c "echo '127.0.0.1 rustfs-svc.flyte' | sudo tee -a /etc/hosts >/dev/null"
@@ -348,10 +305,10 @@ if [ "$DO_LAPTOP" = 1 ]; then
     run sudo brew services restart dnsmasq
     run sudo mkdir -p /etc/resolver
     run bash -c "printf 'nameserver 127.0.0.1\n' | sudo tee /etc/resolver/$DOMAIN >/dev/null"
-    ok "Laptop-side DNS applied"
+    ok "DNS on this machine applied"
 else
-    log "Laptop-side DNS (run once; not automated — re-run with --laptop to apply):"
+    log "DNS on this machine (run once; re-run with --laptop to apply):"
     laptop_steps
 fi
 
-ok "Devbox cluster-side workarounds applied."
+ok "Devbox set up."

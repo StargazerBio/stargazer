@@ -1,4 +1,4 @@
-"""Tests for `cli/devbox_dashboard.py`, the devbox's dashboard deploy.
+"""Tests for `devbox/dashboard.py`, the devbox's dashboard deploy.
 
 The script lives outside the shipped packages, so it's loaded from its path.
 """
@@ -14,7 +14,7 @@ from app import config, onboard
 from stargazer.config import PROJECT_ROOT
 
 _spec = importlib.util.spec_from_file_location(
-    "devbox_dashboard", PROJECT_ROOT / "cli" / "devbox_dashboard.py"
+    "devbox_dashboard", PROJECT_ROOT / "devbox" / "dashboard.py"
 )
 devbox_dashboard = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(devbox_dashboard)

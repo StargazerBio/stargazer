@@ -30,7 +30,7 @@ Step 4 is usually one small script in `scratch/` that imports the real module an
 3. **Look where grep stops.** In Stargazer that usually means:
    - **Stored metadata.** `Asset.to_keyvalues()` / `from_keyvalues()` output lives in each user's asset index (a SQLite file locally, the user's dashboard on Union) and in Pinata's public records. Renaming or retyping a field leaves old records unreadable or unqueryable. Check `query_files` against existing data, not just new data.
    - **Wire formats.** `marshal.py` shapes what MCP clients and the in-notebook assistant see. The registry in `registry.py` shapes what they can discover.
-   - **Flyte images and environments.** A new import or CLI tool must exist in the `flyte.Image` of the env the task runs in (`config.py`). Code bundles ship only `.py` files, and bundled code can shadow image-baked packages (see `devbox_workarounds.md`).
+   - **Flyte images and environments.** A new import or CLI tool must exist in the `flyte.Image` of the env the task runs in (`config.py`). Code bundles ship only `.py` files, and bundled code can shadow image-baked packages (see the `include=` comment on `app_env` in `app/admin_app.py`, and `sg_proxy` in `app/per_notebook.py`).
    - **Notebooks.** Notebooks import SDK functions by name, and `@app.function` exports are imported across notebooks. A rename breaks them without any test in `tests/tasks/` noticing.
    - **Third-party behavior.** Read the installed library source in `.venv/`, not your memory of its API.
 4. **Rate each risk honestly.** A realistic chance of happening and a real cost if it does. Keep confirmed risks. List checked-and-cleared ones separately. Cite real `file:line`. A search that finds nothing is still an answer. Never invent a caller or an API.

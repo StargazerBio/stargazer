@@ -2,15 +2,39 @@
 """
 Deploy a Stargazer dashboard on the local devbox.
 
-The devbox has no Union users or login, so instead of `stargazer-users
-onboard` this deploys one dashboard into the default project for a stand-in
-user, storing under the devbox's bucket and indexing in the devbox's Postgres
-server (which `cli/devbox-setup.sh` starts). It holds a `kubectl`
-port-forward to the devbox's object store open while the code bundle
-uploads. Why each piece is needed: `.opencode/reference/devbox_workarounds.md`.
+The app tier is built for Union, where onboarding gives each user a project
+and Union's login sits in front of every app. The devbox has neither, so this
+calls the same `app.onboard.deploy_dashboard` with devbox settings, and
+everything devbox-specific about the dashboard lives here; `app/` stays
+target-agnostic:
 
-Usage (after `cli/devbox-setup.sh`):
-    uv run --all-extras python cli/devbox_dashboard.py
+- The default project and a stand-in owner, `devbox-user`, who is also the
+  asset owner and the folder in the store.
+- `SG_STAND_IN_SUBJECT`. The dashboard reads the user from `X-User-Subject`,
+  which only Union's login sets, so without it every page answers `401 not
+  signed in`. `app.identity` treats a request with no subject as the stand-in;
+  `app.config.stand_in_subject` ignores it when `STARGAZER_TARGET=union`, and
+  this script refuses to run off the devbox. A real subject header still wins.
+- The store under `s3://flyte-data/stargazer`, the devbox's bucket (rustfs).
+- The index on the devbox's Postgres server (`devbox/postgres.yaml`). With a
+  Postgres URL the dashboard's asset browser reads that database, the notebook
+  pods it launches get the same URL rather than the dashboard's address, and
+  its launcher skips Litestream, which has no file to replicate.
+- A `kubectl` port-forward to the object store while the code bundle uploads,
+  since uploads go to the in-cluster signed-URL host (`devbox/setup.sh`).
+
+Runs submitted from this machine store into the devbox's bucket and index
+without the dashboard, when these are exported (`stargazer.config` forwards
+them into every pod) and the storage port-forward is open:
+
+    export STARGAZER_STORE_ROOT=s3://flyte-data/stargazer
+    export STARGAZER_INDEX_URL=postgresql://stargazer:stargazer@postgres.stargazer.svc.cluster.local:5432/stargazer
+    export STARGAZER_OWNER=devbox-user
+    kubectl port-forward -n flyte svc/rustfs-svc 9000:9000
+
+Usage (after `devbox/setup.sh`), printing the dashboard's URL,
+`http://dashboard-flytesnacks-development.devbox.stargazer.bio:30081`:
+    uv run --all-extras python devbox/dashboard.py
 """
 
 import socket
@@ -24,7 +48,7 @@ from app.onboard import deploy_dashboard
 from stargazer.config import PROJECT_ROOT
 
 # The stand-in user, the bucket every devbox deploy stores under, and the
-# asset index: the Postgres server `cli/devbox-setup.sh` starts, whose user,
+# asset index: the Postgres server in `devbox/postgres.yaml`, whose user,
 # password and database this URL must match.
 SUBJECT = "devbox-user"
 STORE_ROOT = "s3://flyte-data/stargazer"
@@ -89,7 +113,7 @@ def deploy() -> str:
 def main() -> None:
     """Refuse off the devbox, then deploy and print the dashboard's URL."""
     if config.TARGET != "devbox":
-        raise SystemExit("devbox_dashboard.py needs STARGAZER_TARGET=devbox.")
+        raise SystemExit("devbox/dashboard.py needs STARGAZER_TARGET=devbox.")
     init(config.FLYTE_CONFIG, root_dir=PROJECT_ROOT)
     print(f"Dashboard: {deploy()}")
 
