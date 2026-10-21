@@ -43,11 +43,11 @@ a clean venv outside any checkout:
 
 ## Plan
 
-- [x] **Decide where the notebooks live.** Settled 2026-10-17. The tutorials
-      and `notebook_base` stay in the package, so the tutorials keep importing
-      each other as `stargazer.notebooks.tutorials.*`. Other notebooks, the
-      scRNA notebook first, live in a top-level `notebooks/` folder that no
-      distribution ships, and the workspace seeds move to `app/` (ticket
+- [x] **Decide where the notebooks live.** Settled 2026-10-21. The tutorials,
+      the scRNA notebook, the workspace seeds and `notebook_base` all stay in
+      the package for now, so the tutorials keep importing each other as
+      `stargazer.notebooks.tutorials.*`. Moving the scRNA notebook to a
+      top-level `notebooks/` folder and the seeds to `app/` is shelved (ticket
       `top-level-notebooks`). Snapshots go (ticket `save-whole-workspace`).
 - [ ] **Versioned, published task images.** A task's code runs from its image,
       so the image must carry the same `stargazer` version as the caller.
