@@ -1,8 +1,9 @@
 ---
 title: A butler skill for the routine repo sweep
-status: doing
+status: review
 priority: normal
 created: 2026-10-20
+pr: 64
 ---
 
 Saying "butler" runs the routine sweep the user otherwise asks for piece by
