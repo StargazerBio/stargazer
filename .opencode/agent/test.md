@@ -33,6 +33,8 @@ The Stargazer project follows this process:
 
 Assert observable behavior against literal expected values. If a test would still pass when the code under test returns `None`, rewrite the assertion or delete it.
 
+Don't restate configuration in a test. A version pin, a resource size or any other chosen value changes with the choice, so a test that hardcodes it only gets edited alongside it. Check what the value does on its real surface instead.
+
 ## Test Tiers
 
 Every top-level directory under `tests/` belongs to exactly one tier, and its tests carry that tier's marker. The mapping is `TIERS` in `tests/conftest.py`; a new directory has to be added there, or the run stops with an error naming it. A bare `pytest` run is the unit tier (`addopts` in `pyproject.toml`); `-m` picks another.

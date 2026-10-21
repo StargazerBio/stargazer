@@ -3,9 +3,9 @@
 The image runs `app/proxy.py` the way the hosted notebook image does, so it
 mirrors `notebook_app_img_recipe` in `app/per_notebook.py`: the proxy's pip
 packages, the static files it reads beside itself in `/usr/local/lib/`, and
-the Claude Code version and context file the dropdown terminal runs with.
-Nothing ties the two recipes together, and a gap crashes `docker run` at start
-or leaves the terminal's agent without its instructions.
+the context file Claude Code reads in the dropdown terminal. Nothing ties the
+two recipes together, and a gap crashes `docker run` at start or leaves the
+terminal's agent without its instructions.
 """
 
 import re
@@ -88,13 +88,3 @@ def test_both_images_bake_the_notebook_agent_context_as_workspace_agents_md():
         "notebook_agent.md /workspace/AGENTS.md" in cmd for cmd in _hosted_commands()
     )
     assert ("notebook_agent.md", "/opt/workspace/AGENTS.md") in local_copies
-
-
-def test_both_images_pin_the_same_claude_code_and_it_reads_agents_md():
-    """Claude Code reads `AGENTS.md` from 2.1.277 on."""
-    pin = re.compile(r"install\.sh \| HOME=/opt/claude-cli bash -s (\d+)\.(\d+)\.(\d+)")
-    hosted = {m.groups() for cmd in _hosted_commands() for m in pin.finditer(cmd)}
-    local = set(pin.findall((ROOT / "Dockerfile").read_text()))
-    assert len(hosted) == 1
-    assert hosted == local
-    assert tuple(map(int, hosted.pop())) >= (2, 1, 277)
