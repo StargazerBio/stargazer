@@ -1,8 +1,9 @@
 ---
 title: A config that turns the public tier off in the dashboard
-status: doing
+status: review
 priority: normal
 created: 2026-10-20
+pr: 73
 ---
 
 Add a config that turns public assets off in the dashboard. Raised in the
@@ -23,3 +24,11 @@ Decide first:
   way `dashboard-settings` passes the save interval.
 - **Publishing:** whether "off" also hides Publish, or only stops public
   assets from being listed and fetched.
+
+## Decided (2026-10-21, best assumptions)
+
+- **Whose config:** per deployment, `STARGAZER_PUBLIC_ASSETS=off` in the
+  deployer's shell, forwarded into each dashboard by onboarding.
+- **How far:** the dashboard only; tasks and notebooks keep the public tier.
+- **Publishing:** off hides the public upload option and refuses the public
+  routes, as having no Pinata key does.
