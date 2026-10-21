@@ -1,8 +1,9 @@
 ---
 title: Hosted notebook kernels never reach the cluster
-status: doing
+status: review
 priority: high
 created: 2026-10-20
+pr: 68
 blocked_by:
   - notebook-pod-ephemeral-storage
 ---
@@ -17,10 +18,10 @@ There are three separate gaps between a hosted kernel and a working cluster run.
 
 ## Likely fix
 
-- [ ] One SDK helper for notebook Flyte init, under `src/stargazer/notebooks/` (the SDK can't import `app/`). In a pod (`_U_EP_OVERRIDE` set) it calls `flyte.init_in_cluster(org=FLYTE_ORG, project=FLYTE_PROJECT, domain=FLYTE_DOMAIN)`; elsewhere it calls `flyte.init_from_config()`. The three notebooks' setup blocks call it instead of `flyte.init_from_config()`. The pod already carries every input: `_U_EP_OVERRIDE`, `_UNION_EAGER_API_KEY`, `FLYTE_ORG`, `FLYTE_PROJECT`, `FLYTE_DOMAIN` (measured, below). Consider `server.py` too.
-- [ ] A bundle root that covers where the task code lives: `/stargazer/src` for SDK and image-baked notebooks, and `/workspace` for a workspace notebook's own `@app.function` tasks. Only the `/stargazer/src` case is measured. Options (inferred, unmeasured): call `flyte.init_from_api_key(api_key=<injected key>, project=…, domain=…, root_dir=…, image_builder="remote")`, which takes a `root_dir` where `init_in_cluster` doesn't; or `copy_style="none"` for tasks whose image already installs stargazer (`with_uv_project`).
-- [ ] Give `tutorial_env` an image that has stargazer and its imports, the way the `config.py` envs use `with_uv_project`.
-- [ ] Verify on the real surface: a hosted Execution tutorial, once it can open (ticket `notebook-pod-ephemeral-storage`), shows a real console URL and a succeeded run in the user's project. `dispatch` "On the cluster" does the same from a hosted pod.
+- [x] One SDK helper for notebook Flyte init, under `src/stargazer/notebooks/` (the SDK can't import `app/`). In a pod (`_U_EP_OVERRIDE` set) it calls `flyte.init_in_cluster(org=FLYTE_ORG, project=FLYTE_PROJECT, domain=FLYTE_DOMAIN)`; elsewhere it calls `flyte.init_from_config()`. The three notebooks' setup blocks call it instead of `flyte.init_from_config()`. The pod already carries every input: `_U_EP_OVERRIDE`, `_UNION_EAGER_API_KEY`, `FLYTE_ORG`, `FLYTE_PROJECT`, `FLYTE_DOMAIN` (measured, below). Consider `server.py` too.
+- [x] A bundle root that covers where the task code lives: `/stargazer/src` for SDK and image-baked notebooks, and `/workspace` for a workspace notebook's own `@app.function` tasks. Only the `/stargazer/src` case is measured. Options (inferred, unmeasured): call `flyte.init_from_api_key(api_key=<injected key>, project=…, domain=…, root_dir=…, image_builder="remote")`, which takes a `root_dir` where `init_in_cluster` doesn't; or `copy_style="none"` for tasks whose image already installs stargazer (`with_uv_project`).
+- [x] Give `tutorial_env` an image that has stargazer and its imports, the way the `config.py` envs use `with_uv_project`.
+- [x] Verify on the real surface: a hosted Execution tutorial, once it can open (ticket `notebook-pod-ephemeral-storage`), shows a real console URL and a succeeded run in the user's project. `dispatch` "On the cluster" does the same from a hosted pod.
 
 A run started this way runs as the pod's platform key, not the user: the measured run's creator is application subject `393067446845621194` (`stargazerbio-EAGER_API_KEY-union-us-west-2`). That's ticket `org-wide-platform-key`.
 
