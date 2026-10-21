@@ -121,7 +121,7 @@ This doesn't need that.
   - The shared role can't log in as `u-pryce`'s database role.
   - Confirm `INSERT … ON CONFLICT` and `->>` filters behave as in SQLite.
   - Time the assume, token and connect steps a task pays per call.
-- [ ] **DSQL on `PostgresIndex`** (ticket `postgres-index`): connecting with
+- [x] **DSQL on `PostgresIndex`** (ticket `postgres-index`): connecting with
   a token from the assumed per-user role, retrying serialization errors, and
   reconnecting when a connection times out. `make_index` accepts the DSQL
   URL form.
@@ -582,6 +582,16 @@ Run by the user with the runbook's steps 0–4, extracted verbatim into a script
 - **The constructor can't create the table** as a user's role on DSQL, so on DSQL `PostgresIndex` skips its DDL and onboarding creates the table.
 - **Pods have no IPv6 route.** The endpoint resolves to both, and every connection tried an IPv6 address first and failed it with `Network is unreachable` before connecting over IPv4. Connect over IPv4 only (resolve A records, pass `hostaddr`) rather than pay the failed attempt.
 - **Cache per process:** the assumed credentials (1 h) and the token, and reuse the connection. A cold call costs ~330 ms (assume ~50, token ~47, connect ~235); a warm one, a query (2–12 ms). Reconnect when DSQL ends a connection at its hour.
+
+## Piece 1 results (2026-10-21)
+
+On branch `feat/dsql-asset-index` (`5237f5a`). `make_index` opens `dsql://<login>@<endpoint>/<schema>.<table>?role_arn=<arn>` as `DsqlIndex`: `PostgresIndex`'s SQL on the user's table, logged in as their database role with a token signed by their IAM role. Credentials and token are cached per process, each call connects afresh over IPv4 with `verify-full`, and it never runs DDL. `PostgresIndex` writes rerun on 40001, up to 10 tries with jittered backoff.
+
+- **Tests first:** URL parsing (endpoint, region, login, table, role) and a URL without `role_arn` refused (unit); concurrent merges under serializable isolation each land, which failed with `SerializationFailure` before the retry (postgres tier, 8 of 8 repeats); the nine shared index tests run as a login with only `USAGE` on `assets` and row privileges on `assets.u_probe` (postgres tier). Unit tier 553 passed, postgres tier 20 passed.
+- **Tenant,** a task built from the branch, URL for `u_pryce`:
+  - `u-pryce` (runs `u6kf7m48wzvl5j57htn5`, `ucwzjgc2hjh5ct6x6nwq`): upsert, a list-filter query, a miss, 10 concurrent merges on one row (all landed, 438–575 ms), get, delete. First call 723 ms cold (assume, sign, connect). Steady-state calls 21–41 ms on a fresh connection; on one reused connection a query is 2–3 ms. DNS 3 ms.
+  - `flytesnacks` (run `u6kxp9r62c7vl4k7x7vg`): the same URL fails at `AssumeRoleWithWebIdentity` (`not authorized`).
+- **Not done, not needed yet:** connection reuse. ~30 ms a call is about what a call to the dashboard costs.
 
 ## Meanwhile
 
