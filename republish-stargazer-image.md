@@ -1,6 +1,6 @@
 ---
 title: Republish the stargazer image so the quickstart starts
-status: doing
+status: done
 priority: high
 created: 2026-10-20
 ---
@@ -18,3 +18,34 @@ that has `write:packages`.
 Verify by pulling the pushed image on a clean cache and running the README's
 command: `http://localhost:8080` serves marimo's notebook list with
 `notebooks/` in it. The amd64 build hasn't been run anywhere yet.
+
+## Outcome
+
+Pushed `ghcr.io/stargazerbio/stargazer:latest` on 2026-10-20, built from
+`origin/main` at `2b96e0e` (the #56 merge) with the `contributing.md` buildx
+command, unchanged, on Docker Desktop's default builder (containerd image
+store, so it builds and pushes both platforms without a separate builder).
+
+- Index: `sha256:c29589130f353ed1fedc66fc97e9353b09a06ec2b1963c501d685bed67e07764`
+- linux/amd64: `sha256:f931b5e293e2455c993ff18a3fe967700359977baa210028fff9926aff1d717d`
+- linux/arm64: `sha256:f89965990a76073a09c329caaba33f27f7d60271a6e2e9e13d0560d4ef6482be`
+
+It replaces index `sha256:743c4d6e…` from 2026-10-19. The arm64 RUN layers
+came from the local build cache, built from the same Dockerfile steps; every
+COPY of `app/` and `src/` came from `main`. amd64 was built from scratch.
+
+Verified (measured): ghcr serves the config and all 19 layers of both
+platform manifests (HTTP 200 on each blob). With the local tag removed, each
+platform was pulled and started with the README's command (host port 8081):
+it stays up, `/` returns 200 with marimo 0.23.6 in `home` mode, and
+`/api/home/workspace_files` lists `notebooks/` with its 7 files (templates,
+tutorials, the scrna workflow), the same set as `main`. In both,
+`/usr/local/lib/save_banner.html` is present and gatk 4.6.2.0, samtools 1.24,
+bwa 0.7.19, bwa-mem2 2.2.1 and Claude Code 2.1.153 run. This was the first
+run of the amd64 image anywhere (under emulation).
+
+Left: the `stargazer` package is `internal`, not public, so an anonymous
+`docker run ghcr.io/stargazerbio/stargazer` gets `401` from ghcr (anonymous
+token and manifest requests both 401; the public `debug` package gets 200).
+The README and Getting Started quickstart only works once the package's
+visibility is changed to public in its GitHub settings, which has no API.
