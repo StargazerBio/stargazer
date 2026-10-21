@@ -3,8 +3,6 @@ title: The scRNA notebook moves to a top-level notebooks folder
 status: next
 priority: normal
 created: 2026-10-17
-blocked_by:
-  - app-502s-behind-cloudflare
 ---
 
 Notebooks that aren't SDK tutorials live in the repo, in a top-level

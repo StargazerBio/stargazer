@@ -1,6 +1,6 @@
 ---
 title: Dashboard errors sent as 502 never reach the page
-status: review
+status: done
 priority: normal
 created: 2026-10-19
 pr: 57
@@ -56,3 +56,12 @@ notebook with no app, through the public URL, answered `500` with
 `{"error":"stop failed: entry not found"}`, both with the admin's bearer
 token and from the test account's browser session. The probe app and the
 dashboard were deactivated afterwards.
+
+## Outcome
+
+PR #57 (`c0e3f25`, merged 2026-10-20). The dashboard's own failures on
+create, copy, settings update, delete, stop and cleanup answer 500, whose
+body Cloudflare passes through (measured with `cf-status-probe` above). On
+the test account's dashboard, `POST /stop` for a notebook with no app
+answered 500 with `{"error":"stop failed: entry not found"}` through the
+public URL. Nothing left.

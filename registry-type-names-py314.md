@@ -3,8 +3,6 @@ title: The registry renders optional types as Union[...] on Python 3.14
 status: backlog
 priority: low
 created: 2026-10-20
-blocked_by:
-  - workflow-export-check
 ---
 
 `_type_name` in `src/stargazer/registry.py` renders `X | None` as

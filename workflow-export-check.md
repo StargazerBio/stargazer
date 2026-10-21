@@ -1,6 +1,6 @@
 ---
 title: Check workflow exports against the workflow modules
-status: review
+status: done
 priority: low
 created: 2026-10-15
 pr: 59
@@ -35,3 +35,10 @@ Branch `test/workflow-export-check`, PR #59.
   the task walk test.
 - `to_catalog()` is byte-identical to `origin/main`'s. The unit tier passes
   (501).
+
+## Outcome
+
+PR #59 (`5bd1a96`, merged 2026-10-21). `test_discovery_finds_every_defined_workflow`
+walks the modules under `stargazer.workflows` with the task test's helper,
+and the registry no longer skips a workflow whose name is already
+registered. Verified as above. Nothing left.
