@@ -45,6 +45,8 @@ Handle a merged PR if its branch still exists, locally or on origin, or its tick
 
 Commit the ticket edits on `planning`, naming only your own files. Push them, then `git -C "$MAIN" pull` again.
 
+If any PR handled here changed the `Dockerfile`, publish the `stargazer` image from `$MAIN` after that pull, once per sweep, both platforms (`AGENTS.md` → Git Workflow).
+
 A PR that was closed without merging keeps its branch and worktree. Report it and ask what to do.
 
 ## 4. Open PRs
@@ -69,6 +71,7 @@ Do these in each open PR's worktree. If it has none, add one for the existing br
 Keep it short, one line per item, with each claim's evidence:
 
 - **Merged and cleaned up:** each PR, and the tickets its comments became.
+- **Published:** the `stargazer` image, if a merged PR changed the `Dockerfile`, with the digest the push printed.
 - **Open PRs:**
   - each one's state: feedback answered (with the commits), rebased, or waiting on review;
   - questions from review comments, with their answers;
