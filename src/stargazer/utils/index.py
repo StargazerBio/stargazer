@@ -1,5 +1,5 @@
 """
-### The asset index: SQLite or Postgres, or the user's dashboard over HTTP.
+### The asset index: SQLite, Postgres or Aurora DSQL, or the user's dashboard over HTTP.
 
 The metadata half of asset storage: one row per asset, keyed by its CID, with
 where the bytes live (`uri`), the original filename, and the asset's
@@ -18,7 +18,14 @@ SQLite serializes writes through one connection behind a `threading.Lock`,
 taken inside the worker thread rather than an `asyncio.Lock` so one index
 can serve callers on different event loops; WAL mode lets reads run
 alongside a write. Postgres opens a connection per call and leaves
-concurrency to the database.
+concurrency to the database, rerunning a write the database refused for
+conflicting with a concurrent one (SQLSTATE 40001), which is how DSQL
+answers every write conflict.
+
+`DsqlIndex` is `PostgresIndex` on a user's own table in the shared
+`assets` schema of a DSQL cluster, logged in as that user's database role
+with a token signed by their IAM role. Only pods in the user's namespace can
+assume that role, so the database itself keeps each user to their table.
 
 Re-upserting a CID with different keyvalues replaces them and logs a WARNING:
 the same bytes recorded with new metadata is allowed, but should be visible.
@@ -26,20 +33,28 @@ the same bytes recorded with new metadata is allowed, but should be visible.
 Locally, `SqliteIndex` is the index itself. On the devbox it's a Postgres
 server that the dashboard and every pod reach through `PostgresIndex`. On
 Union the user's dashboard owns a SQLite file and serves it over HTTP; pods
-reach it through `HttpIndex`, which makes the same calls.
+reach it through `HttpIndex`, which makes the same calls. `DsqlIndex` is
+what replaces that on Union.
 
 spec: [docs/architecture/types.md](../architecture/types.md)
 """
 
 import asyncio
 import json
+import os
+import random
+import socket
 import sqlite3
 import threading
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypeVar
+from urllib.parse import parse_qs, urlsplit
 
+import boto3
+import certifi
 import httpx
 import psycopg
 
@@ -47,11 +62,15 @@ from stargazer.config import logger
 
 T = TypeVar("T")
 
-# The URL schemes `make_index` opens as a `PostgresIndex`.
+# The URL schemes `make_index` opens as a `PostgresIndex`, and as a `DsqlIndex`.
 POSTGRES_SCHEMES = ("postgresql://", "postgres://")
+DSQL_SCHEME = "dsql://"
+
+# Tries per write before a serialization failure is raised.
+_WRITE_ATTEMPTS = 10
 
 _SCHEMA = """
-CREATE TABLE IF NOT EXISTS assets (
+CREATE TABLE IF NOT EXISTS {table} (
     cid        TEXT PRIMARY KEY,
     uri        TEXT NOT NULL,
     name       TEXT NOT NULL,
@@ -90,9 +109,11 @@ class _SqlIndex:
 
     Subclasses give what the engines spell differently: the JSON column type,
     one keyvalue's lookup and the merge (each with a `?` parameter), and how
-    statements run. Statements use `?` placeholders throughout.
+    statements run, and set `table`. Statements use `?` placeholders
+    throughout.
     """
 
+    table: str
     _JSON_TYPE: str
     _KEYVALUE: str
     _MERGE: str
@@ -133,7 +154,7 @@ class _SqlIndex:
         def work(execute):
             """Read the old keyvalues and write the row, in one transaction."""
             existing = execute(
-                "SELECT keyvalues FROM assets WHERE cid = ?", [cid]
+                f"SELECT keyvalues FROM {self.table} WHERE cid = ?", [cid]
             ).fetchone()
             if existing is not None:
                 changed = _changed_keys(_decode(existing[0]), keyvalues)
@@ -143,7 +164,7 @@ class _SqlIndex:
                         f"replacing keys {changed}"
                     )
             return execute(
-                f"INSERT INTO assets ({_COLUMNS}) "
+                f"INSERT INTO {self.table} ({_COLUMNS}) "
                 f"VALUES (?, ?, ?, CAST(? AS {self._JSON_TYPE}), ?) "
                 "ON CONFLICT (cid) DO UPDATE SET uri = excluded.uri, "
                 "name = excluded.name, keyvalues = excluded.keyvalues "
@@ -163,7 +184,7 @@ class _SqlIndex:
         """Merge keyvalues onto a row in one statement."""
         stored = self._write(
             lambda execute: execute(
-                f"UPDATE assets SET keyvalues = {self._MERGE} WHERE cid = ? "
+                f"UPDATE {self.table} SET keyvalues = {self._MERGE} WHERE cid = ? "
                 f"RETURNING {_COLUMNS}",
                 [json.dumps(patch), cid],
             ).fetchone()
@@ -174,7 +195,9 @@ class _SqlIndex:
 
     def _delete_sync(self, cid: str) -> None:
         """Remove a row."""
-        self._write(lambda execute: execute("DELETE FROM assets WHERE cid = ?", [cid]))
+        self._write(
+            lambda execute: execute(f"DELETE FROM {self.table} WHERE cid = ?", [cid])
+        )
 
     async def upsert(self, record: dict) -> dict:
         """Insert a row, or replace an existing row's uri, name and keyvalues.
@@ -202,7 +225,8 @@ class _SqlIndex:
         where, params = self._where(filters)
         rows = await asyncio.to_thread(
             self._read,
-            f"SELECT {_COLUMNS} FROM assets WHERE {where} ORDER BY created_at DESC",
+            f"SELECT {_COLUMNS} FROM {self.table} WHERE {where} "
+            "ORDER BY created_at DESC",
             params,
         )
         return [_row(r) for r in rows]
@@ -210,7 +234,7 @@ class _SqlIndex:
     async def get(self, cid: str) -> dict | None:
         """One row by CID, or None."""
         rows = await asyncio.to_thread(
-            self._read, f"SELECT {_COLUMNS} FROM assets WHERE cid = ?", [cid]
+            self._read, f"SELECT {_COLUMNS} FROM {self.table} WHERE cid = ?", [cid]
         )
         return _row(rows[0]) if rows else None
 
@@ -247,11 +271,12 @@ class SqliteIndex(_SqlIndex):
             path: The SQLite file; its parent directory is created if missing
         """
         self.path = Path(path)
+        self.table = "assets"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._writer = sqlite3.connect(self.path, check_same_thread=False, timeout=30)
         self._writer.execute("PRAGMA journal_mode=WAL")
-        self._writer.execute(_SCHEMA.format(json=self._JSON_TYPE))
+        self._writer.execute(_SCHEMA.format(table=self.table, json=self._JSON_TYPE))
         self._writer.commit()
 
     def _key(self, key: str) -> str:
@@ -282,7 +307,8 @@ class PostgresIndex(_SqlIndex):
     """Asset metadata index in a Postgres database, keyvalues as `jsonb`.
 
     Each call opens its own connection, so concurrent writers are serialized
-    by Postgres's row locks rather than a lock here.
+    by Postgres's row locks rather than a lock here. A write refused with a
+    serialization failure is rerun whole, with jittered backoff.
 
     Usage:
         index = PostgresIndex("postgresql://user:pass@host:5432/db")
@@ -293,29 +319,170 @@ class PostgresIndex(_SqlIndex):
     _KEYVALUE = "(keyvalues ->> CAST(? AS TEXT))"
     _MERGE = "keyvalues || CAST(? AS JSONB)"
 
-    def __init__(self, url: str):
-        """Connect to `url` and create the assets table if it's missing.
+    def __init__(self, url: str, table: str = "assets"):
+        """Connect to `url` and create the index table if it's missing.
 
         Args:
             url: A `postgresql://` connection URL
+            table: The table, schema-qualified if it isn't in the search path
         """
         self.url = url
-        with psycopg.connect(url, autocommit=True) as conn:
-            conn.execute(_SCHEMA.format(json=self._JSON_TYPE))
+        self.table = table
+        with self._connect(autocommit=True) as conn:
+            conn.execute(_SCHEMA.format(table=table, json=self._JSON_TYPE))
+
+    def _connect(self, autocommit: bool) -> psycopg.Connection:
+        """A new connection to the database."""
+        return psycopg.connect(self.url, autocommit=autocommit)
 
     def _key(self, key: str) -> str:
         """`->>` takes the key name itself."""
         return key
 
     def _write(self, work: Callable[[Callable], T]) -> T:
-        """Run `work` in one transaction on a new connection."""
-        with psycopg.connect(self.url) as conn:
-            return work(lambda sql, params: conn.execute(_pg(sql), params))
+        """Run `work` in one transaction on a new connection, rerun on conflict.
+
+        DSQL refuses a write that conflicts with a concurrent one instead of
+        making it wait, and Postgres does the same under serializable
+        isolation, both with SQLSTATE 40001, at a statement or at commit.
+        """
+        delay = 0.02
+        for attempt in range(1, _WRITE_ATTEMPTS + 1):
+            try:
+                with self._connect(autocommit=False) as conn:
+                    return work(lambda sql, params: conn.execute(_pg(sql), params))
+            except psycopg.errors.SerializationFailure:
+                if attempt == _WRITE_ATTEMPTS:
+                    raise
+            time.sleep(random.uniform(0, delay))
+            delay = min(delay * 2, 1.0)
+        raise AssertionError("unreachable")
 
     def _read(self, sql: str, params: list) -> list[tuple]:
         """Run a read on a new connection."""
-        with psycopg.connect(self.url, autocommit=True) as conn:
+        with self._connect(autocommit=True) as conn:
             return conn.execute(_pg(sql), params).fetchall()
+
+
+class DsqlIndex(PostgresIndex):
+    """A user's asset index table on Aurora DSQL, reached as their own login.
+
+    The URL names the cluster endpoint, the user's database role, their
+    table and the IAM role mapped to that database role:
+    `dsql://u_jane@<id>.dsql.us-west-2.on.aws/assets.u_jane?role_arn=<arn>`.
+    The table, the database role and the IAM role are made by onboarding;
+    the database role can't create anything, so this never runs DDL.
+
+    Each call connects afresh, so DSQL ending a connection after an hour
+    never reaches a caller. The IAM role's credentials and the auth token
+    are cached for the process; the token is signed locally, so the only
+    remote calls per connection are STS when the credentials near expiry
+    and the connection itself.
+
+    Usage:
+        index = DsqlIndex(os.environ["STARGAZER_INDEX_URL"])
+        rows = await index.query({"companion_of": cid})
+    """
+
+    # Refresh the IAM role's credentials this long before they expire, and
+    # sign a new token after this long (DSQL tokens last 15 minutes).
+    _CREDENTIALS_MARGIN = 300
+    _TOKEN_LIFETIME = 600
+
+    def __init__(self, url: str):
+        """Read the cluster, login, table and IAM role from `url`; no connection.
+
+        Args:
+            url: A `dsql://` index URL (see the class docstring)
+
+        Raises:
+            ValueError: when `url` has no login, table or `role_arn`, or its
+                host isn't a DSQL endpoint
+        """
+        parts = urlsplit(url)
+        host = parts.hostname or ""
+        labels = host.split(".")
+        role_arn = parse_qs(parts.query).get("role_arn", [""])[0]
+        table = parts.path.lstrip("/")
+        if len(labels) < 3 or labels[1] != "dsql":
+            raise ValueError(f"Not a DSQL endpoint (<id>.dsql.<region>...): {host}")
+        if not (parts.username and table and role_arn):
+            raise ValueError(
+                "A DSQL index URL names its login, table and IAM role: "
+                "dsql://<login>@<endpoint>/<schema>.<table>?role_arn=<arn>"
+            )
+        self.url = url
+        self.endpoint = host
+        self.region = labels[2]
+        self.user = parts.username
+        self.table = table
+        self.role_arn = role_arn
+        self._lock = threading.Lock()
+        self._dsql = None
+        self._credentials_expire = 0.0
+        self._token = ""
+        self._token_expires = 0.0
+
+    def _password(self) -> str:
+        """A DSQL auth token for `user`, signed with the IAM role's credentials.
+
+        The role is assumed with the pod's own service-account token, which
+        STS accepts for the role only from the user's namespace.
+        """
+        with self._lock:
+            now = time.time()
+            if now >= self._credentials_expire:
+                web_token = Path(os.environ["AWS_WEB_IDENTITY_TOKEN_FILE"]).read_text()
+                creds = boto3.client(
+                    "sts", region_name=self.region
+                ).assume_role_with_web_identity(
+                    RoleArn=self.role_arn,
+                    RoleSessionName="stargazer-index",
+                    WebIdentityToken=web_token,
+                )["Credentials"]
+                self._dsql = boto3.Session(
+                    aws_access_key_id=creds["AccessKeyId"],
+                    aws_secret_access_key=creds["SecretAccessKey"],
+                    aws_session_token=creds["SessionToken"],
+                ).client("dsql", region_name=self.region)
+                self._credentials_expire = (
+                    creds["Expiration"].timestamp() - self._CREDENTIALS_MARGIN
+                )
+                self._token_expires = 0.0
+            if now >= self._token_expires:
+                self._token = self._dsql.generate_db_connect_auth_token(
+                    self.endpoint, self.region
+                )
+                self._token_expires = min(
+                    now + self._TOKEN_LIFETIME, self._credentials_expire
+                )
+            return self._token
+
+    def _connect(self, autocommit: bool) -> psycopg.Connection:
+        """A verified TLS connection to the cluster as `user`, over IPv4.
+
+        Task pods have no IPv6 route and the endpoint resolves to both, so
+        leaving the choice to libpq costs a failed IPv6 attempt on every
+        connect (measured on the tenant). certifi's bundle carries the
+        Amazon root CA that signs the cluster's certificate.
+        """
+        ipv4 = socket.getaddrinfo(
+            self.endpoint, 5432, socket.AF_INET, socket.SOCK_STREAM
+        )[0][4][0]
+        ssl = {"sslmode": "verify-full", "sslrootcert": certifi.where()}
+        if psycopg.pq.version() >= 170000:
+            ssl["sslnegotiation"] = "direct"
+        return psycopg.connect(
+            host=self.endpoint,
+            hostaddr=ipv4,
+            port=5432,
+            dbname="postgres",
+            user=self.user,
+            password=self._password(),
+            connect_timeout=15,
+            autocommit=autocommit,
+            **ssl,
+        )
 
 
 def _pg(sql: str) -> str:
