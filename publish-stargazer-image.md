@@ -1,6 +1,6 @@
 ---
 title: CI publishes the stargazer image when its Dockerfile or baked files change
-status: review
+status: done
 priority: normal
 created: 2026-10-21
 pr: 70
@@ -62,3 +62,9 @@ jobs:
 - [x] `.github/workflows/stargazer-image.yml`, linted (`actionlint`)
 - [x] `docs/guides/contributing.md` → Building Images and `docs/architecture/configuration.md` → Container Images: CI publishes it, and how to run it by hand. Both currently say nothing publishes it automatically.
 - [ ] Verify: the merge of this PR touches the workflow file, so it triggers the first run. Check that the run succeeds, that `docker buildx imagetools inspect ghcr.io/stargazerbio/stargazer:latest` shows both platforms with today's build date on Python 3.14, and that the README's `docker run` starts it from a clean cache.
+
+## Outcome
+
+Shipped in PR #70 (merge `717dabe`): `.github/workflows/stargazer-image.yml` builds both platforms on pushes to `main` that touch the image's files, and on `workflow_dispatch`; the docs say so. Linted with `actionlint`.
+
+The first run, on the merge (run `39662998285`), built both platforms in 11m38s and failed at the push: `denied: permission_denied: write_package`. The package's Actions access was never granted (`gh api /orgs/StargazerBio/packages/container/stargazer` still reads `"repository": null`), and `:latest` is still the 2026-10-20 19:38 UTC build. That grant, the re-run and the image check are ticket `stargazer-image-actions-access`. No comments on the PR.

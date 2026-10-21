@@ -1,6 +1,6 @@
 ---
 title: Notebooks on the devbox
-status: review
+status: done
 priority: normal
 created: 2026-10-08
 pr: 73
@@ -35,3 +35,7 @@ From `main` at `956ea36`, dashboard deployed with `devbox/dashboard.py`:
 
 Nothing needed a code change. Both devbox facts went into `devbox/setup.sh`'s
 "What it can't fix", riding on PR #73.
+
+## Outcome
+
+Edit mode, saving and the terminal were driven on the devbox on 2026-10-21 (above) and needed no code change. The two devbox facts (Stop only scales to zero; pods run as root) went into `devbox/setup.sh`'s "What it can't fix", riding on PR #73 (merge `0f43b8b`). Nothing left.
