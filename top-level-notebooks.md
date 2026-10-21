@@ -4,7 +4,6 @@ status: next
 priority: normal
 created: 2026-10-17
 blocked_by:
-  - production-context-files
   - hosted-notebook-flyte-init
 ---
 
