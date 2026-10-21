@@ -18,13 +18,19 @@ A notebook can declare its own pod image in its setup block, as a
 The dashboard evaluates that expression at launch and serves the notebook on
 the built image.
 
+A notebook's setup calls `init_flyte()` rather than `flyte.init_from_config()`,
+so that in a hosted pod, which has no config file, `flyte.run` reaches the
+cluster instead of quietly running in-process.
+
 Navigation between notebooks lives on the dashboard; notebooks themselves
 carry no nav chrome. The dashboard tile registry is `app/notebooks.py`.
 
 spec: [docs/architecture/notebook.md](../architecture/notebook.md)
 """
 
+import contextlib
 import os
+from pathlib import Path
 
 import flyte
 
@@ -47,3 +53,27 @@ def notebook_image_base(uri: str) -> flyte.Image:
 notebook_base = notebook_image_base(
     os.environ.get("STARGAZER_NOTEBOOK_IMAGE", _LOCAL_NOTEBOOK_IMAGE)
 )
+
+
+def init_flyte() -> None:
+    """Initialize Flyte for a notebook's kernel, wherever it runs.
+
+    A hosted notebook pod (`_U_EP_OVERRIDE` set) has no config file, but it
+    carries the endpoint, an API key and the owner's org, project and domain,
+    which make an in-cluster client for the owner's project. Its runs bundle
+    code from the directory holding the `stargazer` package, where the SDK and
+    the image-baked notebooks' tasks live. Anywhere else the config file
+    decides, as `flyte.init_from_config()` does: with none, runs stay in the
+    notebook's own process.
+    """
+    if not os.environ.get("_U_EP_OVERRIDE"):
+        flyte.init_from_config()
+        return
+    # `init_in_cluster` takes the code bundle's root from the cwd and has no
+    # parameter for it. A pod's cwd is the workspace, which holds no SDK code.
+    with contextlib.chdir(Path(__file__).resolve().parents[2]):
+        flyte.init_in_cluster(
+            org=os.environ.get("FLYTE_ORG"),
+            project=os.environ.get("FLYTE_PROJECT"),
+            domain=os.environ.get("FLYTE_DOMAIN"),
+        )

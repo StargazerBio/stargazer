@@ -11,11 +11,11 @@ This doc covers what notebooks *are* — the taxonomy, who uses them, and how wo
 
 ## Execution Context
 
-Where *tasks* run. Notebooks call `flyte.init_from_config()` at startup, and `.flyte/config.yaml` names the cluster that remote runs go to. Whether a run goes there or stays in the notebook's own process is decided where it's started, never in the task: the same task or workflow runs either way, unchanged. That's what lets one notebook span the whole arc: run on the notebook's own machine it's an exploratory scratchpad, and run on a cluster it's a production workflow management interface, launching, parameterizing, and tracking pipelines. The Execution tutorial makes the two underlying calls side by side.
+Where *tasks* run. Notebooks call `stargazer.notebooks.init_flyte()` at startup. Opened locally, it reads `.flyte/config.yaml`, which names the cluster that remote runs go to. In a hosted notebook it connects to the user's own project on the cluster the notebook runs on, with no config file. Whether a run goes there or stays in the notebook's own process is decided where it's started, never in the task: the same task or workflow runs either way, unchanged. That's what lets one notebook span the whole arc: run on the notebook's own machine it's an exploratory scratchpad, and run on a cluster it's a production workflow management interface, launching, parameterizing, and tracking pipelines. The Execution tutorial makes the two underlying calls side by side.
 
 For whoever runs a notebook, the choice is a control. `stargazer.notebooks.ui` provides `run_location()`, a two-way switch between *On this machine* (the default) and *On the cluster*, and `dispatch()`, which runs a task or workflow wherever the switch is set, waits for it, and returns its result. *On the cluster* always asks for a remote run, so with no cluster configured it fails instead of quietly running locally. The Execution tutorial ends by introducing it.
 
-A cluster can only run tasks its pods can import: the SDK's, and those a notebook declares as reusable top-level functions (`@app.function`, the way the Execution tutorial imports the Workflows tutorial's workflow). A task defined inside a regular cell runs only on the notebook's own machine.
+A cluster can only run tasks its pods can import: the SDK's, and those a notebook declares as reusable top-level functions (`@app.function`, the way the Execution tutorial imports the Workflows tutorial's workflow). A task defined inside a regular cell runs only on the notebook's own machine. Its environment's image has to carry what the task's module imports, as the tutorials' `tutorial_env` carries stargazer and marimo.
 
 ## Notebook Types
 

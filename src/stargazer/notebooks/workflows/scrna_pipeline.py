@@ -37,12 +37,13 @@ def _():
 
     import asyncio
 
-    import flyte
     import marimo as mo
     import matplotlib.pyplot as plt
     import numpy as np
 
-    flyte.init_from_config()
+    from stargazer.notebooks import init_flyte
+
+    init_flyte()
 
     mo.md(
         """
