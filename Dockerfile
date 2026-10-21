@@ -48,6 +48,9 @@ RUN python -m venv /opt/venv \
 COPY app/proxy.py /usr/local/lib/sg_proxy.py
 COPY app/terminal_overlay.html app/save_banner.html /usr/local/lib/
 COPY app/launch-notebook.sh /usr/local/bin/
+# Claude Code's user-level memory for the flyte user, the terminal agent's
+# context. Not in /workspace, which is the user's own.
+COPY app/notebook_agent.md /home/flyte/.claude/CLAUDE.md
 # Owned by the runtime user: each sandbox builds `stargazer` from this tree
 # and writes its egg-info here.
 COPY --chown=flyte:flyte pyproject.toml README.md /stargazer/
@@ -55,8 +58,10 @@ COPY --chown=flyte:flyte src/ /stargazer/src/
 COPY --chown=flyte:flyte app/ /stargazer/app/
 
 # ~/.stargazer exists so a volume mounted there takes its ownership from it.
+# ~/.claude is where Claude Code also writes its login and sessions.
 RUN mkdir -p /workspace /snapshots /home/flyte/.stargazer \
-    && chown -R flyte:flyte /workspace /snapshots /home/flyte/.stargazer
+    && chown -R flyte:flyte /workspace /snapshots /home/flyte/.stargazer \
+        /home/flyte/.claude
 
 # What a new /workspace starts with: the SDK's whole notebooks folder
 # (templates, tutorials, workflows), without the package files.

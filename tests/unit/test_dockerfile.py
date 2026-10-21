@@ -2,8 +2,10 @@
 
 The image runs `app/proxy.py` the way the hosted notebook image does, so it
 mirrors `notebook_app_img_recipe` in `app/per_notebook.py`: the proxy's pip
-packages, and the static files it reads beside itself in `/usr/local/lib/`.
-Nothing ties the two recipes together, and a gap crashes `docker run` at start.
+packages, the static files it reads beside itself in `/usr/local/lib/`, and
+the context file Claude Code reads in the dropdown terminal. Nothing ties the
+two recipes together, and a gap crashes `docker run` at start or leaves the
+terminal's agent without its instructions.
 """
 
 import re
@@ -55,3 +57,24 @@ def test_dockerfile_installs_every_package_the_hosted_image_pins():
     }
     assert any(pkg.startswith("marimo==") for pkg in pinned)
     assert pinned - installed == set()
+
+
+def test_both_images_give_claude_code_the_notebook_agent_context():
+    """Claude Code reads `~/.claude/CLAUDE.md`, and both images run as `flyte`."""
+    claude_md = "/home/flyte/.claude/CLAUDE.md"
+    layers = notebook_app_img_recipe._layers
+    hosted_copies = {
+        layer.src.name for layer in layers if type(layer).__name__ == "CopyConfig"
+    }
+    hosted_commands = [
+        cmd
+        for layer in layers
+        if type(layer).__name__ == "Commands"
+        for cmd in layer.commands
+    ]
+    local_copies = {
+        (Path(args[-2]).name, args[-1]) for op, *args in _instructions() if op == "COPY"
+    }
+    assert "notebook_agent.md" in hosted_copies
+    assert any(f"notebook_agent.md {claude_md}" in cmd for cmd in hosted_commands)
+    assert ("notebook_agent.md", claude_md) in local_copies

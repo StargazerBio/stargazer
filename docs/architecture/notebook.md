@@ -134,6 +134,6 @@ A notebook runs in one mode at a time — see [App → Core Concepts](app.md#cor
 
 ## In-Notebook AI
 
-**Claude Code rides along in the hosted notebook** — the proxy injects a dropdown terminal overlay (Ctrl+`) into every notebook page with the Claude Code CLI on PATH, for agentic work against the notebook's files and environment.
+**Claude Code rides along in the hosted notebook** — the proxy injects a dropdown terminal overlay (Ctrl+`) into every notebook page with the Claude Code CLI on PATH, for agentic work against the notebook's files and environment. The image gives it one condensed context file, `app/notebook_agent.md`, as its user-level memory (`~/.claude/CLAUDE.md`), so every session starts knowing what the pod is (what `/workspace` saves, what's lost when the pod stops), marimo's notebook conventions, Stargazer's task, asset and workflow patterns, and how a run goes local or to the cluster. It lives in the image rather than the workspace, so it changes with the image and never lands in anyone's saved files. The `stargazer` image ships the same file.
 
 The stargazer MCP server serves agent users through external coding tools (Claude Code, Cursor, etc.), exposing `list_tasks`, `run_task`, `query_files`, and the rest of the catalog.

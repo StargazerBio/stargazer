@@ -30,6 +30,11 @@ The image layers, on top of the Flyte debian base:
   into marimo's HTML responses.
 - `app/launch-notebook.sh` baked at `/usr/local/bin/launch-notebook.sh`,
   invoked by the AppEnvironment `args=[...]`.
+- `app/notebook_agent.md` baked at `/home/flyte/.claude/CLAUDE.md`, Claude
+  Code's user-level memory for the `flyte` runtime user, so an agent started
+  in the terminal knows where it is and how Stargazer notebooks, tasks and
+  runs work. Not in `/workspace`: that's the user's saved workspace, where the
+  file would be saved into every user's store and go stale as the image moves.
 
 Stargazer itself is NOT installed at the system level — every notebook
 declares its deps inline via PEP 723 and the sandbox venv resolves them
@@ -80,6 +85,9 @@ from stargazer.config import (
 _PROXY_LIB_DIR = "/usr/local/lib"
 _PROXY_MODULE = "sg_proxy"
 _LAUNCH_BIN = "/usr/local/bin"
+# Claude Code's user-level memory dir for the `flyte` user the pod runs as
+# (`~/.claude/`, whose CLAUDE.md every session loads).
+_CLAUDE_USER_DIR = "/home/flyte/.claude"
 
 # Where a launch hydrates the owner's notebooks, flat as `<dir>/<slug>.py`. The
 # dashboard builds `notebook_path` from it; the proxy mirrors it.
@@ -160,6 +168,12 @@ notebook_app_img_recipe = (
     .with_source_file(PROJECT_ROOT / "app" / "terminal_overlay.html", _PROXY_LIB_DIR)
     .with_source_file(PROJECT_ROOT / "app" / "save_banner.html", _PROXY_LIB_DIR)
     .with_source_file(PROJECT_ROOT / "app" / "launch-notebook.sh", _LAUNCH_BIN)
+    # The terminal agent's context file, renamed to CLAUDE.md below. Copied
+    # into a directory, as every other file here is, since the builder takes
+    # the destination as one.
+    .with_source_file(
+        PROJECT_ROOT / "app" / "notebook_agent.md", f"{_CLAUDE_USER_DIR}/"
+    )
     # Bake the stargazer source tree at `/stargazer/` so each notebook's
     # `[tool.uv.sources] stargazer = { path = "/stargazer", editable = true }`
     # resolves inside the marimo --sandbox venv. Image-shipped notebooks live
@@ -172,6 +186,10 @@ notebook_app_img_recipe = (
         [
             f"mv {_PROXY_LIB_DIR}/proxy.py {_PROXY_LIB_DIR}/{_PROXY_MODULE}.py",
             f"chmod +x {_LAUNCH_BIN}/launch-notebook.sh",
+            # Owned by the flyte user, since Claude Code writes its login and
+            # sessions into the same directory.
+            f"mv {_CLAUDE_USER_DIR}/notebook_agent.md {_CLAUDE_USER_DIR}/CLAUDE.md "
+            f"&& chown -R flyte:flyte {_CLAUDE_USER_DIR}",
             # Pre-create the hydration target owned by the flyte runtime user
             # so the launch script can write into it at startup.
             f"mkdir -p {WORKSPACE_NOTEBOOK_DIR} "
