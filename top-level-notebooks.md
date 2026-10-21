@@ -4,7 +4,6 @@ status: next
 priority: normal
 created: 2026-10-17
 blocked_by:
-  - local-remote-toggle
   - devbox-postgres-index
   - production-context-files
 ---
