@@ -1,6 +1,6 @@
 ---
 title: Resumable uploads up to 10 GB from the asset page
-status: review
+status: done
 priority: normal
 created: 2026-06-10
 pr: 72
@@ -210,3 +210,11 @@ this goes second.
   Pinata's TUS endpoint in chunks, up to Pinata's 10 GiB, for the SDK and
   task outputs. Verified by `test_tus_upload_multichunk_roundtrip` (pinata
   tier).
+
+## Outcome
+
+Shipped in PR #72 (merge `f106f42`). Private uploads from the asset page go over TUS to the dashboard (`/assets/tus`), up to 10 GiB, straight into the store's multipart writer while `CidBuilder` hashes them; an interrupted upload resumes from `HEAD`'s offset. `StorageClient.adopt` indexes the result, and `upload` reuses a stored file with the same CID. `POST /assets/upload` is gone.
+
+Verified with tests written first (unit tier 527 passed, 536 after the rebase onto #73) and on Union with the test account in Chrome: 150 MB in about 8 s with the CID matching `compute_cid`; the same file again kept one row and one object; 1 GB reloaded at ~30% resumed on the same upload ID and finished with the matching CID; no unfinished multipart uploads afterwards; the dashboard used 269 Mi. Not driven: the offline wait (no network toggle in the extension). The probe files (1.15 GB, asset `tus_probe`) stay in the test account's store.
+
+Left: public uploads over TUS (ticket `tus-public-uploads`), and Union keeping the bucket's abort rule (ticket `union-keeps-multipart-abort-rule`). No comments on the PR.
