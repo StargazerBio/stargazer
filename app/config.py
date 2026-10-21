@@ -106,3 +106,21 @@ def admin_subjects(env) -> frozenset[str]:
 # admins, set by the deployer (`app.onboard` bakes it). Union's own check,
 # that the visitor can view the project, never runs on the in-cluster address.
 ADMIN_SUBJECTS: frozenset[str] = admin_subjects(os.environ)
+
+
+def console_url(env) -> str:
+    """The Union console's address on Union, nothing elsewhere.
+
+    Union gives every app pod the tenant's endpoint as `_U_EP_OVERRIDE`
+    (`dns:///<tenant host>`), and the console is served from the same host,
+    which also names the org. The devbox's endpoint is an in-cluster address
+    with no console users can reach, so off Union this is empty.
+    """
+    if env.get("STARGAZER_TARGET") != "union":
+        return ""
+    host = env.get("_U_EP_OVERRIDE", "").removeprefix("dns:///")
+    return f"https://{host}" if host else ""
+
+
+# Where the dashboard links its owner to see their runs. Empty means no link.
+CONSOLE_URL: str = console_url(os.environ)
