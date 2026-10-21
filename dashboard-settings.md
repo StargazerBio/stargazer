@@ -1,6 +1,6 @@
 ---
 title: A Settings section on the dashboard, starting with the save interval
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-18
 ---
