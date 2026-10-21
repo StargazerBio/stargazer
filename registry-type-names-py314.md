@@ -1,6 +1,6 @@
 ---
 title: The registry renders optional types as Union[...] on Python 3.14
-status: backlog
+status: doing
 priority: low
 created: 2026-10-20
 ---
