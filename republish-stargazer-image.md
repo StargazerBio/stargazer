@@ -44,8 +44,8 @@ tutorials, the scrna workflow), the same set as `main`. In both,
 bwa 0.7.19, bwa-mem2 2.2.1 and Claude Code 2.1.153 run. This was the first
 run of the amd64 image anywhere (under emulation).
 
-Left: the `stargazer` package is `internal`, not public, so an anonymous
-`docker run ghcr.io/stargazerbio/stargazer` gets `401` from ghcr (anonymous
-token and manifest requests both 401; the public `debug` package gets 200).
-The README and Getting Started quickstart only works once the package's
-visibility is changed to public in its GitHub settings, which has no API.
+The package was `internal` at first, so an anonymous `docker run` got `401`
+from ghcr. It was made public in its GitHub settings (there's no API for
+it) on 2026-10-20. Then an anonymous token request and the `latest`
+manifest request both returned 200, with digest `sha256:c2958913…`, and the
+packages API reported `"visibility": "public"`. Nothing is left.
