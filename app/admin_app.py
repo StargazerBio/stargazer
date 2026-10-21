@@ -15,7 +15,8 @@ integration. It has three jobs:
    Tutorials (shipped in the per-notebook image), and Workspace (the owner's
    notebooks). The owner's notebooks live in the workspace store
    (`app.workspace_store`), keyed by their Union subject, so saving needs no
-   setup.
+   setup. On Union its header links to the project's runs in the Union
+   console (`config.CONSOLE_URL`).
 
 2. **Workspace actions.** Create, settings, delete, copy and download, all
    against the workspace store.

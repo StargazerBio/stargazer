@@ -111,10 +111,11 @@ ADMIN_SUBJECTS: frozenset[str] = admin_subjects(os.environ)
 def console_url(env) -> str:
     """The Union console's address on Union, nothing elsewhere.
 
-    Union gives every app pod the tenant's endpoint as `_U_EP_OVERRIDE`
-    (`dns:///<tenant host>`), and the console is served from the same host,
-    which also names the org. The devbox's endpoint is an in-cluster address
-    with no console users can reach, so off Union this is empty.
+    Union gives every app pod the tenant's host as `_U_EP_OVERRIDE` (bare;
+    the SDK's `dns:///<host>` form is accepted too), and the console is
+    served from that host, which also names the org. The devbox's endpoint
+    is an in-cluster address with no console users can reach, so off Union
+    this is empty.
     """
     if env.get("STARGAZER_TARGET") != "union":
         return ""

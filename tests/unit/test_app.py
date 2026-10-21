@@ -301,12 +301,16 @@ def test_dashboard_without_a_console_has_no_console_link(client, monkeypatch):
     assert "/v2/domain/" not in html
 
 
-def test_console_url_comes_from_the_pods_platform_endpoint():
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "stargazerbio.us-west-2.unionai.cloud",
+        "dns:///stargazerbio.us-west-2.unionai.cloud",
+    ],
+)
+def test_console_url_comes_from_the_pods_platform_endpoint(endpoint):
     """An app pod on Union is given the tenant's endpoint; the console is its host."""
-    env = {
-        "STARGAZER_TARGET": "union",
-        "_U_EP_OVERRIDE": "dns:///stargazerbio.us-west-2.unionai.cloud",
-    }
+    env = {"STARGAZER_TARGET": "union", "_U_EP_OVERRIDE": endpoint}
     assert config.console_url(env) == "https://stargazerbio.us-west-2.unionai.cloud"
 
 
