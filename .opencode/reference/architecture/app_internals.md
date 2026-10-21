@@ -106,7 +106,7 @@ Each Workspace tile carries two corner controls:
 
 Seed slugs are rejected by both. The browser confirms delete, then drops the tile on success.
 
-Resources are honored **as-authored — no ceiling**. At `/launch`, the dashboard reads a workspace notebook's source from the store and `app.notebook_meta.parse_notebook_resources` reads `[tool.stargazer]` (cpu/memory) and passes it to `per_notebook_env(resources=…)`. Parsing is purely textual. Image-baked tutorials/workflows notebooks carry no such block and keep the env's legacy `("2Gi", "6Gi")` default.
+Resources are honored **as-authored — no ceiling**. At `/launch`, the dashboard reads a workspace notebook's source from the store and `app.notebook_meta.parse_notebook_resources` reads `[tool.stargazer]` (cpu/memory) and passes it to `per_notebook_env(resources=…)`. Parsing is purely textual. Image-baked tutorials/workflows notebooks carry no such block and fall back to one CPU and a `("2Gi", "6Gi")` memory request/limit. Every notebook pod, declared or not, also gets `NOTEBOOK_DISK` (20Gi) of ephemeral storage, which Union applies as request and limit both. Without it the pod's only ephemeral-storage limit is the Knative queue-proxy sidecar's 1Gi, and the kubelet evicts a pod whose sandbox venv, uv cache and workspace outgrow that, as a notebook with numpy and matplotlib does while its venv installs.
 
 ## Notebook-Declared Images (`main_img`)
 

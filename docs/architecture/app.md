@@ -77,7 +77,7 @@ sequenceDiagram
 
 **Sharing upstream is a download.** Any workspace notebook can be downloaded as its `.py` file and contributed to the repository like any other change. The app tier has no GitHub integration.
 
-**Resources live in the notebook.** A workspace notebook's `[tool.stargazer]` header (cpu/memory) is parsed textually at launch (no code execution) and honored as-authored, with no ceiling. Image-baked notebooks carry no header and fall back to the env default.
+**Resources live in the notebook.** A workspace notebook's `[tool.stargazer]` header (cpu/memory) is parsed textually at launch (no code execution) and honored as-authored, with no ceiling. Image-baked notebooks carry no header and fall back to the env default. Every notebook pod gets the same fixed disk, for its kernel's environment and the files it writes.
 
 **So does the image.** A workspace notebook can declare the image its pod runs on as `main_img` in its setup block ([Notebooks → Notebook Environment](notebook.md#notebook-environment)). At launch the dashboard evaluates just that expression and hands the resulting image to the SDK's `serve`, which builds it on Union's remote builder in the user's own project (or finds it already built) before deploying the notebook on it. It's the one piece of notebook code the dashboard runs: the owner's, in the owner's own dashboard. The dashboard's one secret is the org's Pinata key, which any of the owner's tasks can read anyway.
 

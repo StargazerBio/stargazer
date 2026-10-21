@@ -25,10 +25,10 @@ def _env(**overrides):
 
 
 def test_default_resources_preserve_legacy_request_limit():
-    """With no resources, the env keeps the legacy ('2Gi','6Gi') tuple."""
+    """With no resources, the env gets one CPU and the ('2Gi','6Gi') memory tuple."""
     env = _env()
     assert env.resources.memory == ("2Gi", "6Gi")
-    assert env.resources.cpu is None
+    assert env.resources.cpu == 1
 
 
 def test_custom_resources_applied_to_env():

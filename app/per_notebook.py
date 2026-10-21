@@ -94,6 +94,13 @@ WORKSPACE_NOTEBOOK_DIR = "/workspace"
 # the project, and a notebook's app is `nb-<slug>-<mode>`, longest in `edit`.
 NOTEBOOK_SLUG_MAX = 30 - len("nb--edit")
 
+# The pod's disk holds the kernel's sandbox venv, uv's cache, the hydrated
+# workspace and whatever the notebook writes. Without a limit of its own, the
+# pod's only ephemeral-storage limit is the Knative queue-proxy sidecar's 1Gi,
+# which a notebook with numpy and matplotlib outgrows while its venv installs,
+# and the kubelet evicts the pod. Union turns the request into a limit too.
+NOTEBOOK_DISK = "20Gi"
+
 
 # Layered build recipe. Consumed only by the deployer's build step
 # (`onboard.build_notebook_image`), which bakes the built, content-hashed URI
@@ -231,8 +238,9 @@ def per_notebook_env(
 
     `resources` is the notebook's declared `[tool.stargazer]` spec, honored
     as-authored (no ceiling). When None — image-baked tutorials and workflows
-    notebooks — the env falls back to the legacy `("2Gi", "6Gi")`
-    request/limit, which the memory-heavy scRNA notebook depends on.
+    notebooks — the env falls back to one CPU and a `("2Gi", "6Gi")` memory
+    request/limit, which the memory-heavy scRNA notebook depends on. Every pod
+    gets `NOTEBOOK_DISK` of disk, declared or not.
 
     `image` is the notebook's own `main_img`, which `serve` builds before it
     deploys, or None to run on the deployed notebook image. The pod's
@@ -244,10 +252,10 @@ def per_notebook_env(
             "STARGAZER_NOTEBOOK_IMAGE is unset: deploy with `stargazer-users`, "
             "which builds the notebook image and bakes its URI in."
         )
-    flyte_resources = (
-        flyte.Resources(cpu=resources.cpu, memory=resources.memory)
+    cpu, memory = (
+        (resources.cpu, resources.memory)
         if resources is not None
-        else flyte.Resources(memory=("2Gi", "6Gi"))
+        else (1, ("2Gi", "6Gi"))
     )
     return flyte.app.AppEnvironment(
         name=f"nb-{slug}-{mode}",
@@ -273,7 +281,7 @@ def per_notebook_env(
         ],
         port=8080,
         requires_auth=True,
-        resources=flyte_resources,
+        resources=flyte.Resources(cpu=cpu, memory=memory, disk=NOTEBOOK_DISK),
         scaling=flyte.app.Scaling(
             replicas=(0, 1), scaledown_after=timedelta(minutes=30)
         ),
