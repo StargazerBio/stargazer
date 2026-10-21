@@ -31,7 +31,7 @@ from app.notebook_meta import (
     notebook_description,
     notebook_name,
     notebook_resources,
-    setup_block_text,
+    setup_body,
 )
 from stargazer.notebooks import notebook_image_base
 
@@ -39,13 +39,17 @@ ALICE = "387300641116005877"
 BOB = "111111111111111111"
 PROJECT = f"u-{ALICE}"
 
-NB_SETUP = (
-    "with app.setup:\n"
-    "    import flyte\n"
+NB_BODY = (
+    "import flyte\n"
     "\n"
-    '    main_name = "QC run"\n'
-    '    main_description = "Quality control."\n'
-    '    main_resources = flyte.Resources(cpu=4, memory="8Gi")\n'
+    'main_name = "QC run"\n'
+    'main_description = "Quality control."\n'
+    'main_resources = flyte.Resources(cpu=4, memory="8Gi")\n'
+)
+
+NB_SETUP = "with app.setup:\n" + "".join(
+    f"    {line}" if line.strip() else line
+    for line in NB_BODY.splitlines(keepends=True)
 )
 
 NB_SRC = (
@@ -418,24 +422,24 @@ def test_create_without_store_is_503(client, monkeypatch):
 
 
 def test_setup_shows_the_notebooks_setup_block(client):
-    """The gear's editor opens on the stored notebook's setup block."""
+    """The gear's editor opens on the stored notebook's setup block, flush left."""
     _put(ALICE, "qc-run.py")
     _as(client)
     resp = client.get("/workspace/setup?slug=qc-run")
     assert resp.status_code == 200
-    assert resp.json() == {"slug": "qc-run", "setup": NB_SETUP}
+    assert resp.json() == {"slug": "qc-run", "setup": NB_BODY}
 
 
 def test_setup_save_rewrites_the_block_and_retitles_the_tile(client):
     """Saving writes the edited block and returns what the tile shows."""
     _put(ALICE, "qc-run.py")
     _as(client)
-    block = NB_SETUP.replace("cpu=4", "cpu=2").replace("Quality control.", "New")
-    resp = client.post("/workspace/setup", data={"slug": "qc-run", "setup": block})
+    body = NB_BODY.replace("cpu=4", "cpu=2").replace("Quality control.", "New")
+    resp = client.post("/workspace/setup", data={"slug": "qc-run", "setup": body})
     assert resp.status_code == 200
     assert resp.json() == {"slug": "qc-run", "title": "QC run", "description": "New"}
     stored = _get(ALICE, "qc-run.py")
-    assert setup_block_text(stored) == block
+    assert setup_body(stored) == body
     assert notebook_resources(stored) == flyte.Resources(cpu=2, memory="8Gi")
 
 
@@ -443,8 +447,8 @@ def test_setup_save_takes_the_browsers_line_endings(client):
     """A textarea posts CRLF; the stored notebook keeps LF."""
     _put(ALICE, "qc-run.py")
     _as(client)
-    block = NB_SETUP.replace("\n", "\r\n")
-    resp = client.post("/workspace/setup", data={"slug": "qc-run", "setup": block})
+    body = NB_BODY.replace("\n", "\r\n")
+    resp = client.post("/workspace/setup", data={"slug": "qc-run", "setup": body})
     assert resp.status_code == 200
     assert _get(ALICE, "qc-run.py") == NB_SRC
 
@@ -455,7 +459,7 @@ def test_setup_save_refuses_a_broken_block(client):
     _as(client)
     resp = client.post(
         "/workspace/setup",
-        data={"slug": "qc-run", "setup": "with app.setup:\n    main_name = (\n"},
+        data={"slug": "qc-run", "setup": "import flyte\nmain_name = (\n"},
     )
     assert resp.status_code == 400
     assert "line 2" in resp.json()["error"]
@@ -467,7 +471,7 @@ def test_setup_missing_notebook_is_404(client):
     _put(BOB, "qc-run.py")
     _as(client)
     assert client.get("/workspace/setup?slug=qc-run").status_code == 404
-    resp = client.post("/workspace/setup", data={"slug": "qc-run", "setup": NB_SETUP})
+    resp = client.post("/workspace/setup", data={"slug": "qc-run", "setup": NB_BODY})
     assert resp.status_code == 404
 
 
@@ -823,7 +827,7 @@ async def _unreachable(*_args, **_kwargs):
         ),
         (
             "/workspace/setup",
-            {"slug": "qc-run", "setup": NB_SETUP},
+            {"slug": "qc-run", "setup": NB_BODY},
             "app.workspace_store.update_workspace_notebook",
             _unreachable,
             "update failed: unreachable",

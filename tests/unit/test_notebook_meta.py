@@ -13,19 +13,22 @@ from app.notebook_meta import (
     notebook_description,
     notebook_name,
     notebook_resources,
-    replace_setup_block,
-    setup_block_text,
+    replace_setup_body,
+    setup_body,
     with_setup_values,
 )
 from app.notebooks import seed_source
 
-SETUP = (
-    "with app.setup:\n"
-    "    import flyte\n"
+BODY = (
+    "import flyte\n"
     "\n"
-    '    main_name = "QC run"\n'
-    '    main_description = "Quality control."\n'
-    '    main_resources = flyte.Resources(cpu=4, memory="8Gi")\n'
+    'main_name = "QC run"\n'
+    'main_description = "Quality control."\n'
+    'main_resources = flyte.Resources(cpu=4, memory="8Gi")\n'
+)
+
+SETUP = "with app.setup:\n" + "".join(
+    f"    {line}" if line.strip() else line for line in BODY.splitlines(keepends=True)
 )
 
 CELL = '@app.cell\ndef _():\n    main_name = "not this"\n    return\n'
@@ -102,20 +105,20 @@ def test_resources_that_are_not_a_resources_call_are_an_error():
         notebook_resources(src)
 
 
-def test_setup_block_text_is_the_whole_block():
-    """The editor gets the block from its `with` line to its last line."""
-    assert setup_block_text(_notebook()) == SETUP
+def test_setup_body_is_the_block_without_its_header_and_indent():
+    """The editor gets the block's body, flush left."""
+    assert setup_body(_notebook()) == BODY
 
 
-def test_setup_block_text_keeps_a_trailing_comment():
+def test_setup_body_keeps_a_trailing_comment():
     """A comment at the end of the block is part of it."""
     setup = SETUP + "    # TODO: more tools\n"
-    assert setup_block_text(_notebook(setup)) == setup
+    assert setup_body(_notebook(setup)) == BODY + "# TODO: more tools\n"
 
 
-def test_setup_block_text_without_a_block_is_none():
+def test_setup_body_without_a_block_is_none():
     """A notebook with no setup block has nothing to edit."""
-    assert setup_block_text("import marimo\napp = marimo.App()\n") is None
+    assert setup_body("import marimo\napp = marimo.App()\n") is None
 
 
 # ---------------------------------------------------------------------------
@@ -123,22 +126,30 @@ def test_setup_block_text_without_a_block_is_none():
 # ---------------------------------------------------------------------------
 
 
-def test_replace_swaps_only_the_block():
-    """The new block lands where the old one was; cells are untouched."""
-    new = (
+def test_replace_swaps_only_the_body():
+    """The new body lands under the block's own header; cells are untouched."""
+    src = _notebook(SETUP.replace("with app.setup:", "with app.setup(hide_code=True):"))
+    out = replace_setup_body(
+        src, 'import flyte\nmain_resources = flyte.Resources(cpu=8, memory="32Gi")\n'
+    )
+    assert out == _notebook(
         "with app.setup(hide_code=True):\n"
         "    import flyte\n"
         '    main_resources = flyte.Resources(cpu=8, memory="32Gi")\n'
     )
-    src = replace_setup_block(_notebook(), new)
-    assert src == _notebook(new)
-    assert notebook_resources(src) == flyte.Resources(cpu=8, memory="32Gi")
+    assert notebook_resources(out) == flyte.Resources(cpu=8, memory="32Gi")
+
+
+def test_replace_round_trips_the_body():
+    """Saving the body the editor showed changes nothing."""
+    src = _notebook(SETUP + "    # TODO: more tools\n")
+    assert replace_setup_body(src, setup_body(src)) == src
 
 
 def test_replace_adds_a_block_to_a_notebook_without_one():
     """The block goes right after `app = marimo.App(...)`, where marimo writes it."""
     src = "import marimo\n\napp = marimo.App()\n\n\n@app.cell\ndef _():\n    return\n"
-    out = replace_setup_block(src, 'with app.setup:\n    main_name = "New"\n')
+    out = replace_setup_body(src, 'main_name = "New"\n')
     assert out == (
         "import marimo\n\napp = marimo.App()\n\n"
         'with app.setup:\n    main_name = "New"\n'
@@ -147,19 +158,17 @@ def test_replace_adds_a_block_to_a_notebook_without_one():
 
 
 @pytest.mark.parametrize(
-    ("block", "error"),
+    ("body", "error"),
     [
-        ("with app.setup:\n    main_name = (\n", "line 2"),
-        ("import os\n", "with app.setup:"),
-        ("with app.setup:\n    pass\nimport os\n", "with app.setup:"),
-        ("with app.setup:\n    main_resources = flyte.Resources(cpu=n)\n", "literal"),
-        ("with app.setup:\n    main_name = 3\n", "main_name"),
+        ("import flyte\nmain_name = (\n", "line 2"),
+        ("main_resources = flyte.Resources(cpu=n)\n", "literal"),
+        ("main_name = 3\n", "main_name"),
     ],
 )
-def test_replace_refuses_a_block_that_would_break(block, error):
-    """A bad edit is refused with the reason, never written."""
+def test_replace_refuses_a_body_that_would_break(body, error):
+    """A bad edit is refused with the reason, in the editor's line numbers."""
     with pytest.raises(SetupError, match=error):
-        replace_setup_block(_notebook(), block)
+        replace_setup_body(_notebook(), body)
 
 
 def test_with_setup_values_replaces_a_declared_value():
@@ -178,12 +187,8 @@ def test_with_setup_values_declares_a_missing_value_after_the_imports():
         "    main_resources = flyte.Resources(cpu=1)\n"
     )
     src = with_setup_values(_notebook(setup), main_name="QC")
-    assert setup_block_text(src) == (
-        "with app.setup:\n"
-        "    import flyte\n"
-        '    main_name = "QC"\n'
-        "\n"
-        "    main_resources = flyte.Resources(cpu=1)\n"
+    assert setup_body(src) == (
+        'import flyte\nmain_name = "QC"\n\nmain_resources = flyte.Resources(cpu=1)\n'
     )
 
 

@@ -100,7 +100,7 @@ Create refuses a name whose slug is over `NOTEBOOK_SLUG_MAX` (22) with a 400. Fl
 
 Each Workspace tile carries two corner controls:
 
-- **Gear** → a code editor on the notebook's whole setup block (`with app.setup:` through its last line, a closing comment included). Opening it fetches the block fresh (`GET /workspace/setup`), since an open notebook saves its edits back; a notebook without one gets a starter block. Save (`POST /workspace/setup`) normalizes CRLF, then `replace_setup_block` checks the text is exactly one setup block that parses and whose `main_name`, `main_description` and `main_resources` read (a 400 with the reason otherwise, nothing written), splices it over the old block's lines (or after `app = marimo.App(...)` when there was none), and returns the tile's new title and blurb, which the browser swaps in. Resource and image changes take effect at the **next** launch.
+- **Gear** → a code editor on the body of the notebook's setup block: everything under `with app.setup:` (a closing comment included), dedented flush left (`setup_body`). Opening it fetches the body fresh (`GET /workspace/setup`), since an open notebook saves its edits back; a notebook without a setup block gets a starter body. Save (`POST /workspace/setup`) normalizes CRLF and parses the body on its own, so a syntax error carries the editor's line number; `replace_setup_body` then indents it back under the block's own `with` line (keeping options like `hide_code=True`, or a plain `with app.setup:` after `app = marimo.App(...)` when there was none), checks that `main_name`, `main_description` and `main_resources` read (a 400 with the reason otherwise, nothing written), splices it over the old block's lines, and returns the tile's new title and blurb, which the browser swaps in. Resource and image changes take effect at the **next** launch.
 - **Trash** (`POST /workspace/delete`, workspace-only) removes `<slug>.py` from the store (idempotent — a file already gone still succeeds; recovery relies on bucket versioning, not yet confirmed enabled) and tears down any edit/run pod for that slug (deactivate, then delete the record), so deleting can't orphan a pod with no tile left to Stop it.
 - **Download** (`GET /workspace/download`) returns the notebook's `.py` as an attachment — the path for sharing a notebook upstream.
 
@@ -148,7 +148,7 @@ All on `app/admin_app.py` (`app_env`), all behind Union's login. Lifespan runs `
 |---|---|
 | `/` | Dashboard: the notebook sections, then the asset browser |
 | `/workspace/create` | Writes a new notebook to the user's store from a seed, returns the rendered tile (409 on name collision) |
-| `/workspace/setup` | GET: a workspace notebook's setup block, for the gear's editor. POST: replaces it (400 if the dashboard can't read it) and returns the tile's title and blurb |
+| `/workspace/setup` | GET: a workspace notebook's setup block body, flush left, for the gear's editor. POST: replaces it (400 if the dashboard can't read it) and returns the tile's title and blurb |
 | `/workspace/delete` | Removes a workspace notebook (idempotent); tears down its pods |
 | `/workspace/copy` | *Copies* a Workflows notebook into the workspace as an editable notebook (409 on name collision); returns the rendered tile |
 | `/workspace/download` | A workspace notebook as a `.py` attachment |

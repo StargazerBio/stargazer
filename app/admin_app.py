@@ -80,8 +80,8 @@ from app.notebook_meta import (
     notebook_description,
     notebook_name,
     notebook_resources,
-    replace_setup_block,
-    setup_block_text,
+    replace_setup_body,
+    setup_body,
     with_setup_values,
 )
 from app.notebooks import (
@@ -581,19 +581,19 @@ async def workspace_copy(
 
 # Shown in the gear's editor for a notebook that has no setup block yet.
 _STARTER_SETUP = (
-    "with app.setup:\n"
-    "    import flyte\n"
+    "import flyte\n"
     "\n"
-    '    main_description = ""\n'
-    '    main_resources = flyte.Resources(cpu=2, memory="4Gi")\n'
+    'main_description = ""\n'
+    'main_resources = flyte.Resources(cpu=2, memory="4Gi")\n'
 )
 
 
 @asgi_app.get("/workspace/setup")
 async def workspace_setup(user: CurrentUser, slug: str):
-    """Return a workspace notebook's setup block, for the gear's editor.
+    """Return a workspace notebook's setup block body, for the gear's editor.
 
-    A notebook without one gets a starter block to save.
+    The body comes without its `with app.setup:` line and flush left. A
+    notebook without a setup block gets a starter body to save.
     """
     if not _store_ready():
         return _store_off()
@@ -602,18 +602,17 @@ async def workspace_setup(user: CurrentUser, slug: str):
     source = await store.get_workspace_notebook(user.subject, f"{slug}.py")
     if source is None:
         return JSONResponse({"error": "notebook not found"}, status_code=404)
-    return JSONResponse(
-        {"slug": slug, "setup": setup_block_text(source) or _STARTER_SETUP}
-    )
+    return JSONResponse({"slug": slug, "setup": setup_body(source) or _STARTER_SETUP})
 
 
 @asgi_app.post("/workspace/setup")
 async def workspace_setup_save(
     user: CurrentUser, slug: str = Form(...), setup: str = Form(...)
 ):
-    """Replace a workspace notebook's setup block with the gear editor's.
+    """Replace a workspace notebook's setup block body with the gear editor's.
 
-    A block that won't parse, or declares a name, description or resources
+    The body is indented back under the block's own `with app.setup:` line.
+    A body that won't parse, or declares a name, description or resources
     the dashboard can't read, is a 400 with the reason, and nothing is
     written. Resource and image changes take effect at the **next**
     `/launch`; the tile's name and description, which this returns, change
@@ -631,7 +630,7 @@ async def workspace_setup_save(
                 {"error": f"notebook not found: {filename}"}, status_code=404
             )
         try:
-            content = replace_setup_block(source, setup)
+            content = replace_setup_body(source, setup)
         except SetupError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
         await store.update_workspace_notebook(user.subject, filename, content)

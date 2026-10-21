@@ -18,15 +18,16 @@ the name and description are string literals and `main_resources` is a
 `flyte.Resources(...)` call whose arguments are literals. Whatever a notebook
 declares is honored as-is; there is no ceiling.
 
-The gear on a workspace tile edits the whole block (`setup_block_text`,
-`replace_setup_block`), and create and copy set the name and description
-(`with_setup_values`).
+The gear on a workspace tile edits the block's body, flush left
+(`setup_body`, `replace_setup_body`), and create and copy set the name and
+description (`with_setup_values`).
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import ast
 import json
+import textwrap
 
 import flyte
 
@@ -174,7 +175,7 @@ def _block_span(source: str) -> tuple[int, int] | None:
     return start, end
 
 
-def setup_block_text(source: str) -> str | None:
+def _block_text(source: str) -> str | None:
     """The setup block as written, from its `with` line through its last line.
 
     None when the notebook has no setup block or doesn't parse.
@@ -184,6 +185,23 @@ def setup_block_text(source: str) -> str | None:
         return None
     text = "".join(source.splitlines(keepends=True)[span[0] : span[1]])
     return text if text.endswith("\n") else text + "\n"
+
+
+def _split_block(text: str) -> tuple[str, str]:
+    """Split a setup block's text into its `with` header lines and its body."""
+    block = ast.parse(text).body[0]
+    header_end = block.items[0].context_expr.end_lineno
+    lines = text.splitlines(keepends=True)
+    return "".join(lines[:header_end]), "".join(lines[header_end:])
+
+
+def setup_body(source: str) -> str | None:
+    """The setup block's body, without its `with` line and flush left.
+
+    None when the notebook has no setup block or doesn't parse.
+    """
+    text = _block_text(source)
+    return textwrap.dedent(_split_block(text)[1]) if text is not None else None
 
 
 def _check_block(block: str) -> None:
@@ -202,7 +220,7 @@ def _check_block(block: str) -> None:
             raise SetupError(f"{name} must be a string.")
 
 
-def replace_setup_block(source: str, block: str) -> str:
+def _replace_block(source: str, block: str) -> str:
     """Return `source` with its setup block replaced by `block`.
 
     A notebook without a setup block gets `block` right after its
@@ -210,7 +228,6 @@ def replace_setup_block(source: str, block: str) -> str:
     and changes nothing, when `block` isn't one readable setup block or there's
     nowhere to put it.
     """
-    block = block.replace("\r\n", "\n").rstrip() + "\n"
     _check_block(block)
     lines = source.splitlines(keepends=True)
     span = _block_span(source)
@@ -233,18 +250,39 @@ def replace_setup_block(source: str, block: str) -> str:
     return "".join(lines[:app_line] + ["\n", block] + lines[app_line:])
 
 
+def replace_setup_body(source: str, body: str) -> str:
+    """Return `source` with its setup block's body replaced by `body`.
+
+    `body` is flush left, as `setup_body` gives it; it's indented back under
+    the block's own `with` line, which keeps any options (`hide_code=True`).
+    A notebook without a setup block gets one. Raises `SetupError`, and
+    changes nothing, when `body` doesn't parse (the line number is the
+    body's) or declares a name, description or resources that can't be read.
+    """
+    body = body.replace("\r\n", "\n").rstrip() + "\n"
+    try:
+        ast.parse(body)
+    except SyntaxError as exc:
+        raise SetupError(f"line {exc.lineno}: {exc.msg}") from exc
+    text = _block_text(source)
+    header = _split_block(text)[0] if text is not None else "with app.setup:\n"
+    if not body.strip():
+        body = "pass\n"
+    return _replace_block(source, header + textwrap.indent(body, "    "))
+
+
 def with_setup_values(source: str, **values: str) -> str:
     """Return `source` with each `name = "value"` declared in its setup block.
 
     A name the block already assigns is reassigned in place; a new one goes
     after the block's leading imports. A notebook without a setup block gets
-    one. Raises `SetupError` as `replace_setup_block` does.
+    one. Raises `SetupError` as `replace_setup_body` does.
     """
     for name, value in values.items():
         line = f"{name} = {json.dumps(value, ensure_ascii=False)}\n"
-        text = setup_block_text(source)
+        text = _block_text(source)
         if text is None:
-            source = replace_setup_block(source, f"with app.setup:\n    {line}")
+            source = replace_setup_body(source, line)
             continue
         block = ast.parse(text).body[0]
         lines = text.splitlines(keepends=True)
@@ -260,5 +298,5 @@ def with_setup_values(source: str, **values: str) -> str:
                 imports.append(s)
             at = imports[-1].end_lineno if imports else block.body[0].lineno - 1
             lines.insert(at, indent + line)
-        source = replace_setup_block(source, "".join(lines))
+        source = _replace_block(source, "".join(lines))
     return source
