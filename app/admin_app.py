@@ -449,6 +449,7 @@ async def dashboard(request: Request, user: CurrentUser):
                 for n in by_section("workflows")
             ],
             "workspace": workspace,
+            "settings": await _settings(user),
             "version": config.VERSION,
             "console_runs_url": _console_runs_url(),
             # The asset browser compares `_owner` against the visitor.
@@ -690,6 +691,47 @@ async def workspace_download(user: CurrentUser, slug: str):
 
 
 # ---------------------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------------------
+
+
+async def _settings(user: User) -> dict:
+    """The user's settings, or the defaults when the store can't say."""
+    if not _store_ready():
+        return dict(store.DEFAULT_SETTINGS)
+    try:
+        return await store.get_settings(user.subject)
+    except Exception as exc:
+        logger.warning(f"Settings read failed for {user.subject}: {exc}")
+        return dict(store.DEFAULT_SETTINGS)
+
+
+@asgi_app.post("/settings")
+async def save_settings(user: CurrentUser, save_interval_seconds: str = Form("")):
+    """Save the user's settings; notebooks started afterwards use them.
+
+    The save interval is a whole number of seconds, 0 or more. Anything else
+    is a 400, and nothing is stored. Returns the settings as saved.
+    """
+    if not _store_ready():
+        return _store_off()
+    text = save_interval_seconds.strip()
+    if not (text.isascii() and text.isdigit()):
+        return JSONResponse(
+            {"error": "The save interval is a whole number of seconds, 0 or more."},
+            status_code=400,
+        )
+    try:
+        settings = await store.get_settings(user.subject)
+        settings["save_interval_seconds"] = int(text)
+        await store.put_settings(user.subject, settings)
+    except Exception as exc:
+        logger.error(f"Settings save failed for {user.subject}: {exc}")
+        return _failed("settings save", exc)
+    return JSONResponse(settings)
+
+
+# ---------------------------------------------------------------------------
 # Launch / stop / status / cleanup
 # ---------------------------------------------------------------------------
 
@@ -783,6 +825,10 @@ async def launch(
     # Owner attribution: workspace MCP/SDK uploads stamp `_owner` from this
     # (and config.py forwards it onward into task pods at run submission).
     env.env_vars["STARGAZER_OWNER"] = user.subject
+    # Read at launch: a running pod keeps the interval it started with.
+    env.env_vars["SG_SAVE_INTERVAL_SECONDS"] = str(
+        (await _settings(user))["save_interval_seconds"]
+    )
 
     # `serve.aio()` watches the deployment to readiness and raises if the pod
     # is slow to schedule/boot. That's not a real failure: the route (and

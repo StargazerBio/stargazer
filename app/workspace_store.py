@@ -2,13 +2,15 @@
 ### Workspace store — users' workspaces on object storage.
 
 The durable home of every user's workspace: every file in it, one object per
-file at its path, keyed by the user's Union subject:
+file at its path, keyed by the user's Union subject. Their dashboard
+settings sit beside it, outside what a pod hydrates:
 
     <WORKSPACE_ROOT>/users/<subject>/workspace/<path>
+    <WORKSPACE_ROOT>/users/<subject>/settings.json
 
 The dashboard reads and writes only the notebooks, the top-level `.py` files,
-so it can list a user's notebooks and read one header without fetching the
-rest. Per-notebook pods hydrate their `/workspace` from `workspace_uri()` at
+and the settings, so it can list a user's notebooks and read one header
+without fetching the rest. Per-notebook pods hydrate their `/workspace` from `workspace_uri()` at
 launch and write each changed file back to its own key, so two running
 notebooks can never clobber each other.
 
@@ -22,6 +24,7 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import asyncio
+import json
 import re
 
 import flyte.storage
@@ -34,6 +37,10 @@ _SUBJECT_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 # A notebook filename: one plain segment ending in `.py`. `_`-prefixed files
 # are reserved (they never list), and a leading dot is never a notebook.
 _FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*\.py$")
+
+# A user's settings before they save any. Pods save their workspace every
+# `save_interval_seconds`, and 0 saves only when the pod stops.
+DEFAULT_SETTINGS = {"save_interval_seconds": 30}
 
 
 class NotebookExistsError(Exception):
@@ -81,7 +88,7 @@ async def _list(prefix: str) -> list[str]:
 
 
 async def _get(uri: str) -> str | None:
-    """Read one notebook's UTF-8 source, or None if it doesn't exist."""
+    """Read one object's UTF-8 text, or None if it doesn't exist."""
     if not await flyte.storage.exists(uri):
         return None
     chunks = [chunk async for chunk in flyte.storage.get_stream(uri)]
@@ -89,7 +96,7 @@ async def _get(uri: str) -> str | None:
 
 
 async def _put(uri: str, content: str) -> None:
-    """Write one notebook's source as a single object (atomic per PUT)."""
+    """Write UTF-8 text as a single object (atomic per PUT)."""
     # Object stores have no directories; a local root does, and won't create
     # the parent on write. A no-op on S3.
     parent = uri.rsplit("/", 1)[0]
@@ -140,3 +147,19 @@ async def update_workspace_notebook(subject: str, filename: str, content: str) -
 async def delete_workspace_notebook(subject: str, filename: str) -> None:
     """Delete a Workspace notebook. Idempotent."""
     await _delete(_key(workspace_uri(subject), filename))
+
+
+def _settings_uri(subject: str) -> str:
+    """URI of the user's settings, beside their workspace rather than in it."""
+    return f"{_subject_prefix(subject)}/settings.json"
+
+
+async def get_settings(subject: str) -> dict:
+    """The user's settings, with the default for any they never saved."""
+    raw = await _get(_settings_uri(subject))
+    return {**DEFAULT_SETTINGS, **(json.loads(raw) if raw else {})}
+
+
+async def put_settings(subject: str, settings: dict) -> None:
+    """Save the user's settings, replacing what was stored."""
+    await _put(_settings_uri(subject), json.dumps(settings))

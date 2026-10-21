@@ -107,6 +107,39 @@
 
     {{ assets.panel() }}
 
+    {% if workspace_configured %}
+    <section>
+        <h2>
+            Settings
+            <span class="section-tag">Yours, for every notebook you open.</span>
+        </h2>
+        <p class="section-desc">
+            While a notebook is open, your workspace saves on the interval
+            below, and once more when the notebook stops. At 0 it saves only when the
+            notebook stops, so anything since the last save is lost if the
+            notebook stops unexpectedly. A change applies to notebooks you start
+            from then on.
+        </p>
+        <form id="user-settings-form" class="create-form">
+            <label class="create-field">
+                Save every
+                <input
+                    type="number"
+                    name="save_interval_seconds"
+                    class="create-num"
+                    min="0"
+                    step="1"
+                    required
+                    value="{{ settings.save_interval_seconds }}"
+                />
+                <span class="create-unit">seconds</span>
+            </label>
+            <button type="submit" class="btn btn-notebook">Save</button>
+            <span id="user-settings-status" class="create-unit" role="status"></span>
+        </form>
+    </section>
+    {% endif %}
+
     <footer class="dash-footer">
         {% if version %}
         <span class="dash-version" title="Dashboard version">{{ version }}</span>
@@ -571,6 +604,35 @@
             } finally {
                 button.disabled = false;
                 button.textContent = originalLabel;
+            }
+        });
+    }
+
+    // Save the user's settings. The outcome goes in the status line beside the
+    // button rather than an alert, which would block the page.
+    const userSettingsForm = document.getElementById("user-settings-form");
+    if (userSettingsForm) {
+        const status = document.getElementById("user-settings-status");
+        userSettingsForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const button = userSettingsForm.querySelector('button[type="submit"]');
+            button.disabled = true;
+            status.textContent = "";
+            try {
+                const resp = await fetch("/settings", {
+                    method: "POST",
+                    body: new FormData(userSettingsForm),
+                    headers: { Accept: "application/json" },
+                });
+                const payload = await resp.json().catch(() => ({}));
+                if (!resp.ok) {
+                    throw new Error(payload.error || "HTTP " + resp.status);
+                }
+                status.textContent = "Saved. Notebooks you start from now on use it.";
+            } catch (err) {
+                status.textContent = "Not saved: " + err.message;
+            } finally {
+                button.disabled = false;
             }
         });
     }

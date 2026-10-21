@@ -99,3 +99,22 @@ async def test_bad_subject_is_rejected(bad):
 def test_workspace_uri_layout():
     """The workspace prefix sits under users/<subject>/workspace."""
     assert ws.workspace_uri(ALICE) == f"{config.WORKSPACE_ROOT}/users/{ALICE}/workspace"
+
+
+async def test_settings_of_a_new_user_are_the_defaults():
+    """A user who never saved settings gets the default settings."""
+    assert await ws.get_settings(ALICE) == ws.DEFAULT_SETTINGS
+
+
+async def test_saved_settings_read_back():
+    """A saved interval reads back, and only for that user."""
+    await ws.put_settings(ALICE, {"save_interval_seconds": 60})
+    assert (await ws.get_settings(ALICE))["save_interval_seconds"] == 60
+    assert await ws.get_settings(BOB) == ws.DEFAULT_SETTINGS
+
+
+async def test_settings_are_not_in_the_workspace(tmp_path):
+    """Settings sit beside the workspace, so pods never hydrate them."""
+    await ws.put_settings(ALICE, {"save_interval_seconds": 60})
+    assert Path(config.WORKSPACE_ROOT, "users", ALICE, "settings.json").is_file()
+    assert await ws.list_workspace(ALICE) == []

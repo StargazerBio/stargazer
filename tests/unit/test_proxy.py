@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app import proxy
+from app import workspace_store as ws
 
 OWNER = "387300641116005877"
 OTHER = "111111111111111111"
@@ -511,10 +512,10 @@ def test_interval_from_env_saves_while_serving(pod_dirs, monkeypatch):
         assert (stored / "live.py").read_text() == "# live\n"
 
 
-def test_interval_defaults_to_five_seconds(monkeypatch):
-    """With nothing setting the interval, as now, a pod saves every 5 seconds."""
+def test_unset_interval_is_the_dashboards_default(monkeypatch):
+    """A pod launched without an interval saves as often as a new user's would."""
     monkeypatch.delenv("SG_SAVE_INTERVAL_SECONDS", raising=False)
-    assert proxy._save_interval() == 5.0
+    assert proxy._save_interval() == ws.DEFAULT_SETTINGS["save_interval_seconds"]
 
 
 def test_interval_zero_saves_only_at_shutdown(pod_dirs, monkeypatch):
