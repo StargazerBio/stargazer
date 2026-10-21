@@ -16,7 +16,10 @@ Private assets are the dashboard owner's own index and store, tested against
 a real `SqliteIndex` and a temp-dir store: only the owner reaches them.
 """
 
+import base64
+import itertools
 import json
+import random
 from pathlib import Path
 
 import pytest
@@ -167,13 +170,15 @@ def private_store(tmp_path, monkeypatch):
 
 
 def _upload(client, data=READS, filename="r1.fq", keyvalues=None):
-    """Upload `data` as a private asset through the route."""
-    keyvalues = keyvalues or {"asset": "r1", "sample_id": "S1"}
-    return client.post(
-        "/assets/upload",
-        params={"filename": filename, "keyvalues": json.dumps(keyvalues)},
-        content=data,
-    )
+    """Upload `data` as a private asset over TUS in one piece.
+
+    Returns the creation's response if it was refused, else the piece's,
+    whose `Stargazer-Cid` header is the stored CID.
+    """
+    created = _tus_create(client, len(data), filename=filename, keyvalues=keyvalues)
+    if created.status_code != 201:
+        return created
+    return _tus_patch(client, created.headers["Location"], 0, data)
 
 
 def _expected_cid(tmp_path: Path, data: bytes) -> str:
@@ -189,9 +194,9 @@ class TestPrivate:
     def test_upload_then_list(self, fake_pinata, private_store, client):
         _auth(client, OWNER)
         resp = _upload(client)
-        assert resp.status_code == 200
+        assert resp.status_code == 204
         cid = _expected_cid(private_store, READS)
-        assert resp.json()["cid"] == cid
+        assert resp.headers["Stargazer-Cid"] == cid
 
         listed = client.get("/assets/list", params={"network": "private"}).json()
         # A typed asset stores its declared fields, empty ones included.
@@ -208,7 +213,7 @@ class TestPrivate:
                 },
             )
         ]
-        stored = private_store / "store" / "users" / OWNER / "assets" / cid / "r1.fq"
+        (stored,) = [p for p in _uploads_dir(private_store).rglob("r1.fq")]
         assert stored.read_bytes() == READS
         assert fake_pinata.sign_calls == []
 
@@ -223,7 +228,7 @@ class TestPrivate:
 
     def test_download_returns_the_bytes(self, fake_pinata, private_store, client):
         _auth(client, OWNER)
-        cid = _upload(client).json()["cid"]
+        cid = _upload(client).headers["Stargazer-Cid"]
         resp = client.get(f"/assets/download/{cid}", params={"network": "private"})
         assert resp.status_code == 200
         assert resp.content == READS
@@ -236,7 +241,7 @@ class TestPrivate:
 
     def test_update_merges_and_restamps_owner(self, fake_pinata, private_store, client):
         _auth(client, OWNER)
-        cid = _upload(client).json()["cid"]
+        cid = _upload(client).headers["Stargazer-Cid"]
         resp = client.post(
             "/assets/update",
             json={
@@ -256,28 +261,9 @@ class TestPrivate:
         }
         assert fake_pinata.update_calls == []
 
-    def test_bad_keyvalues_400_before_reading(self, fake_pinata, private_store, client):
-        _auth(client, OWNER)
-        resp = _upload(client, keyvalues={"sample_id": "S1"})
-        assert resp.status_code == 400
-        assert "asset" in resp.json()["detail"]
-        assert client.get("/assets/list", params={"network": "private"}).json() == []
-
-    def test_upload_over_the_cap_413(
-        self, fake_pinata, private_store, client, monkeypatch
-    ):
-        import app.assets as assets_mod
-
-        monkeypatch.setattr(assets_mod, "MAX_UPLOAD_BYTES", 10)
-        _auth(client, OWNER)
-        resp = _upload(client, b"x" * 11)
-        assert resp.status_code == 413
-        assert resp.json()["detail"] == "Uploads are capped at 10 bytes."
-        assert client.get("/assets/list", params={"network": "private"}).json() == []
-
     def test_someone_else_gets_403(self, fake_pinata, private_store, client):
         _auth(client, OWNER)
-        cid = _upload(client).json()["cid"]
+        cid = _upload(client).headers["Stargazer-Cid"]
         _auth(client, "mallory")
         assert _upload(client, b"theirs").status_code == 403
         assert (
@@ -312,7 +298,7 @@ class TestPrivate:
     ):
         monkeypatch.delenv("PINATA_JWT", raising=False)
         _auth(client, OWNER)
-        assert _upload(client).status_code == 200
+        assert _upload(client).status_code == 204
         assert (
             len(client.get("/assets/list", params={"network": "private"}).json()) == 1
         )
@@ -573,3 +559,132 @@ class TestNotConfigured:
             json={"filename": "x.bam", "keyvalues": {"asset": "alignment"}},
         )
         assert resp.status_code == 503
+
+
+BIG = random.Random(0).randbytes(700_000)
+TUS = {"Tus-Resumable": "1.0.0"}
+
+
+def _metadata(**pairs: str) -> str:
+    """A TUS `Upload-Metadata` header: `key base64(value)` pairs."""
+    return ",".join(
+        f"{k} {base64.b64encode(v.encode()).decode()}" for k, v in pairs.items()
+    )
+
+
+def _tus_create(client, length=None, filename="big.fq", keyvalues=None):
+    """POST a new private TUS upload; returns the response."""
+    keyvalues = keyvalues or {"asset": "r1", "sample_id": "S1"}
+    return client.post(
+        "/assets/tus",
+        headers={
+            **TUS,
+            "Upload-Length": str(len(BIG) if length is None else length),
+            "Upload-Metadata": _metadata(
+                filename=filename, network="private", keyvalues=json.dumps(keyvalues)
+            ),
+        },
+    )
+
+
+def _tus_patch(client, location, offset, data):
+    """PATCH `data` onto an upload at `offset`."""
+    return client.patch(
+        location,
+        headers={
+            **TUS,
+            "Upload-Offset": str(offset),
+            "Content-Type": "application/offset+octet-stream",
+        },
+        content=data,
+    )
+
+
+def _tus_upload(client, data=BIG, cuts=(250_000, 500_000), **create):
+    """Create an upload and send `data` in pieces split at `cuts`."""
+    location = _tus_create(client, len(data), **create).headers["Location"]
+    bounds = [0, *cuts, len(data)]
+    for start, end in itertools.pairwise(bounds):
+        resp = _tus_patch(client, location, start, data[start:end])
+        assert resp.status_code == 204, resp.text
+    return location, resp
+
+
+def _uploads_dir(store: Path) -> Path:
+    """Where in-progress uploads land in the owner's store."""
+    return store / "store" / "users" / OWNER / "uploads"
+
+
+class TestTus:
+    """Resumable private uploads over TUS, into the owner's store and index."""
+
+    def test_three_chunks_store_the_file_under_its_cid(
+        self, fake_pinata, private_store, client
+    ):
+        _auth(client, OWNER)
+        _, done = _tus_upload(client)
+        cid = _expected_cid(private_store, BIG)
+        assert done.headers["Upload-Offset"] == str(len(BIG))
+        assert done.headers["Stargazer-Cid"] == cid
+        listed = client.get("/assets/list", params={"network": "private"}).json()
+        assert [(r["cid"], r["name"]) for r in listed] == [(cid, "big.fq")]
+        resp = client.get(f"/assets/download/{cid}", params={"network": "private"})
+        assert resp.content == BIG
+
+    def test_same_file_twice_keeps_one_copy(self, fake_pinata, private_store, client):
+        _auth(client, OWNER)
+        _tus_upload(client)
+        _tus_upload(client)
+        listed = client.get("/assets/list", params={"network": "private"}).json()
+        assert len(listed) == 1
+        stored = [p for p in _uploads_dir(private_store).rglob("*") if p.is_file()]
+        assert len(stored) == 1
+
+    def test_head_reports_the_offset_to_resume_from(
+        self, fake_pinata, private_store, client
+    ):
+        _auth(client, OWNER)
+        location = _tus_create(client).headers["Location"]
+        _tus_patch(client, location, 0, BIG[:300_000])
+        head = client.head(location, headers=TUS)
+        assert head.headers["Upload-Offset"] == "300000"
+        assert head.headers["Upload-Length"] == str(len(BIG))
+        done = _tus_patch(client, location, 300_000, BIG[300_000:])
+        assert done.headers["Stargazer-Cid"] == _expected_cid(private_store, BIG)
+
+    def test_patch_at_the_wrong_offset_is_a_conflict(
+        self, fake_pinata, private_store, client
+    ):
+        _auth(client, OWNER)
+        location = _tus_create(client).headers["Location"]
+        _tus_patch(client, location, 0, BIG[:1000])
+        assert _tus_patch(client, location, 0, BIG[:1000]).status_code == 409
+
+    def test_over_10_gb_is_refused(self, fake_pinata, private_store, client):
+        _auth(client, OWNER)
+        assert _tus_create(client, length=11 * 1024**3).status_code == 413
+
+    def test_bad_keyvalues_are_refused_before_any_bytes(
+        self, fake_pinata, private_store, client
+    ):
+        _auth(client, OWNER)
+        resp = _tus_create(client, keyvalues={"sample_id": "S1"})
+        assert resp.status_code == 422
+        assert not _uploads_dir(private_store).exists()
+
+    def test_only_the_owner_uploads(self, fake_pinata, private_store, client):
+        assert _tus_create(client).status_code == 401
+        _auth(client, "someone-else")
+        assert _tus_create(client).status_code == 403
+
+    def test_an_idle_upload_is_dropped(
+        self, fake_pinata, private_store, client, monkeypatch
+    ):
+        import app.assets as assets_mod
+
+        _auth(client, OWNER)
+        location = _tus_create(client).headers["Location"]
+        _tus_patch(client, location, 0, BIG[:1000])
+        monkeypatch.setattr(assets_mod, "TUS_IDLE_SECONDS", 0)
+        _tus_create(client)
+        assert _tus_patch(client, location, 1000, BIG[1000:2000]).status_code == 404

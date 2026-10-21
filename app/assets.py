@@ -5,10 +5,13 @@ APIRouter included by the dashboard, serving the asset browser on its home
 page (`templates/_assets.html`) over two networks:
 
 - **Private** is the dashboard owner's own asset index and store, the same
-  ones their tasks write to. Uploads stream through the dashboard into the
-  store (`StorageClient.upload`: the CID, the stored file, the index row),
-  downloads stream back out, and metadata edits merge onto the index row.
-  Only the owner reaches them: another signed-in user gets a 403.
+  ones their tasks write to. Uploads come in resumable pieces over the TUS
+  protocol (`/assets/tus`), up to 10 GB, each piece passed straight on to
+  the store as part of one multipart upload while its CID is worked out
+  (`CidBuilder`), so the file never touches the dashboard's disk. The last
+  piece indexes it (`StorageClient.adopt`). Downloads stream back out, and
+  metadata edits merge onto the index row. Only the owner reaches them:
+  another signed-in user gets a 403.
 - **Public** is Pinata's public network, through the org's shared key (a
   Flyte secret, `app.admin_app`). Uploads go browser→Pinata on a signed URL,
   so the bytes never transit the dashboard, and downloads redirect to the
@@ -30,16 +33,19 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import asyncio
+import base64
+import binascii
 import dataclasses
 import json
 import os
 import tempfile
 import time
+import uuid
 from pathlib import Path
-from typing import get_type_hints
+from typing import Any, get_type_hints
 
 import flyte.storage
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
 
 from app import config
@@ -47,18 +53,28 @@ from app.identity import User, user_from_request
 from app.index_api import _get_index
 from stargazer.assets import ASSET_REGISTRY, build_asset
 from stargazer.assets.asset import _BASE_FIELDS
+from stargazer.utils.cid import CidBuilder
 from stargazer.utils.pinata import PinataClient, _stamp_owner
 from stargazer.utils.storage import StorageClient
 
 router = APIRouter()
 
 # Pinata's plain multipart POST — the only thing a signed URL accepts from
-# a fetch() upload — is capped at 100MB; larger files require the TUS
-# resumable endpoint (ticket tus-browser-uploads). Mirroring the cap into the
-# signed URL turns an opaque mid-upload failure into a mint-time error the
-# form can explain. Private uploads share it for now: they stream to the
-# dashboard's disk, whose ephemeral-storage limit hasn't been checked.
+# a fetch() upload — is capped at 100MB; larger public files need Pinata's
+# TUS endpoint, which no route speaks yet. Mirroring the cap into the signed
+# URL turns an opaque mid-upload failure into a mint-time error the form can
+# explain.
 MAX_UPLOAD_BYTES = 100 * 1024**2
+
+# Private uploads over TUS. The browser sends pieces small enough for one
+# request through Cloudflare and for the dashboard's memory; each goes
+# straight to the store's multipart writer.
+TUS_VERSION = "1.0.0"
+TUS_MAX_BYTES = 10 * 1024**3
+# An upload no request has touched for this long is dropped. Its multipart
+# upload is left unfinished, so nothing appears at its path; the bucket's
+# lifecycle has to clear the parts, since the pods' role can't abort one.
+TUS_IDLE_SECONDS = 3600.0
 
 # The anonymous public tab reads this cache, refreshed lazily — stale
 # entries cost at most one Pinata listing per TTL regardless of traffic.
@@ -109,11 +125,6 @@ def _require_network(network: str) -> None:
         raise HTTPException(
             status_code=400, detail="network must be 'private' or 'public'"
         )
-
-
-def _size(n: int) -> str:
-    """A byte count in the unit the upload form states its cap in."""
-    return f"{n // 1024**2} MB" if n % 1024**2 == 0 else f"{n} bytes"
 
 
 def public_assets_on() -> bool:
@@ -215,7 +226,7 @@ async def assets_sign(request: Request):
     if body.get("network", "public") != "public":
         raise HTTPException(
             status_code=400,
-            detail="Signed uploads are public; private ones post to /assets/upload.",
+            detail="Signed uploads are public; private ones go to /assets/tus.",
         )
     if not filename:
         raise HTTPException(status_code=400, detail="filename is required")
@@ -338,48 +349,188 @@ async def _update_private(request: Request, cid: str, keyvalues: dict) -> dict:
         raise HTTPException(status_code=404, detail=str(exc))
 
 
-@router.post("/assets/upload")
-async def assets_upload(request: Request, filename: str = "", keyvalues: str = "{}"):
-    """Store the request body as a private asset in the owner's store and index.
+class _LocalWriter:
+    """A local file written from async code, for a store rooted at a plain path.
 
-    The keyvalues (a JSON object in the query string) are checked with
-    `build_asset()` before any of the body is read. The body streams to a temp
-    file, refused past `MAX_UPLOAD_BYTES`, then `StorageClient.upload` works
-    out the CID, stores the file and writes the index row, stamping `_owner`.
-    Returns the row.
+    `flyte.storage.open` only writes object stores; a local run's store is a
+    directory.
+    """
+
+    def __init__(self, path: Path) -> None:
+        """Open `path` for writing, creating its directory."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._fh = path.open("wb")
+
+    async def write(self, data: bytes) -> None:
+        """Append `data`."""
+        await asyncio.to_thread(self._fh.write, data)
+
+    async def close(self) -> None:
+        """Finish the file."""
+        await asyncio.to_thread(self._fh.close)
+
+
+async def _open_writer(uri: str) -> Any:
+    """A writer for `uri`: a multipart upload on an object store, else a file."""
+    if "file" in flyte.storage.get_underlying_filesystem(path=uri).protocol:
+        return _LocalWriter(Path(uri))
+    return await flyte.storage.open(uri, "wb")
+
+
+@dataclasses.dataclass
+class _TusUpload:
+    """One private upload in progress: where it's going and how far it got."""
+
+    uri: str
+    length: int
+    asset: Any
+    writer: Any
+    builder: CidBuilder = dataclasses.field(default_factory=CidBuilder)
+    offset: int = 0
+    touched: float = dataclasses.field(default_factory=time.monotonic)
+    lock: asyncio.Lock = dataclasses.field(default_factory=asyncio.Lock)
+
+
+# Uploads live in the dashboard's memory: the dashboard is one replica, and a
+# restart means starting an upload again.
+_tus_uploads: dict[str, _TusUpload] = {}
+
+
+def _tus(status_code: int, **headers: str) -> Response:
+    """An empty TUS response carrying the protocol version."""
+    return Response(
+        status_code=status_code, headers={"Tus-Resumable": TUS_VERSION, **headers}
+    )
+
+
+def _drop_idle_uploads() -> None:
+    """Forget uploads no request has touched for `TUS_IDLE_SECONDS`."""
+    now = time.monotonic()
+    for upload_id, upload in list(_tus_uploads.items()):
+        if now - upload.touched > TUS_IDLE_SECONDS:
+            del _tus_uploads[upload_id]
+
+
+def _tus_metadata(header: str) -> dict[str, str]:
+    """Decode `Upload-Metadata`: comma-separated `key base64(value)` pairs."""
+    pairs = (p.strip().partition(" ") for p in header.split(",") if p.strip())
+    try:
+        return {k: base64.b64decode(v, validate=True).decode() for k, _, v in pairs}
+    except binascii.Error, UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Upload-Metadata isn't valid")
+
+
+def _store_client() -> StorageClient:
+    """A storage client on the owner's store and index, for indexing uploads."""
+    return StorageClient(
+        local_dir=Path(tempfile.gettempdir()) / "stargazer-uploads",
+        store_root=os.environ["STARGAZER_STORE_ROOT"],
+        index=_get_index(),
+    )
+
+
+def _tus_upload(upload_id: str) -> _TusUpload:
+    """The upload in progress under `upload_id`, or a 404."""
+    _drop_idle_uploads()
+    upload = _tus_uploads.get(upload_id)
+    if upload is None:
+        raise HTTPException(
+            status_code=404, detail="This upload has expired; start it again."
+        )
+    return upload
+
+
+@router.post("/assets/tus")
+async def tus_create(request: Request) -> Response:
+    """Start a resumable private upload (TUS creation).
+
+    `Upload-Length` is the file's size, at most `TUS_MAX_BYTES`, and
+    `Upload-Metadata` carries the `filename` and the `keyvalues` (a JSON
+    object), checked with `build_asset()` before any bytes move. Returns the
+    upload's URL in `Location`.
     """
     _require_owner(request)
+    _drop_idle_uploads()
+    try:
+        length = int(request.headers.get("Upload-Length", ""))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Upload-Length is required")
+    if length <= 0:
+        raise HTTPException(status_code=400, detail="The file is empty.")
+    if length > TUS_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Uploads are capped at {TUS_MAX_BYTES // 1024**3} GB.",
+        )
+    meta = _tus_metadata(request.headers.get("Upload-Metadata", ""))
+    filename = meta.get("filename", "")
     if not filename or Path(filename).name != filename:
         raise HTTPException(status_code=400, detail="filename is required")
-    try:
-        parsed = json.loads(keyvalues)
-    except ValueError:
-        parsed = None
-    if not isinstance(parsed, dict):
-        raise HTTPException(status_code=400, detail="keyvalues must be a JSON object")
-    try:
-        asset = build_asset(parsed)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / filename
-        size = 0
-        with path.open("wb") as fh:
-            async for chunk in request.stream():
-                size += len(chunk)
-                if size > MAX_UPLOAD_BYTES:
-                    raise HTTPException(
-                        status_code=413,
-                        detail=f"Uploads are capped at {_size(MAX_UPLOAD_BYTES)}.",
-                    )
-                fh.write(chunk)
-        # The client's cache sits in the temp dir too, so nothing it links
-        # outlives the request on the dashboard's small disk.
-        client = StorageClient(
-            local_dir=Path(tmp) / "cache",
-            store_root=os.environ["STARGAZER_STORE_ROOT"],
-            index=_get_index(),
+    if meta.get("network", "private") != "private":
+        raise HTTPException(
+            status_code=400, detail="Resumable uploads go to your private storage."
         )
-        await client.upload(asset, path)
-    return await _get_index().get(asset.cid)
+    try:
+        keyvalues = json.loads(meta.get("keyvalues", "{}"))
+        asset = build_asset(keyvalues if isinstance(keyvalues, dict) else {})
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    upload_id = uuid.uuid4().hex
+    uri = _store_client().staging_uri(upload_id, filename)
+    _tus_uploads[upload_id] = _TusUpload(
+        uri=uri, length=length, asset=asset, writer=await _open_writer(uri)
+    )
+    return _tus(201, Location=f"/assets/tus/{upload_id}")
+
+
+@router.head("/assets/tus/{upload_id}")
+async def tus_head(request: Request, upload_id: str) -> Response:
+    """How much of an upload has arrived, for a client resuming it."""
+    _require_owner(request)
+    upload = _tus_upload(upload_id)
+    return _tus(
+        200,
+        **{
+            "Upload-Offset": str(upload.offset),
+            "Upload-Length": str(upload.length),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.patch("/assets/tus/{upload_id}")
+async def tus_patch(request: Request, upload_id: str) -> Response:
+    """Append the request body to an upload at `Upload-Offset`.
+
+    Bytes go to the store and the CID builder as they arrive, and the offset
+    counts each piece written, so a dropped connection resumes from what
+    landed. A wrong offset is a 409. The piece that completes the file
+    finishes the multipart upload and indexes it; its response carries the
+    CID in `Stargazer-Cid`.
+    """
+    _require_owner(request)
+    upload = _tus_upload(upload_id)
+    if request.headers.get("Content-Type") != "application/offset+octet-stream":
+        raise HTTPException(
+            status_code=415, detail="Send application/offset+octet-stream"
+        )
+    async with upload.lock:
+        if request.headers.get("Upload-Offset") != str(upload.offset):
+            return _tus(409, **{"Upload-Offset": str(upload.offset)})
+        async for piece in request.stream():
+            if upload.offset + len(piece) > upload.length:
+                raise HTTPException(
+                    status_code=400, detail="More bytes than Upload-Length"
+                )
+            await upload.writer.write(piece)
+            upload.builder.update(piece)
+            upload.offset += len(piece)
+            upload.touched = time.monotonic()
+        headers = {"Upload-Offset": str(upload.offset)}
+        if upload.offset == upload.length:
+            del _tus_uploads[upload_id]
+            await upload.writer.close()
+            cid = upload.builder.cid()
+            await _store_client().adopt(upload.asset, upload.uri, cid)
+            headers["Stargazer-Cid"] = cid
+    return _tus(204, **headers)

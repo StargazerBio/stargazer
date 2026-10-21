@@ -6,7 +6,9 @@ Where asset bytes and metadata live, and the local cache in front of them.
 - **Bytes** go to an object store through `flyte.storage`: a local directory
   when run locally, the tenant bucket on Union. Each file is stored once per user
   at `<STARGAZER_STORE_ROOT>/users/<owner>/assets/<cid>/<name>`, where the
-  owner is `STARGAZER_OWNER` (the Union subject) or `local`.
+  owner is `STARGAZER_OWNER` (the Union subject) or `local`. A file uploaded
+  in pieces, whose CID is known only at the end, stays where it was written,
+  `users/<owner>/uploads/<upload id>/<name>`, and its row points there.
 - **Metadata** goes to the asset index (`stargazer.utils.index`), one row
   per CID, written after the bytes so a row never points at a missing file.
   A write that doesn't land raises; nothing is retried behind the caller's
@@ -147,27 +149,70 @@ class StorageClient:
         """Store `path` as `asset`: bytes to the store, then the index row.
 
         Sets `asset.cid` and `asset.path` (a File at the stored location) and
-        seeds the local cache. Identical bytes already in the store aren't
-        transferred again. Whatever the store or the index raises propagates:
+        seeds the local cache. Identical bytes already in the store, under the
+        CID's row or at its path, aren't transferred again. Whatever the store or the index raises propagates:
         a row that doesn't land fails the upload.
         """
         path = Path(path)
         cid = await asyncio.to_thread(compute_cid, path)
-        uri = f"{self.store_root}/users/{_owner()}/assets/{cid}/{path.name}"
-        if not await flyte.storage.exists(uri):
-            await asyncio.to_thread(_makedirs, uri.rsplit("/", 1)[0])
-            await flyte.storage.put(str(path), uri)
+        uri, name = await self._stored_copy(cid)
+        if uri is None:
+            uri, name = (
+                f"{self.store_root}/users/{_owner()}/assets/{cid}/{path.name}",
+                path.name,
+            )
+            if not await flyte.storage.exists(uri):
+                await asyncio.to_thread(_makedirs, uri.rsplit("/", 1)[0])
+                await flyte.storage.put(str(path), uri)
         await self.index.upsert(
             {
                 "cid": cid,
                 "uri": uri,
-                "name": path.name,
+                "name": name,
                 "keyvalues": _stamp_owner(asset.to_keyvalues()),
             }
         )
         asset.cid = cid
-        asset.path = File(path=uri, name=path.name, hash=cid)
-        _materialize(path, self._cache_path(cid, path.name))
+        asset.path = File(path=uri, name=name, hash=cid)
+        _materialize(path, self._cache_path(cid, name))
+
+    async def _stored_copy(self, cid: str) -> tuple[str | None, str | None]:
+        """The `(uri, name)` of the file the CID's row points at, if it exists."""
+        row = await self.index.get(cid)
+        if row is not None and await flyte.storage.exists(row["uri"]):
+            return row["uri"], row["name"]
+        return None, None
+
+    def staging_uri(self, upload_id: str, name: str) -> str:
+        """Where a file uploaded in pieces is written, before its CID is known."""
+        return f"{self.store_root}/users/{_owner()}/uploads/{upload_id}/{name}"
+
+    async def adopt(self, asset: Asset, uri: str, cid: str) -> None:
+        """Index a file already written to the store at `uri` as `asset`.
+
+        For bytes that reached the store some other way than `upload`, such as
+        a resumable upload from the browser, whose CID was worked out as they
+        passed. When the user already has the CID stored, that copy and its
+        row stay as they are and `uri` is deleted. Otherwise the row points at
+        `uri`, stamped with `_owner` like any upload. Sets `asset.cid` and
+        `asset.path` either way.
+        """
+        stored, name = await self._stored_copy(cid)
+        if stored is not None and stored != uri:
+            await asyncio.to_thread(_remove, uri)
+            uri = stored
+        else:
+            name = uri.rsplit("/", 1)[-1]
+            await self.index.upsert(
+                {
+                    "cid": cid,
+                    "uri": uri,
+                    "name": name,
+                    "keyvalues": _stamp_owner(asset.to_keyvalues()),
+                }
+            )
+        asset.cid = cid
+        asset.path = File(path=uri, name=name, hash=cid)
 
     async def download(self, asset: Asset, directory: Path | None = None) -> Path:
         """Make a local copy of `asset` and return its path.
