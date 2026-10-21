@@ -16,9 +16,8 @@ Where asset bytes and metadata live, and the local cache in front of them.
 - **Public data** lives on Pinata's public network. When `PINATA_JWT` is
   set, `query()` merges Pinata's public records in (the user's own row wins
   on a shared CID), and public files download from the IPFS gateway.
-  `companions()` doesn't merge: it asks Pinata only when the user has no
-  companions for the CID, and takes only those published by whoever
-  published the CID itself.
+  `companions()` adds to the user's own the public companions the caller
+  published and those of whoever published the CID itself, nobody else's.
 - **The cache** is `<STARGAZER_LOCAL>/<cid>/<name>`. Uploads seed it,
   downloads fill it, and `Asset.fetch()` hardlinks companions next to their
   asset.
@@ -285,36 +284,39 @@ class StorageClient:
         return [*rows, *public.values()]
 
     async def companions(self, cid: str) -> list[dict]:
-        """Records whose `companion_of` is `cid`: the user's, or else public ones.
+        """Records whose `companion_of` is `cid`, from the caller and the publisher.
 
-        The public tier is asked only when the user's index holds none. A
-        private copy of a public reference shares its CID, so with no
-        companions of its own it gets the public `.fai`, `.dict` and aligner
-        index. A user who has companions gets only theirs, never mixed with
-        public files built separately (bwa reading a `.bwt` from one build
-        and a `.sa` from another), and the lookup makes no Pinata call.
-
-        Public companions count only when their `_owner` also published the
-        parent, so two publishers' builds of a popular reference are never
-        mixed either, and a companion of a file nobody published publicly has
-        no publisher to follow and isn't taken.
+        The user's own rows come first, then public companions the caller
+        published (`_owner` is `STARGAZER_OWNER`), so one published earlier
+        and no longer in the store is fetched again. Then come public
+        companions from whoever published `cid` itself; a file nobody
+        published has no publisher to follow. Anyone else's are left out, so
+        two publishers' builds of a popular reference never mix. A name
+        already taken isn't taken again: a user's own `.bwt` stands, and the
+        publisher's fills in only what the user lacks.
 
         Returns:
             Rows with `cid`, `uri`, `name` and `keyvalues`
         """
         rows = await self.index.query({"companion_of": cid})
-        if rows or self.public is None:
+        if self.public is None:
             return rows
         records = await self.public.query({"companion_of": cid})
         if not records:
-            return []
+            return rows
         parent = await self.public.get(cid)
-        publisher = parent["keyvalues"].get("_owner") if parent else None
-        return [
-            self._public_record(r)
-            for r in records
-            if publisher and r["keyvalues"].get("_owner") == publisher
-        ]
+        caller = os.environ.get("STARGAZER_OWNER")
+        owners = [caller, parent["keyvalues"]["_owner"] if parent else None]
+        taken = {row["name"] for row in rows}
+        for owner in filter(None, owners):
+            for record in records:
+                public = self._public_record(record)
+                if record["keyvalues"].get("_owner") == owner and (
+                    public["name"] not in taken
+                ):
+                    taken.add(public["name"])
+                    rows.append(public)
+        return rows
 
     async def get(self, cid: str) -> dict | None:
         """The user's index row for `cid`, or None."""

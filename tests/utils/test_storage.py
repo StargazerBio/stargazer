@@ -200,15 +200,15 @@ def _listing(directory: Path) -> dict[str, bytes]:
 
 
 @pytest.mark.asyncio
-async def test_fetch_keeps_own_companions_unmixed_with_public_ones(
+async def test_fetch_takes_own_and_publisher_companions_but_no_one_elses(
     tmp_path, monkeypatch
 ):
-    """A user with companions gets only theirs, and Pinata isn't asked.
+    """The caller's private and public companions, then the publisher's.
 
-    The public tier holds a differently built bwa index for the same
-    reference: a `ref.fa.bwt` with other bytes and a `ref.fa.sa` the user
-    doesn't have. Mixing them would hand bwa an index from two builds.
+    A name the caller already has isn't taken again from the publisher, and
+    a companion from anyone else is left out.
     """
+    monkeypatch.setenv("STARGAZER_OWNER", "me")
     public = _PublicCompanions(tmp_path / "gateway")
     c = _client(tmp_path, public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "default_client", c)
@@ -220,8 +220,11 @@ async def test_fetch_keeps_own_companions_unmixed_with_public_ones(
         build="T",
         companion_of=ref.cid,
     )
-    public.add("ref.fa.bwt", b"public bwt", companion_of=ref.cid)
-    public.add("ref.fa.sa", b"public sa", companion_of=ref.cid)
+    public.add("ref.fa", b">chr1\nACGT\n", asset="reference", _owner="maintainer")
+    public.add("ref.fa.bwt", b"their bwt", companion_of=ref.cid, _owner="maintainer")
+    public.add("ref.fa.sa", b"their sa", companion_of=ref.cid, _owner="maintainer")
+    public.add("ref.fa.amb", b"my amb", companion_of=ref.cid, _owner="me")
+    public.add("ref.fa.pac", b"other pac", companion_of=ref.cid, _owner="someone")
 
     pod = _client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "default_client", pod)
@@ -230,8 +233,9 @@ async def test_fetch_keeps_own_companions_unmixed_with_public_ones(
     assert _listing(local.parent) == {
         "ref.fa": b">chr1\nACGT\n",
         "ref.fa.bwt": b"my bwt",
+        "ref.fa.sa": b"their sa",
+        "ref.fa.amb": b"my amb",
     }
-    assert public.queries == []
 
 
 @pytest.mark.asyncio
@@ -286,8 +290,11 @@ async def test_public_companions_come_from_the_parents_publisher(tmp_path, monke
 
 
 @pytest.mark.asyncio
-async def test_no_public_companions_without_a_public_parent(tmp_path, monkeypatch):
-    """Companions of a file nobody published publicly have no publisher to follow."""
+async def test_without_a_public_parent_only_the_callers_public_companions_count(
+    tmp_path, monkeypatch
+):
+    """A file nobody published has no publisher to follow; the caller's own still come."""
+    monkeypatch.setenv("STARGAZER_OWNER", "me")
     public = _PublicCompanions(tmp_path / "gateway")
     c = _client(tmp_path, public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "default_client", c)
@@ -296,8 +303,9 @@ async def test_no_public_companions_without_a_public_parent(tmp_path, monkeypatc
     public.add(
         "ref.fa.fai", b"chr1\t4\t6\t4\t5\n", companion_of=ref.cid, _owner="someone"
     )
+    public.add("ref.fa.dict", b"@HD", companion_of=ref.cid, _owner="me")
 
-    assert await c.companions(ref.cid) == []
+    assert [r["name"] for r in await c.companions(ref.cid)] == ["ref.fa.dict"]
 
 
 @pytest.mark.asyncio
