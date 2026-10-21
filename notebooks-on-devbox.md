@@ -3,6 +3,8 @@ title: Notebooks on the devbox
 status: backlog
 priority: normal
 created: 2026-10-08
+blocked_by:
+  - production-context-files
 ---
 
 The devbox dashboard and asset storage work (`cli/devbox_dashboard.py`, a stand-in user), and a tutorial launched in

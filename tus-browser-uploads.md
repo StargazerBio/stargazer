@@ -3,6 +3,8 @@ title: Resumable uploads up to 10 GB from the asset page
 status: backlog
 priority: normal
 created: 2026-06-10
+blocked_by:
+  - union-console-handoff
 ---
 
 Uploading a file from your machine goes up to 10 GB, private or public, and
