@@ -175,6 +175,14 @@ Asset-manager routes are a separate router (`app/assets.py`, `include_router`ed 
 
 **Owner** on the private routes is the dashboard's: the signed-in subject must equal `SG_OWNER_SUBJECT` (403 otherwise, 401 anonymous). Locally, with no owner baked in, any signed-in user passes. A `network` other than `private` or `public` is a 400. `/assets/sign` mints public URLs only.
 
+## Console Link
+
+The dashboard header's "View your runs in the Union console" opens, in a new tab, `<console>/v2/domain/<FLYTE_DOMAIN>/project/<FLYTE_PROJECT>/runs` (`admin_app._console_runs_url`): the console's runs list for the dashboard's own project. The console adds its default window (`?from=now-7d&to=now`) itself. It's the same URL family the SDK prints for a run or app (`.../project/<p>/runs/<run>`, `.../apps/<app>`). The org isn't in the path: the host is the org's tenant.
+
+`config.CONSOLE_URL` is `https://` plus the pod's `_U_EP_OVERRIDE`, which Union sets in app pods to the bare tenant host, `stargazerbio.us-west-2.unionai.cloud` (measured 2026-10-21 on `u-pryce`'s dashboard pod; a `dns:///` prefix is stripped too). Off the `union` target it's empty and the link isn't rendered: the devbox's `_U_EP_OVERRIDE` is `flyte-binary-http.flyte:8090`, an in-cluster address (measured 2026-10-20).
+
+Measured 2026-10-21 as the test account: the link on `u-pryce`'s dashboard opened `u-pryce`'s runs in `development`, already signed in. Union says console deep links survive the sign-in redirect; that path wasn't exercised, since the browser was already signed in.
+
 ## Asset Manager (mechanics)
 
 **The key is a secret; private assets never touch Pinata.** `app_env` declares `secrets=STARGAZER_SECRETS`, the org-wide `PINATA_JWT`. Union injects it into the dashboard pod, and the app record keeps only a reference (`key: "PINATA_JWT"`, `mount_requirement: ENV_VAR`). Measured 2026-10-17 with a probe app: the key arrived with the right length and hash prefix, and no part of its value was in the record. The devbox drops app secrets (the header of `devbox/setup.sh`), so a devbox dashboard has no key: the public routes 503 and the browser's Public tab says shared data isn't available, while the Private tab works. A shared org key reachable from any task (every task environment declares it) means Pinata's private network would hide nothing between users, so nothing uses it: `PinataClient` works on the public network only, and the Private tab is the dashboard's own index (`app.index_api._get_index`) and the user's store. On the dashboard Union's login sits in front of the routes; `app/assets.py` keeps its own signed-in check so its per-record ownership rules stay testable on a bare router.

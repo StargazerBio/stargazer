@@ -15,7 +15,8 @@ integration. It has three jobs:
    Tutorials (shipped in the per-notebook image), and Workspace (the owner's
    notebooks). The owner's notebooks live in the workspace store
    (`app.workspace_store`), keyed by their Union subject, so saving needs no
-   setup.
+   setup. On Union its header links to the project's runs in the Union
+   console (`config.CONSOLE_URL`).
 
 2. **Workspace actions.** Create, settings, delete, copy and download, all
    against the workspace store.
@@ -259,6 +260,20 @@ def _index_url() -> str:
     return pattern.format(app_fqdn=app_env.name)
 
 
+def _console_runs_url() -> str:
+    """This dashboard's project's runs in the Union console, or "" with no console.
+
+    The console's runs list for a project is
+    `<console>/v2/domain/<domain>/project/<project>/runs`.
+    """
+    if not config.CONSOLE_URL:
+        return ""
+    return (
+        f"{config.CONSOLE_URL}/v2/domain/{config.FLYTE_DOMAIN}"
+        f"/project/{config.FLYTE_PROJECT}/runs"
+    )
+
+
 def _store_ready() -> bool:
     """Whether this deploy has a workspace store to save notebooks in."""
     return bool(config.WORKSPACE_ROOT)
@@ -456,6 +471,7 @@ async def dashboard(request: Request, user: CurrentUser):
             ],
             "workspace": workspace,
             "version": config.VERSION,
+            "console_runs_url": _console_runs_url(),
             # The asset browser compares `_owner` against the visitor.
             "username": user.subject,
             "pinata_configured": bool(os.environ.get("PINATA_JWT")),

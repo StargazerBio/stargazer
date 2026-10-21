@@ -275,6 +275,55 @@ def test_dashboard_warns_against_sensitive_data(client):
     )
 
 
+def test_dashboard_links_to_its_projects_runs_in_the_console(client, monkeypatch):
+    """On Union the dashboard links to its own project's runs, not the console root."""
+    monkeypatch.setattr(
+        config, "CONSOLE_URL", "https://stargazerbio.us-west-2.unionai.cloud"
+    )
+    monkeypatch.setattr(config, "FLYTE_PROJECT", "u-jane")
+    monkeypatch.setattr(config, "FLYTE_DOMAIN", "development")
+    _as(client)
+    html = client.get("/").text
+    href = (
+        "https://stargazerbio.us-west-2.unionai.cloud"
+        "/v2/domain/development/project/u-jane/runs"
+    )
+    assert f'href="{href}"' in html
+    assert "View your runs in the Union console" in html
+
+
+def test_dashboard_without_a_console_has_no_console_link(client, monkeypatch):
+    """Off Union there's no console to send users to, so no link."""
+    monkeypatch.setattr(config, "CONSOLE_URL", "")
+    _as(client)
+    html = client.get("/").text
+    assert "Union console" not in html
+    assert "/v2/domain/" not in html
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "stargazerbio.us-west-2.unionai.cloud",
+        "dns:///stargazerbio.us-west-2.unionai.cloud",
+    ],
+)
+def test_console_url_comes_from_the_pods_platform_endpoint(endpoint):
+    """An app pod on Union is given the tenant's endpoint; the console is its host."""
+    env = {"STARGAZER_TARGET": "union", "_U_EP_OVERRIDE": endpoint}
+    assert config.console_url(env) == "https://stargazerbio.us-west-2.unionai.cloud"
+
+
+def test_console_url_is_empty_off_union():
+    """The devbox's endpoint is an in-cluster address, not a console to link to."""
+    env = {
+        "STARGAZER_TARGET": "devbox",
+        "_U_EP_OVERRIDE": "flyte-binary-http.flyte:8090",
+    }
+    assert config.console_url(env) == ""
+    assert config.console_url({"STARGAZER_TARGET": "union"}) == ""
+
+
 def test_dashboard_without_store_says_saving_is_unavailable(client, monkeypatch):
     """A deploy with no store renders a plain notice instead of the create tile."""
     monkeypatch.setattr(config, "WORKSPACE_ROOT", "")

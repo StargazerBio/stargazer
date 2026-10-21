@@ -6,19 +6,30 @@
             <img src="/static/8-bit_stargazer_no-bg.jpg" alt="Stargazer" />
         </a>
 
-        <details class="user-menu">
-            <summary aria-label="User menu">
-                <span class="avatar-initial">{{ user.initial }}</span>
-            </summary>
-            <div class="menu">
-                <div class="menu-user">
-                    Signed in as <strong>{{ user.display }}</strong>
-                    {% if user.email and user.email != user.display %}
-                    <span class="menu-email">{{ user.email }}</span>
-                    {% endif %}
+        <div class="dash-header-end">
+            {% if console_runs_url %}
+            <a
+                class="dash-console"
+                href="{{ console_runs_url }}"
+                target="_blank"
+                rel="noopener"
+                >View your runs in the Union console ↗</a
+            >
+            {% endif %}
+            <details class="user-menu">
+                <summary aria-label="User menu">
+                    <span class="avatar-initial">{{ user.initial }}</span>
+                </summary>
+                <div class="menu">
+                    <div class="menu-user">
+                        Signed in as <strong>{{ user.display }}</strong>
+                        {% if user.email and user.email != user.display %}
+                        <span class="menu-email">{{ user.email }}</span>
+                        {% endif %}
+                    </div>
                 </div>
-            </div>
-        </details>
+            </details>
+        </div>
     </header>
 
     <section>
