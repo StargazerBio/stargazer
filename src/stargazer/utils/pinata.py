@@ -8,7 +8,8 @@ Provides async interface for authenticated Pinata operations:
 - Minting signed upload and download URLs
 
 Stargazer uses Pinata's public network only: shared data lives there,
-readable by everyone and attributed by `_owner`. Private data lives in each
+readable by everyone and attributed by `_owner`. Every public write needs an
+`_owner`, and reads skip a file without one. Private data lives in each
 user's own store (`stargazer.utils.storage`), never on Pinata's private
 network.
 
@@ -86,6 +87,26 @@ def _stamp_owner(kv: dict[str, str]) -> dict[str, str]:
     if owner:
         kv["_owner"] = owner
     return kv
+
+
+def _check_owner(kv: dict[str, str]) -> None:
+    """Raise unless `kv` carries an `_owner`.
+
+    Every public record names who published it: companions follow their
+    parent's `_owner`, and only the owner may edit a record from the page.
+    Reads skip a record without one, since anyone with the key can upload
+    straight to Pinata.
+    """
+    if not kv.get("_owner"):
+        raise ValueError(
+            "A public record needs an owner, and these keyvalues have no "
+            "`_owner`: set STARGAZER_OWNER"
+        )
+
+
+def _owned(f: dict) -> bool:
+    """Whether a Pinata file listing entry names its owner."""
+    return bool(f.get("keyvalues", {}).get("_owner"))
 
 
 def _check_keyvalue_count(kv: dict[str, str]) -> None:
@@ -205,12 +226,13 @@ class PinataClient:
             The signed upload URL
 
         Raises:
-            ValueError: when ``keyvalues`` has more than ``MAX_KEYVALUES``
-                keys or one longer than ``MAX_KEYVALUE_CHARS``, before any
-                request is made
+            ValueError: when ``keyvalues`` has no ``_owner``, more than
+                ``MAX_KEYVALUES`` keys or one longer than
+                ``MAX_KEYVALUE_CHARS``, before any request is made
         """
         _check_keyvalue_count(keyvalues)
         _check_keyvalue_lengths(keyvalues)
+        _check_owner(keyvalues)
         payload: dict = {
             "date": int(time.time()),
             "expires": expires,
@@ -244,14 +266,15 @@ class PinataClient:
             path: The local file to upload
 
         Raises:
-            ValueError: when the stamped keyvalues have more than
-                ``MAX_KEYVALUES`` keys or one longer than
+            ValueError: when the stamped keyvalues have no ``_owner``, more
+                than ``MAX_KEYVALUES`` keys or one longer than
                 ``MAX_KEYVALUE_CHARS``, before any bytes are sent
         """
         path = Path(path)
         kv = _stamp_owner(component.to_keyvalues())
         _check_keyvalue_count(kv)
         _check_keyvalue_lengths(kv)
+        _check_owner(kv)
         if path.stat().st_size > TUS_THRESHOLD_BYTES:
             await self._upload_tus(component, path, kv)
         else:
@@ -332,6 +355,8 @@ class PinataClient:
     async def query(self, keyvalues: dict[str, str]) -> list[dict]:
         """Query the public network's files by keyvalue metadata.
 
+        Files with no `_owner` are left out.
+
         Args:
             keyvalues: Metadata key-value pairs to filter by
 
@@ -354,7 +379,8 @@ class PinataClient:
                     data = json.loads(await response.text())
 
                 for f in data.get("data", {}).get("files", []):
-                    seen.setdefault(f["cid"], _record(f))
+                    if _owned(f):
+                        seen.setdefault(f["cid"], _record(f))
 
                 next_token = data.get("data", {}).get("next_page_token")
                 if not next_token:
@@ -364,7 +390,7 @@ class PinataClient:
         return list(seen.values())
 
     async def get(self, cid: str) -> dict | None:
-        """The public network's record for `cid`, or None if it has none.
+        """The public network's owned record for `cid`, or None if it has none.
 
         Returns:
             The record (cid, name, keyvalues, network), or None
@@ -376,8 +402,8 @@ class PinataClient:
         ):
             response.raise_for_status()
             data = json.loads(await response.text())
-        files = data.get("data", {}).get("files", [])
-        return _record(files[0]) if files else None
+        owned = [f for f in data.get("data", {}).get("files", []) if _owned(f)]
+        return _record(owned[0]) if owned else None
 
     async def delete(self, component: Asset) -> None:
         """Delete a file from Pinata by querying for its internal ID first.
@@ -428,12 +454,13 @@ class PinataClient:
             The updated record: ``{cid, name, keyvalues, network}``
 
         Raises:
-            ValueError: when a key or value is longer than
-                ``MAX_KEYVALUE_CHARS``, before any request is made, or when
-                no public file exists for ``cid``
+            ValueError: when the stamped patch has no ``_owner`` or a key
+                or value longer than ``MAX_KEYVALUE_CHARS``, before any
+                request is made, or when no public file exists for ``cid``
         """
         kv = _stamp_owner(dict(keyvalues))
         _check_keyvalue_lengths(kv)
+        _check_owner(kv)
         async with aiohttp.ClientSession() as session:
             async with session.get(
                 f"{self.API_BASE}/files/{NETWORK}",
