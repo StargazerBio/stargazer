@@ -3,6 +3,8 @@ title: Public notebooks
 status: backlog
 priority: normal
 created: 2026-10-16
+blocked_by:
+  - devbox-postgres-index
 ---
 
 A notebook in a user's workspace is a plain file (ticket

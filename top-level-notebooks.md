@@ -3,6 +3,10 @@ title: The scRNA notebook moves to a top-level notebooks folder
 status: next
 priority: normal
 created: 2026-10-17
+blocked_by:
+  - local-remote-toggle
+  - devbox-postgres-index
+  - production-context-files
 ---
 
 Notebooks that aren't SDK tutorials live in the repo, in a top-level
