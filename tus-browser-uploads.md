@@ -1,8 +1,9 @@
 ---
 title: Resumable uploads up to 10 GB from the asset page
-status: backlog
+status: review
 priority: normal
 created: 2026-06-10
+pr: 72
 ---
 
 Uploading a file from your machine goes up to 10 GB, private or public, and
@@ -161,14 +162,14 @@ this goes second.
 
 ## Pieces
 
-- [ ] An incremental CID builder in `src/stargazer/utils/cid.py`: its own
+- [x] An incremental CID builder in `src/stargazer/utils/cid.py`: its own
       ticket, `incremental-cid` (split out 2026-10-18).
-- [ ] `StorageClient.upload` skips the transfer when the CID has a row
+- [x] `StorageClient.upload` skips the transfer when the CID has a row
       whose `uri` exists. A test in `tests/utils/test_storage.py`: a row
       pointing at a file outside the CID path, then `upload` of the same
       bytes → nothing written at the CID path, and the row's `uri`
       unchanged.
-- [ ] The TUS routes. Tests in `tests/unit/test_assets_routes.py`, against a
+- [x] The TUS routes. Tests in `tests/unit/test_assets_routes.py`, against a
       `file://` store in a temp dir and a `SqliteIndex`:
   - create, then three `PATCH`es → an index row whose CID is
     `compute_cid` of the file, and a download returns the same bytes
@@ -181,19 +182,13 @@ this goes second.
     written
   - a signed-in user who isn't the owner → 403; anonymous → 401
   - an upload idle past its timeout → aborted, and a `PATCH` to it → 404
-- [ ] The upload form sends private uploads with `tus-js-client` to
+- [x] The upload form sends private uploads with `tus-js-client` to
       `/assets/tus`, and shows a 10 GB limit for them.
-- [ ] The Pinata backend: a public upload's `POST` creates a Pinata TUS
-      upload, each chunk is passed on as a `PATCH`, and Pinata's CID has to
-      equal the builder's, as `StorageClient.publish` checks. Then the form
-      sends public uploads to `/assets/tus` too, and `/assets/sign` and the
-      browser→Pinata upload go. Tests against a fake Pinata TUS endpoint:
-      three chunks passed on in order, a CID mismatch → an error and no
-      record kept.
-- [ ] Docs: `docs/architecture/app.md` and
+- [x] The Pinata backend: split out as ticket `tus-public-uploads`.
+- [x] Docs: `docs/architecture/app.md` and
       `.opencode/reference/architecture/app_internals.md` (the upload path),
       and the upload limit in the user guides, in product terms.
-- [ ] Verify on Union with the test account's dashboard:
+- [x] Verify on Union with the test account's dashboard (private; the public half is in `tus-public-uploads`):
   - upload a private file over 5 GB from the asset page, take the browser
     offline partway (devtools), bring it back, and see it resume
   - upload a public file over 100 MB, see its CID in the Public tab, then
