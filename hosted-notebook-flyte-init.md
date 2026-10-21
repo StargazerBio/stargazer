@@ -1,11 +1,9 @@
 ---
 title: Hosted notebook kernels never reach the cluster
-status: review
+status: done
 priority: high
 created: 2026-10-20
 pr: 68
-blocked_by:
-  - notebook-pod-ephemeral-storage
 ---
 
 In a hosted notebook pod on Union, `flyte.run(...)` from the kernel quietly runs the task inside the pod. The notebooks' setup blocks call `flyte.init_from_config()` (`tutorials/execution.py:38`, `templates/basic.py:49`, `workflows/scrna_pipeline.py:45`). The pod has no Flyte config file, so that call leaves Flyte with no client, and `flyte.run` falls back to an in-process `_InlineRun`. So the Execution tutorial's "Run Remotely" section runs in the pod and shows a local `/tmp/flyte/metadata/...` path as its console URL. The "On the cluster" choice from ticket `local-remote-toggle` (`stargazer.notebooks.ui.dispatch`, which forces `mode="remote"`, merged in #62) fails outright. The MCP server's `flyte.init_from_config()` (`server.py:80`) is inferred to do the same when it runs in a pod.
@@ -120,3 +118,9 @@ The `Run.listall` names match the deployer's listing of `u-pryce`. The deployer 
 For comparison, a local run with no config anywhere gives the same shape: `resolve_config_path()=None`, client `None`, `flyte.run` → `_InlineRun` with url `/tmp/flyte/metadata/...`.
 
 Teardown: `nb-workflows-edit`, `nb-execution-edit` and `dashboard` deactivated. Every app in `u-pryce` is STOPPED, `active_runs` is `[]` for `u-pryce` and `flytesnacks`, and `u-pryce-development` has no pods. The probe left three demo `SampleSheet` assets and one `CohortSummary` in the test account's asset store, which is what the Execution tutorial does anyway. The added cells were in the image's copy of the Workflows tutorial, outside `/workspace`, so nothing was saved.
+
+## Outcome
+
+Shipped in PR #68 (merge `393a9c4`). `stargazer.config.init_flyte()` calls `flyte.init_in_cluster(...)` from the directory holding the `stargazer` package when run in a pod, and `flyte.init_from_config()` elsewhere; the notebooks, the MCP server and the tests call it. `tutorial_env` has its own image, and the notebook image bakes `uv.lock` so pod-built task images get stargazer's deps.
+
+Verified on Union with the test account: the Execution tutorial's section 4 run `umlbn8q8hw5lpnzxtxcd` and its section 6 "On the cluster" run `u9dd6c8bj8pb9tvgfvnz` both SUCCEEDED in `u-pryce`, with the user's store and index. Unit tier 520 passed. Left: runs are created by the platform key (ticket `org-wide-platform-key`); notebook-defined workflows and a workspace notebook's own tasks (ticket `notebook-cluster-runs`). No comments on the PR.
