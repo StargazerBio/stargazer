@@ -51,7 +51,9 @@ def _():
 
     import marimo as mo
 
-    flyte.init_from_config()
+    from stargazer.config import init_flyte
+
+    init_flyte()
 
     mo.md(
         """

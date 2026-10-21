@@ -33,4 +33,4 @@ Steps:
 - A `MISSING` line means two samples produced byte-identical files at that stage. The index keeps one row per CID, so the second sample's metadata replaced the first's, and the log shows a WARNING naming the CID.
 - `scrna-fetch` hits public IPFS gateways, which rate-limit with HTTP `429` after a few full downloads. Drive it at most once per run, and only when the change touches fetching.
 - With a real `PINATA_JWT` in the environment, `assemble()` also searches Pinata's public index, so a drive can pick up public records that aren't part of the run.
-- `flyte.init_from_config()` in the first cell reads `.flyte/config.yaml` but does not need the devbox. Tasks called directly from cells run in-process.
+- `init_flyte()` in the first cell reads `.flyte/config.yaml` but does not need the devbox. Tasks called directly from cells run in-process.

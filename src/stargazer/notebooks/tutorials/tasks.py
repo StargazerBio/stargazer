@@ -31,6 +31,7 @@ app = marimo.App(width="medium")
 with app.setup:
     import csv
     import json
+    import os
     from dataclasses import dataclass
     from typing import ClassVar
 
@@ -38,16 +39,36 @@ with app.setup:
     import marimo as mo
 
     from stargazer.assets.asset import Asset
+    from stargazer.config import (
+        IMAGE_PLATFORM,
+        PROJECT_ROOT,
+        STARGAZER_ENV_VARS,
+        STARGAZER_SECRETS,
+    )
     from stargazer.notebooks.tutorials.assets import SampleSheet
 
     # Declared here (not in a cell) so the reusable task/asset below can
     # reference it and stay importable. No Flyte init happens in this
     # notebook — defining a task needs none, and running it is the
-    # execution tutorial's job.
+    # execution tutorial's job. A cluster pod imports this module to find
+    # the task, so its image carries stargazer and marimo.
     tutorial_env = flyte.TaskEnvironment(
         name="tutorial",
         description="Lightweight env for the tutorial notebooks.",
+        image=(
+            flyte.Image.from_debian_base(
+                name="stargazer-tutorial",
+                registry=os.environ.get("STARGAZER_REGISTRY"),
+                platform=IMAGE_PLATFORM,
+            )
+            .with_uv_project(
+                PROJECT_ROOT / "pyproject.toml", project_install_mode="install_project"
+            )
+            .with_pip_packages("marimo>=0.23,<0.24")
+        ),
         resources=flyte.Resources(cpu=1, memory="512Mi"),
+        env_vars=STARGAZER_ENV_VARS,
+        secrets=STARGAZER_SECRETS,
     )
 
 

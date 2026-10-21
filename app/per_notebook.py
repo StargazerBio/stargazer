@@ -186,8 +186,11 @@ notebook_app_img_recipe = (
     # Bake the stargazer source tree at `/stargazer/` so each notebook's
     # `[tool.uv.sources] stargazer = { path = "/stargazer", editable = true }`
     # resolves inside the marimo --sandbox venv. Image-shipped notebooks live
-    # under `/stargazer/src/stargazer/notebooks/{tutorials,workflows}/`.
+    # under `/stargazer/src/stargazer/notebooks/{tutorials,workflows}/`. The
+    # lock is there for the task images a kernel builds (`with_uv_project`):
+    # Union's builder skips a uv project layer that comes without one.
     .with_source_file(PROJECT_ROOT / "pyproject.toml", "/stargazer/")
+    .with_source_file(PROJECT_ROOT / "uv.lock", "/stargazer/")
     .with_source_file(PROJECT_ROOT / "README.md", "/stargazer/")
     .with_source_folder(PROJECT_ROOT / "src", "/stargazer/src")
     .with_source_folder(PROJECT_ROOT / "app", "/stargazer/app")
