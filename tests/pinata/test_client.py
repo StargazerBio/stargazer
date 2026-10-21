@@ -172,7 +172,12 @@ async def test_update_metadata_merges(tmp_path):
 
     url = await client.create_signed_upload_url(
         filename="update_meta_test.txt",
-        keyvalues={"asset": "never_registered_key", "stage": "before", "keep": "me"},
+        keyvalues={
+            "asset": "never_registered_key",
+            "stage": "before",
+            "keep": "me",
+            "_owner": "integration-test",
+        },
         expires=120,
         max_file_size=1024,
     )
@@ -252,9 +257,8 @@ def _unique_file(tmp_path, tag: str):
 
 
 @pytest.mark.asyncio
-async def test_upload_at_the_keyvalue_cap(tmp_path, monkeypatch):
+async def test_upload_at_the_keyvalue_cap(tmp_path):
     """An R1 with four extras stamps to exactly 9 keys, and all 9 come back."""
-    monkeypatch.setenv("STARGAZER_OWNER", "integration-test")
     tag = uuid.uuid4().hex
     client = PinataClient()
     extras = {"probe": tag, "x0": "v", "x1": "v", "x2": "v"}
@@ -271,9 +275,8 @@ async def test_upload_at_the_keyvalue_cap(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_upload_over_the_keyvalue_cap_stores_nothing(tmp_path, monkeypatch):
+async def test_upload_over_the_keyvalue_cap_stores_nothing(tmp_path):
     """One key past the cap is refused before anything is sent."""
-    monkeypatch.setenv("STARGAZER_OWNER", "integration-test")
     tag = uuid.uuid4().hex
     client = PinataClient()
     extras = {"probe": tag, "x0": "v", "x1": "v", "x2": "v", "x3": "v"}
@@ -287,9 +290,8 @@ async def test_upload_over_the_keyvalue_cap_stores_nothing(tmp_path, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_alignment_uploads_with_every_field_and_owner(tmp_path, monkeypatch):
+async def test_alignment_uploads_with_every_field_and_owner(tmp_path):
     """An Alignment with all its fields set, plus _owner, fits the cap."""
-    monkeypatch.setenv("STARGAZER_OWNER", "integration-test")
     tag = uuid.uuid4().hex
     client = PinataClient()
     aln = Alignment(
@@ -313,9 +315,8 @@ async def test_alignment_uploads_with_every_field_and_owner(tmp_path, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_publish_puts_a_stored_asset_on_the_public_network(tmp_path, monkeypatch):
+async def test_publish_puts_a_stored_asset_on_the_public_network(tmp_path):
     """A stored asset published keeps its CID and keyvalues on Pinata."""
-    monkeypatch.setenv("STARGAZER_OWNER", "integration-test")
     tag = uuid.uuid4().hex
     client = StorageClient(
         local_dir=tmp_path / "cache",

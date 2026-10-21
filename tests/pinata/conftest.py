@@ -2,7 +2,8 @@
 
 These tests call the real Pinata API with the key in tests/.secrets/pinata_jwt.
 The root conftest strips PINATA_JWT before anything imports stargazer; each
-test here gets it back for its own duration.
+test here gets it back for its own duration, and uploads as the owner
+`integration-test`, since every public record needs one.
 """
 
 import pytest
@@ -11,7 +12,7 @@ from conftest import SECRETS_DIR
 
 @pytest.fixture(autouse=True)
 def pinata_jwt(monkeypatch):
-    """Set PINATA_JWT from tests/.secrets/pinata_jwt for the test.
+    """Set PINATA_JWT from tests/.secrets/pinata_jwt, and an owner, for the test.
 
     A run without the key fails rather than skipping, so it can't pass by
     testing nothing.
@@ -23,3 +24,4 @@ def pinata_jwt(monkeypatch):
     if not jwt:
         pytest.fail(f"Pinata JWT file is empty: {jwt_file}")
     monkeypatch.setenv("PINATA_JWT", jwt)
+    monkeypatch.setenv("STARGAZER_OWNER", "integration-test")
