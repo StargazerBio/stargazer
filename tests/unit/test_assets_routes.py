@@ -543,6 +543,24 @@ class TestDownload:
 
 
 class TestNotConfigured:
+    def test_public_routes_503_when_public_assets_are_off(
+        self, fake_pinata, private_store, client, monkeypatch
+    ):
+        monkeypatch.setattr(config, "PUBLIC_ASSETS", False)
+        _auth(client, OWNER)
+        assert (
+            client.get("/assets/list", params={"network": "public"}).status_code == 503
+        )
+        resp = client.post(
+            "/assets/sign",
+            json={"filename": "x.bam", "keyvalues": {"asset": "alignment"}},
+        )
+        assert resp.status_code == 503
+        assert fake_pinata.query_calls == fake_pinata.sign_calls == []
+        assert (
+            client.get("/assets/list", params={"network": "private"}).status_code == 200
+        )
+
     def test_routes_503_without_jwt(self, fake_pinata, client, monkeypatch):
         monkeypatch.delenv("PINATA_JWT", raising=False)
         _auth(client)

@@ -273,6 +273,10 @@ def deploy_dashboard(
     # (`app.identity`), when the deployer names them.
     if admins := os.environ.get("STARGAZER_ADMIN_SUBJECTS"):
         env_vars["STARGAZER_ADMIN_SUBJECTS"] = admins
+    # Public assets turned off for every dashboard the deploy touches
+    # (`app.config.PUBLIC_ASSETS`), when the deployer says so.
+    if public := os.environ.get("STARGAZER_PUBLIC_ASSETS"):
+        env_vars["STARGAZER_PUBLIC_ASSETS"] = public
     # In-cluster init can't discover the org in an app pod; bake the deployer's.
     if org := get_init_config().org:
         env_vars["FLYTE_ORG"] = org

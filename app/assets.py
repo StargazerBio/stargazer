@@ -14,7 +14,8 @@ page (`templates/_assets.html`) over two networks:
   so the bytes never transit the dashboard, and downloads redirect to the
   gateway. Pinata's private network is never used: with a shared key it
   would keep nothing private. Without a key (the devbox, which drops app
-  secrets, or a local run with none) the public routes 503 and the
+  secrets, or a local run with none), or with public assets turned off for
+  the deploy (`config.PUBLIC_ASSETS`), the public routes 503 and the
   browser's Public tab says shared data isn't available.
 
 Auth model: Union's login sits in front of these routes, so on the hosted
@@ -115,10 +116,17 @@ def _size(n: int) -> str:
     return f"{n // 1024**2} MB" if n % 1024**2 == 0 else f"{n} bytes"
 
 
+def public_assets_on() -> bool:
+    """Whether this dashboard offers public assets: the org's key, and not off."""
+    return config.PUBLIC_ASSETS and bool(os.environ.get("PINATA_JWT"))
+
+
 def _require_pinata() -> None:
-    """Raise 503 when no PINATA_JWT is present — the page reads Pinata only."""
-    if not os.environ.get("PINATA_JWT"):
-        raise HTTPException(status_code=503, detail="Pinata not configured")
+    """Raise 503 when the dashboard doesn't offer public assets."""
+    if not public_assets_on():
+        raise HTTPException(
+            status_code=503, detail="Shared data isn't available on this deployment."
+        )
 
 
 async def _public_records() -> list[dict]:
