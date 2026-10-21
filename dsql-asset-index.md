@@ -92,21 +92,19 @@ This doesn't need that.
   from it. That's what makes this work without Union where storage
   isolation doesn't (ticket `per-user-storage-isolation`).
 
-**Not airtight while the org key is in every pod:** a pod can start a run in
-another user's project, and that run carries that project's token (ticket
-`org-wide-platform-key`).
-
 ## Design
 
 - One DSQL cluster for the org, single-region, us-west-2, created once by
   hand.
-- One schema per user, holding the same `assets` table `SqliteIndex`
-  creates (keyvalues as `jsonb`). One database role per user, mapped to
-  their IAM role with `AWS IAM GRANT`, holding `USAGE` on their schema
-  only. DSQL manages permissions through schema-level grants.
+- One shared schema, `assets`, and one table per user in it,
+  `assets.u_<handle>`, with `SqliteIndex`'s columns (keyvalues as `jsonb`).
+  One database role per user, mapped to their IAM role with `AWS IAM
+  GRANT`, holding `USAGE` on the schema and `SELECT`, `INSERT`, `UPDATE`,
+  `DELETE` on its own table only. A database holds at most 1,000 tables;
+  moving to one shared table later is a migration.
 - `STARGAZER_INDEX_URL` picks the backend in `make_index`: a file path
   (SQLite, unchanged), a Postgres URL (devbox), or a DSQL endpoint with
-  schema and role (Union). The exact URL form is decided in the work.
+  table and role (Union). The exact URL form is decided in the work.
 - The dashboard's asset page uses the same index class as every other
   client.
 
@@ -114,8 +112,8 @@ another user's project, and that run carries that project's token (ticket
 
 - [ ] **Piece 0, the tenant check**, by hand, with the user's admin access
   (mine is read-only):
-  - Create the cluster. For `u-pryce`, create the IAM role, the schema, the
-    table, the database role and the grants.
+  - Create the cluster and the `assets` schema. For `u-pryce`, create the
+    IAM role, the table, the database role and the grants.
   - From a task in `u-pryce-development`: assume the role from the token
     file, get a DSQL token, connect, upsert, and query by a keyvalue.
   - From a task in `flytesnacks`: `AssumeRoleWithWebIdentity` on
@@ -130,11 +128,11 @@ another user's project, and that run carries that project's token (ticket
 - [ ] **Onboarding:**
   - `stargazer-users onboard` creates, on every call and safely when it
     already exists, the IAM role (trust as above, `dsql:DbConnect` on the
-    cluster), then the schema, table, role and grants as the DSQL admin.
+    cluster), then the user's table, role and grants as the DSQL admin.
   - This needs the admin's AWS credentials (`iam:CreateRole`,
     `iam:PutRolePolicy`, `dsql:DbConnectAdmin`). Today onboarding needs
     only Flyte credentials. `upgrade` needs no AWS access.
-  - `offboard` deletes the IAM role and keeps the schema, as it keeps the
+  - `offboard` deletes the IAM role and keeps the table, as it keeps the
     user's notebooks.
 - [ ] **Deploys:** dashboards, notebook pods and the runs they start get
   the DSQL `STARGAZER_INDEX_URL`.
@@ -156,7 +154,7 @@ another user's project, and that run carries that project's token (ticket
 - The germline workflow runs end to end on the test account.
 - A dashboard redeploy while writes are going in costs no index call, since
   none reach the dashboard.
-- A task in another project is refused on the user's schema.
+- A task in another project is refused on the user's table.
 
 ### Piece 0 runbook
 
@@ -165,17 +163,10 @@ the repo. Every value that exists before the cluster is filled in, read
 2026-10-21 with `AWS_PROFILE=claude` (read-only). It takes minutes, plus one
 image build on the first `flyte run`.
 
-**Read first: DSQL allows 10 schemas in a database, and a cluster has one
-database.** The quotas page lists the 10 as not configurable; awslabs' DSQL
-agent skill measured it as 10 not counting `public` and `sys`. One schema
-per user caps a cluster at 10 users. The runbook still uses schema
-`u_pryce`, because what it tests (an IAM-mapped database role, refused
-wherever it holds no grant) carries over. Pick the layout before Piece 1:
-- a table per user in one shared schema, isolated by table grants (1,000
-  tables per database); the probe checks that refusal too;
-- a cluster per user (20 per region by default, raisable), keeping `assets`;
-- one shared table with an owner column, giving up database-enforced
-  isolation (`CREATE POLICY` isn't in DSQL's supported-SQL list).
+The layout is one table per user in the shared `assets` schema (DSQL caps
+a database at 10 schemas and 1,000 tables, and a cluster has one database).
+`assets.u_other` stands in for a second user's table, so the probe can show
+`u_pryce` is refused on it.
 
 **Filled in, measured read-only:**
 - Account `791359099513`. OIDC provider
@@ -262,28 +253,28 @@ locally.
 **3. Database objects, as the DSQL admin.** psql autocommits each
 statement, so every DDL statement is its own transaction (DSQL allows one
 per transaction). `u-pryce` becomes `u_pryce`, since an unquoted identifier
-can't hold `-`.
+can't hold `-`. The schema is created once for every user; the table, role
+and grants are per user.
 
 ```bash
 export PGPASSWORD=$(aws dsql generate-db-connect-admin-auth-token --hostname "$DSQL_ENDPOINT" --region us-west-2 --expires-in 3600)
 dsql_psql -U admin <<'EOF'
-CREATE SCHEMA u_pryce;
-CREATE TABLE u_pryce.assets (cid TEXT PRIMARY KEY, uri TEXT NOT NULL, name TEXT NOT NULL, keyvalues JSONB NOT NULL, created_at TEXT NOT NULL);
+CREATE SCHEMA assets;
+CREATE TABLE assets.u_pryce (cid TEXT PRIMARY KEY, uri TEXT NOT NULL, name TEXT NOT NULL, keyvalues JSONB NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE assets.u_other (cid TEXT PRIMARY KEY, uri TEXT NOT NULL, name TEXT NOT NULL, keyvalues JSONB NOT NULL, created_at TEXT NOT NULL);
 CREATE ROLE u_pryce WITH LOGIN;
 AWS IAM GRANT u_pryce TO 'arn:aws:iam::791359099513:role/stargazer-index-u-pryce';
-GRANT USAGE ON SCHEMA u_pryce TO u_pryce;
-GRANT SELECT, INSERT, UPDATE, DELETE ON u_pryce.assets TO u_pryce;
-CREATE TABLE public.other_user_assets (cid TEXT PRIMARY KEY);
-GRANT USAGE ON SCHEMA public TO u_pryce;
+GRANT USAGE ON SCHEMA assets TO u_pryce;
+GRANT SELECT, INSERT, UPDATE, DELETE ON assets.u_pryce TO u_pryce;
 SELECT pg_role_name, arn FROM sys.iam_pg_role_mappings;
-SELECT nspname FROM pg_namespace ORDER BY 1;
+SELECT tablename FROM pg_tables WHERE schemaname = 'assets' ORDER BY 1;
 EOF
 ```
 
 - The table is `SqliteIndex`'s, keyvalues as `JSONB` (DSQL stores `jsonb`
   up to 1 MiB a value and can't index it; `cid` is the key).
-- `other_user_assets` is a decoy for the table-per-user layout: `u_pryce`
-  holds `USAGE` on its schema and no grant on the table.
+- `assets.u_other` gets no grant to `u_pryce`, which holds `USAGE` on the
+  schema like every user will.
 - Each statement follows DSQL's docs or the examples in awslabs' DSQL
   skill; none has run on DSQL yet. If one is refused, note it and go on.
 
@@ -326,13 +317,13 @@ env = flyte.TaskEnvironment(
 
 # SqliteIndex's and PostgresIndex's SQL (src/stargazer/utils/index.py).
 COLS = "cid, uri, name, keyvalues, created_at"
-SCHEMA = ("CREATE TABLE IF NOT EXISTS assets (cid TEXT PRIMARY KEY, uri TEXT NOT NULL, "
+SCHEMA = ("CREATE TABLE IF NOT EXISTS {table} (cid TEXT PRIMARY KEY, uri TEXT NOT NULL, "
           "name TEXT NOT NULL, keyvalues {json} NOT NULL, created_at TEXT NOT NULL)")
-UPSERT = (f"INSERT INTO assets ({COLS}) VALUES (?, ?, ?, CAST(? AS {{json}}), ?) "
+UPSERT = (f"INSERT INTO {{table}} ({COLS}) VALUES (?, ?, ?, CAST(? AS {{json}}), ?) "
           "ON CONFLICT (cid) DO UPDATE SET uri = excluded.uri, name = excluded.name, "
           f"keyvalues = excluded.keyvalues RETURNING {COLS}")
-MERGE = f"UPDATE assets SET keyvalues = {{merge}} WHERE cid = ? RETURNING {COLS}"
-QUERY = f"SELECT {COLS} FROM assets WHERE {{kv}} = ? AND {{kv}} IN (?, ?)"
+MERGE = f"UPDATE {{table}} SET keyvalues = {{merge}} WHERE cid = ? RETURNING {COLS}"
+QUERY = f"SELECT {COLS} FROM {{table}} WHERE {{kv}} = ? AND {{kv}} IN (?, ?)"
 ENGINES = {
     "pg": {"json": "JSONB", "merge": "keyvalues || CAST(? AS JSONB)",
            "kv": "(keyvalues ->> CAST(? AS TEXT))"},
@@ -347,7 +338,7 @@ def _row(r: tuple) -> dict:
     return dict(zip(COLS.split(", "), [*r[:3], kv, r[4]], strict=True))
 
 
-def _calls(run, engine: str) -> dict:
+def _calls(run, engine: str, table: str) -> dict:
     """Insert, upsert on conflict, merge, query by keyvalue, delete: what each gave."""
     key = (lambda k: k) if engine == "pg" else (lambda k: f'$."{k}"')
     kv1 = json.dumps({"asset": "dsql_probe", "sample_id": "S1"})
@@ -359,12 +350,12 @@ def _calls(run, engine: str) -> dict:
         "merge": (MERGE, [json.dumps({"sample_id": "S3"}), "c1"]),
         "query_hit": (QUERY, [*find, "S3", "S9"]),
         "query_miss": (QUERY, [*find, "S1", "S9"]),
-        "delete": ("DELETE FROM assets WHERE cid = ?", ["c1"]),
-        "after_delete": (f"SELECT {COLS} FROM assets WHERE cid = ?", ["c1"]),
+        "delete": ("DELETE FROM {table} WHERE cid = ?", ["c1"]),
+        "after_delete": (f"SELECT {COLS} FROM {{table}} WHERE cid = ?", ["c1"]),
     }
     out = {}
     for name, (sql, params) in steps.items():
-        cur = run(sql.format(**ENGINES[engine]), params)
+        cur = run(sql.format(**ENGINES[engine], table=table), params)
         out[name] = [_row(r) for r in cur.fetchall()] if cur.description else "done"
     return out
 
@@ -399,21 +390,19 @@ def _try(fn) -> str:
 
 def _as_db_role(conn, db_role: str) -> dict:
     """What the database role can do on one connection, and the index SQL's results."""
-    who = "SELECT current_user, current_schema(), current_setting('search_path')"
-    out = {"whoami": conn.execute(who).fetchone()}
-    if out["whoami"][1] != db_role:
-        out["set_search_path"] = _try(lambda: conn.execute(f"SET search_path = {db_role}"))
-    ddl = SCHEMA.format(json="JSONB")
+    table = f"assets.{db_role}"
+    out = {"whoami": conn.execute("SELECT current_user").fetchone()[0]}
+    ddl = SCHEMA.format(json="JSONB", table=table)
     out["create_table_if_not_exists"] = _try(lambda: conn.execute(ddl))
-    other = "SELECT count(*) FROM public.other_user_assets"
-    out["read_other_table"] = _try(lambda: conn.execute(other))
+    out["read_other_table"] = _try(lambda: conn.execute("SELECT count(*) FROM assets.u_other"))
     try:
-        pg = _calls(lambda sql, p: conn.execute(sql.replace("?", "%s"), p), "pg")
+        pg = _calls(lambda sql, p: conn.execute(sql.replace("?", "%s"), p), "pg", table)
     except psycopg.Error as err:
         pg = f"{type(err).__name__} {err.sqlstate}: {err}"
     lite = sqlite3.connect(":memory:")
-    lite.execute(SCHEMA.format(json="TEXT"))
-    return out | {"index_calls": pg, "same_as_sqlite": pg == _calls(lite.execute, "sqlite")}
+    lite.execute(SCHEMA.format(json="TEXT", table="assets"))
+    same = pg == _calls(lite.execute, "sqlite", "assets")
+    return out | {"index_calls": pg, "same_as_sqlite": same}
 
 
 @env.task
@@ -490,58 +479,51 @@ Each run prints a JSON report and returns it as its output. What to expect:
     client plus local signing), `connect` (TLS and IAM auth), `select_1`.
   - `tls`: `verify-full` against certifi's bundle, which carries Amazon Root
     CA 1, or `require` with `verify_full_error`.
-  - `whoami`: `["u_pryce", "u_pryce", "\"$user\", public"]` if DSQL keeps
-    Postgres's default search path, so `PostgresIndex`'s unqualified
-    `assets` needs no `SET`. Otherwise `set_search_path` says whether `SET`
-    works.
+  - `whoami`: `u_pryce`.
   - `create_table_if_not_exists`: Postgres 16 refuses it with `42501
-    permission denied for schema u_pryce` although the table exists. If
-    DSQL does too, `PostgresIndex`'s constructor can't run as a user's
-    role: Piece 1 skips the DDL on DSQL, or onboarding grants `CREATE` on
-    the schema.
-  - `read_other_table`: `42501 permission denied for table
-    other_user_assets`.
+    permission denied for schema assets` although the table exists. If DSQL
+    does too, `PostgresIndex`'s constructor can't run as a user's role, so
+    on DSQL it skips the DDL and onboarding creates the table.
+  - `read_other_table`: `42501 permission denied for table u_other`.
   - `same_as_sqlite: true`: the insert, the `ON CONFLICT` update (keeping
     `created_at`), the `||` merge, a `->>` hit and miss, and the delete
     return what SQLite returns. `false`, or an error in `index_calls`, most
     likely means `RETURNING`, which DSQL's supported-SQL page doesn't list.
   - `user_role_as_admin`: refused (no `dsql:DbConnectAdmin`).
 
-The Postgres 16 values above were measured locally (`postgres:16-alpine`):
-step 3's SQL without the `AWS IAM` line, then the probe's `_as_db_role` as
-`u_pryce`, then the teardown below. Its SQLite side ran on SQLite 3.47.
+The Postgres 16 values above were measured locally on 2026-10-21
+(`postgres:16-alpine`): step 3's SQL without the `AWS IAM` and `sys` lines,
+then the probe's `_as_db_role` as `u_pryce`, then the teardown below.
 
-Then drop the decoy:
+Then drop the stand-in second user's table:
 
 ```bash
-dsql_psql -U admin <<'EOF'
-DROP TABLE public.other_user_assets;
-REVOKE USAGE ON SCHEMA public FROM u_pryce;
-EOF
+dsql_psql -U admin -c 'DROP TABLE assets.u_other;'
 ```
 
 **5. Record** under `## Piece 0 results (<date>)`, then tick Piece 0:
 - The cluster ID, ARN and endpoint, and the time to `ACTIVE`.
-- Step 3: any refused statement, the mapping row, the schema list, and the
+- Step 3: any refused statement, the mapping row, the table list, and the
   unmapped login's refusal.
 - Both probe reports verbatim, with their run names.
-- Decisions for Piece 1: the layout (10 schemas); skipping the DDL or
-  granting `CREATE`; and, from the timings, whether the client caches the
+- Decisions for Piece 1: from the timings, whether the client caches the
   assumed credentials (1 h) and the token (15 min by default, a week at
   most) per process and reuses connections. DSQL accepts 100 new
   connections a second per cluster (1,000 burst) and ends each after an
   hour.
 
-**Teardown, to undo it.** After the decoy is gone (order measured on
-Postgres 16):
+**Teardown, to undo it.** After `assets.u_other` is gone. Order measured on
+Postgres 16: `DROP ROLE` fails while the role still holds `USAGE` on the
+schema.
 
 ```bash
 export PGPASSWORD=$(aws dsql generate-db-connect-admin-auth-token --hostname "$DSQL_ENDPOINT" --region us-west-2 --expires-in 3600)
 dsql_psql -U admin <<'EOF'
 AWS IAM REVOKE u_pryce FROM 'arn:aws:iam::791359099513:role/stargazer-index-u-pryce';
-DROP TABLE u_pryce.assets;
-DROP SCHEMA u_pryce;
+DROP TABLE assets.u_pryce;
+REVOKE USAGE ON SCHEMA assets FROM u_pryce;
 DROP ROLE u_pryce;
+DROP SCHEMA assets;
 EOF
 aws iam delete-role-policy --role-name "$ROLE" --policy-name dsql-connect
 aws iam delete-role --role-name "$ROLE"
@@ -558,9 +540,9 @@ aws dsql wait cluster-not-exists --identifier "$CLUSTER_ID"
 
 **Unverified**, because nothing here could run against DSQL; the runbook's
 own output settles each:
-- On DSQL: all of step 3's SQL, and in particular `RETURNING`, the default
-  search path, `CREATE TABLE IF NOT EXISTS` without `CREATE`, `DROP SCHEMA`
-  (the docs mention dropping one) and `DROP ROLE`.
+- On DSQL: all of step 3's SQL, and in particular table-level `GRANT` (the
+  docs describe permissions as schema-level grants), `RETURNING`, `CREATE
+  TABLE IF NOT EXISTS` without `CREATE`, `DROP SCHEMA` and `DROP ROLE`.
 - From the pod: `verify-full` with certifi's bundle and
   `sslnegotiation=direct`. From Docker: psql 17's TLS to DSQL.
 - The refusal messages, and whether the remote builder builds the probe
