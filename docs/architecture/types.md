@@ -83,7 +83,7 @@ See the [Catalog](../reference/catalog.md#asset-types) for a complete list of re
 A companion is a file a tool expects beside another, such as an index or a sequence dictionary. It records that file's CID in its `companion_of` keyvalue. When `fetch()` is called on an asset:
 
 1. Downloads the asset itself
-2. Queries for assets whose `companion_of` equals this asset's CID: the user's own, or the public tier's when the user has none, never a mix of the two
+2. Queries for assets whose `companion_of` equals this asset's CID: the user's own, or the public tier's when the user has none, never a mix of the two. Public ones come only from the asset's own publisher
 3. Downloads them into the same directory, so tools find an index next to its file
 4. Returns the asset's local path
 

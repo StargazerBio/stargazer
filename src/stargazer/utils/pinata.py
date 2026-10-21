@@ -65,6 +65,16 @@ def _tus_metadata(filename: str, keyvalues: dict[str, str]) -> str:
     )
 
 
+def _record(f: dict) -> dict:
+    """A Pinata file listing entry as a public record."""
+    return {
+        "cid": f["cid"],
+        "name": f.get("name", ""),
+        "keyvalues": f.get("keyvalues", {}),
+        "network": NETWORK,
+    }
+
+
 def _stamp_owner(kv: dict[str, str]) -> dict[str, str]:
     """Inject ``_owner`` from STARGAZER_OWNER into upload keyvalues.
 
@@ -344,15 +354,7 @@ class PinataClient:
                     data = json.loads(await response.text())
 
                 for f in data.get("data", {}).get("files", []):
-                    seen.setdefault(
-                        f["cid"],
-                        {
-                            "cid": f["cid"],
-                            "name": f.get("name", ""),
-                            "keyvalues": f.get("keyvalues", {}),
-                            "network": NETWORK,
-                        },
-                    )
+                    seen.setdefault(f["cid"], _record(f))
 
                 next_token = data.get("data", {}).get("next_page_token")
                 if not next_token:
@@ -360,6 +362,22 @@ class PinataClient:
                 params["pageToken"] = next_token
 
         return list(seen.values())
+
+    async def get(self, cid: str) -> dict | None:
+        """The public network's record for `cid`, or None if it has none.
+
+        Returns:
+            The record (cid, name, keyvalues, network), or None
+        """
+        url = f"{self.API_BASE}/files/{NETWORK}"
+        async with (
+            aiohttp.ClientSession() as session,
+            session.get(url, headers=self._headers(), params={"cid": cid}) as response,
+        ):
+            response.raise_for_status()
+            data = json.loads(await response.text())
+        files = data.get("data", {}).get("files", [])
+        return _record(files[0]) if files else None
 
     async def delete(self, component: Asset) -> None:
         """Delete a file from Pinata by querying for its internal ID first.

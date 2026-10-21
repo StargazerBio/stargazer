@@ -15,7 +15,8 @@ Where asset bytes and metadata live, and the local cache in front of them.
   set, `query()` merges Pinata's public records in (the user's own row wins
   on a shared CID), and public files download from the IPFS gateway.
   `companions()` doesn't merge: it asks Pinata only when the user has no
-  companions for the CID.
+  companions for the CID, and takes only those published by whoever
+  published the CID itself.
 - **The cache** is `<STARGAZER_LOCAL>/<cid>/<name>`. Uploads seed it,
   downloads fill it, and `Asset.fetch()` hardlinks companions next to their
   asset.
@@ -248,6 +249,11 @@ class StorageClient:
         public files built separately (bwa reading a `.bwt` from one build
         and a `.sa` from another), and the lookup makes no Pinata call.
 
+        Public companions count only when their `_owner` also published the
+        parent, so two publishers' builds of a popular reference are never
+        mixed either, and a companion of a file nobody published publicly has
+        no publisher to follow and isn't taken.
+
         Returns:
             Rows with `cid`, `uri`, `name` and `keyvalues`
         """
@@ -255,7 +261,15 @@ class StorageClient:
         if rows or self.public is None:
             return rows
         records = await self.public.query({"companion_of": cid})
-        return [self._public_record(r) for r in records]
+        if not records:
+            return []
+        parent = await self.public.get(cid)
+        publisher = parent["keyvalues"].get("_owner") if parent else None
+        return [
+            self._public_record(r)
+            for r in records
+            if publisher and r["keyvalues"].get("_owner") == publisher
+        ]
 
     async def get(self, cid: str) -> dict | None:
         """The user's index row for `cid`, or None."""
