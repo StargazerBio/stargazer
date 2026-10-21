@@ -179,7 +179,7 @@ def test_with_setup_values_replaces_a_declared_value():
 
 
 def test_with_setup_values_declares_a_missing_value_after_the_imports():
-    """A value the block lacks is added after its imports, before the rest."""
+    """A value the block lacks gets its own line after the imports, before the rest."""
     setup = (
         "with app.setup:\n"
         "    import flyte\n"
@@ -188,7 +188,7 @@ def test_with_setup_values_declares_a_missing_value_after_the_imports():
     )
     src = with_setup_values(_notebook(setup), main_name="QC")
     assert setup_body(src) == (
-        'import flyte\nmain_name = "QC"\n\nmain_resources = flyte.Resources(cpu=1)\n'
+        'import flyte\n\nmain_name = "QC"\n\nmain_resources = flyte.Resources(cpu=1)\n'
     )
 
 

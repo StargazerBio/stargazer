@@ -296,7 +296,10 @@ def with_setup_values(source: str, **values: str) -> str:
                 if not isinstance(s, ast.Import | ast.ImportFrom):
                     break
                 imports.append(s)
-            at = imports[-1].end_lineno if imports else block.body[0].lineno - 1
-            lines.insert(at, indent + line)
+            if imports:
+                at = imports[-1].end_lineno
+                lines[at:at] = ["\n", indent + line]
+            else:
+                lines.insert(block.body[0].lineno - 1, indent + line)
         source = _replace_block(source, "".join(lines))
     return source
