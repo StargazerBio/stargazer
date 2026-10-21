@@ -7,16 +7,22 @@ goes through the dashboard's `/launch` handler, which spawns a
 per-notebook AppEnvironment whose image is built programmatically by
 `app.per_notebook.notebook_app_img_recipe`.
 
-A notebook can declare its own pod image in its setup block, as a
-`main_img` built on `notebook_base`:
+A notebook declares its own pod in its setup block: `main_resources`, and
+`main_img` built on `notebook_base`. The dashboard tile's name and blurb are
+declared there too:
 
     with app.setup:
+        import flyte
+
         from stargazer.notebooks import notebook_base
 
+        main_name = "Variant QC"
+        main_description = "bcftools stats on new calls."
+        main_resources = flyte.Resources(cpu=2, memory="4Gi")
         main_img = notebook_base.with_apt_packages("bcftools")
 
-The dashboard evaluates that expression at launch and serves the notebook on
-the built image.
+At launch the dashboard sizes the pod from `main_resources` and serves the
+notebook on the built image.
 
 Navigation between notebooks lives on the dashboard; notebooks themselves
 carry no nav chrome. The dashboard tile registry is `app/notebooks.py`.

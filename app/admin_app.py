@@ -18,8 +18,10 @@ integration. It has three jobs:
    setup. On Union its header links to the project's runs in the Union
    console (`config.CONSOLE_URL`).
 
-2. **Workspace actions.** Create, settings, delete, copy and download, all
-   against the workspace store.
+2. **Workspace actions.** Create, setup, delete, copy and download, all
+   against the workspace store. A notebook's tile name, description and pod
+   resources are declared in its setup block (`app.notebook_meta`), which
+   the tile's gear edits.
 
 3. **Launch broker.** `POST /launch` builds a per-notebook AppEnvironment via
    `app.per_notebook.per_notebook_env(...)`, owned by the same user, serves
@@ -74,14 +76,13 @@ from app.index_api import router as index_router
 from app.init import init
 from app.notebook_image import MainImgError, evaluate_main_img, extract_main_img
 from app.notebook_meta import (
-    DEFAULT_RESOURCES,
-    NotebookResources,
-    memory_to_gib,
-    parse_notebook_description,
-    parse_notebook_name,
-    parse_notebook_resources,
-    resources_from_inputs,
-    with_stargazer_resources,
+    SetupError,
+    notebook_description,
+    notebook_name,
+    notebook_resources,
+    replace_setup_block,
+    setup_block_text,
+    with_setup_values,
 )
 from app.notebooks import (
     SEED_SLUGS,
@@ -324,27 +325,13 @@ def _notebook_slug(name: str) -> str | None:
     return slug
 
 
-def _tile_dict(
-    slug: str,
-    title: str,
-    description: str,
-    section: str,
-    *,
-    cpu: int | None = None,
-    memory: int | None = None,
-) -> dict:
-    """Build the context dict consumed by `_tile.html`.
-
-    `cpu`/`memory` (whole GiB) are carried only for workspace tiles — they
-    seed the settings modal's fields via the gear button's data attributes.
-    """
+def _tile_dict(slug: str, title: str, description: str, section: str) -> dict:
+    """Build the context dict consumed by `_tile.html`."""
     return {
         "slug": slug,
         "title": title,
         "description": description,
         "section": section,
-        "cpu": cpu,
-        "memory": memory,
     }
 
 
@@ -361,31 +348,26 @@ def _display_name(filename: str) -> str:
 _GENERIC_WS_DESC = "Personal workspace notebook."
 
 
-def _workspace_tile_dict(
-    slug: str, cpu: int, memory: int, description: str, name: str = ""
-) -> dict:
-    """A workspace tile carrying its editable resources + blurb for the modal.
+def _workspace_tile_dict(slug: str, name: str, description: str) -> dict:
+    """A workspace tile titled by the notebook's `main_name` and `main_description`.
 
-    `name` is the title the user typed at creation, preserved verbatim; when
-    absent the title falls back to a filename-derived form.
+    The name is preserved verbatim as the user typed it; without one the
+    title falls back to a filename-derived form.
     """
     return _tile_dict(
         slug,
         name or _display_name(f"{slug}.py"),
         description or _GENERIC_WS_DESC,
         "workspace",
-        cpu=cpu,
-        memory=memory,
     )
 
 
 async def _workspace_tiles(user: User) -> list[dict]:
     """Build Workspace tiles from the user's own notebooks in the store.
 
-    Each notebook's `[tool.stargazer]` header is read (in parallel,
-    best-effort) so the tile shows its description and the gear seeds the
-    settings modal with current resources. A failed read falls back to the
-    generic blurb + default resources rather than dropping the tile.
+    Each notebook's setup block is read (in parallel, best-effort) for its
+    tile's name and description. A failed read falls back to the
+    filename-derived title and the generic blurb rather than dropping the tile.
     """
     try:
         files = await store.list_workspace(user.subject)
@@ -393,21 +375,17 @@ async def _workspace_tiles(user: User) -> list[dict]:
         logger.warning(f"Workspace listing failed for {user.subject!r}: {exc}")
         return []
     slugs = [s for f in files if (s := f.removesuffix(".py")) not in SEED_SLUGS]
-    default_gib = memory_to_gib(DEFAULT_RESOURCES.memory)
 
     async def _tile(slug: str) -> dict:
-        """Build one workspace tile, parsing its header (best-effort)."""
-        cpu, memory, desc, name = DEFAULT_RESOURCES.cpu, default_gib, "", ""
+        """Build one workspace tile from its setup block (best-effort)."""
+        name, desc = "", ""
         try:
             src = await store.get_workspace_notebook(user.subject, f"{slug}.py")
             if src:
-                res = parse_notebook_resources(src)
-                cpu, memory = res.cpu, memory_to_gib(res.memory)
-                desc = parse_notebook_description(src)
-                name = parse_notebook_name(src)
+                name, desc = notebook_name(src), notebook_description(src)
         except Exception as exc:
             logger.warning(f"Workspace metadata read failed for {slug!r}: {exc}")
-        return _workspace_tile_dict(slug, cpu, memory, desc, name=name)
+        return _workspace_tile_dict(slug, name, desc)
 
     return list(await asyncio.gather(*[_tile(s) for s in slugs]))
 
@@ -494,17 +472,16 @@ async def workspace_create(
     user: CurrentUser,
     name: str = Form(...),
     source: str = Form("blank"),
-    cpu: str = Form("2"),
-    memory: str = Form("4"),
 ):
     """Create a new workspace notebook from the blank or template seed.
 
-    Writes `<slug>.py` to the user's store with default resources baked into
-    its `[tool.stargazer]` header, then returns the rendered tile. Resources
-    (and the tile blurb) are edited afterward via the tile's gear → settings
-    modal (`/workspace/settings`). Create stays a pure "add a notebook"
-    action: no launch, no navigation. A name whose slug is over
-    `NOTEBOOK_SLUG_MAX` is refused, since its app could never be deployed.
+    Writes `<slug>.py` to the user's store with the name the user typed as
+    its `main_name`, then returns the rendered tile. The seed's own setup
+    block declares the pod's resources, which the tile's gear edits
+    afterward (`/workspace/setup`) along with the description. Create stays
+    a pure "add a notebook" action: no launch, no navigation. A name whose
+    slug is over `NOTEBOOK_SLUG_MAX` is refused, since its app could never be
+    deployed.
     """
     if not _store_ready():
         return _store_off()
@@ -525,11 +502,10 @@ async def workspace_create(
     # the tile; the slug above is the lowercased, dash-joined filename form.
     display_name = " ".join(name.split())
     filename = f"{slug}.py"
-    resources = resources_from_inputs(cpu, memory)
     seed = seed_source(source)
     if seed is None:
         return JSONResponse({"error": f"{source} seed not found"}, status_code=500)
-    content = with_stargazer_resources(seed, resources, name=display_name)
+    content = with_setup_values(seed, main_name=display_name)
     try:
         await store.create_workspace_notebook(user.subject, filename, content)
     except store.NotebookExistsError:
@@ -540,9 +516,7 @@ async def workspace_create(
         logger.error(f"Notebook create failed for {filename!r}: {exc}")
         return _failed("create", exc)
 
-    tile = _workspace_tile_dict(
-        slug, resources.cpu, memory_to_gib(resources.memory), "", name=display_name
-    )
+    tile = _workspace_tile_dict(slug, display_name, notebook_description(content))
     return JSONResponse({"slug": slug, "tile_html": _render_tile(tile)})
 
 
@@ -568,9 +542,9 @@ async def workspace_copy(
     """Copy a Workflows notebook into the user's workspace.
 
     The source is a shipped Workflows notebook; it's written as a fresh,
-    editable workspace notebook. The copy keeps the source's `[tool.stargazer]`
-    resources but gets its own name/description so it tiles like any other
-    workspace notebook. The target slug is derived from the source title;
+    editable workspace notebook. The copy keeps the source's setup block, and
+    the workflow's title and blurb are declared in it as `main_name` and
+    `main_description`, so it tiles like any other workspace notebook. The target slug is derived from the source title;
     like `/workspace/create` it fails with 409 if that name is taken. Returns
     the rendered Workspace tile.
     """
@@ -590,10 +564,7 @@ async def workspace_copy(
             status_code=400,
         )
     filename = f"{target_slug}.py"
-    resources = parse_notebook_resources(source)
-    content = with_stargazer_resources(
-        source, resources, description=desc or None, name=title
-    )
+    content = with_setup_values(source, main_name=title, main_description=desc)
     try:
         await store.create_workspace_notebook(user.subject, filename, content)
     except store.NotebookExistsError:
@@ -604,61 +575,75 @@ async def workspace_copy(
         logger.error(f"Notebook copy failed for {slug!r} from {section}: {exc}")
         return _failed("copy", exc)
 
-    tile = _workspace_tile_dict(
-        target_slug, resources.cpu, memory_to_gib(resources.memory), desc, name=title
-    )
+    tile = _workspace_tile_dict(target_slug, title, desc)
     return JSONResponse({"slug": target_slug, "tile_html": _render_tile(tile)})
 
 
-@asgi_app.post("/workspace/settings")
-async def workspace_settings(
-    user: CurrentUser,
-    slug: str = Form(...),
-    cpu: str = Form(...),
-    memory: str = Form(...),
-    description: str = Form(""),
-):
-    """Persist edited resources + description for a workspace notebook.
+# Shown in the gear's editor for a notebook that has no setup block yet.
+_STARTER_SETUP = (
+    "with app.setup:\n"
+    "    import flyte\n"
+    "\n"
+    '    main_description = ""\n'
+    '    main_resources = flyte.Resources(cpu=2, memory="4Gi")\n'
+)
 
-    Rewrites the notebook's `[tool.stargazer]` header (cpu/memory + the tile
-    blurb). Resource changes take effect at the **next** `/launch` (resources
-    bind at pod-spawn); the description is reflected on the tile immediately.
-    Returns the normalized values so the browser can refresh the tile + gear
-    data in place.
+
+@asgi_app.get("/workspace/setup")
+async def workspace_setup(user: CurrentUser, slug: str):
+    """Return a workspace notebook's setup block, for the gear's editor.
+
+    A notebook without one gets a starter block to save.
+    """
+    if not _store_ready():
+        return _store_off()
+    if bad := _invalid_slug(slug):
+        return bad
+    source = await store.get_workspace_notebook(user.subject, f"{slug}.py")
+    if source is None:
+        return JSONResponse({"error": "notebook not found"}, status_code=404)
+    return JSONResponse(
+        {"slug": slug, "setup": setup_block_text(source) or _STARTER_SETUP}
+    )
+
+
+@asgi_app.post("/workspace/setup")
+async def workspace_setup_save(
+    user: CurrentUser, slug: str = Form(...), setup: str = Form(...)
+):
+    """Replace a workspace notebook's setup block with the gear editor's.
+
+    A block that won't parse, or declares a name, description or resources
+    the dashboard can't read, is a 400 with the reason, and nothing is
+    written. Resource and image changes take effect at the **next**
+    `/launch`; the tile's name and description, which this returns, change
+    right away.
     """
     if not _store_ready():
         return _store_off()
     if bad := _invalid_slug(slug):
         return bad
     filename = f"{slug}.py"
-    resources = resources_from_inputs(cpu, memory)
-    desc = " ".join(description.split())[:200]
     try:
         source = await store.get_workspace_notebook(user.subject, filename)
         if source is None:
             return JSONResponse(
                 {"error": f"notebook not found: {filename}"}, status_code=404
             )
-        # Rewrites the whole table — re-pass the stored display name so this
-        # resources/description edit doesn't drop it.
-        content = with_stargazer_resources(
-            source,
-            resources,
-            description=desc or None,
-            name=parse_notebook_name(source) or None,
-        )
+        try:
+            content = replace_setup_block(source, setup)
+        except SetupError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
         await store.update_workspace_notebook(user.subject, filename, content)
     except Exception as exc:
-        logger.error(f"Notebook settings update failed for {filename!r}: {exc}")
+        logger.error(f"Notebook setup update failed for {filename!r}: {exc}")
         return _failed("update", exc)
 
+    tile = _workspace_tile_dict(
+        slug, notebook_name(content), notebook_description(content)
+    )
     return JSONResponse(
-        {
-            "slug": slug,
-            "cpu": resources.cpu,
-            "memory": memory_to_gib(resources.memory),
-            "description": desc or _GENERIC_WS_DESC,
-        }
+        {"slug": slug, "title": tile["title"], "description": tile["description"]}
     )
 
 
@@ -713,29 +698,26 @@ _SECTIONS = ("tutorials", "workflows", "workspace")
 
 async def _launch_target(
     user: User, slug: str, section: str
-) -> tuple[str, NotebookResources | None, str | None] | None:
-    """Resolve a launch to `(notebook_path, resources, main_img)`, or None if unknown.
+) -> tuple[str, str | None] | None:
+    """Resolve a launch to `(notebook_path, source)`, or None if unknown.
 
-    Workspace notebooks declare resources in their `[tool.stargazer]` header;
-    a missing or unreadable header falls back to the defaults. Tutorials and
-    workflows keep the env's legacy defaults (`resources=None`). Workspace
-    notebooks can also declare their own image (`main_img`, the expression to
-    build); every other section runs on the deployed notebook image.
+    `source` is a workspace notebook's, whose setup block can declare its
+    pod's resources and image. It's None for tutorials and workflows, which
+    run on the deployed notebook image with the default resources, and for
+    a workspace notebook that can't be read.
     """
     if section == "workspace":
         path = f"{WORKSPACE_NOTEBOOK_DIR}/{slug}.py"
         try:
             source = await store.get_workspace_notebook(user.subject, f"{slug}.py")
         except Exception as exc:
-            logger.warning(f"Resource read failed for {slug!r}: {exc}")
+            logger.warning(f"Setup read failed for {slug!r}: {exc}")
             source = None
-        if not source:
-            return path, DEFAULT_RESOURCES, None
-        return path, parse_notebook_resources(source), extract_main_img(source)
+        return path, source
     nb: Notebook | None = by_slug(slug)
     if nb is None or nb.section != section:
         return None
-    return nb.path_in_image, None, None
+    return nb.path_in_image, None
 
 
 @asgi_app.post("/launch")
@@ -753,10 +735,11 @@ async def launch(
     until the notebook is ready, so the URL is returned as soon as the app is
     admitted.
 
-    A notebook that declares its own image is served on it, and `serve`
-    builds it first when it isn't built yet, so the first launch after a
-    change waits for the build. An image that won't evaluate or build is a
-    422 with the reason, never a pod on the wrong image.
+    The pod gets the resources the notebook declares. A notebook that
+    declares its own image is served on it, and `serve` builds it first when
+    it isn't built yet, so the first launch after a change waits for the
+    build. Resources that can't be read, or an image that won't evaluate or
+    build, are a 422 with the reason, never a pod sized or built wrong.
     """
     if mode not in ("edit", "run"):
         return JSONResponse({"error": f"invalid mode: {mode}"}, status_code=400)
@@ -771,12 +754,14 @@ async def launch(
     target = await _launch_target(user, slug, section)
     if target is None:
         return JSONResponse({"error": f"unknown notebook: {slug}"}, status_code=404)
-    notebook_path, resources, main_img = target
-    image = None
-    if main_img is not None:
+    notebook_path, source = target
+    resources, image = None, None
+    if source:
         try:
-            image = evaluate_main_img(main_img)
-        except MainImgError as exc:
+            resources = notebook_resources(source)
+            if (main_img := extract_main_img(source)) is not None:
+                image = evaluate_main_img(main_img)
+        except (SetupError, MainImgError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=422)
 
     project = config.FLYTE_PROJECT

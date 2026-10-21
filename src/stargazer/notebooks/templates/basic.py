@@ -27,7 +27,13 @@ app = marimo.App(width="medium")
 with app.setup:
     import shutil
 
+    import flyte
+
     from stargazer.notebooks import notebook_base
+
+    # TODO: the dashboard tile's blurb, and the pod this notebook runs in.
+    main_description = ""
+    main_resources = flyte.Resources(cpu=2, memory="4Gi")
 
     # TODO: the image this notebook runs on. System tools go here, Python
     # packages in the script header above.
@@ -43,7 +49,6 @@ def _():
     from pathlib import Path
     from typing import ClassVar
 
-    import flyte
     import marimo as mo
 
     flyte.init_from_config()
@@ -61,21 +66,23 @@ def _():
         tasks, and Workflows for composition — all on your dashboard.
         """
     )
-    return ClassVar, Path, asyncio, dataclass, flyte, mo, tempfile
+    return ClassVar, Path, asyncio, dataclass, mo, tempfile
 
 
 @app.cell
 def _(mo):
-    """Section 0 — the notebook's own image."""
+    """Section 0 — the notebook's own pod."""
     mo.md(
         f"""
-        ## 0. Image
+        ## 0. Pod
 
-        `main_img` in the setup block is the image this notebook runs on.
-        Add system tools to it (apt packages, or `with_commands` for
+        The setup block declares the pod this notebook runs in.
+        `main_resources` is its CPU and memory, and `main_img` is its
+        image: add system tools to it (apt packages, or `with_commands` for
         bioconda tools) and they're there the next time you launch the
         notebook. Python packages go in the script header instead and
-        install when it starts.
+        install when it starts. The dashboard tile's gear edits the same
+        block, along with the tile's name and description.
 
         `bcftools` → `{shutil.which("bcftools") or "not installed here"}`
         """
@@ -182,7 +189,7 @@ def _(mo):
 
 
 @app.cell
-def _(flyte):
+def _():
     """Task environment for your work."""
     my_env = flyte.TaskEnvironment(
         name="template",
