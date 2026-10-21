@@ -1,6 +1,6 @@
 ---
 title: Org-wide platform key in every pod
-status: backlog
+status: next
 priority: high
 created: 2026-10-05
 ---
@@ -78,12 +78,18 @@ the dashboard's login gate.
 - Union would rather we wait for delegated auth, and isolation between
   users isn't guaranteed until then.
 
-## Parked (2026-10-20)
+## Union turns the org key off (2026-10-21)
 
-Set aside by the user while the org secret keeps coming back. Branch
-`fix/org-wide-platform-key` holds the per-project key code, unpushed in its
-worktree, rebased onto `main` at `2b96e0e` on 2026-10-20 (unit tier 508
-passed). It also carries a rider from ticket `quickstart-save-banner`, which
+Union will turn off the org key's injection and stop it being recreated, so
+the org-wide key goes away. Pods then get only a project-scoped
+`EAGER_API_KEY` (measured during the experiment below), and a project
+without one can't start pods, so onboarding has to create each user's key.
+That's what branch `fix/org-wide-platform-key` does (The project key,
+below).
+
+The branch holds the per-project key code, unpushed in its worktree, last
+rebased onto `main` at `2b96e0e` on 2026-10-20 (unit tier 508 passed); it
+needs rebasing onto today's `main` before its PR. It also carries a rider from ticket `quickstart-save-banner`, which
 its PR lists under its own heading: "Stage the image's notebooks as
 /opt/notebooks and copy the folder itself" (`Dockerfile` only; the image's
 `/workspace/notebooks/` comes out the same, verified on its original
@@ -134,7 +140,8 @@ recreated the secret an hour later.
   secrets, so from then on pods called Union as the org key again. Nothing
   failed; the isolation was silently gone.
 - [ ] Find out what recreated it (the user, Union, or the operator's
-  bootstrap loop) and stop it.
+  bootstrap loop) and stop it. Union is turning off the injection and the
+  recreation (2026-10-21); check the org secret stays gone afterwards.
 - [ ] Cross-project writes under the project key. The read check passed
   (`ACTION_VIEW` refused on other projects), but the write probe (run
   `urdpj55wqsm25nbs7r5t`: register a task, start a run and serve an app in

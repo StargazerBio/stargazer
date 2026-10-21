@@ -1,6 +1,6 @@
 ---
 title: Curate which public companions a popular asset gets
-status: review
+status: done
 priority: normal
 created: 2026-10-20
 pr: 74
@@ -39,3 +39,9 @@ One publisher per parent: public companions count only when their `_owner`
 also published the parent (`PinataClient.get` by CID); with no public parent,
 none are taken. Gating at publish can't be enforced with a shared key, and a
 curation keyvalue costs one of Pinata's 9 slots.
+
+## Outcome
+
+PR #74 merged (merge `719d7f1`) with only its first commit: public companions count only when their `_owner` matches the `_owner` of the parent's public record. Two later commits, made in its worktree minutes before the merge but never pushed, didn't ship, though the PR's description covers them: every public record needs an `_owner` (`PinataClient` refuses unowned writes, and reads skip unowned files), and `fetch()` also takes the caller's own public companions. They're ticket `public-companion-owners`.
+
+Verified on the merged commit with unit tests written first (fake public tier). Not driven live: the public tier holds no companions. No comments on the PR.
