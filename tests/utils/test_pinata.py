@@ -6,6 +6,8 @@ The ones that do are in tests/pinata/.
 import base64
 
 import pytest
+from aiohttp import web
+from aiohttp.test_utils import TestServer
 
 import stargazer.assets as assets_mod
 from stargazer.assets.asset import Asset
@@ -77,6 +79,57 @@ async def test_upload_refuses_a_long_value_before_sending(tmp_path):
 async def test_update_metadata_refuses_a_long_value_before_sending():
     with pytest.raises(ValueError, match="at most 250 characters"):
         await PinataClient(jwt="unused").update_metadata("bafy", {"note": "n" * 251})
+
+
+@pytest.mark.asyncio
+async def test_upload_refuses_a_file_with_no_owner_before_sending(tmp_path):
+    path = tmp_path / "x.txt"
+    path.write_text("x")
+
+    with pytest.raises(ValueError, match="no `_owner`"):
+        await PinataClient(jwt="unused").upload(Asset(keyvalues={"asset": "x"}), path)
+
+
+@pytest.mark.asyncio
+async def test_update_metadata_refuses_a_patch_with_no_owner_before_sending():
+    with pytest.raises(ValueError, match="no `_owner`"):
+        await PinataClient(jwt="unused").update_metadata("bafy", {"note": "n"})
+
+
+@pytest.mark.asyncio
+async def test_sign_upload_refuses_keyvalues_with_no_owner_before_sending():
+    with pytest.raises(ValueError, match="no `_owner`"):
+        await PinataClient(jwt="unused").create_signed_upload_url(
+            "x.txt", {"asset": "x"}
+        )
+
+
+@pytest.mark.asyncio
+async def test_public_records_with_no_owner_are_skipped():
+    """A file uploaded without `_owner` (straight to Pinata) isn't read back."""
+    files = [
+        {"cid": "bafyUnowned", "name": "a.fa", "keyvalues": {"asset": "reference"}},
+        {
+            "cid": "bafyOwned",
+            "name": "b.fa",
+            "keyvalues": {"asset": "reference", "_owner": "maintainer"},
+        },
+    ]
+
+    async def listing(request):
+        cid = request.query.get("cid")
+        hits = [f for f in files if cid in (None, f["cid"])]
+        return web.json_response({"data": {"files": hits}})
+
+    app = web.Application()
+    app.router.add_get("/files/public", listing)
+    async with TestServer(app) as server:
+        client = PinataClient(jwt="unused")
+        client.API_BASE = str(server.make_url("")).rstrip("/")
+
+        assert [r["cid"] for r in await client.query({})] == ["bafyOwned"]
+        assert await client.get("bafyUnowned") is None
+        assert (await client.get("bafyOwned"))["keyvalues"]["_owner"] == "maintainer"
 
 
 @pytest.mark.parametrize("cls", SDK_TYPES, ids=lambda cls: cls._asset_key)

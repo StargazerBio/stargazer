@@ -66,11 +66,11 @@ A bare `Asset` (no `_asset_key`) carries a free-form `keyvalues` dict, serialize
 
 ### Ownership (`_owner`)
 
-`_owner` is a reserved keyvalue stamped automatically for attribution — never typed by users (`build_asset()` rejects `_*` keys). The storage client stamps it from `STARGAZER_OWNER` on every index row it writes (`upload()` and `update_metadata()`), and `PinataClient` on public uploads; the env wins over any stale value, and with it unset nothing is stamped. The asset browser stamps the signed-in user. It records who made a record; it grants or denies nothing, and on Pinata's public network anyone holding the key can edit or delete any record. Hosted-deployment plumbing is in [App → Asset Manager](app.md#asset-manager).
+`_owner` is a reserved keyvalue stamped automatically for attribution — never typed by users (`build_asset()` rejects `_*` keys). The storage client stamps it from `STARGAZER_OWNER` on every index row it writes (`upload()` and `update_metadata()`), and `PinataClient` on public uploads; the env wins over any stale value, and with it unset nothing is stamped. The asset browser stamps the signed-in user. Every public record has one: `PinataClient` refuses an upload, signed upload URL or edit that would leave a public record without `_owner`, and its reads skip any public file that has none, since anyone holding the key can upload straight to Pinata. It records who made a record and decides which public companions `fetch()` takes; it grants or denies nothing else, and on Pinata's public network anyone holding the key can edit or delete any record. Hosted-deployment plumbing is in [App → Asset Manager](app.md#asset-manager).
 
 ### Core Methods
 
-- `fetch()` — downloads self, then every asset with `companion_of = self.cid` into the same directory (the user's own, or the public tier's when the user has none); returns the local path
+- `fetch()` — downloads self, then every asset with `companion_of = self.cid` into the same directory (the user's own, plus public ones the user or the asset's publisher published); returns the local path
 - `update(path, **kwargs)` — sets the given attributes, stores the file, and sets `cid` and `path`
 - `to_dict()` / `from_dict()` — JSON serialization
 
@@ -83,7 +83,7 @@ See the [Catalog](../reference/catalog.md#asset-types) for a complete list of re
 A companion is a file a tool expects beside another, such as an index or a sequence dictionary. It records that file's CID in its `companion_of` keyvalue. When `fetch()` is called on an asset:
 
 1. Downloads the asset itself
-2. Queries for assets whose `companion_of` equals this asset's CID: the user's own, or the public tier's when the user has none, never a mix of the two. Public ones come only from the asset's own publisher
+2. Queries for assets whose `companion_of` equals this asset's CID: the user's own, then public ones the user published, then public ones from the asset's own publisher for names still missing. Nobody else's are taken
 3. Downloads them into the same directory, so tools find an index next to its file
 4. Returns the asset's local path
 
