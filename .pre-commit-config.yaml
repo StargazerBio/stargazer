@@ -22,7 +22,7 @@ repos:
         entry: uv run python docs/gen_catalog.py
         language: system
         pass_filenames: false
-        files: ^(src/stargazer/(tasks|workflows|assets|bundles)/.*\.py|src/stargazer/bundles/.*\.yaml|docs/gen_catalog\.py)$
+        files: ^(src/stargazer/(tasks|workflows|assets|bundles)/.*\.py|src/stargazer/bundles/.*\.yaml|src/stargazer/registry\.py|docs/gen_catalog\.py)$
       # Only a check: the docs workflow builds and publishes the site from main,
       # so the build's output and cache are removed, keeping the build's status.
       - id: zensical-build
