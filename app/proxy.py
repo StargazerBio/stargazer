@@ -337,10 +337,10 @@ async def sync_once() -> list[str]:
 def _save_interval() -> float:
     """Seconds between save passes, from the pod's env; 0 means none.
 
-    The dashboard sets it at launch from the owner's settings, 5 unless
-    they changed it. The pass reads
-    only files whose size or mtime changed, so a short interval costs little
-    and bounds what a pod that dies without SIGTERM loses.
+    The dashboard sets it at launch from the owner's settings, 5 unless they
+    changed it. The pass reads only files whose size or mtime changed, so a
+    short interval costs little and bounds what a pod that dies without
+    SIGTERM loses.
     """
     return float(os.environ.get("SG_SAVE_INTERVAL_SECONDS", "5"))
 
