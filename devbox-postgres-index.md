@@ -1,6 +1,6 @@
 ---
 title: The devbox's asset index moves to a Postgres pod
-status: review
+status: done
 priority: high
 created: 2026-10-20
 pr: 60
@@ -42,3 +42,14 @@ is removed here.
   and its sandbox Python read the task pods' `variants` rows through
   `PostgresIndex`.
 - **Postgres tier:** 10 passed. **Unit tier:** 505 passed.
+
+## Outcome
+
+Merged as #60. The devbox's index is a Postgres deployment
+(`devbox/postgres.yaml`, applied by `devbox/setup.sh`), and the devbox
+dashboard, its notebook pods and devbox runs all use it through
+`PostgresIndex`. Before merge the devbox infra moved from `cli/` to
+`devbox/`, and `devbox_workarounds.md` was folded into `devbox/setup.sh`'s
+commented steps. Verified as above: devbox tier 8 passed, postgres tier 10,
+unit 505. Left: the dashboard-served index (`HttpIndex`, the `/index` routes,
+Litestream) still runs on Union, and goes in ticket `dsql-asset-index`.
