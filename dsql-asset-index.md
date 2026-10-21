@@ -110,7 +110,7 @@ This doesn't need that.
 
 ## Pieces
 
-- [ ] **Piece 0, the tenant check**, by hand, with the user's admin access
+- [x] **Piece 0, the tenant check**, by hand, with the user's admin access
   (mine is read-only):
   - Create the cluster and the `assets` schema. For `u-pryce`, create the
     IAM role, the table, the database role and the grants.
@@ -547,6 +547,41 @@ own output settles each:
   `sslnegotiation=direct`. From Docker: psql 17's TLS to DSQL.
 - The refusal messages, and whether the remote builder builds the probe
   image as written.
+
+## Piece 0 results (2026-10-21)
+
+Run by the user with the runbook's steps 0–4, extracted verbatim into a script; nothing in it was changed. Everything came out as the runbook expected.
+
+**Cluster:** `ajufqlufrijtcts2ekxc4ovea4`, ARN `arn:aws:dsql:us-west-2:791359099513:cluster/ajufqlufrijtcts2ekxc4ovea4`, endpoint `ajufqlufrijtcts2ekxc4ovea4.dsql.us-west-2.on.aws`. Created 2026-10-21 23:26:45 UTC, `ACTIVE`, deletion protection on. Time to `ACTIVE` wasn't recorded separately; the whole script, image build included, took about 4 minutes.
+
+**IAM role:** `arn:aws:iam::791359099513:role/stargazer-index-u-pryce`, with `dsql-connect`.
+
+**Step 3, every statement accepted on DSQL:** `CREATE SCHEMA`, both `CREATE TABLE`s, `CREATE ROLE`, `AWS IAM GRANT`, and both `GRANT`s, table-level `GRANT` included. Mapping: `u_pryce | arn:aws:iam::791359099513:role/stargazer-index-u-pryce`. Tables: `u_other`, `u_pryce`. The unmapped login (the admin's identity as `u_pryce`): `FATAL: unable to accept connection, access denied`.
+
+**Probe in `u-pryce`** (run `u5zdk9nvqdnmd8xhbtpq`, SUCCEEDED; image built in 1:58 as `stargazerbio:dsql-probe-70a2f0fdfae283f581b4305301ecafa9`):
+
+- `sub` `system:serviceaccount:u-pryce-development:default`, `aud` `["sts.amazonaws.com"]`
+- `shared_role_as_db_role`: refused, `userflyterole … is not authorized to perform: dsql:DbConnect`
+- `assume: ok`, `tls: verify-full` (certifi's bundle, `sslnegotiation=direct`), `whoami: u_pryce`
+- `timings_ms` (assume / token / connect / select_1): 51 / 47 / 235 / 12, then 12 / 46 / 181 / 12, then 12 / 47 / 32 / 2
+- `create_table_if_not_exists`: `42501 permission denied for schema assets`, as on Postgres 16
+- `read_other_table`: `42501 permission denied for table u_other`
+- `same_as_sqlite: true`: insert, `ON CONFLICT` update keeping `created_at`, `||` merge, `->>` hit and miss, delete. `RETURNING` works.
+- `user_role_as_admin`: refused, `stargazer-index-u-pryce/dsql-probe is not authorized to perform: dsql:DbConnectAdmin`
+
+**Probe in `flytesnacks`** (run `u7xvnbch6lwzh726rsgf`, SUCCEEDED):
+
+- `sub` `system:serviceaccount:flytesnacks-development:default`
+- `shared_role_as_db_role`: refused (`dsql:DbConnect`)
+- `assume`: `AccessDenied … Not authorized to perform sts:AssumeRoleWithWebIdentity`
+
+`assets.u_other` dropped afterwards. No runs left running in either project.
+
+**For Piece 1:**
+
+- **The constructor can't create the table** as a user's role on DSQL, so on DSQL `PostgresIndex` skips its DDL and onboarding creates the table.
+- **Pods have no IPv6 route.** The endpoint resolves to both, and every connection tried an IPv6 address first and failed it with `Network is unreachable` before connecting over IPv4. Connect over IPv4 only (resolve A records, pass `hostaddr`) rather than pay the failed attempt.
+- **Cache per process:** the assumed credentials (1 h) and the token, and reuse the connection. A cold call costs ~330 ms (assume ~50, token ~47, connect ~235); a warm one, a query (2–12 ms). Reconnect when DSQL ends a connection at its hour.
 
 ## Meanwhile
 
