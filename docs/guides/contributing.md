@@ -138,7 +138,7 @@ See [Configuration → Container Images](../architecture/configuration.md#contai
 docker build -t ghcr.io/stargazerbio/stargazer:latest .
 ```
 
-Tag it with the published `ghcr.io/stargazerbio/...` URL even though you're not pushing — `docker run` resolves it from the local cache by that name. Nothing publishes it automatically. After each merge that changes the `Dockerfile`, a maintainer publishes both platforms from `main` with buildx, using a `docker-container` builder and logged in to `ghcr.io` with a token that has `write:packages`:
+Tag it with the published `ghcr.io/stargazerbio/...` URL even though you're not pushing — `docker run` resolves it from the local cache by that name. Nothing publishes it automatically. A maintainer publishes both platforms with buildx, logged in to `ghcr.io` with a token that has `write:packages`:
 
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/stargazerbio/stargazer:latest --push .
