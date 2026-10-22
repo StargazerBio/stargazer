@@ -12,7 +12,7 @@ What ticket `dsql-asset-index` left after PR #77: the code to index on DSQL is i
 
 - [x] **Migration:** for each Stargazer project, make its index (`stargazer_users.user_index.ensure_user_index`), restore its dashboard's Litestream replica (`<root>/users/<subject>/index`) once, and insert the rows into its DSQL table. Check the counts match.
 - [x] **Switch:** uncomment `STARGAZER_DSQL_CLUSTER_ARN` in `tenant.env` and `./stargazer-users upgrade`.
-- [x] **Removals** (stargazer, PR #78; infra `095066f`), except the probe data:
+- [x] **Removals** (stargazer, PR #78; infra `095066f`; the probe data deleted by the user):
   - Litestream: the image layer, and restore/replicate in `app/dashboard_launch.py`.
   - `app/index_api.py` and `HttpIndex`.
   - `refuse_while_running` in `app/deploy.py`, and the wait-for-runs loop in infra's `upgrade`: a redeploy no longer risks the index.
@@ -40,4 +40,4 @@ What ticket `dsql-asset-index` left after PR #77: the code to index on DSQL is i
 - **Germline on DSQL:** seed `urvlfkkbrcvs6xrj2zlj`, workflow `ucj7rc9vqcq2h7h4xdvn` (11 actions, SUCCEEDED, `Variants(joint_call_gvcfs, cohort-dsql-192839, ['NA12829'], GRCh38)`), and a check from another pod, `uppfdv4gzdtcjjw7j9xn` (NA12829, 47 records on `chr17:7658421-7697490`).
 - **Writes don't need the dashboard:** I deactivated it at 02:28:43 UTC, one second after the workflow started, and redeployed it at 02:29:56. Every action stored its outputs in between, the last finishing at 02:30:00 as the redeploy began; `haplotype_caller` and `joint_call_gvcfs` ran after the pod would have exited (30–50 s after deactivation, measured earlier).
 - **Another project refused:** measured for `DsqlIndex` in PR #77 (`flytesnacks` fails at `AssumeRoleWithWebIdentity`).
-- **Left for the user:** the PR #52 probe data, `stargazer-probe-revisions/` (75 objects) and `stargazer-probe-revisions-2/` (123), counted read-only. Deleting it needs write access: `aws s3 rm --recursive s3://union-us-west-2-stargazerbio/stargazer-probe-revisions/ --profile pryce`, then the same for `-2/`.
+- **Probe data deleted** by the user on 2026-10-22; both prefixes list 0 objects since (read-only check). Before: `stargazer-probe-revisions/` (75 objects) and `stargazer-probe-revisions-2/` (123), counted read-only. Deleting it needs write access: `aws s3 rm --recursive s3://union-us-west-2-stargazerbio/stargazer-probe-revisions/ --profile pryce`, then the same for `-2/`.
