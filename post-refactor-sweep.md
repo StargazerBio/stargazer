@@ -16,7 +16,7 @@ docstrings, and docs that no longer match the code, then cleans it up on
 
 Seven review passes (dashboard core, asset routes and identity, notebook
 pods and deploy, SDK storage, SDK notebooks, tests, docs) found about 280
-issues. The fixes are four commits on the branch, net about 860 lines lighter:
+issues. The fixes are four commits on the branch, net about 700 lines lighter:
 
 - [x] Storage tier and asset routes. Fixes two bugs: a public edit from the
   dashboard could hand the record to the dashboard's owner, and deleting a
