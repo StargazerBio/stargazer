@@ -1,8 +1,9 @@
 ---
 title: Cleanup sweep after the Oct 19–21 refactors
-status: doing
+status: review
 priority: normal
 created: 2026-10-22
+pr: 81
 ---
 
 PRs #51–#80 moved onboarding to the infra repo, the asset index to DSQL,
