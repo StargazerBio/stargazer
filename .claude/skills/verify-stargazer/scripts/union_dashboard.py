@@ -28,10 +28,11 @@ def check(name: str) -> None:
     env = {e.key: e.value for e in container.env}
     print("active:", app.is_active())
     print("served image:", container.image)
+    names = type(container.resources).ResourceName
     for kind in ("requests", "limits"):
         print(
             f"{kind}:",
-            {r.name: r.value for r in getattr(container.resources, kind)},
+            {names.Name(r.name): r.value for r in getattr(container.resources, kind)},
         )
     print("pod STARGAZER_NOTEBOOK_IMAGE:", env.get("STARGAZER_NOTEBOOK_IMAGE"))
     for run in Run.listall(
