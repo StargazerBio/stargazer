@@ -26,7 +26,7 @@ All env var defaults are set in `config.py`. If set (even to empty string), the 
 | Variable | Purpose | Default | Required |
 |----------|---------|---------|----------|
 | `STARGAZER_STORE_ROOT` | Object-store root: a directory or a bucket URI | `~/.stargazer/store` | No |
-| `STARGAZER_INDEX_URL` | Index: a SQLite file path, a `postgresql://` URL, or a dashboard URL | `~/.stargazer/index.db` | No |
+| `STARGAZER_INDEX_URL` | Index: a SQLite file path, a `postgresql://` URL, a `dsql://` URL naming a user's table and login on Aurora DSQL, or a dashboard URL | `~/.stargazer/index.db` | No |
 | `STARGAZER_LOCAL` | Scratch space for task outputs, and the download cache | `~/.stargazer/local` | No |
 | `STARGAZER_OWNER` | Owner of new assets: their folder in the store, and `_owner` | None (unset → `local`) | No |
 | `PINATA_JWT` | Turns on the public tier | None (unset) | Only for public data |

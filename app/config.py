@@ -131,3 +131,10 @@ def console_url(env) -> str:
 
 # Where the dashboard links its owner to see their runs. Empty means no link.
 CONSOLE_URL: str = console_url(os.environ)
+
+# The org's Aurora DSQL cluster, where each user's asset index is a table:
+# its ARN, which names its region, account and id. Onboarding (in infra)
+# makes each user's table and login there; every deploy gives the dashboard
+# the user's `dsql://` URL (`app.deploy.dsql_index_url`). Unset, dashboards
+# keep their own index.
+DSQL_CLUSTER_ARN: str = os.environ.get("STARGAZER_DSQL_CLUSTER_ARN", "")

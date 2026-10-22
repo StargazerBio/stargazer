@@ -968,6 +968,20 @@ def test_index_url_passes_on_a_postgres_index(monkeypatch):
     assert _index_url() == url
 
 
+def test_index_url_passes_on_a_dsql_index(monkeypatch):
+    """A dashboard on its user's DSQL table hands pods that table, not its address."""
+    url = (
+        "dsql://u_jane@abc123.dsql.us-west-2.on.aws/assets.u_jane"
+        "?role_arn=arn:aws:iam::111122223333:role/stargazer-index-u-jane"
+    )
+    monkeypatch.setenv("STARGAZER_INDEX_URL", url)
+    monkeypatch.setenv(
+        "INTERNAL_APP_ENDPOINT_PATTERN",
+        "http://{app_fqdn}.u-jane-development.svc.cluster.local",
+    )
+    assert _index_url() == url
+
+
 def test_index_routes_are_mounted(client, tmp_path, monkeypatch):
     """The dashboard serves its index without needing a signed-in user."""
     from app import index_api

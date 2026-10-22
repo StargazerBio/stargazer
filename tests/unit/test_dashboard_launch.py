@@ -29,6 +29,16 @@ def test_a_postgres_index_means_no_litestream():
     assert replica_url(env) is None
 
 
+def test_a_dsql_index_means_no_litestream():
+    """A DSQL index is durable in its cluster; there's no file to copy."""
+    env = {
+        "STARGAZER_STORE_ROOT": "s3://bucket/stargazer",
+        "SG_OWNER_SUBJECT": "u1",
+        "STARGAZER_INDEX_URL": "dsql://u_jane@abc123.dsql.us-west-2.on.aws/assets.u_jane?role_arn=arn:aws:iam::1:role/r",
+    }
+    assert replica_url(env) is None
+
+
 def test_replica_url_carries_the_region():
     """The bucket's region rides on the replica URL: AWS_REGION, then
     AWS_DEFAULT_REGION, then the deploy's own setting.

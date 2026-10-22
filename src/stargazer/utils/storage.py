@@ -47,7 +47,9 @@ import stargazer.config  # ensure env var defaults are set  # noqa: F401
 from stargazer.assets.asset import Asset
 from stargazer.utils.cid import compute_cid
 from stargazer.utils.index import (
+    DSQL_SCHEME,
     POSTGRES_SCHEMES,
+    DsqlIndex,
     HttpIndex,
     PostgresIndex,
     SqliteIndex,
@@ -398,10 +400,13 @@ class StorageClient:
 def make_index(url: str) -> SqliteIndex | PostgresIndex | HttpIndex:
     """The index named by `STARGAZER_INDEX_URL`.
 
-    A `postgresql://` (or `postgres://`) URL is a Postgres database; an
+    A `postgresql://` (or `postgres://`) URL is a Postgres database; a
+    `dsql://` URL is a user's table on Aurora DSQL (see `DsqlIndex`); an
     `http(s)://` URL is a user's dashboard; anything else is a SQLite file
     path (a `sqlite://` prefix is accepted and stripped, `~` is expanded).
     """
+    if url.startswith(DSQL_SCHEME):
+        return DsqlIndex(url)
     if url.startswith(POSTGRES_SCHEMES):
         return PostgresIndex(url)
     if url.startswith(("http://", "https://")):

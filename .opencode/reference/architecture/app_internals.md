@@ -251,7 +251,7 @@ Onboarding (`stargazer-users onboard|upgrade`) runs `flyte.build` on the recipe 
 
 ## Deploy Settings
 
-No secret is required to deploy. The org admin's shell, when running `stargazer-users`, supplies:
+No secret is required to deploy. The org admin's shell, when running `stargazer-users`, supplies these; infra keeps the tenant's values in `tenant.env`, which its `./stargazer-users` wrapper loads:
 
 | Env var | Purpose | If absent |
 |---|---|---|
@@ -260,6 +260,7 @@ No secret is required to deploy. The org admin's shell, when running `stargazer-
 | `STARGAZER_STORE_REGION` | the bucket's region, for Litestream, when the pod has no `AWS_REGION` | Litestream looks it up, which the tenant's role refuses |
 | `STARGAZER_ADMIN_SUBJECTS` | comma-separated Union subjects of the org admins who may open every user's dashboard and notebooks; baked into every dashboard, which passes it to its pods | only each dashboard's owner gets in |
 | `STARGAZER_PUBLIC_ASSETS=off` | turns public assets off in every dashboard the deploy touches (`app.config.PUBLIC_ASSETS`): the Public tab says shared data isn't available, the public upload option is gone, and the public routes answer 503, as with no Pinata key. Tasks and notebooks keep the public tier | public assets are on wherever the Pinata key is |
+| `STARGAZER_DSQL_CLUSTER_ARN` | the org's Aurora DSQL cluster. Every deploy gives the dashboard the user's `dsql://` index URL (`deploy.dsql_index_url`), built from names alone, so a deploy needs no AWS access; the dashboard passes it to its notebook pods and the launcher skips Litestream. Onboarding (in infra) makes the table, login and IAM role it names | each dashboard keeps its own SQLite index |
 | `PINATA_GATEWAY` | the account's dedicated gateway (`https://<name>.mypinata.cloud`) for public downloads; rides into every dashboard, notebook pod and run | the same dedicated gateway: it's the SDK's default (`config.py`) |
 
 Per dashboard, onboarding bakes in `FLYTE_PROJECT`, `SG_OWNER_SUBJECT` and `STARGAZER_OWNER`, the deployer's org as `FLYTE_ORG`, the notebook image URI as `STARGAZER_NOTEBOOK_IMAGE`, `STARGAZER_STORE_ROOT` (the workspace root), the dashboard's own index path as `STARGAZER_INDEX_URL`, and the deployer's commit as `STARGAZER_VERSION` (`git describe --always --dirty`, `unknown` outside a checkout), which the dashboard shows in its footer. The same commit is the deploy's version (`with_servecontext(version=…)`, which reaches the pod as `fserve --version`), so the console shows what each dashboard runs. A version is a label, not a key: redeploying under one the app already has, with a changed spec, still makes a new revision (measured 2026-10-13). Deploys stay on `serve` rather than `flyte.deploy`, which takes its project from init (each dashboard is in its user's project) and doesn't wait for the app to come up.

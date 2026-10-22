@@ -6,7 +6,8 @@ import sqlite3
 import pytest
 
 from stargazer.config import logger
-from stargazer.utils.index import SqliteIndex
+from stargazer.utils.index import DsqlIndex, SqliteIndex
+from stargazer.utils.storage import make_index
 
 
 def _record(cid: str, **keyvalues: str) -> dict:
@@ -160,3 +161,23 @@ async def test_read_during_a_held_write(index, tmp_path):
         other.close()
 
     assert [r["cid"] for r in rows] == ["bafyA"]
+
+
+def test_dsql_url_names_the_cluster_login_and_table():
+    """A `dsql://` index URL gives the endpoint, region, login, table and IAM role."""
+    index = make_index(
+        "dsql://u_jane@abc123.dsql.us-west-2.on.aws/assets.u_jane"
+        "?role_arn=arn:aws:iam::111122223333:role/stargazer-index-u-jane"
+    )
+    assert type(index) is DsqlIndex
+    assert index.endpoint == "abc123.dsql.us-west-2.on.aws"
+    assert index.region == "us-west-2"
+    assert index.user == "u_jane"
+    assert index.table == "assets.u_jane"
+    assert index.role_arn == "arn:aws:iam::111122223333:role/stargazer-index-u-jane"
+
+
+def test_dsql_url_without_a_role_is_refused():
+    """The per-user IAM role is what the index logs in with, so it's required."""
+    with pytest.raises(ValueError, match="role_arn"):
+        make_index("dsql://u_jane@abc123.dsql.us-west-2.on.aws/assets.u_jane")

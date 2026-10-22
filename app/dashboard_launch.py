@@ -55,15 +55,17 @@ _REGION_KEYS = ("AWS_REGION", "AWS_DEFAULT_REGION", "STARGAZER_STORE_REGION")
 
 # `stargazer.utils.index.POSTGRES_SCHEMES`, spelled out so the launcher
 # imports nothing from stargazer before it execs.
-_POSTGRES = ("postgresql://", "postgres://")
+# Indexes on a database server, durable on their own: the devbox's Postgres
+# and a user's DSQL table.
+_ON_A_SERVER = ("postgresql://", "postgres://", "dsql://")
 
 
 def replica_url(env: dict) -> str | None:
     """The bucket location the index replicates to, or None without one.
 
     Needs a bucket store root (`s3://…`), the dashboard's owner, and an index
-    that is a SQLite file: a Postgres index (the devbox's) is durable on its
-    own server. The bucket's region rides on the URL (`?region=`), taken from
+    that is a SQLite file: a Postgres index (the devbox's) or a DSQL one is
+    durable on its own server. The bucket's region rides on the URL (`?region=`), taken from
     `AWS_REGION`, `AWS_DEFAULT_REGION` or `STARGAZER_STORE_REGION`. It has to
     be given: without it Litestream looks the region up, which needs
     `s3:GetBucketLocation`, and the tenant's pod role doesn't grant it
@@ -73,7 +75,7 @@ def replica_url(env: dict) -> str | None:
     root = env.get("STARGAZER_STORE_ROOT", "")
     owner = env.get("SG_OWNER_SUBJECT", "")
     index = env.get("STARGAZER_INDEX_URL", "")
-    if not root.startswith("s3://") or not owner or index.startswith(_POSTGRES):
+    if not root.startswith("s3://") or not owner or index.startswith(_ON_A_SERVER):
         return None
     url = f"{root.rstrip('/')}/users/{owner}/index"
     query = {}
