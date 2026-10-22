@@ -1,6 +1,6 @@
 ---
 title: Public uploads over TUS, up to 10 GB
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-21
 ---
