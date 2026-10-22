@@ -97,11 +97,6 @@ def test_declared_env_vars_reach_the_pod_under_the_dashboards():
     assert env.env_vars["SG_OWNER_SUBJECT"] == SUBJECT
 
 
-def test_pod_knows_which_notebook_it_serves():
-    """The proxy turns away sessions for any other notebook."""
-    assert _env().env_vars["SG_NOTEBOOK_PATH"] == f"{WORKSPACE_NOTEBOOK_DIR}/demo.py"
-
-
 def test_pod_env_carries_owner_and_store_root(monkeypatch):
     """The pod learns who owns it and where its notebooks are stored."""
     monkeypatch.setattr(config, "WORKSPACE_ROOT", "s3://bucket/stargazer")

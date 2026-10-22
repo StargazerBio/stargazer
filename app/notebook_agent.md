@@ -22,7 +22,7 @@ You're in the terminal of a Stargazer notebook: a container serving one user's m
 - Python packages go in the PEP 723 header (`# /// script`); each notebook runs in its own environment built from it at start. `stargazer` resolves to `/stargazer` through the header's `[tool.uv.sources]` entry; keep it.
 - The pod the notebook runs in is declared in the setup block as `main_env = notebook_env.clone_with(name=..., image=notebook_base.with_apt_packages(...), resources=flyte.Resources(cpu=2, memory="8Gi"))` (`from stargazer.notebooks import notebook_base, notebook_env`). System tools go in its image, and CPU, memory and disk in its resources. It takes effect the next time the notebook launches from the dashboard. The line is evaluated on its own, so it can use only `flyte`, `notebook_base` and `notebook_env`.
 - The dashboard tile's title and blurb are `main_name` and `main_description` in the setup block. The dashboard reads them without running code, so keep them plain strings.
-- This pod runs only the notebook it was launched for. Open another notebook from the dashboard, where it gets its own pod.
+- Another notebook opened in this pod runs in this notebook's environment, not its own `main_env`. Launch it from the dashboard to run it in its own.
 
 ## Task pattern
 

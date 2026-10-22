@@ -231,8 +231,7 @@ def per_notebook_env(
 
     `notebook_path` is the absolute path inside the spawned pod: image-baked
     notebooks live under `/stargazer/...`, the owner's notebooks under
-    `WORKSPACE_NOTEBOOK_DIR`, hydrated by the launch script. The proxy refuses
-    sessions for any other notebook (`SG_NOTEBOOK_PATH`).
+    `WORKSPACE_NOTEBOOK_DIR`, hydrated by the launch script.
 
     `owner_subject` is the owner's platform user id. The pod sits behind the
     platform login (`requires_auth=True`), and on Union its proxy lets in only
@@ -299,7 +298,6 @@ def per_notebook_env(
             **STARGAZER_ENV_VARS,
             "FLYTE_DOMAIN": config.FLYTE_DOMAIN,
             "STARGAZER_NOTEBOOK_IMAGE": config.NOTEBOOK_IMAGE,
-            "SG_NOTEBOOK_PATH": notebook_path,
             "SG_OWNER_SUBJECT": owner_subject,
             # Who the proxy lets in, and how it checks (`app.proxy._TokenGate`).
             "SG_AUTH_ISSUER": config.AUTH_ISSUER,

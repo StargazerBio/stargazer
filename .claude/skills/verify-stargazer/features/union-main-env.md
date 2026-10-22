@@ -1,6 +1,6 @@
 # Notebook-declared environments on Union
 
-A workspace notebook that sets `main_env` in its setup block launches in that environment: on its image, with its resources. The basic workspace template declares one (2 CPUs, 4Gi, `bcftools` in the image), so a notebook created from it exercises the whole path. The first launch after an image change waits while Union's remote builder builds the image (the tile spins), then the notebook opens with the declared tools on its PATH. A relaunch reuses the built image. The pod runs only that notebook: opening another one from it leads back to the dashboard. This runs on the Union tenant as the test account, because only Union has an image builder.
+A workspace notebook that sets `main_env` in its setup block launches in that environment: on its image, with its resources. The basic workspace template declares one (2 CPUs, 4Gi, `bcftools` in the image), so a notebook created from it exercises the whole path. The first launch after an image change waits while Union's remote builder builds the image (the tile spins), then the notebook opens with the declared tools on its PATH. A relaunch reuses the built image. This runs on the Union tenant as the test account, because only Union has an image builder.
 
 ## Sub-features
 
@@ -8,7 +8,6 @@ A workspace notebook that sets `main_env` in its setup block launches in that en
 - `main-env-kernel` gives the notebook's kernel a `notebook_base` on the deployed notebook image and a `notebook_env` to clone.
 - `main-env-resources` gives the pod the declared CPU and memory, and the default disk.
 - `main-env-reuse` serves a stopped notebook again on the same image, with no build.
-- `one-notebook` sends a second notebook opened inside the pod back to the dashboard.
 
 ## How to get to it (user POV)
 
@@ -32,7 +31,6 @@ Steps:
 - **Launch.** Click **Run** on that tile by its coordinates. On the first launch of a template notebook since the last deploy, it spins through the build and the deploy (about a minute for one apt package), then shows **Open: Run Mode** and **Stop**. Open it: section 0 reads `bcftools → /usr/bin/bcftools`. This covers `main-env-build`.
 - **Check.** `uv run --all-extras python .claude/skills/verify-stargazer/scripts/union_dashboard.py check nb-<slug>-run`: the served image is `…:notebook-custom-<hash>`, the requests are the declared `CPU` and `MEMORY` with the default `EPHEMERAL_STORAGE` (the spec carries no limits; Union applies the requests as limits, which the Resources step shows), the pod's `STARGAZER_NOTEBOOK_IMAGE` is the deployed `…:notebook-app-<hash>`, and the newest run is a succeeded `build-image` (or no new run, when another notebook already built the same declaration on this base). This covers `main-env-kernel` together with section 0 rendering at all, since the setup block imports `notebook_base` and `notebook_env`.
 - **Resources.** Launch the same notebook in **Edit**, open the dropdown terminal (Ctrl+`) and run `cat /sys/fs/cgroup/cpu.max /sys/fs/cgroup/memory.max`: the CPU quota over its period is the declared CPUs, and the memory is the declared limit in bytes. This covers `main-env-resources`.
-- **One notebook.** In that Edit pod, open the file explorer and choose **Open notebook** on any other notebook in `/workspace` (or load `?file=<other>.py` on the pod's URL): the page says to open it from the dashboard and links there. This covers `one-notebook`.
 - **Reuse.** Click **Stop**, then **Run** again. `check` shows the same served image and no new `build-image` run. This covers `main-env-reuse`.
 - **Teardown.** `uv run --all-extras python .claude/skills/verify-stargazer/scripts/union_dashboard.py teardown` stops the notebook's app and the dashboard and prints `live runs: []`.
 - **Proof.** Keep section 0's text from the launch and the `check` output from the launch and the reuse. The created notebook stays in the test account's workspace; delete it from its tile if you want it gone.

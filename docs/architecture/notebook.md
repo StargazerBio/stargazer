@@ -118,7 +118,7 @@ At launch a declared image is built if it isn't already, and the notebook is ser
 
 The `main_env` line is evaluated on its own, so it can use `flyte`, `notebook_base` and `notebook_env` but not other names from the setup block. Building an image needs the hosted deployment; sizing the pod doesn't. Tutorials and workflows run in the standard environment.
 
-**One notebook per pod.** A notebook pod runs only the notebook it was launched for, so a notebook always runs in the environment it declares. Opening another notebook from inside the pod, from the file explorer or as a new notebook, leads back to the dashboard, where that notebook launches on its own pod. Every file stays visible in the explorer, and importing from a sibling notebook still works, since it runs as code in the launched notebook.
+Any other notebook opened inside a running notebook's pod, from marimo's file explorer for instance, runs in the environment of the notebook the pod was launched for, not its own `main_env`.
 
 ## Notebook Modes
 
