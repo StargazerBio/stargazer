@@ -3,6 +3,8 @@ title: The hosted asset index moves to Aurora DSQL
 status: doing
 priority: high
 created: 2026-10-20
+blocked_by:
+  - onboarding-to-infra
 ---
 
 On Union each user's asset index is a SQLite file on their dashboard pod,
