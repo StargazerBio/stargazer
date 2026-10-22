@@ -36,21 +36,54 @@ from app import config
 from app.admin_app import app_env
 from app.per_notebook import list_project_apps, notebook_app_img_recipe
 from stargazer.config import PROJECT_ROOT, logger
+from stargazer.utils.index import DSQL_SCHEME
 
 # How long a deploy whose watch reported failure gets to come up anyway.
 _ACTIVE_POLLS, _ACTIVE_POLL_SECONDS = 24, 5
 # The dashboard's env as defined, before any user's settings are applied, so
 # deploying several users in one run never carries one user's values over.
 _BASE_ENV_VARS = dict(app_env.env_vars)
-# Where the dashboard keeps its SQLite index, on its own disk (Litestream
-# makes it durable). `~` expands in the pod.
+# Where the dashboard keeps its SQLite index without a DSQL cluster, on its
+# own disk (Litestream makes it durable). `~` expands in the pod.
 _DASHBOARD_INDEX = "~/.stargazer/index.db"
+# The schema every user's index table sits in on the DSQL cluster.
+DSQL_SCHEMA = "assets"
 _UNFINISHED = (
     ActionPhase.QUEUED,
     ActionPhase.WAITING_FOR_RESOURCES,
     ActionPhase.INITIALIZING,
     ActionPhase.RUNNING,
 )
+
+
+def login_for(project: str) -> str:
+    """A project's DSQL login and table name: `u-jane` → `u_jane`."""
+    return project.replace("-", "_")
+
+
+def iam_role_name(project: str) -> str:
+    """The IAM role a project's pods log in to its DSQL index with."""
+    return f"stargazer-index-{project}"
+
+
+def dsql_cluster(cluster_arn: str) -> tuple[str, str, str]:
+    """`(region, account, endpoint)` from `arn:aws:dsql:<region>:<account>:cluster/<id>`."""
+    _, _, _, region, account, resource = cluster_arn.split(":", 5)
+    cluster_id = resource.removeprefix("cluster/")
+    return region, account, f"{cluster_id}.dsql.{region}.on.aws"
+
+
+def dsql_index_url(project: str, cluster_arn: str) -> str:
+    """The project's `STARGAZER_INDEX_URL` on DSQL, opened as a `DsqlIndex`.
+
+    Built from names alone, so a deploy needs no AWS call. Onboarding (in
+    infra) makes the login, table and IAM role it names, with these same
+    names.
+    """
+    _, account, endpoint = dsql_cluster(cluster_arn)
+    login = login_for(project)
+    role_arn = f"arn:aws:iam::{account}:role/{iam_role_name(project)}"
+    return f"{DSQL_SCHEME}{login}@{endpoint}/{DSQL_SCHEMA}.{login}?role_arn={role_arn}"
 
 
 def build_notebook_image() -> str:
@@ -116,7 +149,11 @@ def deploy_dashboard(
         "SG_OWNER_SUBJECT": owner_subject,
         "STARGAZER_OWNER": owner_subject,
         "STARGAZER_NOTEBOOK_IMAGE": _notebook_image(),
-        "STARGAZER_INDEX_URL": _DASHBOARD_INDEX,
+        "STARGAZER_INDEX_URL": (
+            dsql_index_url(project, config.DSQL_CLUSTER_ARN)
+            if config.DSQL_CLUSTER_ARN
+            else _DASHBOARD_INDEX
+        ),
         "STARGAZER_VERSION": version,
     }
     # Assets live under the same root as the workspace notebooks.

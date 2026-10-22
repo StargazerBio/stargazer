@@ -82,6 +82,11 @@ CREATE TABLE IF NOT EXISTS {table} (
 _COLUMNS = "cid, uri, name, keyvalues, created_at"
 
 
+def postgres_table_sql(table: str) -> str:
+    """`CREATE TABLE IF NOT EXISTS` for an index table on Postgres or DSQL."""
+    return _SCHEMA.format(table=table, json=PostgresIndex._JSON_TYPE)
+
+
 def _decode(keyvalues: str | dict) -> dict:
     """Keyvalues as a dict: SQLite returns JSON text, Postgres a parsed object."""
     return keyvalues if isinstance(keyvalues, dict) else json.loads(keyvalues)
@@ -329,7 +334,7 @@ class PostgresIndex(_SqlIndex):
         self.url = url
         self.table = table
         with self._connect(autocommit=True) as conn:
-            conn.execute(_SCHEMA.format(table=table, json=self._JSON_TYPE))
+            conn.execute(postgres_table_sql(table))
 
     def _connect(self, autocommit: bool) -> psycopg.Connection:
         """A new connection to the database."""

@@ -109,7 +109,7 @@ from stargazer.config import (
     STARGAZER_SECRETS,
     logger,
 )
-from stargazer.utils.index import POSTGRES_SCHEMES
+from stargazer.utils.index import DSQL_SCHEME, POSTGRES_SCHEMES
 
 # ---------------------------------------------------------------------------
 # Flyte AppEnvironment for the dashboard itself.
@@ -246,15 +246,16 @@ _STORE_OFF = "saving notebooks isn't available on this deployment"
 def _index_url() -> str:
     """Where this dashboard's notebook pods, and the runs they start, index.
 
-    A Postgres index (the devbox's) is a server every pod reaches, so pods
-    get the dashboard's own URL. A SQLite index is a file on the dashboard's
+    A Postgres index (the devbox's) is a server every pod reaches, and a
+    DSQL index is the owner's table, which every pod in their project
+    reaches, so pods get the dashboard's own URL. A SQLite index is a file on the dashboard's
     disk, so pods get the dashboard's in-cluster address: App pods get
     `INTERNAL_APP_ENDPOINT_PATTERN` from the platform; outside one, the
     address is built from the dashboard's project and domain the same way
     (`<app>.<project>-<domain>.svc.cluster.local`).
     """
     own = os.environ.get("STARGAZER_INDEX_URL", "")
-    if own.startswith(POSTGRES_SCHEMES):
+    if own.startswith((*POSTGRES_SCHEMES, DSQL_SCHEME)):
         return own
     pattern = os.environ.get("INTERNAL_APP_ENDPOINT_PATTERN") or (
         f"http://{{app_fqdn}}.{config.FLYTE_PROJECT}-{config.FLYTE_DOMAIN}"

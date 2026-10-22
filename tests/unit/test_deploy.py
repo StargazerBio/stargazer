@@ -196,3 +196,42 @@ def test_dashboard_deploy_waits_out_a_stale_watch_failure(monkeypatch):
     monkeypatch.setattr(deploy, "_notebook_image", lambda: "reg/notebook-app:h1")
     monkeypatch.setattr(deploy.time, "sleep", lambda s: None)
     assert deploy.deploy_dashboard("u-jane", ALICE) == "https://u-jane.apps.example"
+
+
+def test_a_projects_index_login_is_a_plain_identifier():
+    """`-` can't sit in an unquoted identifier, so it becomes `_`."""
+    assert deploy.login_for("u-jane-2") == "u_jane_2"
+
+
+def test_dsql_index_url_names_the_login_table_and_role():
+    """The URL is what `make_index` opens as the user's `DsqlIndex`."""
+    assert deploy.dsql_index_url(
+        "u-jane", "arn:aws:dsql:us-west-2:111122223333:cluster/abc123"
+    ) == (
+        "dsql://u_jane@abc123.dsql.us-west-2.on.aws/assets.u_jane"
+        "?role_arn=arn:aws:iam::111122223333:role/stargazer-index-u-jane"
+    )
+
+
+def test_dashboard_deploy_on_dsql_indexes_in_the_users_table(monkeypatch):
+    """With a DSQL cluster set, the dashboard's index is the user's DSQL table."""
+    served = {}
+
+    def fake_servecontext(**ctx):
+        def serve(env):
+            served.update(env_vars=dict(env.env_vars))
+            return SimpleNamespace(endpoint="https://u-jane.apps.example")
+
+        return SimpleNamespace(serve=serve)
+
+    monkeypatch.setattr(
+        config, "DSQL_CLUSTER_ARN", "arn:aws:dsql:us-west-2:111122223333:cluster/abc123"
+    )
+    monkeypatch.setattr(deploy.flyte, "with_servecontext", fake_servecontext)
+    monkeypatch.setattr(deploy, "_notebook_image", lambda: "reg/notebook-app:h1")
+    monkeypatch.setattr(deploy, "get_init_config", lambda: SimpleNamespace(org=None))
+    deploy.deploy_dashboard("u-jane", ALICE)
+    assert served["env_vars"]["STARGAZER_INDEX_URL"] == (
+        "dsql://u_jane@abc123.dsql.us-west-2.on.aws/assets.u_jane"
+        "?role_arn=arn:aws:iam::111122223333:role/stargazer-index-u-jane"
+    )

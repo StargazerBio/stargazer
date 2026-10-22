@@ -23,7 +23,8 @@ Rules:
   bucket URI (e.g. `s3://union-us-west-2-stargazerbio/stargazer`). Defaults
   to ~/.stargazer/store.
 - STARGAZER_INDEX_URL: The asset index — a SQLite file path, a
-  `postgresql://` URL (the devbox's), or a user's dashboard URL on Union.
+  `postgresql://` URL (the devbox's), a `dsql://` URL naming a user's table
+  on Aurora DSQL, or a user's dashboard URL on Union.
   Defaults to ~/.stargazer/index.db.
 - STARGAZER_OWNER: The Union subject that owns new assets (their folder in
   the store, and `_owner`). Unset locally.
