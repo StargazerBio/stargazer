@@ -1,8 +1,9 @@
 ---
 title: Onboarding moves to the infra repo
-status: doing
+status: review
 priority: high
 created: 2026-10-21
+pr: 76
 ---
 
 Onboarding (`stargazer-users`: invite, project, access policy, `upgrade`, `offboard`) moves out of stargazer into the `StargazerBio/infra` repo, as the same Python, so every AWS operation the org admin runs lives in one place (decided 2026-10-21, when per-user DSQL setup started adding IAM and DSQL admin calls to onboarding). Infra depends on the sibling stargazer checkout and deploys from its `main`.
