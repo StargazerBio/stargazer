@@ -173,7 +173,7 @@ visible in the explorer.
     "So does the image"
   - `.opencode/reference/architecture/app_internals.md`: the `main_img` and
     per-notebook resources sections
-- [ ] Verify on Union with the `union-main-img` feature. Check the pod's
+- [x] Verify on Union with the `union-main-img` feature. Check the pod's
       cgroup limits against the declared resources, and check that opening a
       second notebook from the explorer sends you to the dashboard.
 
@@ -199,3 +199,18 @@ Branch `feat/notebook-environment`, worktree `.claude/worktrees/notebook-environ
   accepted.
 - `9801642` docs, and the verify-stargazer feature renamed `union-main-env`.
 - Unit tier: 553 passed.
+- Union, 2026-10-21, `u-pryce` with the dashboard deployed from `9801642`: a
+  Basic-template notebook built `notebook-custom-cc5b5552…` (run
+  `u6zxzm27jzptvdngsrvb`), and section 0 read `bcftools → /usr/bin/bcftools`.
+  The spec requested CPU 2, MEMORY 4Gi and EPHEMERAL_STORAGE 20Gi; the Edit
+  pod's `cpu.max` was `200000 100000` and `memory.max` was `4294967296`. The
+  Edit relaunch reused the image, with no new build. `?file=limit-probe-…py`
+  in the Edit pod showed the dashboard page, and its link landed on the
+  dashboard. A gear save of a `main_env` with an undefined name returned a
+  400, with the block unchanged. Everything was torn down afterwards.
+- Rebased onto #78 (DSQL switchover) as `c41fc33`. Conflicts: two docstrings
+  and the launch's `index_url` argument. Unit tier: 533 passed. Re-checking it
+  on Union was cut short: another session (`feat/tus-public-uploads`)
+  redeployed the shared test dashboard from its own branch minutes after my
+  redeploy. Only my notebook app was stopped, and that session's dashboard
+  was left running.
