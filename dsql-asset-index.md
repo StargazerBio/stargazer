@@ -194,7 +194,7 @@ a database at 10 schemas and 1,000 tables, and a cluster has one database).
 ```bash
 aws sso login --profile pryce
 export AWS_PROFILE=pryce AWS_REGION=us-west-2
-REPO=~/Desktop/projects/stargazer
+REPO=~/Desktop/stargazerbio/stargazer
 ROLE=stargazer-index-u-pryce
 ROLE_ARN=arn:aws:iam::791359099513:role/$ROLE
 mkdir -p /tmp/dsql-probe && cd /tmp/dsql-probe
