@@ -1,6 +1,6 @@
 ---
 title: Cleanup sweep after the Oct 19–21 refactors
-status: review
+status: done
 priority: normal
 created: 2026-10-22
 pr: 81
@@ -42,3 +42,11 @@ notebook launch then hung: the redeployed dashboard pod has no
 sign-in until Cloudflare returned a 504. That's ticket `org-wide-platform-key`,
 not this branch. The test notebook "Sweep 1022" is left in the test account's
 workspace. Everything was torn down: dashboard stopped, no live runs.
+
+## Outcome
+
+Shipped in PR #81 (merge `01681e1`): four commits over the files #51–#80 touched, about 700 lines lighter, fixing two bugs (a public edit from a dashboard restamped the record's owner, and deleting a bundle-fetched CID raised) and the asset browser's owner comparison.
+
+Verified with the unit tier (485), the Pinata tier (11) against the real API, the scRNA tasks tier (18), a local dashboard driven in Chrome, and on Union with the test account: the dashboard deployed from the branch with the expected env and listed its 64 DSQL assets. No comments on the PR.
+
+Left: a notebook launch on Union wasn't verified (ticket `org-wide-platform-key`), and the test notebook "Sweep 1022" is still in the test account's workspace. The gaps the sweep found are tickets `long-image-build-launch` and `public-surface-rate-limit`.
