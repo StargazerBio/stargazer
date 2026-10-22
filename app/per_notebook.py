@@ -51,8 +51,8 @@ Auth: pods run `requires_auth=True`, and on Union the proxy also checks every
 request for the login's signed token, from the owner or one of
 `SG_ADMIN_SUBJECTS` (`app/proxy.py`), since the in-cluster address skips the
 login. `SG_OWNER_SUBJECT` also keys the pod's workspace store. No credential is baked
-into the pod env: the org's Pinata key arrives as a Flyte secret, as on the
-dashboard and in tasks.
+into the pod env: the org's Pinata key and, on Union, the project's own API
+key arrive as Flyte secrets, as on the dashboard and in tasks.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -240,8 +240,8 @@ def per_notebook_env(
     index (`STARGAZER_INDEX_URL`), the owner's, where the pod and the runs it
     starts index their assets; the assets themselves go under the workspace
     root (`STARGAZER_STORE_ROOT`). No credential is baked into the env, since
-    the owner can read the app's spec. The Pinata key comes as a secret
-    instead, which the spec only references.
+    the owner can read the app's spec. The Pinata key and the project's API
+    key come as secrets instead, which the spec only references.
     """
     if not config.NOTEBOOK_IMAGE:
         raise RuntimeError(
@@ -312,7 +312,8 @@ def per_notebook_env(
                 else {}
             ),
         },
-        # The devbox drops app secrets, so a devbox notebook has no public tier.
+        # The kernel's runs call Union with the project's key. The devbox drops
+        # app secrets, so a devbox notebook has no public tier.
         secrets=STARGAZER_SECRETS,
     )
 

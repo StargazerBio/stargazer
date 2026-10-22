@@ -36,7 +36,8 @@ directly, at the URL the deploy bakes in (`STARGAZER_INDEX_URL`).
 
 The asset manager (`app.assets`) reaches Pinata with the org's key, which the
 dashboard gets as a Flyte secret: injected into the pod, never in the app
-spec the owner can read.
+spec the owner can read. On Union the dashboard launches notebooks and builds
+their images with its project's own API key, a secret the same way.
 
 `app_env` (this app's own AppEnvironment) is also defined here. It is
 deployed per user by `app.deploy.deploy_dashboard`, which onboarding
@@ -166,9 +167,10 @@ app_env = flyte.app.AppEnvironment(
         **_FLYTE_CONTEXT,
         **_PUBLIC_CONFIG,
     },
-    # The Pinata key as a secret, never in `env_vars`: the owner can read the
-    # app spec, and Union keeps only a reference to a secret there. The devbox
-    # drops app secrets, so a devbox dashboard has no public tier.
+    # The Pinata key and, on Union, the project's API key as secrets, never in
+    # `env_vars`: the owner can read the app spec, and Union keeps only a
+    # reference to a secret there. The devbox drops app secrets, so a devbox
+    # dashboard has no public tier.
     secrets=STARGAZER_SECRETS,
     # Flyte's loaded_modules bundler ships only the .py files the deployer
     # imported; HTML and the landing-page logo must be enumerated. The

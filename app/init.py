@@ -3,7 +3,8 @@
 
 Selects the right init path for the runtime context:
 - in-cluster App pod (`_U_EP_OVERRIDE` set) → `flyte.init_in_cluster()`,
-  which reads `_U_EP_OVERRIDE`, `_U_INSECURE`, `EAGER_API_KEY`, etc. and
+  which reads `_U_EP_OVERRIDE`, `_U_INSECURE` and the project's API key
+  (`_UNION_EAGER_API_KEY`, from the secret every Union pod declares) and
   builds the right client. Mirrors what the `fserve` binary itself does
   before spawning the app subprocess — needed because uvicorn runs in a
   separate process and does not inherit fserve's Python-side client init.

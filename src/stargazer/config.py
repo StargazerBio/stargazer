@@ -30,6 +30,8 @@ Rules:
 - STARGAZER_TARGET: Which Flyte backend images and deploys aim at — `devbox`
   (default, the local cluster) or `union` (the hosted tenant). Anything else
   is an error. Forwarded into every pod so in-pod builds resolve the same way.
+  On `union` every environment also declares the project's API key
+  (`PROJECT_KEY_SECRET`), which its pods call Union with.
 - STARGAZER_REGISTRY: Image push registry. Defaults to the devbox's in-cluster
   registry on `devbox`; left unset on `union`, where the remote builder pushes
   to Union's own registry. An explicit value wins on either target.
@@ -123,6 +125,17 @@ def _stargazer_env_vars() -> dict[str, str]:
 STARGAZER_ENV_VARS = _stargazer_env_vars()
 
 STARGAZER_SECRETS = [flyte.Secret(key="PINATA_JWT", as_env_var="PINATA_JWT")]
+
+# The project's own Union API key, which onboarding stores as this secret in
+# the user's project. Union gives pods no key of its own, and without one a
+# pod's client can't call Union: a workflow can't start its child tasks, and
+# a dashboard can't launch notebooks. Flyte's in-cluster client reads the key
+# from this variable. The devbox has no login, so its pods declare none.
+PROJECT_KEY_SECRET = "UNION_API_KEY"
+if os.environ["STARGAZER_TARGET"] == "union":
+    STARGAZER_SECRETS.append(
+        flyte.Secret(key=PROJECT_KEY_SECRET, as_env_var="_UNION_EAGER_API_KEY")
+    )
 
 
 def log_execution() -> str:
