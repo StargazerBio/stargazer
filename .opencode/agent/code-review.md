@@ -31,7 +31,7 @@ Types (dataclasses) → Tasks (single-purpose) → Workflows (composition)
 - **Types**: Content-addressed dataclasses in `src/stargazer/assets/` with IPFS metadata
 - **Tasks**: Single-purpose async Flyte v2 tasks in `src/stargazer/tasks/`
 - **Workflows**: Composed pipelines in `src/stargazer/workflows/`
-- **Utils**: Shared helpers in `src/stargazer/utils/` (subprocess, pinata, query)
+- **Utils**: Shared helpers in `src/stargazer/utils/` (subprocess, pinata, storage, index, cid, query)
 
 ### Critical Configuration Parameters
 
@@ -40,7 +40,7 @@ You MUST scrutinize how code handles these environment-driven behaviors (see `co
 #### Storage & Network
 ```
 PINATA_JWT                  → Turns on the public tier (Pinata's public network; no default)
-PINATA_GATEWAY              → Download gateway URL (default: https://dweb.link)
+PINATA_GATEWAY              → Download gateway URL (default: the account's dedicated Pinata gateway)
 STARGAZER_STORE_ROOT        → Object-store root for asset bytes (default: ~/.stargazer/store)
 STARGAZER_INDEX_URL         → Asset index: SQLite path, postgresql:// URL, or dsql:// URL (default: ~/.stargazer/index.db)
 STARGAZER_LOCAL             → Scratch space and download cache (default: ~/.stargazer/local)
@@ -285,7 +285,8 @@ if apply_bqsr:
 - [ ] Notebook must import without errors and expose a `marimo.App` object
 - [ ] A corresponding parametrized test case must exist in `tests/notebooks/test_notebook_smoke.py` (it walks `src/stargazer/notebooks/`, so adding the `.py` file is sufficient)
 - [ ] Async cells must use `async def`, never `asyncio.get_event_loop().run_until_complete()`
-- [ ] Notebooks must only import from `stargazer.*` public APIs — never define production tasks or types inline
+- [ ] Notebooks must only import from `stargazer.*` public APIs — never define production tasks or types inline that belong in the SDK (prototypes are fine)
+- [ ] The setup block declares `main_env`, `main_name` and `main_description` as plain assignments
 - [ ] Every cell function must have a docstring
 
 ## Review Process

@@ -127,7 +127,7 @@ How the *notebook UI* is served — orthogonal to execution context. A notebook 
 | Mode | Behavior | Used for |
 |------|----------|----------|
 | **Edit** | Full marimo editing UI | Tutorials, Workflows, Workspace authoring |
-| **Run** | Read-only app view (`--include-code`) | Shareable views of any notebook |
+| **Run** | Read-only app view of the notebook | Shareable views of any notebook |
 
 A notebook runs in one mode at a time — see [App → Core Concepts](app.md#core-concepts).
 

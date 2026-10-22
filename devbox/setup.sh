@@ -29,7 +29,7 @@
 #     `env_vars` would show it to every user in their app's spec.
 #   - Memory. The node has ~7.75 GiB allocatable, and the cluster's own pods,
 #     the dashboard and the index's Postgres request ~1.7 GiB of it (1,710 Mi
-#     measured 2026-10-20). Scheduling counts requests, and a parent task holds
+#     measured). Scheduling counts requests, and a parent task holds
 #     its request while it waits on its children, so a workflow's pods must fit
 #     together in ~6 GiB. That's why gatk_env requests 1 GiB
 #     (src/stargazer/config.py).
@@ -37,12 +37,12 @@
 #     Knative service when it's deactivated (Union removes it), so the next
 #     request starts a pod again: a stopped notebook's open tab polls every
 #     10 s and brings it back, and the new pod hydrates and saves the
-#     workspace as usual (measured 2026-10-21). Close a stopped notebook's
+#     workspace as usual (measured). Close a stopped notebook's
 #     tab; deleting the notebook removes its service.
 #   - Notebook pods run as root. The local image builder leaves the notebook
 #     image at `USER root` where Union's builder ends at `flyte`, so pods
 #     start as root with HOME=/root. Edit mode, saving and the terminal (with
-#     Claude Code) all work that way (measured 2026-10-21).
+#     Claude Code) all work that way (measured).
 #   - Architecture. On Apple silicon the node is arm64 (an x86_64 devbox
 #     can't start pods: seccomp is unsupported under emulation). Stargazer's
 #     images are x86_64 only, because GATK's GenomicsDB native library is, so

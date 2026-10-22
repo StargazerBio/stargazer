@@ -37,7 +37,7 @@ All env var defaults are set in `config.py`. If set (even to empty string), the 
 
 `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` are forwarded into task pods only when set explicitly. A pod can't use the local default store or index, so a remote run submitted locally with the defaults has nowhere shared to write.
 
-On Union, `PINATA_JWT` is a Flyte secret that every task environment, dashboard and notebook pod declares, so the key is set wherever Stargazer runs and its value never appears in a task's or an app's spec.
+On Union, `PINATA_JWT` is a Flyte secret ([The public tier](#the-public-tier)).
 
 ## Connecting to Flyte
 
@@ -69,7 +69,7 @@ Gateway downloads use aiohttp directly: `flyte.io.File.download()` can't read an
 
 ## The public tier
 
-Shared data — bundles, reference genomes — is public data on Pinata's public network: anyone can read it, and `_owner` records who uploaded it. Every public record needs an `_owner`: a public upload or edit without one is refused before anything is sent (so publishing needs `STARGAZER_OWNER`), and a public file without one, uploaded straight to Pinata, is left out of every read. The SDK reads Pinata's public index (which needs `PINATA_JWT` even for public files) and downloads public bytes from `PINATA_GATEWAY`. Nothing uses Pinata's private network: the asset browser's Private tab is the user's own index and store, and its Public tab calls Pinata's public network directly. Hosted dashboards get the key as a Flyte secret, which keeps its value out of the app's spec.
+Shared data — bundles, reference genomes — is public data on Pinata's public network: anyone can read it, and `_owner` records who uploaded it. Every public record needs an `_owner`: a public upload or edit without one is refused before anything is sent (so publishing needs `STARGAZER_OWNER`), and a public file without one, uploaded straight to Pinata, is left out of every read. The SDK reads Pinata's public index (which needs `PINATA_JWT` even for public files) and downloads public bytes from `PINATA_GATEWAY`. Nothing uses Pinata's private network: the asset browser's Private tab is the user's own index and store, and its Public tab calls Pinata's public network directly. On Union the key is a Flyte secret that every task environment, dashboard and notebook pod declares, so it is set wherever Stargazer runs and its value never appears in a task's or an app's spec. The devbox drops app secrets, so devbox dashboards and notebook pods have no public tier.
 
 **Publishing moves a stored asset into the public tier.** `StorageClient.publish(cid)` uploads one of the user's stored files to Pinata with its index row's keyvalues, `_owner` restamped. The CID has to come back the same: ours is computed with Pinata's parameters, so a different one raises instead of passing quietly. The user's row stays, so the asset is in both tiers, and queries keep the row over the public duplicate. Companions aren't published with their asset. The MCP server exposes it as `publish_file`.
 
@@ -80,7 +80,7 @@ multipart POST (one round trip, CID in the response body). Larger files use
 Pinata's resumable **TUS** endpoint — chunked `PATCH`es, CID read from the
 `Upload-Cid` header on the completing request. The split is required, not an
 optimization: Pinata's plain POST is hard-capped at 100MB. The TUS path is
-chunked-first (no resume yet) with a 10 GiB/file ceiling — itself a Pinata
+chunked, not resumable across calls, with a 10 GiB/file ceiling — itself a Pinata
 limit, not an IPFS one (IPFS chunks files into a DAG with no inherent size
 cap).
 
@@ -111,15 +111,17 @@ once the last one lands — see [App → Asset Manager](app.md#asset-manager).
 
 ## Container Images
 
-Stargazer has three container images. They split along a sharp line: **task images** (run only by Flyte) are declared as `flyte.Image`s on the `TaskEnvironment`s in `src/stargazer/config.py`; **human-runnable images** (used via `docker run`) are built from the project's multi-stage `Dockerfile`.
+Stargazer has five container images. They split along a sharp line: **Flyte-built images** (run only by Flyte) are declared as `flyte.Image`s, the task images on the `TaskEnvironment`s in `src/stargazer/config.py` and the two hosted-app images in `app/`; the **human-runnable image** (used via `docker run`) is built from the project's multi-stage `Dockerfile`.
 
 | Image | Source | Type | Where it runs |
 |-------|--------|------|---------------|
 | `stargazer-scrna` | `config.py` (`scrna_env`) | `flyte.TaskEnvironment` | scRNA-seq tasks (`tasks/scrna/`) |
 | `stargazer-gatk` | `config.py` (`gatk_env`) | `flyte.TaskEnvironment` | GATK + alignment tasks (`tasks/gatk/`, `tasks/general/`) |
-| `stargazer` | `Dockerfile` | The hosted notebook image: marimo behind the terminal proxy, Claude Code, the bioconda tools | Local `docker run` only |
+| `notebook-app` | `app/per_notebook.py` (`notebook_app_img_recipe`) | `flyte.Image` | Hosted notebook pods |
+| the dashboard image | `app/admin_app.py` (`app_env`) | `flyte.Image` via `with_uv_project` | Each user's dashboard |
+| `stargazer` | `Dockerfile` | Marimo behind the terminal proxy, Claude Code, the bioconda tools | Local `docker run` only |
 
-Why the split: task images need nothing but Flyte's contract (an entrypoint Flyte injects, a content-hash tag Flyte pins by) — perfectly served by the SDK. A human-runnable image needs a real `ENTRYPOINT`, baked-in source, and a stable `:latest` tag — none of which the Flyte Image SDK exposes. Rather than reinvent the Dockerfile via post-build wrapping, we just use a Dockerfile.
+Why the split: Flyte-built images need nothing but Flyte's contract (an entrypoint Flyte injects, a content-hash tag Flyte pins by) — perfectly served by the SDK. A human-runnable image needs a real `ENTRYPOINT`, baked-in source, and a stable `:latest` tag — none of which the Flyte Image SDK exposes. Rather than reinvent the Dockerfile via post-build wrapping, we just use a Dockerfile.
 
 Both task images install the stargazer package itself, not only its dependencies. A task pod finds the tasks a workflow calls by their installed module names, so without the package a workflow's child tasks can't load, wherever the run was submitted from. Your own tasks and workflows still travel in each run's code bundle. Since the package is in the image, a change to the project's source builds new task images; `.dockerignore` keeps docs, tests and local caches out of the build context, so they don't.
 
@@ -127,7 +129,7 @@ Every image Flyte builds — the task images, the dashboard, the notebook image 
 
 The `Dockerfile` image is published for both `linux/amd64` and `linux/arm64`, so it runs natively on Apple silicon. It carries the bioconda tools and a Flyte config that runs workflows in the container; a notebook's own dependencies come from its PEP 723 header, as in a hosted pod. Because GenomicsDB has no arm64 build, joint calling works only in the amd64 variant.
 
-Hosted notebook pods run **`notebook-app`**, defined programmatically in `app/per_notebook.py` and built by onboarding (`stargazer-users`). `stargazer` mirrors that recipe in the `Dockerfile` without sharing code with it (a unit test keeps its pip packages in step; tool versions can lag), because a published, multi-arch image needs a real `ENTRYPOINT` and a stable tag the Flyte Image SDK doesn't expose. See [App → Images](app.md#images).
+Hosted notebook pods run **`notebook-app`**, defined programmatically in `app/per_notebook.py` and built by the deploy (`app.deploy.build_notebook_image`). `stargazer` mirrors that recipe in the `Dockerfile` without sharing code with it (a unit test keeps its pip packages in step; tool versions can lag), because a published, multi-arch image needs a real `ENTRYPOINT` and a stable tag the Flyte Image SDK doesn't expose. See [App → Images](app.md#images).
 
 ### Building locally
 

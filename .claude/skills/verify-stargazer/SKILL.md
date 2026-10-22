@@ -1,6 +1,6 @@
 ---
 name: verify-stargazer
-description: Drive Stargazer the way a user does and capture evidence that a change works. Covers the marimo notebooks run headless, with SDK tasks executing locally against an isolated asset store, and the local devbox: asset storage (task pods storing and finding assets through the devbox's Postgres index, and the dashboard listing them) and the germline workflow end to end. Use before declaring a task, workflow, or notebook change done, or when asked to verify, prove, or reproduce Stargazer behavior.
+description: Drive Stargazer the way a user does and capture evidence that a change works. Covers the marimo notebooks run headless, with SDK tasks executing locally against an isolated asset store, and the local devbox: asset storage (task pods storing and finding assets through the devbox's Postgres index, and the dashboard listing them) and the germline workflow end to end. Also covers a notebook launched with `main_env` on the Union tenant (`union-main-env`). Use before declaring a task, workflow, or notebook change done, or when asked to verify, prove, or reproduce Stargazer behavior.
 ---
 
 # Verify Stargazer
