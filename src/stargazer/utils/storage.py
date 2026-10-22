@@ -16,19 +16,13 @@ Where asset bytes and metadata live, and the local cache in front of them.
 - **Public data** lives on Pinata's public network. When `PINATA_JWT` is
   set, `query()` merges Pinata's public records in (the user's own row wins
   on a shared CID), and public files download from the IPFS gateway.
-  `companions()` adds to the user's own the public companions the caller
-  published and those of whoever published the CID itself, nobody else's.
+  `companions()` decides which public companions join the user's own.
 - **The cache** is `<STARGAZER_LOCAL>/<cid>/<name>`. Uploads seed it,
   downloads fill it, and `Asset.fetch()` hardlinks companions next to their
   asset.
 
-Gateway downloads use aiohttp directly: `flyte.io.File.download()` can't
-read an `https://` path (flyte 2.10.7's HTTP filesystem fails with "Timeout
-context manager should be used inside a task").
-
 `get_client()` builds a client from the environment; `default_client` is the
-lazily built process-wide instance (lazy because Flyte injects `PINATA_JWT`
-just before a task runs).
+lazily built process-wide instance (`_LazyClient`).
 
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
@@ -46,13 +40,7 @@ from flyte.io import File
 import stargazer.config  # ensure env var defaults are set  # noqa: F401
 from stargazer.assets.asset import Asset
 from stargazer.utils.cid import compute_cid
-from stargazer.utils.index import (
-    DSQL_SCHEME,
-    POSTGRES_SCHEMES,
-    DsqlIndex,
-    PostgresIndex,
-    SqliteIndex,
-)
+from stargazer.utils.index import SqlIndex, make_index
 from stargazer.utils.pinata import PinataClient, _stamp_owner
 from stargazer.utils.query import generate_query_combinations
 
@@ -81,6 +69,12 @@ def _makedirs(uri: str) -> None:
     flyte.storage.get_underlying_filesystem(path=uri).makedirs(uri, exist_ok=True)
 
 
+def _set_stored(asset: Asset, cid: str, uri: str, name: str) -> None:
+    """Point `asset` at its stored file."""
+    asset.cid = cid
+    asset.path = File(path=uri, name=name, hash=cid)
+
+
 def _remove(uri: str) -> None:
     """Delete one stored file; an absent file is already deleted."""
     try:
@@ -90,7 +84,12 @@ def _remove(uri: str) -> None:
 
 
 async def _fetch_http(url: str, dest: Path) -> None:
-    """Stream a URL to `dest`."""
+    """Stream a URL to `dest`.
+
+    aiohttp rather than `flyte.storage`: flyte's HTTP filesystem can't read
+    an `https://` path outside a task ("Timeout context manager should be
+    used inside a task").
+    """
     async with aiohttp.ClientSession() as session, session.get(url) as response:
         response.raise_for_status()
         async with aiofiles.open(dest, "wb") as fh:
@@ -112,7 +111,7 @@ class StorageClient:
         self,
         local_dir: Path,
         store_root: str,
-        index: SqliteIndex | PostgresIndex,
+        index: SqlIndex,
         public: PinataClient | None = None,
         gateway: str | None = None,
     ):
@@ -136,12 +135,16 @@ class StorageClient:
         """Where a file lives in the local cache."""
         return self.local_dir / cid / name
 
+    def gateway_uri(self, cid: str) -> str:
+        """Where the public IPFS gateway serves `cid`."""
+        return f"{self.gateway}/ipfs/{cid}"
+
     def _public_record(self, record: dict) -> dict:
         """A Pinata public record in index-row shape, located at the gateway."""
         cid = record["cid"]
         return {
             "cid": cid,
-            "uri": f"{self.gateway}/ipfs/{cid}",
+            "uri": self.gateway_uri(cid),
             "name": record.get("name") or cid,
             "keyvalues": record.get("keyvalues", {}),
         }
@@ -150,9 +153,10 @@ class StorageClient:
         """Store `path` as `asset`: bytes to the store, then the index row.
 
         Sets `asset.cid` and `asset.path` (a File at the stored location) and
-        seeds the local cache. Identical bytes already in the store, under the
-        CID's row or at its path, aren't transferred again. Whatever the store or the index raises propagates:
-        a row that doesn't land fails the upload.
+        seeds the local cache. Bytes the CID's row already points at, or
+        already at the target path, aren't transferred again. Whatever the
+        store or the index raises propagates: a row that doesn't land fails
+        the upload.
         """
         path = Path(path)
         cid = await asyncio.to_thread(compute_cid, path)
@@ -165,6 +169,11 @@ class StorageClient:
             if not await flyte.storage.exists(uri):
                 await asyncio.to_thread(_makedirs, uri.rsplit("/", 1)[0])
                 await flyte.storage.put(str(path), uri)
+        await self._index_as(asset, cid, uri, name)
+        _materialize(path, self._cache_path(cid, name))
+
+    async def _index_as(self, asset: Asset, cid: str, uri: str, name: str) -> None:
+        """Write `asset`'s row, stamped with `_owner`, and point it at `uri`."""
         await self.index.upsert(
             {
                 "cid": cid,
@@ -173,9 +182,7 @@ class StorageClient:
                 "keyvalues": _stamp_owner(asset.to_keyvalues()),
             }
         )
-        asset.cid = cid
-        asset.path = File(path=uri, name=name, hash=cid)
-        _materialize(path, self._cache_path(cid, name))
+        _set_stored(asset, cid, uri, name)
 
     async def _stored_copy(self, cid: str) -> tuple[str | None, str | None]:
         """The `(uri, name)` of the file the CID's row points at, if it exists."""
@@ -201,19 +208,9 @@ class StorageClient:
         stored, name = await self._stored_copy(cid)
         if stored is not None and stored != uri:
             await asyncio.to_thread(_remove, uri)
-            uri = stored
+            _set_stored(asset, cid, stored, name)
         else:
-            name = uri.rsplit("/", 1)[-1]
-            await self.index.upsert(
-                {
-                    "cid": cid,
-                    "uri": uri,
-                    "name": name,
-                    "keyvalues": _stamp_owner(asset.to_keyvalues()),
-                }
-            )
-        asset.cid = cid
-        asset.path = File(path=uri, name=name, hash=cid)
+            await self._index_as(asset, cid, uri, uri.rsplit("/", 1)[-1])
 
     async def download(self, asset: Asset, directory: Path | None = None) -> Path:
         """Make a local copy of `asset` and return its path.
@@ -236,8 +233,9 @@ class StorageClient:
             if row is not None:
                 asset.path = File(path=row["uri"], name=row["name"], hash=asset.cid)
             else:
-                uri = f"{self.gateway}/ipfs/{asset.cid}"
-                asset.path = File(path=uri, name=asset.cid, hash=asset.cid)
+                asset.path = File(
+                    path=self.gateway_uri(asset.cid), name=asset.cid, hash=asset.cid
+                )
         source = asset.path.path
         if not asset.cid:
             local = Path(source)
@@ -278,7 +276,7 @@ class StorageClient:
             return rows
         mine = {r["cid"] for r in rows}
         public: dict[str, dict] = {}
-        for combo in generate_query_combinations(base_query={}, filters=filters):
+        for combo in generate_query_combinations(filters):
             for record in await self.public.query(combo):
                 if record["cid"] not in mine:
                     public.setdefault(record["cid"], self._public_record(record))
@@ -319,15 +317,15 @@ class StorageClient:
                     rows.append(public)
         return rows
 
-    async def get(self, cid: str) -> dict | None:
-        """The user's index row for `cid`, or None."""
-        return await self.index.get(cid)
-
     async def delete(self, asset: Asset) -> None:
-        """Remove the asset's index row and its stored file. Idempotent."""
+        """Remove the asset's index row and, if it's in the store, its file.
+
+        A row pointing at the IPFS gateway (a fetched bundle) has no stored
+        file to remove. Idempotent.
+        """
         row = await self.index.get(asset.cid)
         await self.index.delete(asset.cid)
-        if row is not None:
+        if row is not None and not row["uri"].startswith(("http://", "https://")):
             await asyncio.to_thread(_remove, row["uri"])
 
     async def publish(self, cid: str) -> dict:
@@ -355,13 +353,9 @@ class StorageClient:
         row = await self.index.get(cid)
         if row is None:
             raise ValueError(f"{cid} isn't in your storage")
-        stored = Asset(
-            cid=cid,
-            path=File(path=row["uri"], name=row["name"], hash=cid),
-            keyvalues=dict(row["keyvalues"]),
-        )
+        stored = Asset(cid=cid, path=File(path=row["uri"], name=row["name"], hash=cid))
         local = await self.download(stored)
-        published = Asset(keyvalues=dict(row["keyvalues"]))
+        published = Asset(keyvalues=_stamp_owner(dict(row["keyvalues"])))
         await self.public.upload(published, local)
         # Our CIDs are computed to match Pinata's, so a mismatch is a bug.
         if published.cid != cid:
@@ -371,44 +365,20 @@ class StorageClient:
         return {
             "cid": cid,
             "name": row["name"],
-            "keyvalues": _stamp_owner(published.to_keyvalues()),
+            "keyvalues": published.to_keyvalues(),
         }
 
-    async def update_metadata(
-        self, cid: str, keyvalues: dict[str, str], network: str | None = None
-    ) -> dict:
-        """Merge a metadata patch onto a record, restamping `_owner`.
+    async def update_metadata(self, cid: str, keyvalues: dict[str, str]) -> dict:
+        """Merge a metadata patch onto the user's index row, restamping `_owner`.
 
         Args:
             cid: The record to update
             keyvalues: Keys to add or overwrite; others are kept
-            network: "public" edits the Pinata public record; otherwise the
-                user's index row
 
         Raises:
-            ValueError: when the record doesn't exist, or "public" is asked
-                for without a Pinata key
+            ValueError: when the user has no row for `cid`
         """
-        if network == "public":
-            if self.public is None:
-                raise ValueError("No PINATA_JWT: public records can't be edited")
-            return await self.public.update_metadata(cid, keyvalues)
         return await self.index.merge(cid, _stamp_owner(dict(keyvalues)))
-
-
-def make_index(url: str) -> SqliteIndex | PostgresIndex:
-    """The index named by `STARGAZER_INDEX_URL`.
-
-    A `postgresql://` (or `postgres://`) URL is a Postgres database; a
-    `dsql://` URL is a user's table on Aurora DSQL (see `DsqlIndex`);
-    anything else is a SQLite file path (a `sqlite://` prefix is accepted and
-    stripped, `~` is expanded).
-    """
-    if url.startswith(DSQL_SCHEME):
-        return DsqlIndex(url)
-    if url.startswith(POSTGRES_SCHEMES):
-        return PostgresIndex(url)
-    return SqliteIndex(Path(url.removeprefix("sqlite://")).expanduser())
 
 
 def get_client() -> StorageClient:
@@ -429,8 +399,8 @@ def get_client() -> StorageClient:
 class _LazyClient:
     """Lazy singleton proxy for the storage client.
 
-    Why: PINATA_JWT is injected by Flyte just before a task runs, so building
-    the client at import would miss it and silently drop the public tier.
+    PINATA_JWT is injected by Flyte just before a task runs, so building the
+    client at import would miss it and silently drop the public tier.
     """
 
     _instance: StorageClient | None = None

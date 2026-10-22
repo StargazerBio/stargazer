@@ -14,7 +14,6 @@ dependencies = [
     "flyte[tui]>=2.0.3",
     "loguru>=0.7.3",
     "pyyaml>=6.0.3",
-    "httpx>=0.27,<1",
     "psycopg[binary]>=3.2,<4",
     "boto3>=1.40,<2",
     "certifi>=2024.2.2",
@@ -36,8 +35,7 @@ mcp = ["mcp[cli]>=2.0,<3"]
 landing = [
     "fastapi>=0.115",
     "uvicorn>=0.34",
-    "itsdangerous>=2.1",
-    "httpx>=0.27",
+    "httpx>=0.27,<1",
     "websockets>=12",
     "python-multipart>=0.0.9",
     "jinja2>=3.1",

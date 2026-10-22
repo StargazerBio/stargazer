@@ -103,7 +103,7 @@ class TestSpecialize:
 
     def test_unknown_preserves_keyvalues(self):
         """A custom-key record keeps its metadata when no class is registered
-        in this process (plan 20: registry is import-driven, per-process).
+        in this process (the registry is import-driven, per process).
 
         The key must never collide with a registered class — even the
         tutorials register real classes (e.g. sample_sheet) on import.

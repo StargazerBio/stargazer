@@ -1,19 +1,19 @@
-"""Tests for build_asset() and _owner stamping (plan 20, piece 1).
+"""Tests for build_asset(), _owner stamping, and the MCP upload/publish tools.
 
 build_asset() is the single validation choke point shared by the MCP
-server and the asset-manager page: registered asset keys check their
+server and the dashboard's asset browser: registered asset keys check their
 declared fields and keep any other key as an extra, unregistered keys
 pass through as a bare Asset, reserved system keys (underscore-prefixed)
 are rejected everywhere.
 """
 
-from pathlib import Path
-
 import pytest
+from conftest import FakePublicTier
 
 from stargazer.assets import Asset, build_asset
 from stargazer.assets.alignment import Alignment
 from stargazer.config import _stargazer_env_vars
+from stargazer.server import publish_file, upload_file
 from stargazer.utils.cid import compute_cid
 from stargazer.utils.pinata import _stamp_owner
 
@@ -96,8 +96,6 @@ class TestUploadFileTool:
     async def test_unregistered_key_uploads_as_generic_with_note(
         self, isolated_storage, tmp_path
     ):
-        from stargazer.server import upload_file
-
         f = tmp_path / "sheet.tsv"
         f.write_text("a\tb\n")
         result = await upload_file(
@@ -114,8 +112,6 @@ class TestUploadFileTool:
     async def test_registered_key_uploads_typed_without_note(
         self, isolated_storage, tmp_path
     ):
-        from stargazer.server import upload_file
-
         f = tmp_path / "x.bam"
         f.write_bytes(b"BAM")
         result = await upload_file(str(f), {"asset": "alignment", "sample_id": "S1"})
@@ -125,8 +121,6 @@ class TestUploadFileTool:
         assert row["keyvalues"]["sample_id"] == "S1"
 
     async def test_underscore_key_rejected(self, isolated_storage, tmp_path):
-        from stargazer.server import upload_file
-
         f = tmp_path / "x.bam"
         f.write_bytes(b"BAM")
         with pytest.raises(ValueError, match="stamped automatically"):
@@ -138,24 +132,13 @@ class TestPublishFileTool:
     """server.py::publish_file publishes one of the user's stored files."""
 
     async def test_publishes_a_stored_file(self, isolated_storage, tmp_path):
-        from stargazer.server import publish_file, upload_file
-
-        sent = []
-
-        class _PublicTier:
-            """Records the upload and assigns the CID Pinata would."""
-
-            async def upload(self, component, path):
-                sent.append(Path(path).read_bytes())
-                component.cid = compute_cid(Path(path))
-
-        isolated_storage.public = _PublicTier()
+        isolated_storage.public = public = FakePublicTier()
         f = tmp_path / "sheet.tsv"
         f.write_text("a\tb\n")
         stored = await upload_file(str(f), {"asset": "sample_sheet_probe"})
 
         result = await publish_file(stored["cid"])
 
-        assert sent == [b"a\tb\n"]
+        assert [u["bytes"] for u in public.uploads] == [b"a\tb\n"]
         assert result["cid"] == stored["cid"]
         assert result["keyvalues"] == {"asset": "sample_sheet_probe"}

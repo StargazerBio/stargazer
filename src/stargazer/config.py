@@ -53,9 +53,9 @@ from loguru import logger as logger  # noqa: PLC0414
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# The account's dedicated gateway: public ones rate-limit full downloads, and
-# dweb.link stopped serving files on 2026-09-21. Every download through it,
-# signed in or not, counts against the account's bandwidth.
+# The account's dedicated gateway, since public ones rate-limit full
+# downloads. Every download through it, signed in or not, counts against the
+# account's bandwidth.
 os.environ.setdefault(
     "PINATA_GATEWAY", "https://maroon-written-fowl-769.mypinata.cloud"
 )
@@ -98,12 +98,11 @@ logger.add(sys.stderr, level="INFO")
 def _stargazer_env_vars() -> dict[str, str]:
     """env_vars forwarded into task pods via the TaskEnvironments.
 
-    The spec serializes from the submitting process, so STARGAZER_OWNER is
-    included when the submitter carries it (hosted workspaces) — task pods
-    then stamp ``_owner`` onto pipeline outputs. Strictly optional: absent
-    locally, nothing requires it. STARGAZER_TARGET (and an explicit
-    STARGAZER_REGISTRY) ride along so a pod that builds or submits images —
-    the admin app, a notebook, a parent task — resolves them like the deployer.
+    The spec serializes from the submitting process. STARGAZER_OWNER rides
+    along when set (hosted workspaces), so a pod stores outputs in the
+    owner's folder and stamps their ``_owner``; without it a pod writes as
+    ``local``. PINATA_GATEWAY, STARGAZER_TARGET and an explicit
+    STARGAZER_REGISTRY ride along so a pod resolves them like the submitter.
     STARGAZER_STORE_ROOT and STARGAZER_INDEX_URL ride along only when set
     explicitly: a pod can't use the local store or index.
     """
@@ -160,12 +159,12 @@ def log_execution() -> str:
     execution_id = f"{workflow}-{commit}-{timestamp}"
     logger.add(_log_dir / f"{execution_id}.log")
 
-    jwt_len = len(os.environ.get("PINATA_JWT", ""))
+    public = "on" if os.environ.get("PINATA_JWT") else "off"
     logger.info(
         f"Execution started: {execution_id} "
         f"| store={os.environ['STARGAZER_STORE_ROOT']} "
         f"| index={os.environ['STARGAZER_INDEX_URL']} "
-        f"| public tier={'on' if jwt_len else 'off'} "
+        f"| public tier={public} "
         f"| gateway={os.environ['PINATA_GATEWAY']} "
         f"| local_dir={os.environ['STARGAZER_LOCAL']} | target={os.environ['STARGAZER_TARGET']}"
     )
@@ -249,9 +248,8 @@ gatk_env = flyte.TaskEnvironment(
                 "-c bioconda -c conda-forge gatk4 samtools bwa bwa-mem2 "
                 "&& /usr/local/bin/micromamba clean -a -y",
                 # java is the JVM bundled by the gatk4 conda package; gatk's
-                # wrapper script subprocess-calls it by name so it must be on
-                # PATH. bwa-mem2
-                # is a launcher that runs a CPU-specific sibling (bwa-mem2.avx2,
+                # wrapper calls it by name, so it must be on PATH. bwa-mem2 is
+                # a launcher that runs a CPU-specific sibling (bwa-mem2.avx2,
                 # …) from its own directory, so every variant is linked.
                 "ln -s /opt/conda/bin/gatk /usr/local/bin/gatk "
                 "&& ln -s /opt/conda/bin/java /usr/local/bin/java "

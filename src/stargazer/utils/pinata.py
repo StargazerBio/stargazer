@@ -24,7 +24,6 @@ from pathlib import Path
 import aiofiles
 import aiohttp
 
-import stargazer.config  # ensure env var defaults are set  # noqa: F401
 from stargazer.assets.asset import Asset
 
 # Pinata's plain multipart POST is capped at 100MB; larger files must use the
@@ -136,13 +135,17 @@ def _check_keyvalue_lengths(kv: dict[str, str]) -> None:
             )
 
 
+def _check_new_file(kv: dict[str, str]) -> None:
+    """Raise unless `kv` can go on a new public file: owned and within limits."""
+    _check_keyvalue_count(kv)
+    _check_keyvalue_lengths(kv)
+    _check_owner(kv)
+
+
 class PinataClient:
-    """Async client for Pinata API v3.
+    """Async client for Pinata API v3, on Pinata's public network (`NETWORK`).
 
-    Handles authenticated operations against the Pinata API: uploads,
-    metadata queries, and deletions, all on Pinata's
-    public network (`NETWORK`).
-
+    Uploads (plain or TUS), keyvalue queries, metadata updates and deletes.
     A pure remote transport: caching and gateway downloads are the storage
     client's job (`stargazer.utils.storage`).
 
@@ -179,26 +182,15 @@ class PinataClient:
         """Get authorization headers."""
         return {"Authorization": f"Bearer {self.jwt}"}
 
-    async def _get_gateway_domain(self) -> str:
-        """Fetch the dedicated gateway domain from Pinata API."""
-        if not hasattr(self, "_gateway_domain") or self._gateway_domain is None:
-            async with (
-                aiohttp.ClientSession() as session,
-                session.get(
-                    f"{self.API_BASE}/ipfs/gateways", headers=self._headers()
-                ) as response,
-            ):
-                response.raise_for_status()
-                data = await response.json()
-                rows = data["data"]["rows"]
-                if not rows:
-                    raise ValueError(
-                        "No gateway configured in Pinata account. "
-                        "Create one at https://app.pinata.cloud/gateway"
-                    )
-                domain = rows[0]["domain"]
-                self._gateway_domain = f"https://{domain}.mypinata.cloud"
-        return self._gateway_domain
+    async def _files(self, session: aiohttp.ClientSession, cid: str) -> list[dict]:
+        """The public network's file listings for `cid`, owned or not."""
+        async with session.get(
+            f"{self.API_BASE}/files/{NETWORK}",
+            headers=self._headers(),
+            params={"cid": cid},
+        ) as response:
+            response.raise_for_status()
+            return (await response.json()).get("data", {}).get("files", [])
 
     async def tus_create(
         self, filename: str, keyvalues: dict[str, str], length: int
@@ -207,7 +199,8 @@ class PinataClient:
 
         Args:
             filename: Name the uploaded file will carry
-            keyvalues: Validated, already-stamped metadata for the file
+            keyvalues: The file's metadata, `_owner` included (checked here,
+                not stamped)
             length: The whole file's size in bytes
 
         Returns:
@@ -218,9 +211,7 @@ class PinataClient:
                 ``MAX_KEYVALUES`` keys or one longer than
                 ``MAX_KEYVALUE_CHARS``, before any request is made
         """
-        _check_keyvalue_count(keyvalues)
-        _check_keyvalue_lengths(keyvalues)
-        _check_owner(keyvalues)
+        _check_new_file(keyvalues)
         async with (
             aiohttp.ClientSession() as session,
             session.post(
@@ -281,12 +272,10 @@ class PinataClient:
         """
         path = Path(path)
         kv = _stamp_owner(component.to_keyvalues())
-        _check_keyvalue_count(kv)
-        _check_keyvalue_lengths(kv)
-        _check_owner(kv)
         if path.stat().st_size > TUS_THRESHOLD_BYTES:
             await self._upload_tus(component, path, kv)
         else:
+            _check_new_file(kv)
             await self._upload_plain(component, path, kv)
 
     async def _upload_plain(
@@ -300,8 +289,7 @@ class PinataClient:
             data.add_field("file", open(path, "rb"), filename=path.name)
             data.add_field("name", path.name)
             data.add_field("network", NETWORK)
-            if kv:
-                data.add_field("keyvalues", json.dumps(kv))
+            data.add_field("keyvalues", json.dumps(kv))
 
             async with session.post(
                 url, headers=self._headers(), data=data
@@ -373,14 +361,8 @@ class PinataClient:
         Returns:
             The record (cid, name, keyvalues, network), or None
         """
-        url = f"{self.API_BASE}/files/{NETWORK}"
-        async with (
-            aiohttp.ClientSession() as session,
-            session.get(url, headers=self._headers(), params={"cid": cid}) as response,
-        ):
-            response.raise_for_status()
-            data = json.loads(await response.text())
-        owned = [f for f in data.get("data", {}).get("files", []) if _owned(f)]
+        async with aiohttp.ClientSession() as session:
+            owned = [f for f in await self._files(session, cid) if _owned(f)]
         return _record(owned[0]) if owned else None
 
     async def delete(self, component: Asset) -> None:
@@ -389,22 +371,12 @@ class PinataClient:
         Args:
             component: Asset with cid set
         """
-        url = f"{self.API_BASE}/files/{NETWORK}"
-        params = {"cid": component.cid}
-
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                url, headers=self._headers(), params=params
-            ) as response:
-                response.raise_for_status()
-                data = await response.json()
-                files = data.get("data", {}).get("files", [])
-                if not files:
-                    return
-                file_id = files[0]["id"]
-
+            files = await self._files(session, component.cid)
+            if not files:
+                return
             async with session.delete(
-                f"{self.API_BASE}/files/{NETWORK}/{file_id}",
+                f"{self.API_BASE}/files/{NETWORK}/{files[0]['id']}",
                 headers=self._headers(),
             ) as response:
                 response.raise_for_status()
@@ -417,51 +389,34 @@ class PinataClient:
         are preserved — there is no key *removal*. The file bytes and CID are
         untouched (the CID is content-addressed; keyvalues live in the
         account index, not the file), so existing ``*_cid`` provenance edges
-        pointing at this record stay valid. Looks up the internal file id by
-        CID first (Pinata keys updates off the UUID, not the CID), then PUTs.
-        ``_owner`` is restamped from ``STARGAZER_OWNER`` (env wins, unset
-        passes through) so a re-attributed edit stays consistent with upload.
+        pointing at this record stay valid. Pinata keys updates off the
+        file's id, so the id is looked up by CID first.
 
         Args:
             cid: Content identifier of the file to update
             keyvalues: Metadata patch to merge (partial — only these keys
-                change). Reserved ``_*`` keys should be left out; ``_owner``
-                is stamped here.
+                change), ``_owner`` included: the caller names the owner
 
         Returns:
             The updated record: ``{cid, name, keyvalues, network}``
 
         Raises:
-            ValueError: when the stamped patch has no ``_owner`` or a key
-                or value longer than ``MAX_KEYVALUE_CHARS``, before any
-                request is made, or when no public file exists for ``cid``
+            ValueError: when the patch has no ``_owner`` or a key or value
+                longer than ``MAX_KEYVALUE_CHARS``, before any request is
+                made, or when no public file exists for ``cid``
         """
-        kv = _stamp_owner(dict(keyvalues))
+        kv = dict(keyvalues)
         _check_keyvalue_lengths(kv)
         _check_owner(kv)
         async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{self.API_BASE}/files/{NETWORK}",
-                headers=self._headers(),
-                params={"cid": cid},
-            ) as response:
-                response.raise_for_status()
-                files = (await response.json()).get("data", {}).get("files", [])
+            files = await self._files(session, cid)
             if not files:
                 raise ValueError(f"No public file for cid {cid}")
-            file_id = files[0]["id"]
-
             async with session.put(
-                f"{self.API_BASE}/files/{NETWORK}/{file_id}",
+                f"{self.API_BASE}/files/{NETWORK}/{files[0]['id']}",
                 headers=self._headers(),
                 json={"keyvalues": kv},
             ) as response:
                 response.raise_for_status()
                 data = (await response.json()).get("data", {})
-
-        return {
-            "cid": data.get("cid", cid),
-            "name": data.get("name", ""),
-            "keyvalues": data.get("keyvalues", kv),
-            "network": NETWORK,
-        }
+        return _record({"cid": cid, "keyvalues": kv, **data})

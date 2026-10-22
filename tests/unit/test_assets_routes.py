@@ -1,4 +1,4 @@
-"""Tests for the asset-manager API routes (plan 20, piece 2).
+"""Tests for the asset-manager API routes.
 
 Route tests mount the router on a bare FastAPI app: the dashboard's owner
 gate (tested in `test_app.py`) sits in front of these routes there, and is
@@ -125,18 +125,6 @@ def _auth(client: TestClient, subject: str = "octocat") -> None:
 
 class TestAuth:
     """Anonymous: browsing OK; uploading requires a session."""
-
-    def test_anonymous_can_read_schema(self, fake_pinata, client):
-        assert client.get("/assets/schema").status_code == 200
-
-    def test_anonymous_can_list_public(self, fake_pinata, client):
-        resp = client.get("/assets/list", params={"network": "public"})
-        assert resp.status_code == 200
-
-    def test_anonymous_can_download_public(self, fake_pinata, client, monkeypatch):
-        monkeypatch.setenv("PINATA_GATEWAY", "https://gw.example")
-        resp = client.get("/assets/download/bafy123", params={"network": "public"})
-        assert resp.status_code == 302
 
     def test_anonymous_list_defaults_to_public(self, fake_pinata, client):
         resp = client.get("/assets/list")
@@ -334,7 +322,7 @@ class TestPublicList:
 
 
 class TestUpdate:
-    """`POST /assets/update` — owner-only metadata merge (plan 21 follow-up)."""
+    """`POST /assets/update` — owner-only metadata merge."""
 
     def _post(self, client, **body):
         return client.post("/assets/update", json=body)
@@ -429,20 +417,14 @@ class TestUpdate:
 
 
 class TestDownload:
-    def test_public_authed_redirects_to_dedicated_gateway(
-        self, fake_pinata, client, monkeypatch
+    @pytest.mark.parametrize("signed_in", [True, False])
+    def test_public_redirects_to_the_dedicated_gateway(
+        self, fake_pinata, client, monkeypatch, signed_in
     ):
+        """Signed in or not, public downloads use PINATA_GATEWAY: public gateways rate-limit."""
         monkeypatch.setenv("PINATA_GATEWAY", "https://gw.example")
-        _auth(client)
-        resp = client.get("/assets/download/bafy123", params={"network": "public"})
-        assert resp.status_code == 302
-        assert resp.headers["location"] == "https://gw.example/ipfs/bafy123"
-
-    def test_public_anonymous_redirects_to_the_same_gateway(
-        self, fake_pinata, client, monkeypatch
-    ):
-        """Anonymous downloads use PINATA_GATEWAY too: public gateways rate-limit."""
-        monkeypatch.setenv("PINATA_GATEWAY", "https://gw.example")
+        if signed_in:
+            _auth(client)
         resp = client.get("/assets/download/bafy123", params={"network": "public"})
         assert resp.status_code == 302
         assert resp.headers["location"] == "https://gw.example/ipfs/bafy123"
@@ -466,7 +448,6 @@ class TestNotConfigured:
     def test_routes_503_without_jwt(self, fake_pinata, client, monkeypatch):
         monkeypatch.delenv("PINATA_JWT", raising=False)
         _auth(client)
-        assert client.get("/assets/list").status_code == 503
         assert (
             client.get("/assets/list", params={"network": "public"}).status_code == 503
         )
@@ -574,9 +555,10 @@ class TestTus:
         _tus_patch(client, location, 0, BIG[:1000])
         assert _tus_patch(client, location, 0, BIG[:1000]).status_code == 409
 
-    def test_over_10_gb_is_refused(self, fake_pinata, private_store, client):
+    def test_over_the_cap_is_refused(self, fake_pinata, private_store, client):
         _auth(client, OWNER)
-        assert _tus_create(client, length=11 * 1024**3).status_code == 413
+        length = assets_mod.TUS_MAX_BYTES + 1
+        assert _tus_create(client, length=length).status_code == 413
 
     def test_bad_keyvalues_are_refused_before_any_bytes(
         self, fake_pinata, private_store, client

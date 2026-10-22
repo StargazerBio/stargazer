@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from conftest import FakePublicTier, make_client
 from flyte.io import File
 from flyte.types import TypeEngine
 
@@ -16,28 +17,12 @@ from stargazer.assets import (
     assemble,
 )
 from stargazer.utils.cid import compute_cid
-from stargazer.utils.index import SqliteIndex
-from stargazer.utils.storage import StorageClient
-
-
-def _client(
-    root: Path, cache: str = "cache", public=None, gateway: str | None = None
-) -> StorageClient:
-    """A client on a local store and index under `root`, with its own cache dir."""
-    return StorageClient(
-        local_dir=root / cache,
-        store_root=str(root / "store"),
-        index=SqliteIndex(root / "index.db"),
-        public=public,
-        gateway=gateway,
-    )
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    """The default client, pointed at a temp store, index and cache."""
-    monkeypatch.delenv("STARGAZER_OWNER", raising=False)
-    c = _client(tmp_path)
+    """The default client, on a store and index right under tmp_path."""
+    c = make_client(tmp_path)
     monkeypatch.setattr(storage_mod, "default_client", c)
     return c
 
@@ -105,7 +90,7 @@ async def test_fetch_downloads_into_cid_dir_with_real_name(
     aln = Alignment()
     await aln.update(bam, sample_id="S1")
 
-    fresh = _client(tmp_path, cache="fresh_cache")
+    fresh = make_client(tmp_path, cache="fresh_cache")
     monkeypatch.setattr(storage_mod, "default_client", fresh)
     local = await aln.fetch()
 
@@ -136,7 +121,9 @@ async def test_fetch_colocates_companions(client, tmp_path, monkeypatch):
     idx = ReferenceIndex()
     await idx.update(fai, build="T", companion_of=ref.cid)
 
-    monkeypatch.setattr(storage_mod, "default_client", _client(tmp_path, cache="c2"))
+    monkeypatch.setattr(
+        storage_mod, "default_client", make_client(tmp_path, cache="c2")
+    )
     local = await ref.fetch()
 
     assert (local.parent / "ref.fa.fai").read_bytes() == b"chr1\t4\t6\t4\t5\n"
@@ -160,38 +147,13 @@ async def test_fetch_resolves_a_bare_cid_through_the_index(
     aln = Alignment()
     await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x07"), sample_id="S1")
 
-    monkeypatch.setattr(storage_mod, "default_client", _client(tmp_path, cache="c3"))
+    monkeypatch.setattr(
+        storage_mod, "default_client", make_client(tmp_path, cache="c3")
+    )
     local = await Alignment(cid=aln.cid).fetch()
 
     assert local.name == "s1.bam"
     assert local.read_bytes() == b"BAM\x07"
-
-
-class _PublicCompanions:
-    """A public tier whose files sit in a local gateway dir; it records each query."""
-
-    def __init__(self, gateway: Path):
-        self.gateway = gateway
-        self.records = []
-        self.queries = []
-
-    def add(self, name: str, data: bytes, **keyvalues: str) -> None:
-        """Publish `data` as `name`, served at <gateway>/ipfs/<cid>."""
-        staged = _write(self.gateway / "staging" / name, data)
-        cid = compute_cid(staged)
-        staged.rename(_write(self.gateway / "ipfs" / cid, b""))
-        self.records.append({"cid": cid, "name": name, "keyvalues": keyvalues})
-
-    async def query(self, keyvalues):
-        self.queries.append(dict(keyvalues))
-        return [
-            r
-            for r in self.records
-            if all(r["keyvalues"].get(k) == v for k, v in keyvalues.items())
-        ]
-
-    async def get(self, cid):
-        return next((r for r in self.records if r["cid"] == cid), None)
 
 
 def _listing(directory: Path) -> dict[str, bytes]:
@@ -209,8 +171,8 @@ async def test_fetch_takes_own_and_publisher_companions_but_no_one_elses(
     a companion from anyone else is left out.
     """
     monkeypatch.setenv("STARGAZER_OWNER", "me")
-    public = _PublicCompanions(tmp_path / "gateway")
-    c = _client(tmp_path, public=public, gateway=str(public.gateway))
+    public = FakePublicTier(tmp_path / "gateway")
+    c = make_client(tmp_path, public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "default_client", c)
     ref = Reference()
     await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
@@ -226,7 +188,7 @@ async def test_fetch_takes_own_and_publisher_companions_but_no_one_elses(
     public.add("ref.fa.amb", b"my amb", companion_of=ref.cid, _owner="me")
     public.add("ref.fa.pac", b"other pac", companion_of=ref.cid, _owner="someone")
 
-    pod = _client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
+    pod = make_client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "default_client", pod)
     local = await ref.fetch()
 
@@ -243,8 +205,8 @@ async def test_fetch_fills_in_public_companions_when_the_user_has_none(
     tmp_path, monkeypatch
 ):
     """A private copy of a public reference, with no companions of its own, gets the public ones."""
-    public = _PublicCompanions(tmp_path / "gateway")
-    c = _client(tmp_path, public=public, gateway=str(public.gateway))
+    public = FakePublicTier(tmp_path / "gateway")
+    c = make_client(tmp_path, public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "default_client", c)
     ref = Reference()
     await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
@@ -253,7 +215,7 @@ async def test_fetch_fills_in_public_companions_when_the_user_has_none(
         "ref.fa.fai", b"chr1\t4\t6\t4\t5\n", companion_of=ref.cid, _owner="maintainer"
     )
 
-    pod = _client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
+    pod = make_client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "default_client", pod)
     local = await ref.fetch()
 
@@ -267,8 +229,8 @@ async def test_fetch_fills_in_public_companions_when_the_user_has_none(
 @pytest.mark.asyncio
 async def test_public_companions_come_from_the_parents_publisher(tmp_path, monkeypatch):
     """Another publisher's index for a public reference isn't mixed in."""
-    public = _PublicCompanions(tmp_path / "gateway")
-    c = _client(tmp_path, public=public, gateway=str(public.gateway))
+    public = FakePublicTier(tmp_path / "gateway")
+    c = make_client(tmp_path, public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "default_client", c)
     ref = Reference()
     await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
@@ -279,7 +241,7 @@ async def test_public_companions_come_from_the_parents_publisher(tmp_path, monke
     public.add("ref.fa.bwt", b"other bwt", companion_of=ref.cid, _owner="someone")
     public.add("ref.fa.sa", b"other sa", companion_of=ref.cid, _owner="someone")
 
-    pod = _client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
+    pod = make_client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "default_client", pod)
     local = await ref.fetch()
 
@@ -295,8 +257,8 @@ async def test_without_a_public_parent_only_the_callers_public_companions_count(
 ):
     """A file nobody published has no publisher to follow; the caller's own still come."""
     monkeypatch.setenv("STARGAZER_OWNER", "me")
-    public = _PublicCompanions(tmp_path / "gateway")
-    c = _client(tmp_path, public=public, gateway=str(public.gateway))
+    public = FakePublicTier(tmp_path / "gateway")
+    c = make_client(tmp_path, public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "default_client", c)
     ref = Reference()
     await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
@@ -311,34 +273,20 @@ async def test_without_a_public_parent_only_the_callers_public_companions_count(
 @pytest.mark.asyncio
 async def test_query_merges_public_tier(tmp_path, monkeypatch):
     """Public records join the user's rows by CID; the user's own row wins."""
-    monkeypatch.delenv("STARGAZER_OWNER", raising=False)
 
-    class _Public:
-        """A public tier that knows one shared CID and one CID the user also has."""
-
-        def __init__(self):
-            self.shared_cid = ""
-
-        async def query(self, keyvalues):
-            return [
-                {
-                    "cid": "bafyPublic",
-                    "name": "pub.fa",
-                    "keyvalues": {"asset": "reference"},
-                },
-                {
-                    "cid": self.shared_cid,
-                    "name": "x.fa",
-                    "keyvalues": {"asset": "reference", "who": "public"},
-                },
-            ]
-
-    public = _Public()
-    c = _client(tmp_path, public=public)
+    public = FakePublicTier()
+    c = make_client(tmp_path, public=public)
     monkeypatch.setattr(storage_mod, "default_client", c)
     ref = Reference()
     await ref.update(_write(tmp_path / "w" / "x.fa", b">x\n"), build="T")
-    public.shared_cid = ref.cid
+    public.records = [
+        {"cid": "bafyPublic", "name": "pub.fa", "keyvalues": {"asset": "reference"}},
+        {
+            "cid": ref.cid,
+            "name": "x.fa",
+            "keyvalues": {"asset": "reference", "who": "public"},
+        },
+    ]
 
     rows = {r["cid"]: r for r in await c.query({"asset": "reference"})}
 
@@ -361,6 +309,24 @@ async def test_delete_removes_row_and_bytes(client, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_delete_leaves_the_gateway_alone_for_a_fetched_bundle(client):
+    """A row pointing at the IPFS gateway goes; there's no stored file to remove."""
+    cid = "bafyBundled"
+    await client.index.upsert(
+        {
+            "cid": cid,
+            "uri": client.gateway_uri(cid),
+            "name": "ref.fa",
+            "keyvalues": {"asset": "reference"},
+        }
+    )
+
+    await client.delete(Reference(cid=cid))
+
+    assert await client.index.get(cid) is None
+
+
+@pytest.mark.asyncio
 async def test_update_metadata_merges_and_stamps_owner(client, tmp_path, monkeypatch):
     """A metadata patch merges onto the row and restamps `_owner`."""
     aln = Alignment()
@@ -374,30 +340,12 @@ async def test_update_metadata_merges_and_stamps_owner(client, tmp_path, monkeyp
     assert row["keyvalues"]["_owner"] == "u1"
 
 
-class _PublicTier:
-    """A public tier that records each upload and assigns the CID Pinata would."""
-
-    def __init__(self, cid: str = ""):
-        self.uploads = []
-        self.cid = cid
-
-    async def upload(self, component, path):
-        self.uploads.append(
-            {
-                "bytes": Path(path).read_bytes(),
-                "name": Path(path).name,
-                "keyvalues": component.to_keyvalues(),
-            }
-        )
-        component.cid = self.cid or compute_cid(Path(path))
-
-
 @pytest.mark.asyncio
 async def test_publish_sends_the_stored_file_and_its_keyvalues(tmp_path, monkeypatch):
     """Publishing uploads the stored bytes with the row's keyvalues, same CID."""
     monkeypatch.setenv("STARGAZER_OWNER", "u1")
-    public = _PublicTier()
-    c = _client(tmp_path, public=public)
+    public = FakePublicTier()
+    c = make_client(tmp_path, public=public)
     monkeypatch.setattr(storage_mod, "default_client", c)
     aln = Alignment()
     await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x07"), sample_id="S1")
@@ -425,9 +373,8 @@ async def test_publish_refuses_without_a_public_tier(client, tmp_path):
 @pytest.mark.asyncio
 async def test_publish_refuses_an_unknown_cid(tmp_path, monkeypatch):
     """Only the user's own stored assets can be published; nothing is sent."""
-    monkeypatch.delenv("STARGAZER_OWNER", raising=False)
-    public = _PublicTier()
-    c = _client(tmp_path, public=public)
+    public = FakePublicTier()
+    c = make_client(tmp_path, public=public)
 
     with pytest.raises(ValueError, match="isn't in your storage"):
         await c.publish("bafyNotStored")
@@ -437,8 +384,7 @@ async def test_publish_refuses_an_unknown_cid(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_publish_raises_when_the_cid_changes(tmp_path, monkeypatch):
     """A public CID that differs from ours is a bug, not a quiet success."""
-    monkeypatch.delenv("STARGAZER_OWNER", raising=False)
-    c = _client(tmp_path, public=_PublicTier(cid="bafyDifferent"))
+    c = make_client(tmp_path, public=FakePublicTier(cid="bafyDifferent"))
     monkeypatch.setattr(storage_mod, "default_client", c)
     aln = Alignment()
     await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x09"), sample_id="S1")

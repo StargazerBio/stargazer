@@ -2,7 +2,7 @@
 ### Stargazer MCP Server.
 
 Exposes storage tools and a dynamic task runner via the MCP SDK's
-high-level `MCPServer` (named `FastMCP` before SDK 2.0).
+high-level `MCPServer`.
 Tasks and workflows are auto-discovered from the registry and executed
 with `flyte.run`: remotely when `init_flyte()` finds an endpoint in
 `.flyte/config.yaml`, in-process otherwise.
@@ -59,16 +59,6 @@ def _asset_key_for_hint(hint: Any) -> str | None:
                 return key
 
     return None
-
-
-def _is_list_asset_hint(hint: Any) -> bool:
-    """True if the hint is list[AssetSubclass]."""
-    origin = get_origin(hint)
-    args = get_args(hint)
-    if origin is list and args:
-        inner = args[0]
-        return isinstance(inner, type) and issubclass(inner, Asset)
-    return False
 
 
 # ---------------------------------------------------------------------------
@@ -138,8 +128,8 @@ async def update_file(cid: str, keyvalues: dict[str, str]) -> dict:
     """Update (merge) metadata on an existing file by CID — fix a typo'd or
     mis-tagged record without re-uploading the bytes (the CID is unchanged).
 
-    keyvalues is a patch: the supplied keys are added or overwritten, keys
-    you omit are preserved (Pinata merge — there is no key removal). It must
+    keyvalues is a patch onto your own index row: the supplied keys are added
+    or overwritten, keys you omit are preserved (there is no key removal). It must
     include "asset"; the patch validates through the same rules as upload
     (registered keys check their declared fields' values and accept extra
     keys as text; reserved underscore keys like _owner are stamped
@@ -264,7 +254,7 @@ async def run_task(task_name: str, filters: dict, inputs: dict | None = None) ->
                 )
             if matched:
                 kwargs[p.name] = (
-                    matched if _is_list_asset_hint(p.type_hint) else matched[-1]
+                    matched if get_origin(p.type_hint) is list else matched[-1]
                 )
         elif p.name in inputs:
             value = inputs[p.name]

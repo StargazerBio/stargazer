@@ -3,32 +3,9 @@
 
 The metadata half of asset storage: one row per asset, keyed by its CID, with
 where the bytes live (`uri`), the original filename, and the asset's
-keyvalues as a JSON object. `query()` keeps the semantics storage has always
-had — every filter key must match exactly — and adds list values that match
-any of their entries in a single query.
-
-`SqliteIndex` and `PostgresIndex` share one implementation of the calls, in
-SQL both engines accept; each says only how it spells a JSON column, a
-keyvalue lookup and a merge, and how it runs a statement. Writes are
-acknowledged only after they commit, so a downstream task always sees its
-upstream task's rows, and a merge is one statement, so concurrent merges
-each land.
-
-SQLite serializes writes through one connection behind a `threading.Lock`,
-taken inside the worker thread rather than an `asyncio.Lock` so one index
-can serve callers on different event loops; WAL mode lets reads run
-alongside a write. Postgres opens a connection per call and leaves
-concurrency to the database, rerunning a write the database refused for
-conflicting with a concurrent one (SQLSTATE 40001), which is how DSQL
-answers every write conflict.
-
-`DsqlIndex` is `PostgresIndex` on a user's own table in the shared
-`assets` schema of a DSQL cluster, logged in as that user's database role
-with a token signed by their IAM role. Only pods in the user's namespace can
-assume that role, so the database itself keeps each user to their table.
-
-Re-upserting a CID with different keyvalues replaces them and logs a WARNING:
-the same bytes recorded with new metadata is allowed, but should be visible.
+keyvalues as a JSON object. `query()` matches every filter key exactly; a
+list value matches any of its entries, in one query. `make_index` opens the
+index a `STARGAZER_INDEX_URL` names.
 
 Locally, `SqliteIndex` is the index itself. On the devbox it's a Postgres
 server that the dashboard and every pod reach through `PostgresIndex`. On
@@ -61,7 +38,7 @@ from stargazer.config import logger
 T = TypeVar("T")
 
 # The URL schemes `make_index` opens as a `PostgresIndex`, and as a `DsqlIndex`.
-POSTGRES_SCHEMES = ("postgresql://", "postgres://")
+_POSTGRES_SCHEMES = ("postgresql://", "postgres://")
 DSQL_SCHEME = "dsql://"
 
 # Tries per write before a serialization failure is raised.
@@ -107,13 +84,15 @@ def _changed_keys(old: dict, new: dict) -> list[str]:
     return sorted(k for k in old.keys() | new.keys() if old.get(k) != new.get(k))
 
 
-class _SqlIndex:
+class SqlIndex:
     """The index's five calls, written once in SQL that SQLite and Postgres share.
 
     Subclasses give what the engines spell differently: the JSON column type,
     one keyvalue's lookup and the merge (each with a `?` parameter), and how
     statements run, and set `table`. Statements use `?` placeholders
-    throughout.
+    throughout. Writes are acknowledged only after they commit, so a
+    downstream task always sees its upstream task's rows, and a merge is one
+    statement, so concurrent merges each land.
     """
 
     table: str
@@ -254,8 +233,13 @@ class _SqlIndex:
         await asyncio.to_thread(self._delete_sync, cid)
 
 
-class SqliteIndex(_SqlIndex):
+class SqliteIndex(SqlIndex):
     """Asset metadata index in one SQLite file.
+
+    Writes go through one connection behind a `threading.Lock`, taken inside
+    the worker thread rather than an `asyncio.Lock` so one index can serve
+    callers on different event loops; WAL mode lets reads run alongside a
+    write.
 
     Usage:
         index = SqliteIndex(Path("~/.stargazer/index.db").expanduser())
@@ -306,7 +290,7 @@ class SqliteIndex(_SqlIndex):
             conn.close()
 
 
-class PostgresIndex(_SqlIndex):
+class PostgresIndex(SqlIndex):
     """Asset metadata index in a Postgres database, keyvalues as `jsonb`.
 
     Each call opens its own connection, so concurrent writers are serialized
@@ -350,16 +334,18 @@ class PostgresIndex(_SqlIndex):
         isolation, both with SQLSTATE 40001, at a statement or at commit.
         """
         delay = 0.02
-        for attempt in range(1, _WRITE_ATTEMPTS + 1):
+        for _ in range(_WRITE_ATTEMPTS - 1):
             try:
-                with self._connect(autocommit=False) as conn:
-                    return work(lambda sql, params: conn.execute(_pg(sql), params))
+                return self._transaction(work)
             except psycopg.errors.SerializationFailure:
-                if attempt == _WRITE_ATTEMPTS:
-                    raise
-            time.sleep(random.uniform(0, delay))
-            delay = min(delay * 2, 1.0)
-        raise AssertionError("unreachable")
+                time.sleep(random.uniform(0, delay))
+                delay = min(delay * 2, 1.0)
+        return self._transaction(work)
+
+    def _transaction(self, work: Callable[[Callable], T]) -> T:
+        """Run `work` in one transaction on a new connection."""
+        with self._connect(autocommit=False) as conn:
+            return work(lambda sql, params: conn.execute(_pg(sql), params))
 
     def _read(self, sql: str, params: list) -> list[tuple]:
         """Run a read on a new connection."""
@@ -414,7 +400,6 @@ class DsqlIndex(PostgresIndex):
                 "A DSQL index URL names its login, table and IAM role: "
                 "dsql://<login>@<endpoint>/<schema>.<table>?role_arn=<arn>"
             )
-        self.url = url
         self.endpoint = host
         self.region = labels[2]
         self.user = parts.username
@@ -491,3 +476,18 @@ class DsqlIndex(PostgresIndex):
 def _pg(sql: str) -> str:
     """`?` placeholders as psycopg's `%s`."""
     return sql.replace("?", "%s")
+
+
+def make_index(url: str) -> SqlIndex:
+    """The index named by `STARGAZER_INDEX_URL`.
+
+    A `postgresql://` (or `postgres://`) URL is a Postgres database; a
+    `dsql://` URL is a user's table on Aurora DSQL (see `DsqlIndex`);
+    anything else is a SQLite file path (a `sqlite://` prefix is accepted and
+    stripped, `~` is expanded).
+    """
+    if url.startswith(DSQL_SCHEME):
+        return DsqlIndex(url)
+    if url.startswith(_POSTGRES_SCHEMES):
+        return PostgresIndex(url)
+    return SqliteIndex(Path(url.removeprefix("sqlite://")).expanduser())

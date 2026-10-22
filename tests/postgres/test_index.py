@@ -21,8 +21,7 @@ from utils.test_index import (  # noqa: F401 — pytest collects the imported te
     warnings,
 )
 
-from stargazer.utils.index import PostgresIndex
-from stargazer.utils.storage import make_index
+from stargazer.utils.index import PostgresIndex, make_index
 
 
 def test_make_index_picks_postgres_for_a_postgres_url(postgres_url):

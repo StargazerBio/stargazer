@@ -51,6 +51,11 @@ def _cid(codec: int, block: bytes) -> bytes:
     return b"\x01" + _varint(codec) + b"\x12\x20" + hashlib.sha256(block).digest()
 
 
+def _leaf(block: bytes | memoryview) -> tuple[bytes, int, int]:
+    """A raw leaf as (cid, tsize, file size): both sizes are the block's."""
+    return _cid(_RAW, block), len(block), len(block)
+
+
 def _node(children: list[tuple[bytes, int, int]]) -> tuple[bytes, int, int]:
     """A UnixFS file node over its children; returns (cid, tsize, file size).
 
@@ -88,7 +93,7 @@ class CidBuilder:
 
     def _add_leaf(self, block: bytes | memoryview) -> None:
         """Record one leaf's CID and size."""
-        self._leaves.append((_cid(_RAW, block), len(block), len(block)))
+        self._leaves.append(_leaf(block))
 
     def update(self, data: bytes) -> None:
         """Take the next piece of the file."""
@@ -114,9 +119,7 @@ class CidBuilder:
         """
         level = list(self._leaves)
         if self._partial or not level:
-            level.append(
-                (_cid(_RAW, self._partial), len(self._partial), len(self._partial))
-            )
+            level.append(_leaf(self._partial))
         while len(level) > 1:
             level = [
                 _node(level[i : i + MAX_LINKS]) for i in range(0, len(level), MAX_LINKS)

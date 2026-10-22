@@ -1,4 +1,5 @@
-"""Tests for the SQLite asset index."""
+"""Tests for the asset index: SQLite here; tests/postgres/ reruns them on
+Postgres and as a DSQL login."""
 
 import asyncio
 import sqlite3
@@ -6,8 +7,7 @@ import sqlite3
 import pytest
 
 from stargazer.config import logger
-from stargazer.utils.index import DsqlIndex, SqliteIndex
-from stargazer.utils.storage import make_index
+from stargazer.utils.index import DsqlIndex, SqliteIndex, make_index
 
 
 def _record(cid: str, **keyvalues: str) -> dict:
