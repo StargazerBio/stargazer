@@ -1,8 +1,9 @@
 ---
 title: Notebooks declare their own app environment
-status: doing
+status: review
 priority: normal
 created: 2026-10-16
+pr: 79
 ---
 
 A notebook declares what its pod runs on in two places, in two formats:
@@ -213,4 +214,5 @@ Branch `feat/notebook-environment`, worktree `.claude/worktrees/notebook-environ
   on Union was cut short: another session (`feat/tus-public-uploads`)
   redeployed the shared test dashboard from its own branch minutes after my
   redeploy. Only my notebook app was stopped, and that session's dashboard
-  was left running.
+  was left running. Not re-run, per the user.
+- In review as PR #79.
