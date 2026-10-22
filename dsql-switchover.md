@@ -1,6 +1,6 @@
 ---
 title: Every dashboard switches its asset index to DSQL
-status: review
+status: done
 priority: high
 created: 2026-10-21
 pr: 78
@@ -41,3 +41,11 @@ What ticket `dsql-asset-index` left after PR #77: the code to index on DSQL is i
 - **Writes don't need the dashboard:** I deactivated it at 02:28:43 UTC, one second after the workflow started, and redeployed it at 02:29:56. Every action stored its outputs in between, the last finishing at 02:30:00 as the redeploy began; `haplotype_caller` and `joint_call_gvcfs` ran after the pod would have exited (30–50 s after deactivation, measured earlier).
 - **Another project refused:** measured for `DsqlIndex` in PR #77 (`flytesnacks` fails at `AssumeRoleWithWebIdentity`).
 - **Probe data deleted** by the user on 2026-10-22; both prefixes list 0 objects since (read-only check). Before: `stargazer-probe-revisions/` (75 objects) and `stargazer-probe-revisions-2/` (123), counted read-only. Deleting it needs write access: `aws s3 rm --recursive s3://union-us-west-2-stargazerbio/stargazer-probe-revisions/ --profile pryce`, then the same for `-2/`.
+
+## Outcome
+
+Shipped in PR #78 (merge `391df03`) with infra `1000dee` and `095066f`: every dashboard indexes in its user's DSQL table. The test account's 43 rows were migrated and checked field by field. Litestream, the dashboard's index API, `HttpIndex` and the wait-for-runs guard on redeploys are gone, and the probe data is deleted.
+
+Verified on the tenant with the test account: the migrated rows listed in the dashboard, a TUS upload landing in DSQL, the germline workflow end to end on DSQL, and every action storing its outputs while the dashboard was down for a redeploy. Unit tier 518, postgres tier 20, infra 20. No comments on the PR.
+
+Left: nothing.
