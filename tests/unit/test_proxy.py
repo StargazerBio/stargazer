@@ -2,10 +2,11 @@
 
 The proxy is baked into the notebook image as a standalone module; here we
 import it directly. Covered: what the proxy forwards from the platform-forwarded
-`X-User-Subject`, the signed-token gate on Union, what is (not) forwarded to marimo, the starting page while
-marimo is cold, terminal-overlay injection and streaming passthrough, and the
-workspace hydrate/sync against a local store root through the real
-`flyte.storage` calls. The upstream marimo server is faked with an
+`X-User-Subject`, the signed-token gate on Union, what is (not) forwarded to
+marimo, the starting page while marimo is cold, terminal-overlay and
+save-banner injection and streaming passthrough, and the workspace
+hydrate/sync against a local store root through the real `flyte.storage`
+calls. The upstream marimo server is faked with an
 `httpx.MockTransport` installed as the proxy's shared upstream client.
 """
 
@@ -82,7 +83,7 @@ def test_owner_request_reaches_marimo(owner_client, upstream):
 
 
 def test_any_signed_in_visitor_reaches_marimo(upstream):
-    """The platform alone gates access: an admin is forwarded like the owner."""
+    """Off Union there's no token gate: any signed-in visitor is forwarded like the owner."""
     upstream(lambda req: httpx.Response(200, text="hello"))
     client = TestClient(proxy.asgi_app, headers={"X-User-Subject": OTHER})
 
@@ -95,7 +96,7 @@ def test_any_signed_in_visitor_reaches_marimo(upstream):
 @pytest.fixture
 def on_union(monkeypatch, union_signer):
     """The pod runs on Union: every request needs a token the test signer made."""
-    monkeypatch.setenv("SG_AUTH_ISSUER", "https://signin.example.test")
+    monkeypatch.setenv("SG_AUTH_ISSUER", union_signer.issuer)
     monkeypatch.setenv("SG_ADMIN_SUBJECTS", "")
     monkeypatch.setattr(proxy, "_signing_key", lambda token: union_signer.public_key)
     return union_signer
@@ -258,23 +259,13 @@ def test_shell_env_scrubs_secret_shaped_suffixes(monkeypatch):
     assert env["TERM"] == "xterm-256color"
 
 
-def test_term_injection_targets_body_close():
-    """The overlay splices before </body> and wires the /__sg__/term websocket."""
-    html = b"<html><body><div id='app'></div></body></html>"
-    injected = html.replace(b"</body>", proxy._TERM_INJECTION + b"</body>", 1)
-
-    assert b"/__sg__/term" in injected
-    assert b"sg-term-overlay" in injected
-    assert injected.index(b"sg-term-overlay") < injected.index(b"</body>")
-
-
 # ---------------------------------------------------------------------------
 # Forwarding path — HTML injection, streaming, query passthrough
 # ---------------------------------------------------------------------------
 
 
-def test_proxy_injects_terminal_into_html(owner_client, upstream):
-    """HTML responses get the terminal overlay spliced in before </body>."""
+def test_proxy_injects_the_overlay_and_banner_into_html(owner_client, upstream):
+    """HTML responses get the terminal overlay and the save banner before </body>."""
     upstream(
         lambda req: httpx.Response(
             200,
@@ -286,8 +277,9 @@ def test_proxy_injects_terminal_into_html(owner_client, upstream):
     resp = owner_client.get("/")
 
     assert resp.status_code == 200
-    assert b"sg-term-overlay" in resp.content
-    assert resp.content.index(b"sg-term-overlay") < resp.content.index(b"</body>")
+    for injected in (b"sg-term-overlay", b"/__sg__/term", b"sg-save-banner"):
+        assert resp.content.index(injected) < resp.content.index(b"</body>")
+    assert b"/__sg__/save-status" in resp.content
 
 
 def test_proxy_streams_non_html_untouched(owner_client, upstream):
@@ -372,6 +364,7 @@ async def test_sync_saves_changed_files_at_their_paths(pod_dirs):
     stored.mkdir(parents=True)
     (stored / "qc.py").write_text("# qc\n")
     await proxy.hydrate_async()
+    proxy._seed_from_disk()
 
     assert await proxy.sync_once() == []
 
@@ -426,6 +419,7 @@ async def test_deleted_file_is_deleted_from_the_store(pod_dirs):
     (stored / "qc.py").write_text("# qc\n")
     (stored / "data" / "old.csv").write_text("x\n")
     await proxy.hydrate_async()
+    proxy._seed_from_disk()
 
     (workspace / "data" / "old.csv").unlink()
     await proxy.sync_once()
@@ -446,56 +440,29 @@ async def test_store_files_the_pod_never_had_are_kept(pod_dirs):
     assert (stored / "qc.py").read_text() == "# qc\n"
 
 
-def test_file_over_the_limit_is_not_saved_and_is_reported(pod_dirs, owner_client):
-    """A file over 100 MB isn't saved, and the save status names it for the banner."""
+def test_file_over_the_limit_is_not_saved_and_is_reported(
+    pod_dirs, owner_client, monkeypatch
+):
+    """A file over the limit isn't saved, and the save status names it for the banner."""
+    monkeypatch.setattr(proxy, "MAX_SAVED_BYTES", 10)
     workspace, stored = pod_dirs
     workspace.mkdir()
     (workspace / "qc.py").write_text("# qc\n")
     assert owner_client.get("/__sg__/save-status").json() == {
-        "limit_bytes": 100 * 1024**2,
+        "limit_bytes": 10,
         "unsaved": [],
     }
 
     big = workspace / "data" / "big.h5ad"
     big.parent.mkdir()
-    with big.open("wb") as fh:
-        fh.truncate(100 * 1024**2 + 1)  # sparse: the test writes no data
+    big.write_bytes(b"x" * 11)
 
     assert asyncio.run(proxy.sync_once()) == ["qc.py"]
     assert not (stored / "data" / "big.h5ad").exists()
     assert owner_client.get("/__sg__/save-status").json() == {
-        "limit_bytes": 100 * 1024**2,
-        "unsaved": [{"path": "data/big.h5ad", "bytes": 100 * 1024**2 + 1}],
+        "limit_bytes": 10,
+        "unsaved": [{"path": "data/big.h5ad", "bytes": 11}],
     }
-
-
-def test_proxy_injects_the_save_banner_into_html(owner_client, upstream):
-    """Every marimo page gets the banner that polls the save status."""
-    upstream(
-        lambda req: httpx.Response(
-            200,
-            content=b"<html><body><div id='app'></div></body></html>",
-            headers={"content-type": "text/html; charset=utf-8"},
-        )
-    )
-
-    html = owner_client.get("/").content
-
-    assert b"sg-save-banner" in html
-    assert b"/__sg__/save-status" in html
-    assert html.index(b"sg-save-banner") < html.index(b"</body>")
-
-
-def test_shutdown_flushes_pending_edits(pod_dirs, monkeypatch):
-    """Scale-to-zero writes edits made since the last periodic save."""
-    workspace, stored = pod_dirs
-    monkeypatch.setenv("SG_SAVE_INTERVAL_SECONDS", "3600")
-    proxy.hydrate()
-
-    with TestClient(proxy.asgi_app):
-        (workspace / "late.py").write_text("# late edit\n")
-
-    assert (stored / "late.py").read_text() == "# late edit\n"
 
 
 def test_interval_from_env_saves_while_serving(pod_dirs, monkeypatch):

@@ -46,9 +46,7 @@ from app.deploy import deploy_dashboard
 from app.init import init
 from stargazer.config import PROJECT_ROOT
 
-# The stand-in user, the bucket every devbox deploy stores under, and the
-# asset index: the Postgres server in `devbox/postgres.yaml`, whose user,
-# password and database this URL must match.
+# The stand-in user, store and index; INDEX_URL must match devbox/postgres.yaml.
 SUBJECT = "devbox-user"
 STORE_ROOT = "s3://flyte-data/stargazer"
 INDEX_URL = (
@@ -90,7 +88,7 @@ def port_forward(namespace: str, service: str, local: int, remote: int):
 
 
 def storage_port_forward():
-    """Hold `localhost:9000 → svc/rustfs-svc:9000` open; reuse one already open."""
+    """The devbox object store (rustfs) on localhost:9000."""
     return port_forward("flyte", "svc/rustfs-svc", 9000, 9000)
 
 

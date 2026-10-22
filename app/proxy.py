@@ -1,9 +1,13 @@
 """
 ### Reverse proxy in front of marimo, with workspace hydrate + sync.
 
-Standalone ASGI app baked into the `notebook-app` image. Listens on the
-per-notebook pod's public port (8080) and forwards HTTP + websocket traffic to
-marimo on `127.0.0.1:8081`.
+Standalone ASGI app baked into the `notebook-app` image as the top-level
+module `/usr/local/lib/sg_proxy.py`, beside its two HTML fragments. It needs
+no stargazer or `app` package: `fastapi`, `uvicorn`, `httpx`, `websockets` and
+`pyjwt` are installed at system level next to the `flyte` SDK the base image
+already carries (used here for storage). Listens on the per-notebook pod's
+public port (8080) and forwards HTTP + websocket traffic to marimo on
+`127.0.0.1:8081`.
 
 **Auth.** The pod runs behind the platform login (`requires_auth=True`), but
 it also answers at an in-cluster address that skips the login, where any pod
@@ -24,9 +28,10 @@ one object per file at its path, under
 `app` package). At launch, `hydrate()` copies the owner's whole workspace into
 `/workspace`. While the pod runs, a background loop saves every file whose size
 or modification time changed, every `SG_SAVE_INTERVAL_SECONDS` (30 by default,
-0 for none), and deletes from the store the files deleted from `/workspace`. The `lifespan` shutdown hook
-does a final pass when the pod scales to zero. Dotfiles, `__pycache__/`,
-`__marimo__/` and files over `MAX_SAVED_BYTES` are never saved.
+0 for none), and deletes from the store the files deleted from `/workspace`.
+The `lifespan` shutdown hook does a final pass when the pod scales to zero.
+Dotfiles, `__pycache__/`, `__marimo__/` and files over `MAX_SAVED_BYTES` are
+never saved.
 
 It also injects a Quake-style dropdown terminal into marimo's HTML: every
 `text/html` response gets an xterm.js overlay (loaded from CDN) spliced in
@@ -37,8 +42,9 @@ asset instead.
 
 Reserved paths the proxy handles itself instead of forwarding:
 
-- `GET /__sg__/dashboard` — 302 to the owner's dashboard (`STARGAZER_ADMIN_URL`), so
-  notebooks can link back with a stable relative path.
+- `GET /__sg__/dashboard` — 302 to the owner's dashboard
+  (`STARGAZER_ADMIN_URL`), so notebooks can link back with a stable relative
+  path.
 - `GET /__sg__/save-status` — the files in `/workspace` over `MAX_SAVED_BYTES`,
   which aren't saved; the injected banner polls it.
 - `GET /__sg__/ready` — 200 once local marimo answers, 503 while it's still
@@ -50,13 +56,9 @@ Reserved paths the proxy handles itself instead of forwarding:
 While marimo is still starting, a browser request gets a small self-refreshing
 "Starting your notebook…" page instead of an error.
 
-Self-contained on purpose: the notebook image installs `fastapi`, `uvicorn`,
-`httpx` and `websockets` at system level next to the `flyte` SDK the base image
-already carries (used here for storage), and COPYs this file in as
-`/usr/local/lib/sg_proxy.py` (alongside its two HTML fragments) — no stargazer
-or app-package install needed, and the top-level module name avoids colliding
-with Flyte's loaded_modules code bundle which ships an `app/` package into the
-pod's `/home/flyte` cwd at deploy time.
+It is a top-level module, not `app/proxy.py`, because Flyte's loaded_modules
+code bundle ships an `app/` package into the pod's `/home/flyte` cwd at deploy
+time, which would shadow it.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -242,7 +244,7 @@ async def _download_prefix(prefix: str, dest: Path) -> int:
 
 
 async def hydrate_async() -> None:
-    """Async body of `hydrate()`; also records the hydrated files as saved."""
+    """Async body of `hydrate()`."""
     WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
     prefix = _user_prefix("workspace")
     if prefix is None:
@@ -251,7 +253,6 @@ async def hydrate_async() -> None:
     _init_storage()
     n = await _download_prefix(prefix, WORKSPACE_DIR)
     print(f"[sg] hydrated {n} file(s)")
-    _seed_from_disk()
 
 
 def hydrate() -> None:
@@ -267,9 +268,10 @@ def hydrate() -> None:
 def _seed_from_disk() -> None:
     """Record every file now in `/workspace` as already stored.
 
-    Called at proxy startup, right after hydration, so the first pass doesn't
-    re-upload what was just downloaded. It's also what a later pass may
-    delete from the store: only files this pod knew about. After a failed
+    Called by `lifespan` at proxy startup, after the launch script's
+    `hydrate()` (a separate process), so the first pass doesn't re-upload what
+    was just downloaded. It's also what a later pass may delete from the
+    store: only files this pod knew about. After a failed
     hydrate the workspace is empty, so nothing stored is ever deleted.
     """
     if not WORKSPACE_DIR.is_dir():
@@ -297,9 +299,10 @@ async def sync_once() -> list[str]:
     """Save every changed file in `/workspace`; return their relative paths.
 
     A file whose size and modification time match what was last stored isn't
-    read at all, and nor is one over `MAX_SAVED_BYTES`. A file deleted from `/workspace` is deleted from the store,
-    if this pod hydrated or saved it. A failed upload or delete is logged and
-    retried on the next pass rather than raised.
+    read at all, and nor is one over `MAX_SAVED_BYTES`. A file deleted from
+    `/workspace` is deleted from the store, if this pod hydrated or saved it.
+    A failed upload or delete is logged and retried on the next pass rather
+    than raised.
     """
     prefix = _user_prefix("workspace")
     if prefix is None or not WORKSPACE_DIR.is_dir():
@@ -523,7 +526,9 @@ def _shell_env() -> dict[str, str]:
     """Pod env with auth-critical secrets stripped, for the interactive shell.
 
     Drops every key in `_TERM_SECRET_KEYS` plus anything ending in a
-    secret-shaped suffix, so credentials stay out of casual `env` output. Not a boundary (see the module docstring). Sets a sane `TERM` so curses apps render.
+    secret-shaped suffix, so credentials stay out of casual `env` output. Not a
+    boundary (see the module docstring). Sets a sane `TERM` so curses apps
+    render.
     """
     env = {
         k: v
@@ -547,12 +552,12 @@ def _set_winsize(fd: int, rows: int, cols: int) -> None:
 async def term_proxy(websocket: WebSocket) -> None:
     """Bridge the injected xterm.js overlay to a login bash via a PTY.
 
-    Forks a `bash -l` on a pseudo-terminal
-    with a secret-scrubbed environment (`_shell_env`) and pumps bytes both ways:
-    PTY output is read off the master fd (registered with the event loop) and
-    sent as binary frames; the client sends JSON text frames — `{"type":
-    "input", ...}` for keystrokes and `{"type": "resize", ...}` for geometry.
-    The child is killed and reaped when either side closes.
+    Forks a `bash -l` on a pseudo-terminal with a secret-scrubbed environment
+    (`_shell_env`) and pumps bytes both ways: PTY output is read off the master
+    fd (registered with the event loop) and sent as binary frames; the client
+    sends JSON text frames — `{"type": "input", ...}` for keystrokes and
+    `{"type": "resize", ...}` for geometry. The child is killed and reaped when
+    either side closes.
     """
     await websocket.accept()
 

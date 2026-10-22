@@ -21,7 +21,8 @@ Both are deployed through `app.deploy`, which onboarding (`stargazer-users`,
 in the infra repo) calls when an org admin gives a user their
 project, access and dashboard.
 
-Plus supporting modules: `identity`, `workspace_store`,
+Plus supporting modules: `config` (the env-derived settings), `deploy` (the
+dashboard deploy onboarding calls), `identity`, `workspace_store`,
 `notebooks`, `notebook_meta` (what the dashboard reads from a notebook's
 setup block), `notebook_environment` (the pod environment a notebook
 declares there), `assets` (the asset browser, on the user's asset index),

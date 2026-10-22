@@ -5,11 +5,8 @@ One deployment per user, in that user's own Flyte project (`u-<handle>`),
 behind Union's login (`requires_auth=True`). The owner's subject is baked
 into the env at deploy (`SG_OWNER_SUBJECT`) and the project is the one the
 dashboard runs in (`FLYTE_PROJECT`); neither is derived from the request.
-Union's login gates the public address, and on Union every request must also
-carry its signed token, from the owner or a listed admin (`app.identity`),
-since the in-cluster address skips the login. Whoever gets in sees the
-owner's dashboard. There is no OAuth flow, session cookie, or GitHub
-integration. It has three jobs:
+Union's login gates the public address; `app.identity` decides who else gets
+in, and whoever does sees the owner's dashboard. It has three jobs:
 
 1. **Dashboard.** Renders the notebook tile sections: Workflows and
    Tutorials (shipped in the per-notebook image), and Workspace (the owner's
@@ -73,7 +70,7 @@ from app import config
 from app import workspace_store as store
 from app.assets import TUS_CHUNK_BYTES, TUS_MAX_BYTES, public_assets_on
 from app.assets import router as assets_router
-from app.identity import CurrentUser, User
+from app.identity import CurrentUser, User, user_from_request
 from app.init import init
 from app.notebook_environment import (
     MainEnvError,
@@ -99,8 +96,10 @@ from app.notebooks import (
     slugify,
 )
 from app.per_notebook import (
+    MODES,
     NOTEBOOK_SLUG_MAX,
     WORKSPACE_NOTEBOOK_DIR,
+    app_name,
     list_project_apps,
     per_notebook_env,
 )
@@ -117,25 +116,16 @@ from stargazer.config import (
 # Flyte AppEnvironment for the dashboard itself.
 # ---------------------------------------------------------------------------
 
-# The dashboard's own project: notebooks are served into it, and code-bundle
-# uploads during `serve.aio(per_notebook_env)` use the client's init-time
-# project (`with_servecontext(project=...)` alone is not enough).
-_FLYTE_CONTEXT = {
-    "FLYTE_PROJECT": config.FLYTE_PROJECT,
-    "FLYTE_DOMAIN": config.FLYTE_DOMAIN,
-}
+# The domain notebooks are served into. The project and owner are per user, so
+# `app.deploy.deploy_dashboard` sets them when it serves this environment.
+_FLYTE_CONTEXT = {"FLYTE_DOMAIN": config.FLYTE_DOMAIN}
 
 # Non-secret config request handlers read at runtime, baked into the pod env so
 # the deployed dashboard sees what the deployer's shell set. The workspace root
 # must match what notebook pods hydrate from and save to.
-_PUBLIC_CONFIG = {
-    name: value
-    for name, value in (
-        ("STARGAZER_WORKSPACE_ROOT", config.WORKSPACE_ROOT),
-        ("SG_OWNER_SUBJECT", config.OWNER_SUBJECT),
-    )
-    if value
-}
+_PUBLIC_CONFIG = (
+    {"STARGAZER_WORKSPACE_ROOT": config.WORKSPACE_ROOT} if config.WORKSPACE_ROOT else {}
+)
 
 
 app_env = flyte.app.AppEnvironment(
@@ -144,7 +134,7 @@ app_env = flyte.app.AppEnvironment(
     image=(
         flyte.Image.from_debian_base(
             name="dashboard",
-            registry=os.environ.get("STARGAZER_REGISTRY"),
+            registry=config.REGISTRY,
             platform=IMAGE_PLATFORM,
         )
         .with_apt_packages("ca-certificates")
@@ -235,8 +225,6 @@ asgi_app.include_router(assets_router)
 # Helpers
 # ---------------------------------------------------------------------------
 
-_STORE_OFF = "saving notebooks isn't available on this deployment"
-
 
 def _console_runs_url() -> str:
     """This dashboard's project's runs in the Union console, or "" with no console.
@@ -257,9 +245,36 @@ def _store_ready() -> bool:
     return bool(config.WORKSPACE_ROOT)
 
 
-def _store_off() -> JSONResponse:
-    """The 503 every store-backed route returns without a store."""
-    return JSONResponse({"error": _STORE_OFF}, status_code=503)
+def _workspace_guard(slug: str | None = None) -> JSONResponse | None:
+    """The error response a store-backed route returns early, else None.
+
+    A 503 without a workspace store; and when `slug` is given, a 400 unless it
+    names a user notebook (not a reserved seed slug).
+    """
+    if not _store_ready():
+        return JSONResponse(
+            {"error": "saving notebooks isn't available on this deployment"},
+            status_code=503,
+        )
+    if slug is not None and _notebook_slug(slug) != slug:
+        return JSONResponse(
+            {"error": f"invalid or reserved notebook: {slug!r}"}, status_code=400
+        )
+    return None
+
+
+async def _get_app(name: str) -> App:
+    """The dashboard's project's app `name`, as the control plane has it."""
+    return await App.get.aio(
+        name=name, project=config.FLYTE_PROJECT, domain=config.FLYTE_DOMAIN
+    )
+
+
+async def _delete_app(name: str) -> None:
+    """Delete the deployment record of the dashboard's project's app `name`."""
+    await App.delete.aio(
+        name=name, project=config.FLYTE_PROJECT, domain=config.FLYTE_DOMAIN
+    )
 
 
 def _failed(action: str, exc: Exception) -> JSONResponse:
@@ -282,7 +297,7 @@ def _parse_nb_name(name: str) -> tuple[str, str] | None:
     if not name.startswith("nb-"):
         return None
     slug, _, mode = name.removeprefix("nb-").rpartition("-")
-    if not slug or mode not in ("edit", "run"):
+    if not slug or mode not in MODES:
         return None
     return slug, mode
 
@@ -292,8 +307,8 @@ def _notebook_slug(name: str) -> str | None:
 
     The slug is both the filename stem and the pod name (`nb-{slug}-{mode}`),
     and Flyte app names allow only `[a-z0-9-]`. The original name is preserved
-    verbatim as the display title (stored in the notebook header — see
-    `parse_notebook_name`). Returns None when the result is empty or collides
+    verbatim as the display title (stored as `main_name` in the notebook's
+    setup block). Returns None when the result is empty or collides
     with a reserved seed slug (`SEED_SLUGS`).
     """
     slug = slugify(name)
@@ -312,31 +327,30 @@ def _tile_dict(slug: str, title: str, description: str, section: str) -> dict:
     }
 
 
-def _display_name(filename: str) -> str:
-    """Human-friendly tile title for a notebook file.
+def _display_name(slug: str) -> str:
+    """Human-friendly tile title for a notebook slug.
 
-    Drops the `.py` extension and capitalizes the first letter, so
-    `my-notebook.py` tiles as `My-notebook`.
+    Capitalizes the first letter, so `my-notebook` tiles as `My-notebook`.
     """
-    stem = filename.removesuffix(".py")
-    return stem[:1].upper() + stem[1:]
+    return slug[:1].upper() + slug[1:]
 
 
 _GENERIC_WS_DESC = "Personal workspace notebook."
 
 
-def _workspace_tile_dict(slug: str, name: str, description: str) -> dict:
-    """A workspace tile titled by the notebook's `main_name` and `main_description`.
+def _tile_text(slug: str, name: str, description: str) -> tuple[str, str]:
+    """A workspace tile's `(title, description)` from the notebook's declared ones.
 
     The name is preserved verbatim as the user typed it; without one the
-    title falls back to a filename-derived form.
+    title falls back to a slug-derived form, and a missing description to a
+    generic blurb.
     """
-    return _tile_dict(
-        slug,
-        name or _display_name(f"{slug}.py"),
-        description or _GENERIC_WS_DESC,
-        "workspace",
-    )
+    return name or _display_name(slug), description or _GENERIC_WS_DESC
+
+
+def _workspace_tile_dict(slug: str, name: str, description: str) -> dict:
+    """A workspace tile titled by the notebook's `main_name` and `main_description`."""
+    return _tile_dict(slug, *_tile_text(slug, name, description), "workspace")
 
 
 async def _workspace_tiles(user: User) -> list[dict]:
@@ -372,32 +386,18 @@ async def _teardown_notebook_pods(user: User, slug: str) -> None:
 
     Deactivate first (a clean stop), then delete the deployment record, so the
     notebook leaves nothing behind — no tile to Stop it, no orphan for
-    `/workspace/cleanup` to reap. Shared by every route that removes a
-    notebook from the dashboard. Every step is best-effort and never raises.
+    `/workspace/cleanup` to reap. Every step is best-effort and never raises.
     """
-    project = config.FLYTE_PROJECT
-    for mode in ("edit", "run"):
-        name = f"nb-{slug}-{mode}"
+    for mode in MODES:
+        name = app_name(slug, mode)
         try:
-            app = await App.get.aio(
-                name=name, project=project, domain=config.FLYTE_DOMAIN
-            )
-            await app.deactivate.aio()
+            await (await _get_app(name)).deactivate.aio()
         except Exception:
             pass
         try:
-            await App.delete.aio(name=name, project=project, domain=config.FLYTE_DOMAIN)
+            await _delete_app(name)
         except Exception:
             pass
-
-
-def _invalid_slug(slug: str) -> JSONResponse | None:
-    """A 400 for a slug that isn't a user notebook's, else None."""
-    if _notebook_slug(slug) != slug:
-        return JSONResponse(
-            {"error": f"invalid or reserved notebook: {slug!r}"}, status_code=400
-        )
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -408,14 +408,15 @@ def _invalid_slug(slug: str) -> JSONResponse | None:
 @asgi_app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, user: CurrentUser):
     """Render the owner's dashboard: their notebooks, then the asset browser."""
-    workspace = await _workspace_tiles(user) if _store_ready() else []
+    store_ready = _store_ready()
+    workspace = await _workspace_tiles(user) if store_ready else []
     return templates.TemplateResponse(
         request,
         "dashboard.html",
         {
             "title": "Dashboard",
             "user": user,
-            "workspace_configured": _store_ready(),
+            "workspace_configured": store_ready,
             "tutorials": [
                 _tile_dict(n.slug, n.title, n.description, "tutorials")
                 for n in by_section("tutorials")
@@ -429,8 +430,8 @@ async def dashboard(request: Request, user: CurrentUser):
             "version": config.VERSION,
             "console_runs_url": _console_runs_url(),
             # The asset browser compares `_owner` against the visitor.
-            "username": user.subject,
-            "pinata_configured": public_assets_on(),
+            "username": (user_from_request(request) or user).subject,
+            "public_assets": public_assets_on(),
             "tus_max_bytes": TUS_MAX_BYTES,
             "tus_chunk_bytes": TUS_CHUNK_BYTES,
         },
@@ -463,8 +464,8 @@ async def workspace_create(
     slug is over `NOTEBOOK_SLUG_MAX` is refused, since its app could never be
     deployed.
     """
-    if not _store_ready():
-        return _store_off()
+    if bad := _workspace_guard():
+        return bad
     if source not in SEED_SLUGS:
         return JSONResponse({"error": f"invalid source: {source}"}, status_code=400)
     slug = _notebook_slug(name)
@@ -486,6 +487,20 @@ async def workspace_create(
     if seed is None:
         return JSONResponse({"error": f"{source} seed not found"}, status_code=500)
     content = with_setup_values(seed, main_name=display_name)
+    if failure := await _create_notebook(user, filename, content, "create"):
+        return failure
+
+    tile = _workspace_tile_dict(slug, display_name, notebook_description(content))
+    return JSONResponse({"slug": slug, "tile_html": _render_tile(tile)})
+
+
+async def _create_notebook(
+    user: User, filename: str, content: str, action: str
+) -> JSONResponse | None:
+    """Write a new notebook to the store; the error response if that fails.
+
+    A 409 when the name is taken, else a 500 naming `action`.
+    """
     try:
         await store.create_workspace_notebook(user.subject, filename, content)
     except store.NotebookExistsError:
@@ -493,11 +508,9 @@ async def workspace_create(
             {"error": f"notebook already exists: {filename}"}, status_code=409
         )
     except Exception as exc:
-        logger.error(f"Notebook create failed for {filename!r}: {exc}")
-        return _failed("create", exc)
-
-    tile = _workspace_tile_dict(slug, display_name, notebook_description(content))
-    return JSONResponse({"slug": slug, "tile_html": _render_tile(tile)})
+        logger.error(f"Notebook {action} failed for {filename!r}: {exc}")
+        return _failed(action, exc)
+    return None
 
 
 def _copy_source(slug: str, section: str) -> tuple[str, str, str]:
@@ -509,7 +522,7 @@ def _copy_source(slug: str, section: str) -> tuple[str, str, str]:
     if section == "workflows":
         nb = by_slug(slug)
         source = shipped_source(nb.path_in_image) if nb else None
-        if nb is None or nb.section != "workflows" or source is None:
+        if source is None or nb.section != "workflows":
             raise LookupError(f"unknown workflow: {slug}")
         return source, nb.title, nb.description
     raise ValueError(f"cannot copy from section: {section}")
@@ -524,12 +537,12 @@ async def workspace_copy(
     The source is a shipped Workflows notebook; it's written as a fresh,
     editable workspace notebook. The copy keeps the source's setup block, and
     the workflow's title and blurb are declared in it as `main_name` and
-    `main_description`, so it tiles like any other workspace notebook. The target slug is derived from the source title;
-    like `/workspace/create` it fails with 409 if that name is taken. Returns
-    the rendered Workspace tile.
+    `main_description`, so it tiles like any other workspace notebook. The
+    target slug is derived from the source title; like `/workspace/create` it
+    fails with 409 if that name is taken. Returns the rendered Workspace tile.
     """
-    if not _store_ready():
-        return _store_off()
+    if bad := _workspace_guard():
+        return bad
     try:
         source, title, desc = _copy_source(slug, section)
     except ValueError as exc:
@@ -545,15 +558,8 @@ async def workspace_copy(
         )
     filename = f"{target_slug}.py"
     content = with_setup_values(source, main_name=title, main_description=desc)
-    try:
-        await store.create_workspace_notebook(user.subject, filename, content)
-    except store.NotebookExistsError:
-        return JSONResponse(
-            {"error": f"notebook already exists: {filename}"}, status_code=409
-        )
-    except Exception as exc:
-        logger.error(f"Notebook copy failed for {slug!r} from {section}: {exc}")
-        return _failed("copy", exc)
+    if failure := await _create_notebook(user, filename, content, "copy"):
+        return failure
 
     tile = _workspace_tile_dict(target_slug, title, desc)
     return JSONResponse({"slug": target_slug, "tile_html": _render_tile(tile)})
@@ -579,9 +585,7 @@ async def workspace_setup(user: CurrentUser, slug: str):
     The body comes without its `with app.setup:` line and flush left. A
     notebook without a setup block gets a starter body to save.
     """
-    if not _store_ready():
-        return _store_off()
-    if bad := _invalid_slug(slug):
+    if bad := _workspace_guard(slug):
         return bad
     source = await store.get_workspace_notebook(user.subject, f"{slug}.py")
     if source is None:
@@ -602,9 +606,7 @@ async def workspace_setup_save(
     `/launch`; the tile's name and description, which this returns, change
     right away.
     """
-    if not _store_ready():
-        return _store_off()
-    if bad := _invalid_slug(slug):
+    if bad := _workspace_guard(slug):
         return bad
     filename = f"{slug}.py"
     try:
@@ -625,12 +627,10 @@ async def workspace_setup_save(
         logger.error(f"Notebook setup update failed for {filename!r}: {exc}")
         return _failed("update", exc)
 
-    tile = _workspace_tile_dict(
+    title, description = _tile_text(
         slug, notebook_name(content), notebook_description(content)
     )
-    return JSONResponse(
-        {"slug": slug, "title": tile["title"], "description": tile["description"]}
-    )
+    return JSONResponse({"slug": slug, "title": title, "description": description})
 
 
 @asgi_app.post("/workspace/delete")
@@ -640,9 +640,7 @@ async def workspace_delete(user: CurrentUser, slug: str = Form(...)):
     Idempotent — a notebook that's already gone still returns 200. Teardown
     is best-effort and never fails the delete.
     """
-    if not _store_ready():
-        return _store_off()
-    if bad := _invalid_slug(slug):
+    if bad := _workspace_guard(slug):
         return bad
     await _teardown_notebook_pods(user, slug)
     try:
@@ -660,9 +658,7 @@ async def workspace_download(user: CurrentUser, slug: str):
     This is the path for sharing a notebook upstream: download it and
     contribute it like any file.
     """
-    if not _store_ready():
-        return _store_off()
-    if bad := _invalid_slug(slug):
+    if bad := _workspace_guard(slug):
         return bad
     filename = f"{slug}.py"
     source = await store.get_workspace_notebook(user.subject, filename)
@@ -698,8 +694,8 @@ async def save_settings(user: CurrentUser, save_interval_seconds: str = Form("")
     The save interval is a whole number of seconds, 0 or more. Anything else
     is a 400, and nothing is stored. Returns the settings as saved.
     """
-    if not _store_ready():
-        return _store_off()
+    if bad := _workspace_guard():
+        return bad
     text = save_interval_seconds.strip()
     if not (text.isascii() and text.isdigit()):
         return JSONResponse(
@@ -767,15 +763,12 @@ async def launch(
     build. An environment that won't evaluate, or an image that won't build,
     is a 422 with the reason, never a pod sized or built wrong.
     """
-    if mode not in ("edit", "run"):
+    if mode not in MODES:
         return JSONResponse({"error": f"invalid mode: {mode}"}, status_code=400)
     if section not in _SECTIONS:
         return JSONResponse({"error": f"invalid section: {section}"}, status_code=400)
-    if section == "workspace":
-        if not _store_ready():
-            return _store_off()
-        if bad := _invalid_slug(slug):
-            return bad
+    if section == "workspace" and (bad := _workspace_guard(slug)):
+        return bad
 
     target = await _launch_target(user, slug, section)
     if target is None:
@@ -814,8 +807,8 @@ async def _serve_notebook(
     env.env_vars["FLYTE_PROJECT"] = project
     # App pods aren't given the org (task pods get `_U_ORG_NAME`); pass ours on
     # so in-pod SDK calls address the tenant's org.
-    if os.environ.get("FLYTE_ORG"):
-        env.env_vars["FLYTE_ORG"] = os.environ["FLYTE_ORG"]
+    if config.FLYTE_ORG:
+        env.env_vars["FLYTE_ORG"] = config.FLYTE_ORG
     # Owner attribution: workspace MCP/SDK uploads stamp `_owner` from this
     # (and config.py forwards it onward into task pods at run submission).
     env.env_vars["STARGAZER_OWNER"] = user.subject
@@ -847,9 +840,7 @@ async def _serve_notebook(
     except Exception as exc:
         logger.warning(f"serve watch unconfirmed for {slug!r}/{mode!r}: {exc}")
         try:
-            app = await App.get.aio(
-                name=f"nb-{slug}-{mode}", project=project, domain=config.FLYTE_DOMAIN
-            )
+            app = await _get_app(app_name(slug, mode))
         except Exception:
             return JSONResponse({"error": str(exc)}, status_code=422)
         endpoint = app.endpoint
@@ -864,15 +855,13 @@ async def _serve_notebook(
 @asgi_app.post("/stop")
 async def stop(user: CurrentUser, slug: str = Form(...), mode: str = Form(...)):
     """Deactivate the user's per-notebook app for the requested slug+mode."""
-    if mode not in ("edit", "run"):
+    if mode not in MODES:
         return JSONResponse({"error": f"invalid mode: {mode}"}, status_code=400)
-    project = config.FLYTE_PROJECT
-    name = f"nb-{slug}-{mode}"
+    name = app_name(slug, mode)
     try:
-        app = await App.get.aio(name=name, project=project, domain=config.FLYTE_DOMAIN)
-        await app.deactivate.aio()
+        await (await _get_app(name)).deactivate.aio()
     except Exception as exc:
-        logger.error(f"Stop failed for {name!r} in {project!r}: {exc}")
+        logger.error(f"Stop failed for {name!r} in {config.FLYTE_PROJECT!r}: {exc}")
         return _failed("stop", exc)
     return JSONResponse({"stopped": True})
 
@@ -903,9 +892,7 @@ async def launch_status(user: CurrentUser):
     async def _probe(name: str, slug: str, mode: str) -> dict | None:
         """Return run info for a discovered app if it's active, else None."""
         try:
-            app = await App.get.aio(
-                name=name, project=project, domain=config.FLYTE_DOMAIN
-            )
+            app = await _get_app(name)
         except Exception:
             return None  # vanished between list and get
         if app.is_active() and app.endpoint:
@@ -939,15 +926,13 @@ async def workspace_cleanup(user: CurrentUser):
     async def _cleanup(name: str) -> str | None:
         """Delete `name` if it's still a deactivated deployment."""
         try:
-            app = await App.get.aio(
-                name=name, project=project, domain=config.FLYTE_DOMAIN
-            )
+            app = await _get_app(name)
         except Exception:
             return None  # vanished between list and get
         if not app.is_deactivated():
             return None
         try:
-            await App.delete.aio(name=name, project=project, domain=config.FLYTE_DOMAIN)
+            await _delete_app(name)
             return name
         except Exception as exc:
             logger.warning(f"cleanup delete failed for {name!r}: {exc}")

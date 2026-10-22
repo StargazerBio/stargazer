@@ -15,11 +15,7 @@ ALICE = "387300641116005877"
 BOB = "111111111111111111"
 NB = "# /// script\n# ///\nimport marimo\n"
 
-
-@pytest.fixture(autouse=True)
-def _root(tmp_path, monkeypatch):
-    """Point the store at a fresh local directory for every test."""
-    monkeypatch.setattr(config, "WORKSPACE_ROOT", str(tmp_path / "store"))
+pytestmark = pytest.mark.usefixtures("workspace_root")
 
 
 async def test_round_trip_is_byte_identical():

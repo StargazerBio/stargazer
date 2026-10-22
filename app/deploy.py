@@ -6,6 +6,8 @@ the owner and their settings baked in, at the stable subdomain `<project>`.
 The same app definition goes to every user: only the project, the owner and
 the subdomain differ. Union doesn't reject a second app asking for a taken
 subdomain (it hangs), so uniqueness comes from project ids being unique.
+Images are content-hashed, so a release builds each once however many users
+it deploys.
 
 Each dashboard is deployed under the commit it came from (`release_version`)
 as its version, and shows it on its page. Its asset index is its user's
@@ -22,7 +24,6 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import asyncio
-import os
 import subprocess
 import time
 from functools import cache
@@ -127,11 +128,9 @@ def deploy_dashboard(
 ) -> str:
     """Deploy the dashboard into `project` for its owner; return its URL.
 
-    Same app definition for every user: only the project, the owner and the
-    subdomain differ. Images are content-hashed, so a release builds each
-    once and every user's dashboard runs the same build. The deploy is
-    versioned with `release_version()`, which the dashboard also shows on its
-    page; redeploying under a version the app already has still updates it.
+    The deploy is versioned with `release_version()`, which the dashboard also
+    shows on its page; redeploying under a version the app already has still
+    updates it.
     `extra_env` is applied last; a `STARGAZER_INDEX_URL` in it stands in for
     the DSQL table, as the devbox's Postgres does.
 
@@ -152,6 +151,9 @@ def deploy_dashboard(
     version = release_version()
     env_vars = {
         **_BASE_ENV_VARS,
+        # Notebooks are served into the dashboard's project, and serving
+        # uploads their code bundle under the client's init-time project
+        # (`with_servecontext(project=...)` alone isn't enough).
         "FLYTE_PROJECT": project,
         "SG_OWNER_SUBJECT": owner_subject,
         "STARGAZER_OWNER": owner_subject,
@@ -165,12 +167,12 @@ def deploy_dashboard(
         env_vars["STARGAZER_STORE_ROOT"] = config.WORKSPACE_ROOT
     # The org admins who may open every user's dashboard and notebooks
     # (`app.identity`), when the deployer names them.
-    if admins := os.environ.get("STARGAZER_ADMIN_SUBJECTS"):
-        env_vars["STARGAZER_ADMIN_SUBJECTS"] = admins
+    if config.ADMIN_SUBJECTS:
+        env_vars["STARGAZER_ADMIN_SUBJECTS"] = ",".join(sorted(config.ADMIN_SUBJECTS))
     # Public assets turned off for every dashboard the deploy touches
     # (`app.config.PUBLIC_ASSETS`), when the deployer says so.
-    if public := os.environ.get("STARGAZER_PUBLIC_ASSETS"):
-        env_vars["STARGAZER_PUBLIC_ASSETS"] = public
+    if not config.PUBLIC_ASSETS:
+        env_vars["STARGAZER_PUBLIC_ASSETS"] = "off"
     # In-cluster init can't discover the org in an app pod; bake the deployer's.
     if org := get_init_config().org:
         env_vars["FLYTE_ORG"] = org
@@ -179,9 +181,8 @@ def deploy_dashboard(
     # `clone_with` copy: the copy records `dataclasses.py` as the frame it was
     # created in, and Flyte resolves `include=` and the pod's loader from that
     # frame, so the deploy fails looking for `templates/` in the stdlib.
-    env = app_env
-    env.env_vars = env_vars
-    env.domain = flyte.app.Domain(subdomain=project)
+    app_env.env_vars = env_vars
+    app_env.domain = flyte.app.Domain(subdomain=project)
     ctx = flyte.with_servecontext(
         project=project, domain=config.FLYTE_DOMAIN, version=version
     )
@@ -190,10 +191,12 @@ def deploy_dashboard(
     # (seen on the tenant and the devbox). Trust the app's own
     # state over it, giving the new revision a little time.
     try:
-        return ctx.serve(env).endpoint
+        return ctx.serve(app_env).endpoint
     except RuntimeError as exc:
         for _ in range(_ACTIVE_POLLS):
-            app = App.get(name=env.name, project=project, domain=config.FLYTE_DOMAIN)
+            app = App.get(
+                name=app_env.name, project=project, domain=config.FLYTE_DOMAIN
+            )
             if app.is_active() and app.endpoint:
                 logger.warning(
                     f"Serve watch for {project} reported {exc}; the app is up"
@@ -207,6 +210,7 @@ def stop_project_apps(project: str) -> list[str]:
     """Deactivate every active app in the project; return their names."""
 
     async def _stop() -> list[str]:
+        """Deactivate the project's active apps; return their names."""
         stopped = []
         for listed in await list_project_apps(project, domain=config.FLYTE_DOMAIN):
             app = await App.get.aio(

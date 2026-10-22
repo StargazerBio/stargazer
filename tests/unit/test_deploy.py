@@ -21,23 +21,6 @@ def dsql_cluster(monkeypatch):
     monkeypatch.setattr(config, "DSQL_CLUSTER_ARN", CLUSTER)
 
 
-def _capture_serve(monkeypatch) -> dict:
-    """Fake the serve; return the dict the served env's vars land in."""
-    served = {}
-
-    def fake_servecontext(**ctx):
-        def serve(env):
-            served.update(env_vars=dict(env.env_vars))
-            return SimpleNamespace(endpoint="https://u-jane.apps.example")
-
-        return SimpleNamespace(serve=serve)
-
-    monkeypatch.setattr(deploy.flyte, "with_servecontext", fake_servecontext)
-    monkeypatch.setattr(deploy, "_notebook_image", lambda: "reg/notebook-app:h1")
-    monkeypatch.setattr(deploy, "get_init_config", lambda: SimpleNamespace(org=None))
-    return served
-
-
 def test_notebook_image_is_the_built_uri(monkeypatch):
     """Dashboards bake in the content-hashed URI the build returns, no retag."""
     monkeypatch.setattr(
@@ -46,39 +29,25 @@ def test_notebook_image_is_the_built_uri(monkeypatch):
     assert deploy.build_notebook_image() == "reg/notebook-app:h1"
 
 
-def test_dashboard_deploy_keeps_the_env_resolvable(monkeypatch):
+def test_dashboard_deploy_keeps_the_env_resolvable(monkeypatch, served_dashboard):
     """The served env is built where it's defined, with the owner's settings.
 
     Flyte resolves `include=` paths and the pod's loader from the frame the
     env was created in; a `clone_with` copy reports `dataclasses.py` instead,
     and the deploy fails on `templates/`.
     """
-    served = {}
-
-    def fake_servecontext(**ctx):
-        def serve(env):
-            served.update(
-                ctx=ctx, env=env, env_vars=dict(env.env_vars), domain=env.domain
-            )
-            return SimpleNamespace(endpoint="https://u-jane.apps.example")
-
-        return SimpleNamespace(serve=serve)
-
-    monkeypatch.setattr(deploy.flyte, "with_servecontext", fake_servecontext)
-    monkeypatch.setattr(deploy, "_notebook_image", lambda: "reg/notebook-app:h1")
     monkeypatch.setattr(
         deploy, "get_init_config", lambda: SimpleNamespace(org="stargazerbio")
     )
     assert deploy.deploy_dashboard("u-jane", ALICE) == "https://u-jane.apps.example"
-    env = served["env"]
-    assert env._caller_frame.filename.endswith("app/admin_app.py")
-    assert (served["ctx"]["project"], served["ctx"]["domain"]) == (
+    assert served_dashboard["env"]._caller_frame.filename.endswith("app/admin_app.py")
+    assert (served_dashboard["ctx"]["project"], served_dashboard["ctx"]["domain"]) == (
         "u-jane",
         "development",
     )
-    assert served["domain"].subdomain == "u-jane"
+    assert served_dashboard["domain"].subdomain == "u-jane"
     assert {
-        k: served["env_vars"][k]
+        k: served_dashboard["env_vars"][k]
         for k in (
             "FLYTE_PROJECT",
             "SG_OWNER_SUBJECT",
@@ -93,56 +62,27 @@ def test_dashboard_deploy_keeps_the_env_resolvable(monkeypatch):
     }
 
 
-def test_dashboard_deploy_carries_the_asset_store_and_owner(monkeypatch):
+def test_dashboard_deploy_carries_the_asset_store_and_owner(
+    monkeypatch, served_dashboard
+):
     """The dashboard stores under the workspace root and stamps its owner."""
-    served = _capture_serve(monkeypatch)
     monkeypatch.setattr(config, "WORKSPACE_ROOT", "s3://bucket/stargazer")
-    monkeypatch.setenv("STARGAZER_ADMIN_SUBJECTS", "391057331988775036")
-    monkeypatch.setenv("STARGAZER_PUBLIC_ASSETS", "off")
+    monkeypatch.setattr(config, "ADMIN_SUBJECTS", frozenset({"391057331988775036"}))
+    monkeypatch.setattr(config, "PUBLIC_ASSETS", False)
     deploy.deploy_dashboard("u-jane", ALICE)
-    assert served["env_vars"]["STARGAZER_PUBLIC_ASSETS"] == "off"
-    assert served["env_vars"]["STARGAZER_ADMIN_SUBJECTS"] == "391057331988775036"
-    assert served["env_vars"]["STARGAZER_STORE_ROOT"] == "s3://bucket/stargazer"
-    assert served["env_vars"]["STARGAZER_OWNER"] == ALICE
+    env_vars = served_dashboard["env_vars"]
+    assert env_vars["STARGAZER_PUBLIC_ASSETS"] == "off"
+    assert env_vars["STARGAZER_ADMIN_SUBJECTS"] == "391057331988775036"
+    assert env_vars["STARGAZER_STORE_ROOT"] == "s3://bucket/stargazer"
+    assert env_vars["STARGAZER_OWNER"] == ALICE
 
 
-def test_dashboard_deploy_bakes_the_release_version(monkeypatch):
-    """Each dashboard carries the version it was deployed from, for its page."""
-    served = {}
-
-    def fake_servecontext(**ctx):
-        def serve(env):
-            served.update(env_vars=dict(env.env_vars))
-            return SimpleNamespace(endpoint="https://u-jane.apps.example")
-
-        return SimpleNamespace(serve=serve)
-
-    monkeypatch.setattr(deploy.flyte, "with_servecontext", fake_servecontext)
-    monkeypatch.setattr(deploy, "_notebook_image", lambda: "reg/notebook-app:h1")
-    monkeypatch.setattr(deploy, "get_init_config", lambda: SimpleNamespace(org=None))
+def test_dashboard_deploy_is_versioned_with_the_release(monkeypatch, served_dashboard):
+    """The deploy's version is the commit it came from, on its page and in the console."""
     monkeypatch.setattr(deploy, "release_version", lambda: "18fbabe-dirty")
     deploy.deploy_dashboard("u-jane", ALICE)
-    assert served["env_vars"]["STARGAZER_VERSION"] == "18fbabe-dirty"
-
-
-def test_dashboard_deploy_is_versioned_with_the_release(monkeypatch):
-    """The deploy's version is the commit it came from, so the console shows it."""
-    contexts = []
-
-    def fake_servecontext(**ctx):
-        contexts.append(ctx)
-        return SimpleNamespace(
-            serve=lambda env: SimpleNamespace(endpoint="https://u-jane.apps.example")
-        )
-
-    monkeypatch.setattr(deploy.flyte, "with_servecontext", fake_servecontext)
-    monkeypatch.setattr(deploy, "_notebook_image", lambda: "reg/notebook-app:h1")
-    monkeypatch.setattr(deploy, "get_init_config", lambda: SimpleNamespace(org=None))
-    monkeypatch.setattr(deploy, "release_version", lambda: "18fbabe")
-    deploy.deploy_dashboard("u-jane", ALICE)
-    assert contexts == [
-        {"project": "u-jane", "domain": "development", "version": "18fbabe"}
-    ]
+    assert served_dashboard["env_vars"]["STARGAZER_VERSION"] == "18fbabe-dirty"
+    assert served_dashboard["ctx"]["version"] == "18fbabe-dirty"
 
 
 @pytest.fixture
@@ -213,43 +153,34 @@ def test_a_projects_index_login_is_a_plain_identifier():
     assert deploy.login_for("u-jane-2") == "u_jane_2"
 
 
-def test_dsql_index_url_names_the_login_table_and_role():
-    """The URL is what `make_index` opens as the user's `DsqlIndex`."""
-    assert deploy.dsql_index_url(
-        "u-jane", "arn:aws:dsql:us-west-2:111122223333:cluster/abc123"
-    ) == (
-        "dsql://u_jane@abc123.dsql.us-west-2.on.aws/assets.u_jane"
-        "?role_arn=arn:aws:iam::111122223333:role/stargazer-index-u-jane"
-    )
-
-
-def test_dashboard_deploy_indexes_in_the_users_dsql_table(monkeypatch):
-    """The dashboard's index is the user's DSQL table."""
-    served = _capture_serve(monkeypatch)
+def test_dashboard_deploy_indexes_in_the_users_dsql_table(served_dashboard):
+    """The dashboard's index is the user's DSQL table, as `make_index` opens it."""
     deploy.deploy_dashboard("u-jane", ALICE)
-    assert served["env_vars"]["STARGAZER_INDEX_URL"] == (
+    assert served_dashboard["env_vars"]["STARGAZER_INDEX_URL"] == (
         "dsql://u_jane@abc123.dsql.us-west-2.on.aws/assets.u_jane"
         "?role_arn=arn:aws:iam::111122223333:role/stargazer-index-u-jane"
     )
 
 
-def test_dashboard_deploy_without_an_index_server_is_refused(monkeypatch):
+def test_dashboard_deploy_without_an_index_server_is_refused(
+    monkeypatch, served_dashboard
+):
     """No cluster and no index given: refused before anything is served.
 
     The dashboard would fall back to a file on its own disk, which its pods
     can't reach and scale-to-zero erases.
     """
-    served = _capture_serve(monkeypatch)
     monkeypatch.setattr(config, "DSQL_CLUSTER_ARN", "")
     with pytest.raises(RuntimeError, match="STARGAZER_DSQL_CLUSTER_ARN"):
         deploy.deploy_dashboard("u-jane", ALICE)
-    assert served == {}
+    assert served_dashboard == {}
 
 
-def test_dashboard_deploy_takes_a_given_index_without_a_cluster(monkeypatch):
+def test_dashboard_deploy_takes_a_given_index_without_a_cluster(
+    monkeypatch, served_dashboard
+):
     """The devbox's dashboard brings its Postgres URL and needs no cluster."""
-    served = _capture_serve(monkeypatch)
     monkeypatch.setattr(config, "DSQL_CLUSTER_ARN", "")
     url = "postgresql://sg:pw@postgres.stargazer.svc.cluster.local:5432/stargazer"
     deploy.deploy_dashboard("u-jane", ALICE, extra_env={"STARGAZER_INDEX_URL": url})
-    assert served["env_vars"]["STARGAZER_INDEX_URL"] == url
+    assert served_dashboard["env_vars"]["STARGAZER_INDEX_URL"] == url

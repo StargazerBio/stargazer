@@ -10,22 +10,18 @@ settings in their run context, so nothing needs exporting first.
 """
 
 import asyncio
-import importlib.util
 from urllib.parse import urlsplit
 
 import flyte
 import pytest
+from conftest import load_devbox_dashboard
 
 from app import config
 from app.init import init
 from stargazer.config import PROJECT_ROOT
 from stargazer.utils.index import PostgresIndex
 
-_spec = importlib.util.spec_from_file_location(
-    "devbox_dashboard", PROJECT_ROOT / "devbox" / "dashboard.py"
-)
-devbox_dashboard = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(devbox_dashboard)
+devbox_dashboard = load_devbox_dashboard()
 
 # Where a pod on the devbox stores assets: the bucket, the Postgres index,
 # and the stand-in user who owns them.

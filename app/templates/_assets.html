@@ -49,7 +49,6 @@
     font-family: inherit;
 }
 .asset-filters input:focus { outline: none; border-color: var(--accent); }
-.controls-spacer { flex: 1; }
 
 /* Display region — graph and list are siblings; one is [hidden] at a time. */
 .asset-region {
@@ -141,8 +140,6 @@
 /* Public assets owned by the signed-in user read green (the "yours" signal). */
 .asset-table tbody tr.mine td { background: var(--green-soft); }
 .asset-table td { word-break: break-word; }
-.asset-table .col-cid { font-family: var(--mono); color: var(--text-dim); white-space: nowrap; }
-.asset-table .kv-mini { color: var(--text-dim); font-size: 0.76rem; }
 .badge.owner-me { color: var(--green); border-color: var(--green-line); }
 .badge {
     display: inline-block;
@@ -207,7 +204,7 @@
     font-family: inherit;
 }
 .detail-edit input:focus { outline: none; border-color: var(--accent); }
-/* Existing keys can't be renamed (Pinata merges keyvalues), so they read as a
+/* Existing keys can't be renamed (the update merges keyvalues), so they read as a
    fixed mono label beside the editable value — not a dashed pseudo-input that
    only looks disabled. New rows still expose a real, editable key input. */
 .detail-edit .kv-key {
@@ -374,7 +371,7 @@
             <div class="upload-net">
                 <span>Network:</span>
                 <label><input type="radio" name="net" value="private" checked /> Private, in your own storage</label>
-                {% if pinata_configured %}
+                {% if public_assets %}
                 <label><input type="radio" name="net" value="public" /> Public — <strong>anyone on the internet</strong> can browse it</label>
                 {% endif %}
             </div>
@@ -396,8 +393,8 @@
 <script src="https://cdn.jsdelivr.net/npm/tus-js-client@4.3.1/dist/tus.min.js"></script>
 <script>
 const USERNAME = {{ username | tojson }};
-// Public data needs a Pinata key; private data is the dashboard's own store.
-const PUBLIC_ON = {{ 'true' if pinata_configured else 'false' }};
+// Whether the deploy offers the Public tab and public uploads.
+const PUBLIC_ON = {{ 'true' if public_assets else 'false' }};
 const TUS_MAX_BYTES = {{ tus_max_bytes }};
 const TUS_CHUNK_BYTES = {{ tus_chunk_bytes }};
 
@@ -420,12 +417,15 @@ const owner = (r) => (r.keyvalues && r.keyvalues._owner) || "shared";
 // (Private is already all-yours, so it gets no green — that would be noise.)
 const ownedByUser = (r) => state.network === "public" && owner(r) === USERNAME;
 // Relationship keys: companion_of, and any keyvalue ending in _cid, with a
-// non-empty value. Bare "cid" is excluded (no underscore before the suffix).
+// non-empty value.
 function relKeys(kv) {
     return Object.keys(kv || {}).filter(
-        (k) => (k === "companion_of" || (k !== "cid" && k.endsWith("_cid"))) && kv[k]
+        (k) => (k === "companion_of" || k.endsWith("_cid")) && kv[k]
     );
 }
+// Keys the browser never sets: system keys (`_owner`), the record's own cid
+// and name, and any `extra` the caller names.
+const isReserved = (k, extra = []) => k.startsWith("_") || ["cid", "name", ...extra].includes(k);
 // "reference_cid" → "reference"; "companion_of" → "companion of".
 const relLabel = (k) => (k === "companion_of" ? "companion of" : k.slice(0, -4));
 
@@ -721,8 +721,6 @@ function renderList() {
 }
 
 $("list-body").addEventListener("click", (e) => {
-    const copy = e.target.closest("[data-copy]");
-    if (copy) { e.stopPropagation(); navigator.clipboard?.writeText(copy.dataset.copy); flash(copy, "✓"); return; }
     if (e.target.closest("a")) return; // let download links work
     const tr = e.target.closest("tr[data-cid]");
     if (tr) selectAsset(tr.dataset.cid);
@@ -800,14 +798,14 @@ function renderDetail() {
 
 // Inline metadata editor. Values of existing keys are editable (the headline
 // case: fix a typo'd asset type or field); new keys can be added. Keys aren't
-// renamable/removable — Pinata's update merges, so a renamed key would orphan
-// the old one. Reserved/system keys are never shown or sent; the route
+// renamable/removable — the update merges, so a renamed key would orphan the
+// old one. Reserved/system keys are never shown or sent; the route
 // re-stamps _owner.
 function renderDetailEditor(el, rec) {
     const kv = rec.keyvalues || {};
     let rows = "";
     for (const k of Object.keys(kv)) {
-        if (k.startsWith("_") || k === "cid" || k === "name") continue;
+        if (isReserved(k)) continue;
         rows += kvEditRow(k, kv[k], true);
     }
     el.innerHTML =
@@ -851,7 +849,7 @@ async function saveEdit(cid) {
         const k = (keyInput ? keyInput.value : row.dataset.key || "").trim();
         const v = row.querySelector(".kv-v").value;
         if (!k) continue;
-        if (k.startsWith("_") || k === "cid" || k === "name") {
+        if (isReserved(k)) {
             errEl.textContent = `"${k}" is reserved.`; errEl.hidden = false; return;
         }
         keyvalues[k] = v;
@@ -902,23 +900,25 @@ $("detail").addEventListener("click", (e) => {
 
 // ---- controls ------------------------------------------------------------
 
-$("network-tabs").addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-network]");
-    if (!btn) return;
-    state.network = btn.dataset.network;
-    $("network-tabs").querySelectorAll("button").forEach((b) =>
-        b.setAttribute("aria-selected", String(b === btn))
-    );
+// A segmented control: clicking one of its `data-<attr>` buttons selects it
+// and hands its value to `onPick`.
+function segmented(id, attr, onPick) {
+    $(id).addEventListener("click", (e) => {
+        const btn = e.target.closest(`[data-${attr}]`);
+        if (!btn) return;
+        $(id).querySelectorAll("button").forEach((b) =>
+            b.setAttribute("aria-selected", String(b === btn))
+        );
+        onPick(btn.dataset[attr]);
+    });
+}
+
+segmented("network-tabs", "network", (network) => {
+    state.network = network;
     fetchRecords();
 });
-
-$("view-toggle").addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-view]");
-    if (!btn) return;
-    state.view = btn.dataset.view;
-    $("view-toggle").querySelectorAll("button").forEach((b) =>
-        b.setAttribute("aria-selected", String(b === btn))
-    );
+segmented("view-toggle", "view", (view) => {
+    state.view = view;
     renderView();
 });
 
@@ -935,20 +935,15 @@ $("filter-apply").addEventListener("click", () => {
 
 function populateTypeControls() {
     const keys = Object.keys(state.schema).sort();
-    const dl = $("type-options");
-    if (dl) dl.innerHTML = keys.map((k) => `<option value="${esc(k)}">`).join("");
-    const sel = $("up-type");
-    if (!sel) return;
-    sel.innerHTML =
+    $("type-options").innerHTML = keys.map((k) => `<option value="${esc(k)}">`).join("");
+    $("up-type").innerHTML =
         keys.map((k) => `<option value="${esc(k)}">${esc(k)}</option>`).join("") +
         `<option value="__custom__">custom / bare asset…</option>`;
     renderTypedFields();
 }
 
 function renderTypedFields() {
-    const sel = $("up-type");
-    if (!sel) return;
-    const key = sel.value;
+    const key = $("up-type").value;
     const custom = key === "__custom__";
     $("custom-editor").hidden = !custom;
     $("extra-note").hidden = custom;
@@ -959,17 +954,8 @@ function renderTypedFields() {
     for (const f of state.schema[key] || []) {
         const label = document.createElement("label");
         label.className = "upload-label";
-        let input;
-        if (f.type === "bool") {
-            input = document.createElement("input");
-            input.type = "checkbox";
-        } else if (f.type === "int" || f.type === "float") {
-            input = document.createElement("input");
-            input.type = "number";
-        } else {
-            input = document.createElement("input");
-            input.type = "text";
-        }
+        const input = document.createElement("input");
+        input.type = f.type === "bool" ? "checkbox" : f.type === "int" || f.type === "float" ? "number" : "text";
         input.dataset.field = f.name;
         input.dataset.ftype = f.type;
         label.appendChild(document.createTextNode(f.name + " (" + f.type + ")"));
@@ -988,16 +974,11 @@ function addKvRow(k = "", v = "") {
     $("kv-rows").appendChild(row);
 }
 
-const upType = $("up-type");
-if (upType) upType.addEventListener("change", renderTypedFields);
-const addKv = $("add-kv");
-if (addKv) addKv.addEventListener("click", () => addKvRow());
-const kvRows = $("kv-rows");
-if (kvRows) kvRows.addEventListener("click", (e) => {
+$("up-type").addEventListener("change", renderTypedFields);
+$("add-kv").addEventListener("click", () => addKvRow());
+$("kv-rows").addEventListener("click", (e) => {
     if (e.target.closest(".kv-del")) e.target.closest(".kv-row").remove();
 });
-
-const RESERVED = new Set(["asset", "cid", "name"]);
 
 // Free-form rows, shared by both modes: the whole record for a custom
 // asset, extra keys beside the declared fields for a registered type.
@@ -1006,7 +987,7 @@ function addExtraRows(kv, declared) {
         const k = row.querySelector(".kv-k").value.trim();
         const v = row.querySelector(".kv-v").value;
         if (!k) continue;
-        if (RESERVED.has(k) || k.startsWith("_")) {
+        if (isReserved(k, ["asset"])) {
             throw new Error(`"${k}" is reserved and can't be set here`);
         }
         if (declared.has(k)) {
@@ -1027,13 +1008,8 @@ function collectKeyvalues() {
     const kv = { asset: sel.value };
     for (const input of $("typed-fields").querySelectorAll("[data-field]")) {
         const name = input.dataset.field;
-        if (input.dataset.ftype === "bool") {
-            kv[name] = input.checked ? "true" : "false";
-        } else if (input.type === "number") {
-            if (input.value !== "") kv[name] = input.value; // already valid JSON
-        } else if (input.value !== "") {
-            kv[name] = input.value;
-        }
+        if (input.dataset.ftype === "bool") kv[name] = input.checked ? "true" : "false";
+        else if (input.value !== "") kv[name] = input.value;
     }
     const declared = new Set((state.schema[sel.value] || []).map((f) => f.name));
     return addExtraRows(kv, declared);
@@ -1106,7 +1082,7 @@ async function doUpload() {
             // Optimistic insert — Pinata's list can lag a fresh upload. The row
             // persists in memory until a later fetchRecords() reflects it.
             state.records = [
-                { cid, name: file.name, keyvalues: { ...keyvalues, _owner: USERNAME }, network: "public" },
+                { cid, name: file.name, keyvalues: { ...keyvalues, _owner: USERNAME } },
                 ...state.records,
             ];
             renderView();
@@ -1122,16 +1098,11 @@ async function doUpload() {
     }
 }
 
-const upSubmit = $("up-submit");
-if (upSubmit) upSubmit.addEventListener("click", doUpload);
+$("up-submit").addEventListener("click", doUpload);
 
 // ---- boot ----------------------------------------------------------------
 
 (async function boot() {
-    // Reflect the default network tab selection in the controls.
-    $("network-tabs").querySelectorAll("button").forEach((b) =>
-        b.setAttribute("aria-selected", String(b.dataset.network === state.network))
-    );
     await fetchSchema();
     populateTypeControls();
     await fetchRecords();

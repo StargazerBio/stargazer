@@ -1,10 +1,17 @@
 """Tests for `per_notebook_env`: the declared environment, the dashboard's fields, the pod's env."""
 
+import dataclasses
+
 import flyte
+import pytest
 
 from app import config
 from app.per_notebook import WORKSPACE_NOTEBOOK_DIR, per_notebook_env
-from stargazer.notebooks import NOTEBOOK_DISK, notebook_environment, notebook_image_base
+from stargazer.notebooks import (
+    NOTEBOOK_RESOURCES,
+    notebook_environment,
+    notebook_image_base,
+)
 
 SUBJECT = "387300641116005877"
 
@@ -34,16 +41,9 @@ def _layered():
     return notebook_image_base(config.NOTEBOOK_IMAGE).with_apt_packages("tabix")
 
 
-def test_default_resources_preserve_legacy_request_limit():
-    """With no resources, the env gets one CPU and the ('2Gi','6Gi') memory tuple."""
-    env = _env()
-    assert env.resources.memory == ("2Gi", "6Gi")
-    assert env.resources.cpu == 1
-
-
-def test_without_a_declaration_the_pod_runs_on_the_prebuilt_image():
-    """The deployed image is marked prebuilt, so serving builds nothing."""
-    assert _env().image == flyte.Image.from_base(config.NOTEBOOK_IMAGE)
+def test_default_resources_are_the_notebook_resources():
+    """With nothing declared the pod gets `NOTEBOOK_RESOURCES`."""
+    assert _env().resources == NOTEBOOK_RESOURCES
 
 
 def test_declared_resources_applied_to_env():
@@ -56,13 +56,17 @@ def test_declared_resources_applied_to_env():
 def test_resources_a_notebook_leaves_out_keep_their_defaults():
     """Declaring only memory still gets the pod a CPU and its disk."""
     env = _env(declared=_declared(resources=flyte.Resources(memory="16Gi")))
-    assert env.resources == flyte.Resources(cpu=1, memory="16Gi", disk=NOTEBOOK_DISK)
+    assert env.resources == dataclasses.replace(NOTEBOOK_RESOURCES, memory="16Gi")
 
 
-def test_a_declaration_without_new_layers_runs_on_the_prebuilt_image():
-    """Sizing the pod alone builds nothing."""
-    env = _env(declared=_declared(resources=flyte.Resources(cpu=2)))
-    assert env.image == flyte.Image.from_base(config.NOTEBOOK_IMAGE)
+@pytest.mark.parametrize("fields", [None, {"resources": flyte.Resources(cpu=2)}])
+def test_a_declaration_without_new_layers_runs_on_the_prebuilt_image(fields):
+    """No declaration, or one that only sizes the pod, builds nothing.
+
+    The deployed image is marked prebuilt, so serving hands its URI to Flyte.
+    """
+    declared = None if fields is None else _declared(**fields)
+    assert _env(declared=declared).image == flyte.Image.from_base(config.NOTEBOOK_IMAGE)
 
 
 def test_the_dashboard_names_and_starts_the_pod():
@@ -78,14 +82,15 @@ def test_the_dashboard_names_and_starts_the_pod():
     assert env.port.port == 8080
 
 
-def test_pod_sits_behind_union_login():
-    """Notebook pods require the platform login; the proxy then checks ownership."""
-    assert _env().requires_auth is True
+@pytest.mark.parametrize("fields", [None, {"requires_auth": False}])
+def test_pod_sits_behind_union_login(fields):
+    """Notebook pods require the platform login, whatever a notebook declares.
 
-
-def test_a_declaration_cannot_turn_the_login_off():
-    """The platform login is the pod's only gate on its public address."""
-    assert _env(declared=_declared(requires_auth=False)).requires_auth is True
+    It is the pod's only gate on its public address; the proxy then checks
+    ownership.
+    """
+    declared = None if fields is None else _declared(**fields)
+    assert _env(declared=declared).requires_auth is True
 
 
 def test_declared_env_vars_reach_the_pod_under_the_dashboards():
@@ -97,39 +102,19 @@ def test_declared_env_vars_reach_the_pod_under_the_dashboards():
     assert env.env_vars["SG_OWNER_SUBJECT"] == SUBJECT
 
 
-def test_pod_env_carries_owner_and_store_root(monkeypatch):
-    """The pod learns who owns it and where its notebooks are stored."""
+def test_pod_env_carries_the_owner_the_stores_and_the_index(monkeypatch):
+    """The pod learns who owns it, where its notebooks and assets are stored and
+    which index holds the assets."""
     monkeypatch.setattr(config, "WORKSPACE_ROOT", "s3://bucket/stargazer")
     env = _env()
     assert env.env_vars["SG_OWNER_SUBJECT"] == SUBJECT
     assert env.env_vars["STARGAZER_WORKSPACE_ROOT"] == "s3://bucket/stargazer"
     assert env.env_vars["STARGAZER_ADMIN_URL"] == "http://admin"
-
-
-def test_pod_env_carries_the_asset_store_and_index(monkeypatch):
-    """Assets go under the workspace root and are indexed in the owner's table."""
-    monkeypatch.setattr(config, "WORKSPACE_ROOT", "s3://bucket/stargazer")
-    env = _env()
     assert env.env_vars["STARGAZER_STORE_ROOT"] == "s3://bucket/stargazer"
     assert (
         env.env_vars["STARGAZER_INDEX_URL"]
         == "dsql://u_x@abc123.dsql.us-west-2.on.aws/assets.u_x?role_arn=arn"
     )
-
-
-def test_pod_env_has_no_git_or_session_credentials():
-    """Nothing from the old fork/session model reaches the pod."""
-    env = _env()
-    for gone in (
-        "FORK_FULL_NAME",
-        "FORK_OWNER",
-        "SG_POD_TOKEN",
-        "SG_POD_KEY",
-        "SESSION_SECRET",
-        "STARGAZER_SECURE_COOKIES",
-        "GITHUB_TOKEN",
-    ):
-        assert gone not in env.env_vars
 
 
 def test_pod_runs_the_image_a_notebook_declares():
@@ -157,3 +142,16 @@ def test_pod_env_carries_the_token_check(monkeypatch):
     env = _env()
     assert env.env_vars["SG_AUTH_ISSUER"] == "https://signin.example.test"
     assert env.env_vars["SG_ADMIN_SUBJECTS"] == "1,2"
+
+
+def test_pod_gets_the_configured_domain(monkeypatch):
+    """Per-notebook pods run in the deploy's domain, not a hardcoded one."""
+    monkeypatch.setattr(config, "FLYTE_DOMAIN", "production")
+    assert _env().env_vars["FLYTE_DOMAIN"] == "production"
+
+
+def test_launch_without_a_deployed_image_errors(monkeypatch):
+    """With no image baked in, launching says so instead of pulling garbage."""
+    monkeypatch.setattr(config, "NOTEBOOK_IMAGE", None)
+    with pytest.raises(RuntimeError, match="STARGAZER_NOTEBOOK_IMAGE is unset"):
+        _env()

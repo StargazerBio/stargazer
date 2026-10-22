@@ -14,17 +14,14 @@ user as headers it sets itself, overwriting anything a client sends:
 
 Those headers are only trustworthy through the app's public address. Every app
 also answers at an in-cluster address that skips the login, and any pod in any
-project can send it whatever headers it likes (measured 2026-10-18). So on
-Union (`config.AUTH_ISSUER` set) only the token counts: its signature is
-checked against the issuer's published keys, and the subject is its `sub`. The
+project can send it whatever headers it likes. So on Union
+(`config.AUTH_ISSUER` set) only the token counts: its signature is checked
+against the issuer's published keys, and the subject is its `sub`. The
 visitor must then be the dashboard's owner or one of `config.ADMIN_SUBJECTS`,
 standing in for Union's own check that they can view the project. Elsewhere,
-with no login in front, the headers are taken as they come.
-
-There is no session cookie and no sign-in route of our own: Union owns both.
-
-A deploy with no login in front of it can name a stand-in user
-(`config.STAND_IN_SUBJECT`) for requests that arrive without a subject.
+with no login in front, the headers are taken as they come, and a deploy can
+name a stand-in user (`config.STAND_IN_SUBJECT`) for requests that arrive
+without a subject.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -94,8 +91,7 @@ def _signing_key(token: str):
 
 
 def _token_subject(request: Request) -> str | None:
-    """The `sub` of the request's `X-User-Token`, if the issuer signed it and
-    it hasn't expired; else None."""
+    """The token's `sub`, if the issuer signed it and it hasn't expired; else None."""
     _, _, token = request.headers.get(TOKEN_HEADER, "").partition(" ")
     if not token:
         return None

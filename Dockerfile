@@ -55,8 +55,8 @@ COPY --chown=flyte:flyte src/ /stargazer/src/
 COPY --chown=flyte:flyte app/ /stargazer/app/
 
 # ~/.stargazer exists so a volume mounted there takes its ownership from it.
-RUN mkdir -p /workspace /snapshots /home/flyte/.stargazer \
-    && chown -R flyte:flyte /workspace /snapshots /home/flyte/.stargazer
+RUN mkdir -p /workspace /home/flyte/.stargazer \
+    && chown -R flyte:flyte /workspace /home/flyte/.stargazer
 
 # What a new /workspace starts with: the SDK's whole notebooks folder
 # (templates, tutorials, workflows), without the package files: the notebooks

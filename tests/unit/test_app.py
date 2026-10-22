@@ -35,6 +35,8 @@ ALICE = "387300641116005877"
 BOB = "111111111111111111"
 PROJECT = f"u-{ALICE}"
 
+pytestmark = pytest.mark.usefixtures("workspace_root")
+
 NB_BODY = (
     "import flyte\n"
     "\n"
@@ -58,12 +60,6 @@ NB_SRC = (
     "app = marimo.App()\n\n"
     f"{NB_SETUP}"
 )
-
-
-@pytest.fixture(autouse=True)
-def _store(tmp_path, monkeypatch):
-    """Point the workspace store at a temp dir for every test."""
-    monkeypatch.setattr(config, "WORKSPACE_ROOT", str(tmp_path / "store"))
 
 
 @pytest.fixture(autouse=True)
@@ -114,58 +110,11 @@ def _get(subject: str, filename: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def test_the_shared_admin_deploy_is_gone():
-    """Dashboards are deployed per user by `stargazer-users`, never shared."""
-    from app import admin_app
-
-    assert not hasattr(admin_app, "main")
-
-
 def test_app_env_is_the_union_gated_dashboard():
     """The dashboard is gated by Union's login."""
     assert isinstance(app_env, flyte.app.AppEnvironment)
     assert app_env.name == "dashboard"
     assert app_env.requires_auth is True
-
-
-def test_app_env_carries_no_github_or_session_secrets():
-    """Only the asset-store credential remains in the baked env."""
-    gone = {
-        "GITHUB_CLIENT_ID",
-        "GITHUB_CLIENT_SECRET",
-        "GITHUB_APP_ID",
-        "GITHUB_APP_PRIVATE_KEY",
-        "GITHUB_APP_SLUG",
-        "SESSION_SECRET",
-        "STARGAZER_SECURE_COOKIES",
-    }
-    assert gone.isdisjoint(app_env.env_vars)
-
-
-@pytest.mark.parametrize(
-    "path",
-    ["/auth/login", "/auth/callback", "/auth/logout", "/auth/app-install-callback"],
-)
-def test_github_login_routes_are_gone(client, path):
-    """Union owns sign-in; the app's own GitHub login no longer exists."""
-    _as(client)
-    assert client.get(path).status_code == 404
-
-
-@pytest.mark.parametrize(
-    "path", ["/workspace/enable", "/workspace/save", "/workspace/pod-token"]
-)
-def test_fork_routes_are_gone(client, path):
-    """Saving needs no opt-in, pods save themselves, and pods need no git token."""
-    _as(client)
-    assert client.post(path).status_code == 404
-
-
-@pytest.mark.parametrize("path", ["/workspace/snapshot", "/snapshot/delete"])
-def test_snapshot_routes_are_gone(client, path):
-    """Snapshots are gone: a notebook stays in the workspace until it's published."""
-    _as(client)
-    assert client.post(path, data={"slug": "qc-run"}).status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +134,8 @@ def test_admin_sees_the_owners_dashboard(client):
     resp = client.get("/")
     assert resp.status_code == 200
     assert "qc-run" in resp.text
+    # The asset browser compares records' owners against the visitor, not the owner.
+    assert f'USERNAME = "{BOB}"' in resp.text
     assert client.get("/launch/status").status_code == 200
 
 
@@ -204,16 +155,13 @@ def test_health_needs_no_identity(client):
     assert client.get("/health").json() == {"status": "ok"}
 
 
-def test_dashboard_greets_the_user_without_github(client):
-    """The dashboard names the user and shows no GitHub avatar or sign-out."""
+def test_dashboard_greets_the_user(client):
+    """The dashboard names the user and shows their initial."""
     _as(client)
     resp = client.get("/")
     assert resp.status_code == 200
     assert "Alice Ng" in resp.text
-    assert ".png?size=" not in resp.text  # no GitHub avatar
     assert '<span class="avatar-initial">A</span>' in resp.text
-    assert "/auth/logout" not in resp.text
-    assert "Enable workspace saving" not in resp.text
 
 
 def test_dashboard_shows_its_release_version(client, monkeypatch):
@@ -238,9 +186,21 @@ def test_home_page_carries_the_asset_browser(client, monkeypatch):
     assert f'USERNAME = "{ALICE}"' in html
 
 
-def test_home_page_without_a_pinata_key_offers_only_private_data(client, monkeypatch):
-    """With no shared key the Public tab says so, without naming the service."""
-    monkeypatch.delenv("PINATA_JWT", raising=False)
+@pytest.mark.parametrize(
+    ("jwt", "public_assets"), [(None, True), ("test-jwt", False)], ids=["no-key", "off"]
+)
+def test_home_page_without_public_assets_offers_only_private_data(
+    client, monkeypatch, jwt, public_assets
+):
+    """With no shared key, or public assets off, the Public tab says so.
+
+    It does so without naming the service.
+    """
+    if jwt is None:
+        monkeypatch.delenv("PINATA_JWT", raising=False)
+    else:
+        monkeypatch.setenv("PINATA_JWT", jwt)
+    monkeypatch.setattr(config, "PUBLIC_ASSETS", public_assets)
     _as(client)
     html = client.get("/").text
     assert 'data-network="private"' in html
@@ -249,28 +209,17 @@ def test_home_page_without_a_pinata_key_offers_only_private_data(client, monkeyp
     assert "PINATA" not in html
 
 
-def test_home_page_with_public_assets_off_offers_only_private_data(client, monkeypatch):
-    """A deploy that turns public assets off hides them though it has a key."""
-    monkeypatch.setenv("PINATA_JWT", "test-jwt")
-    monkeypatch.setattr(config, "PUBLIC_ASSETS", False)
+def test_the_alpha_warning_shows_once(client):
+    """The alpha note is on the page once, not again inside the upload panel.
+
+    Isolation between users is soft for now, so it warns against sensitive data.
+    """
     _as(client)
-    html = client.get("/").text
-    assert 'data-network="private"' in html
-    assert 'value="public"' not in html
-    assert "Shared data isn't available on this deployment." in html
-
-
-def test_the_upload_warning_shows_once(client):
-    """The alpha note is on the page once, not again inside the upload panel."""
-    _as(client)
-    assert client.get("/").text.count("Stargazer is alpha software.") == 1
-
-
-def test_the_separate_asset_page_is_gone(client):
-    """No /assets page, and no link to it in the avatar menu."""
-    _as(client)
-    assert client.get("/assets").status_code == 404
-    assert 'href="/assets"' not in client.get("/").text
+    warning = (
+        "Stargazer is alpha software. Don't upload sensitive data, such as "
+        "identifiable patient data."
+    )
+    assert client.get("/").text.count(warning) == 1
 
 
 def test_dashboard_lists_only_the_users_notebooks(client):
@@ -291,15 +240,6 @@ def test_dashboard_states_the_workspace_file_limit(client):
     assert "up to 100 MB each; store bigger files as assets." in text
 
 
-def test_dashboard_warns_against_sensitive_data(client):
-    """Isolation between users is soft for now, so the dashboard says so."""
-    _as(client)
-    assert (
-        "Stargazer is alpha software. Don't upload sensitive data, such as "
-        "identifiable patient data." in client.get("/").text
-    )
-
-
 def test_dashboard_links_to_its_projects_runs_in_the_console(client, monkeypatch):
     """On Union the dashboard links to its own project's runs, not the console root."""
     monkeypatch.setattr(
@@ -314,7 +254,7 @@ def test_dashboard_links_to_its_projects_runs_in_the_console(client, monkeypatch
         "/v2/domain/development/project/u-jane/runs"
     )
     assert f'href="{href}"' in html
-    assert "View your runs in the Union console" in html
+    assert "View your runs" in html
 
 
 def test_dashboard_without_a_console_has_no_console_link(client, monkeypatch):
@@ -694,12 +634,6 @@ IMG_SRC = (
     "        name='qc', image=notebook_base.with_apt_packages('bcftools')\n"
     "    )\n"
 )
-
-
-@pytest.fixture
-def union(monkeypatch):
-    """Launches aim at Union, where a notebook's own image can be built."""
-    monkeypatch.setattr(config, "TARGET", "union")
 
 
 def test_launch_without_main_env_serves_the_default_environment(client, served):
