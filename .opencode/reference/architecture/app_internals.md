@@ -251,7 +251,7 @@ Onboarding (`stargazer-users onboard|upgrade`) runs `flyte.build` on the recipe 
 
 ## Deploy Settings
 
-No secret is required to deploy. The org admin's shell, when running `stargazer-users`, supplies:
+No secret is required to deploy. The org admin's shell, when running `stargazer-users`, supplies these; infra keeps the tenant's values in `tenant.env`, which its `./stargazer-users` wrapper loads:
 
 | Env var | Purpose | If absent |
 |---|---|---|
