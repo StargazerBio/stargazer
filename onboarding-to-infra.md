@@ -5,7 +5,7 @@ priority: high
 created: 2026-10-21
 ---
 
-Onboarding (`stargazer-users`: invite, project, access policy, `upgrade`, `offboard`) moves out of stargazer into the private `StargazerBio/infra` repo, as the same Python, so every AWS operation the org admin runs lives in one place (decided 2026-10-21, when per-user DSQL setup started adding IAM and DSQL admin calls to onboarding). Infra depends on the sibling stargazer checkout and deploys from its `main`.
+Onboarding (`stargazer-users`: invite, project, access policy, `upgrade`, `offboard`) moves out of stargazer into the `StargazerBio/infra` repo, as the same Python, so every AWS operation the org admin runs lives in one place (decided 2026-10-21, when per-user DSQL setup started adding IAM and DSQL admin calls to onboarding). Infra depends on the sibling stargazer checkout and deploys from its `main`.
 
 What stays in stargazer is what deploys a dashboard, since the devbox (which stays here) and the `verify-stargazer` script use it: `deploy_dashboard`, `build_notebook_image`, `release_version`, `active_runs`, `refuse_while_running` and `stop_project_apps`, in `app/deploy.py`.
 
@@ -19,7 +19,7 @@ The per-user DSQL setup from ticket `dsql-asset-index` lands in infra after this
 
 ## Verification (2026-10-21)
 
-- stargazer, branch `refactor/onboarding-to-infra` (`69f99a2`): unit tier 531 passed (the 20 onboarding tests moved out; the 9 deploy tests are `tests/unit/test_deploy.py`).
+- stargazer, branch `refactor/onboarding-to-infra` (`fc74634`): unit tier 531 passed (the 20 onboarding tests moved out; the 9 deploy tests are `tests/unit/test_deploy.py`).
 - infra, branch `feat/onboarding` (`d1ca57e`, local, unmerged): its 20 onboarding tests pass against the stargazer branch on `PYTHONPATH`. The fake control plane also patches `app.deploy.active_runs`; without it ten tests reached a real, uninitialized Flyte client.
-- Real surface: `stargazer-users onboard --email pryce@stargazer.bio` from infra, against the branch. It found the existing user and project (no invite, no create), built `notebook-app-3921aa04…`, and deployed `dashboard` in `u-pryce` at version `69f99a2`: `DEPLOYMENT_STATUS_ACTIVE`, `STARGAZER_VERSION=69f99a2`, public URL 302 to Union's login. Then deactivated: `DESIRED_STATE_STOPPED`, no active apps in `u-pryce`, no running runs.
+- Real surface: `stargazer-users onboard --email pryce@stargazer.bio` from infra, against the branch. It found the existing user and project (no invite, no create), built `notebook-app-3921aa04…`, and deployed `dashboard` in `u-pryce` at version `69f99a2` (the branch before a wording-only amend): `DEPLOYMENT_STATUS_ACTIVE`, `STARGAZER_VERSION=69f99a2`, public URL 302 to Union's login. Then deactivated: `DESIRED_STATE_STOPPED`, no active apps in `u-pryce`, no running runs.
 - Order: infra's `main` imports `app.deploy`, so `feat/onboarding` merges there only after stargazer's PR merges.
