@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from conftest import FakePublicTier
 
 from stargazer.assets.alignment import Alignment
 from stargazer.assets.asset import Asset
@@ -55,7 +56,7 @@ class TestAssetRoundtrip:
 
 
 class TestBareAssetKeyvalues:
-    """Bare Asset carries free-form keyvalues verbatim (plan 20, piece 0)."""
+    """Bare Asset carries free-form keyvalues verbatim."""
 
     def test_to_keyvalues_passthrough(self):
         kv = {"asset": "sample_sheet", "sequencer": "novaseq", "lanes": "4"}
@@ -134,25 +135,12 @@ class TestAssetDefaults:
 
     def test_asset_key_in_to_keyvalues(self):
         """Concrete subclasses include 'asset' key in to_keyvalues()."""
-        from stargazer.assets.reference import Reference
-
         ref = Reference()
         assert ref.to_keyvalues().get("asset") == "reference"
 
     def test_base_asset_to_keyvalues_empty(self):
         """Base Asset with no _asset_key returns empty dict from to_keyvalues()."""
         assert Asset().to_keyvalues() == {}
-
-
-class _CountingPublic:
-    """Stands in for the public tier: records each query, holds nothing."""
-
-    def __init__(self):
-        self.queries = []
-
-    async def query(self, keyvalues):
-        self.queries.append(dict(keyvalues))
-        return []
 
 
 class TestFetch:
@@ -203,7 +191,7 @@ class TestFetch:
         fasta, _, _ = ref_files
         ref = Reference()
         await ref.update(fasta, build="T")
-        isolated_storage.public = _CountingPublic()
+        isolated_storage.public = FakePublicTier()
 
         await ref.fetch()
 

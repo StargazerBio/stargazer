@@ -51,9 +51,9 @@ def init(path_or_config=None, **kwargs):
         # deployer bakes `FLYTE_ORG`; without it org-scoped calls fail
         # validation with an empty organization.
         flyte.init_in_cluster(
-            org=os.environ.get("FLYTE_ORG"),
-            project=os.environ.get("FLYTE_PROJECT"),
-            domain=os.environ.get("FLYTE_DOMAIN", "development"),
+            org=config.FLYTE_ORG or None,
+            project=config.FLYTE_PROJECT,
+            domain=config.FLYTE_DOMAIN,
         )
     else:
         logger.info("Flyte init: config-file path")

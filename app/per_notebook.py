@@ -17,9 +17,9 @@ The image layers, on top of the Flyte debian base:
 - `claude` (Claude Code CLI) — the AI agent, on PATH for the dropdown
   terminal the proxy injects. Pinned standalone binary (auto-update off);
   auth is interactive (`claude` browser login) and ephemeral.
-- `marimo` plus the reverse proxy's web deps (`fastapi`,
-  `uvicorn`, `httpx`, `websockets`). The proxy's storage calls use the
-  `flyte` SDK the base image already carries.
+- `marimo` plus the reverse proxy's web deps (`fastapi`, `uvicorn`, `httpx`,
+  `websockets`, `pyjwt`). The proxy's storage calls use the `flyte` SDK the
+  base image already carries.
 - `app/proxy.py` baked at `/usr/local/lib/sg_proxy.py` (top-level module,
   importable via `PYTHONPATH=/usr/local/lib` as `sg_proxy:asgi_app`; not
   under `app/` so it doesn't get shadowed by Flyte's loaded_modules
@@ -58,7 +58,6 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import dataclasses
-import os
 from datetime import timedelta
 from typing import Literal
 
@@ -82,11 +81,7 @@ from stargazer.notebooks import (
     notebook_image_base,
 )
 
-# Bake the proxy as a TOP-LEVEL module (not under `app/`) because Flyte's
-# loaded_modules code bundle ships an `app/` package into the pod's cwd
-# (`/home/flyte`) at every per-notebook deploy. If the baked-in proxy lived at
-# `/usr/local/lib/app/proxy.py`, that cwd-shadowed `app` package would mask
-# it and `uvicorn app.proxy:asgi_app` would fail to import.
+# The proxy is baked as a top-level module; see the module docstring.
 _PROXY_LIB_DIR = "/usr/local/lib"
 _PROXY_MODULE = "sg_proxy"
 _LAUNCH_BIN = "/usr/local/bin"
@@ -95,9 +90,17 @@ _LAUNCH_BIN = "/usr/local/bin"
 # dashboard builds `notebook_path` from it; the proxy mirrors it.
 WORKSPACE_NOTEBOOK_DIR = "/workspace"
 
+# The modes a notebook can be served in.
+MODES = ("edit", "run")
+
 # Flyte refuses to deploy an app whose name is over 30 characters, whatever
 # the project, and a notebook's app is `nb-<slug>-<mode>`, longest in `edit`.
 NOTEBOOK_SLUG_MAX = 30 - len("nb--edit")
+
+
+def app_name(slug: str, mode: str) -> str:
+    """Return the name of a notebook's app in one mode."""
+    return f"nb-{slug}-{mode}"
 
 
 # Layered build recipe. Consumed only by the deployer's build step
@@ -109,7 +112,7 @@ NOTEBOOK_SLUG_MAX = 30 - len("nb--edit")
 notebook_app_img_recipe = (
     flyte.Image.from_debian_base(
         name="notebook-app",
-        registry=os.environ.get("STARGAZER_REGISTRY"),
+        registry=config.REGISTRY,
         platform=IMAGE_PLATFORM,
     )
     .with_apt_packages("ca-certificates", "curl", "git", "bzip2")
@@ -159,10 +162,7 @@ notebook_app_img_recipe = (
         # The proxy checks Union's signed tokens (`_TokenGate`).
         "pyjwt[crypto]>=2.8,<3",
     )
-    # `/usr/local/lib/` already exists in the base image, so the COPY drops
-    # `proxy.py` into it without needing a directory-creating trailing-slash.
-    # Renamed to `sg_proxy.py` in the next command to avoid clashing with
-    # Flyte's `app/` code bundle and to keep the module name unambiguous.
+    # Renamed to sg_proxy.py below.
     .with_source_file(PROJECT_ROOT / "app" / "proxy.py", _PROXY_LIB_DIR)
     # Static dropdown-terminal markup the proxy reads at import (relative to its
     # own __file__) and injects into marimo's HTML. Baked into the same dir as
@@ -233,11 +233,8 @@ def per_notebook_env(
     notebooks live under `/stargazer/...`, the owner's notebooks under
     `WORKSPACE_NOTEBOOK_DIR`, hydrated by the launch script.
 
-    `owner_subject` is the owner's platform user id. The pod sits behind the
-    platform login (`requires_auth=True`), and on Union its proxy lets in only
-    signed tokens from the owner or an admin (`SG_AUTH_ISSUER`,
-    `SG_ADMIN_SUBJECTS`). `SG_OWNER_SUBJECT` also keys where the pod hydrates
-    from and saves to in the workspace store (`STARGAZER_WORKSPACE_ROOT`).
+    `owner_subject` is the owner's platform user id (`SG_OWNER_SUBJECT`); see
+    the module docstring's Auth section.
     `admin_url` is the dashboard's public base URL, which the proxy's
     `/__sg__/dashboard` route redirects to. `index_url` is the dashboard's own
     index (`STARGAZER_INDEX_URL`), the owner's, where the pod and the runs it
@@ -248,19 +245,23 @@ def per_notebook_env(
     """
     if not config.NOTEBOOK_IMAGE:
         raise RuntimeError(
-            "STARGAZER_NOTEBOOK_IMAGE is unset: deploy with `stargazer-users`, "
-            "which builds the notebook image and bakes its URI in."
+            "STARGAZER_NOTEBOOK_IMAGE is unset: deploy the dashboard with "
+            "app.deploy, which builds the notebook image and bakes its URI in."
         )
     base = notebook_image_base(config.NOTEBOOK_IMAGE)
     declared = declared or notebook_environment(base)
-    declared_resources = {
-        field.name: value
-        for field in dataclasses.fields(flyte.Resources)
-        if declared.resources is not None
-        and (value := getattr(declared.resources, field.name)) is not None
-    }
+    res = declared.resources
+    declared_resources = (
+        {}
+        if res is None
+        else {
+            field.name: value
+            for field in dataclasses.fields(flyte.Resources)
+            if (value := getattr(res, field.name)) is not None
+        }
+    )
     return declared.clone_with(
-        name=f"nb-{slug}-{mode}",
+        name=app_name(slug, mode),
         description=f"Per-notebook app: {slug} ({mode})",
         # `from_base` marks the URI as prebuilt, so serving skips any build or
         # existence check and just hands the URI to Flyte.
@@ -317,16 +318,13 @@ def per_notebook_env(
 
 
 async def list_project_apps(project: str, domain: str, limit: int = 500) -> list[App]:
-    """List every App deployment in `project`, regardless of name or state.
+    """List every App deployment in `project`, whatever its name or state.
 
-    `flyte.remote.App.listall` only honors the ambient init-config project, so
-    we issue the project-scoped list against the same client the SDK uses —
-    there's no public list API that takes a project. The dashboard passes its
-    own project; onboarding passes the user's when stopping their apps. Callers re-`App.get` by name for
-    authoritative status, since a list payload may not carry full conditions.
-
-    Used by `/workspace/cleanup` to find stopped apps for notebooks no longer on
-    the dashboard (e.g. deleted ones), which a name-bounded probe would miss.
+    `flyte.remote.App.listall` honors only the init-config project, so this
+    issues the project-scoped list on the SDK's own client. Callers re-`App.get`
+    by name for authoritative status, since a list payload may lack full
+    conditions. Used by `/launch/status`, `/workspace/cleanup` and
+    `deploy.stop_project_apps`.
     """
     cfg = get_init_config()
     project_id = identifier_pb2.ProjectIdentifier(

@@ -27,7 +27,7 @@ NOTEBOOKS_PKG_DIR = Path(stargazer.notebooks.__file__).parent
 _IMAGE_NOTEBOOKS_PREFIX = f"{IMAGE_WORKDIR}/src/stargazer/notebooks/"
 
 
-# Seed notebooks shipped at `notebooks/templates/{slug}.py`.
+# Seed notebooks shipped at `src/stargazer/notebooks/templates/{slug}.py`.
 # `/workspace/create` copies one of these under the user's chosen name. They
 # are NOT rendered as dashboard tiles (only user-created notebooks are): the
 # basic template is linked from the Workspace description, and both slugs are
@@ -41,10 +41,9 @@ SEED_SLUGS = frozenset({BASIC_SLUG, BLANK_SLUG})
 class Notebook:
     """A single tile on the dashboard.
 
-    `path_in_image` is the absolute path to the `.py` file inside the
-    `notebook-app` image. `section` drives which dashboard column the tile
-    renders under and (with `slug`) keys the per-notebook AppEnvironment
-    Knative name.
+    `path_in_image` is the notebook's absolute `.py` path in the `notebook-app`
+    image. `section` picks the dashboard column; `slug` names its app
+    (`nb-<slug>-<mode>`).
     """
 
     slug: str

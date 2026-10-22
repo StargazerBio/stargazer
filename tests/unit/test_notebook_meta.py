@@ -56,16 +56,13 @@ def test_reads_name_and_description():
 
 
 def test_undeclared_values_are_empty():
-    """A setup block without the declarations has no name or blurb."""
+    """A setup block without the declarations has no name or blurb.
+
+    Even when a cell assigns `main_name`.
+    """
     src = _notebook("with app.setup:\n    import flyte\n")
     assert notebook_name(src) == ""
     assert notebook_description(src) == ""
-
-
-def test_assignments_inside_a_cell_are_ignored():
-    """Only the setup block declares; the cell's `main_name` is not the name."""
-    src = _notebook("with app.setup:\n    import flyte\n")
-    assert notebook_name(src) == ""
 
 
 def test_unparseable_source_reads_as_undeclared():

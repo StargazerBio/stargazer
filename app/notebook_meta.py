@@ -28,7 +28,7 @@ class SetupError(Exception):
     """A setup block the dashboard can't use; the message is for the dashboard."""
 
 
-def is_setup_block(node: ast.stmt) -> bool:
+def _is_setup_block(node: ast.stmt) -> bool:
     """Whether `node` is marimo's `with app.setup:` (or `app.setup(...)`) block."""
     if not isinstance(node, ast.With) or len(node.items) != 1:
         return False
@@ -55,7 +55,7 @@ def _setup_block(tree: ast.Module | None) -> ast.With | None:
     """The module's setup block, or None."""
     if tree is None:
         return None
-    return next((node for node in tree.body if is_setup_block(node)), None)
+    return next((node for node in tree.body if _is_setup_block(node)), None)
 
 
 def _assignments(block: ast.With) -> dict[str, ast.Assign | ast.AnnAssign]:
@@ -100,14 +100,19 @@ def _string(stmt: ast.Assign | ast.AnnAssign | None) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def _declared_string(source: str, name: str) -> str:
+    """The string the setup block assigns to `name`, or "" when it assigns none."""
+    return _string(setup_assignments(source).get(name)) or ""
+
+
 def notebook_name(source: str) -> str:
     """The notebook's `main_name`, or "" when it declares none."""
-    return _string(setup_assignments(source).get("main_name")) or ""
+    return _declared_string(source, "main_name")
 
 
 def notebook_description(source: str) -> str:
     """The notebook's `main_description`, or "" when it declares none."""
-    return _string(setup_assignments(source).get("main_description")) or ""
+    return _declared_string(source, "main_description")
 
 
 def _block_span(source: str) -> tuple[int, int] | None:
@@ -168,7 +173,7 @@ def _check_block(block: str) -> None:
         tree = ast.parse(block)
     except SyntaxError as exc:
         raise SetupError(f"line {exc.lineno}: {exc.msg}") from exc
-    if len(tree.body) != 1 or not is_setup_block(tree.body[0]):
+    if len(tree.body) != 1 or not _is_setup_block(tree.body[0]):
         raise SetupError("The setup block must be one `with app.setup:` block.")
     found = _assignments(tree.body[0])
     for name in ("main_name", "main_description"):

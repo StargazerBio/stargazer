@@ -3,55 +3,41 @@
 The script lives outside the shipped packages, so it's loaded from its path.
 """
 
-import importlib.util
 import sys
 from contextlib import contextmanager
-from types import SimpleNamespace
 
 import pytest
+from conftest import load_devbox_dashboard
 
-from app import config, deploy
-from stargazer.config import PROJECT_ROOT
+from app import config
 
-_spec = importlib.util.spec_from_file_location(
-    "devbox_dashboard", PROJECT_ROOT / "devbox" / "dashboard.py"
-)
-devbox_dashboard = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(devbox_dashboard)
+devbox_dashboard = load_devbox_dashboard()
 
 
-def test_deploys_the_dashboard_for_a_stand_in_on_the_devbox_store(monkeypatch):
+def test_deploys_the_dashboard_for_a_stand_in_on_the_devbox_store(
+    monkeypatch, served_dashboard
+):
     """One dashboard in the default project for a stand-in user, on the
     devbox's bucket and Postgres index, with the storage port-forward open
     while it uploads."""
-    served, steps = {}, []
-
-    def fake_servecontext(**ctx):
-        def serve(env):
-            served.update(ctx=ctx, env_vars=dict(env.env_vars))
-            steps.append("served")
-            return SimpleNamespace(endpoint="http://dashboard.devbox.example:30081")
-
-        return SimpleNamespace(serve=serve)
+    served_while_open = []
 
     @contextmanager
     def fake_forward():
-        steps.append("open")
+        """A port-forward that notes whether the dashboard was served inside it."""
         yield
-        steps.append("closed")
+        served_while_open.append(bool(served_dashboard))
 
-    monkeypatch.setattr(deploy.flyte, "with_servecontext", fake_servecontext)
-    monkeypatch.setattr(deploy, "_notebook_image", lambda: "reg/notebook-app:h1")
-    monkeypatch.setattr(deploy, "get_init_config", lambda: SimpleNamespace(org=None))
     monkeypatch.setattr(devbox_dashboard, "storage_port_forward", fake_forward)
-    assert devbox_dashboard.deploy() == "http://dashboard.devbox.example:30081"
-    assert steps == ["open", "served", "closed"]
-    assert (served["ctx"]["project"], served["ctx"]["domain"]) == (
-        "flytesnacks",
-        "development",
+    assert devbox_dashboard.deploy() == "https://u-jane.apps.example"
+    assert served_while_open == [True]
+    assert (served_dashboard["ctx"]["project"], served_dashboard["ctx"]["domain"]) == (
+        config.FLYTE_PROJECT,
+        config.FLYTE_DOMAIN,
     )
+    subject, root = devbox_dashboard.SUBJECT, devbox_dashboard.STORE_ROOT
     assert {
-        k: served["env_vars"][k]
+        k: served_dashboard["env_vars"][k]
         for k in (
             "SG_STAND_IN_SUBJECT",
             "SG_OWNER_SUBJECT",
@@ -61,15 +47,12 @@ def test_deploys_the_dashboard_for_a_stand_in_on_the_devbox_store(monkeypatch):
             "STARGAZER_INDEX_URL",
         )
     } == {
-        "SG_STAND_IN_SUBJECT": "devbox-user",
-        "SG_OWNER_SUBJECT": "devbox-user",
-        "STARGAZER_OWNER": "devbox-user",
-        "STARGAZER_WORKSPACE_ROOT": "s3://flyte-data/stargazer",
-        "STARGAZER_STORE_ROOT": "s3://flyte-data/stargazer",
-        "STARGAZER_INDEX_URL": (
-            "postgresql://stargazer:stargazer@"
-            "postgres.stargazer.svc.cluster.local:5432/stargazer"
-        ),
+        "SG_STAND_IN_SUBJECT": subject,
+        "SG_OWNER_SUBJECT": subject,
+        "STARGAZER_OWNER": subject,
+        "STARGAZER_WORKSPACE_ROOT": root,
+        "STARGAZER_STORE_ROOT": root,
+        "STARGAZER_INDEX_URL": devbox_dashboard.INDEX_URL,
     }
 
 

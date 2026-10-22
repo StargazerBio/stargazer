@@ -27,18 +27,6 @@ def _notebook(setup_body: str, cell_body: str = "    return\n") -> str:
     )
 
 
-@pytest.fixture
-def union(monkeypatch):
-    """Launches aim at Union, where images can be built."""
-    monkeypatch.setattr(config, "TARGET", "union")
-
-
-@pytest.fixture
-def devbox(monkeypatch):
-    """Launches aim at the devbox, which has no image builder."""
-    monkeypatch.setattr(config, "TARGET", "devbox")
-
-
 # ---------------------------------------------------------------------------
 # extract_main_env
 # ---------------------------------------------------------------------------

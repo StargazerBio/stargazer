@@ -11,7 +11,7 @@ A workspace notebook that sets `main_env` in its setup block launches in that en
 
 ## How to get to it (user POV)
 
-- On the dashboard, create a notebook from the **Template** and launch it. Its section 0 shows where `bcftools` resolves.
+- On the dashboard, create a notebook from **Basic** and launch it. Its section 0 shows where `bcftools` resolves.
 - Or open any workspace notebook's gear and edit `main_env` in its setup block (`notebook_env.clone_with(name=..., image=notebook_base.with_apt_packages("<package>"), resources=flyte.Resources(...))`), then launch it again.
 
 ## Driving it
@@ -26,8 +26,8 @@ Preconditions:
 
 Steps:
 
-- **Deploy.** `STARGAZER_WORKSPACE_ROOT=s3://union-us-west-2-stargazerbio/stargazer STARGAZER_DSQL_CLUSTER_ARN=arn:aws:dsql:us-west-2:791359099513:cluster/ajufqlufrijtcts2ekxc4ovea4 uv run --all-extras python .claude/skills/verify-stargazer/scripts/union_dashboard.py deploy` redeploys only the test account's dashboard from the checkout and prints its URL.
-- **Create.** In the dashboard's create tile, type a name not used before (an existing one is refused), choose **Template**, and click **Create**. A tile for it appears in Workspace.
+- **Deploy.** With the tenant's `STARGAZER_WORKSPACE_ROOT` and `STARGAZER_DSQL_CLUSTER_ARN` exported (from infra's `tenant.env`), `uv run --all-extras python .claude/skills/verify-stargazer/scripts/union_dashboard.py deploy` redeploys only the test account's dashboard from the checkout and prints its URL.
+- **Create.** In the dashboard's create tile, type a name not used before (an existing one is refused), choose **Basic**, and click **Create**. A tile for it appears in Workspace.
 - **Launch.** Click **Run** on that tile by its coordinates. On the first launch of a template notebook since the last deploy, it spins through the build and the deploy (about a minute for one apt package), then shows **Open: Run Mode** and **Stop**. Open it: section 0 reads `bcftools → /usr/bin/bcftools`. This covers `main-env-build`.
 - **Check.** `uv run --all-extras python .claude/skills/verify-stargazer/scripts/union_dashboard.py check nb-<slug>-run`: the served image is `…:notebook-custom-<hash>`, the requests are the declared `CPU` and `MEMORY` with the default `EPHEMERAL_STORAGE` (the spec carries no limits; Union applies the requests as limits, which the Resources step shows), the pod's `STARGAZER_NOTEBOOK_IMAGE` is the deployed `…:notebook-app-<hash>`, and the newest run is a succeeded `build-image` (or no new run, when another notebook already built the same declaration on this base). This covers `main-env-kernel` together with section 0 rendering at all, since the setup block imports `notebook_base` and `notebook_env`.
 - **Resources.** Launch the same notebook in **Edit**, open the dropdown terminal (Ctrl+`) and run `cat /sys/fs/cgroup/cpu.max /sys/fs/cgroup/memory.max`: the CPU quota over its period is the declared CPUs, and the memory is the declared limit in bytes. This covers `main-env-resources`.

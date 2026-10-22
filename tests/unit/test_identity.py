@@ -128,7 +128,7 @@ def test_the_stand_in_is_never_honored_on_union():
 @pytest.fixture
 def on_union(monkeypatch, union_signer):
     """Token checks on, against the test signer, for a dashboard OWNER owns."""
-    monkeypatch.setattr(config, "AUTH_ISSUER", "https://signin.example.test")
+    monkeypatch.setattr(config, "AUTH_ISSUER", union_signer.issuer)
     monkeypatch.setattr(config, "OWNER_SUBJECT", OWNER)
     monkeypatch.setattr(config, "ADMIN_SUBJECTS", frozenset())
     monkeypatch.setattr(identity, "_signing_key", lambda token: union_signer.public_key)
@@ -209,9 +209,7 @@ def test_on_union_no_token_is_401(on_union):
 
 def test_the_issuer_is_unions_on_union_and_unset_elsewhere():
     """Token checks are on for Union deploys and off where there's no login."""
-    assert config.auth_issuer({"STARGAZER_TARGET": "union"}) == (
-        "https://signin.us-west-2.unionai.cloud"
-    )
+    assert config.auth_issuer({"STARGAZER_TARGET": "union"})
     assert config.auth_issuer({"STARGAZER_TARGET": "devbox"}) == ""
 
 

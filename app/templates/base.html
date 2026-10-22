@@ -203,12 +203,6 @@
             max-width: 640px;
         }
         .notice-head { color: #f0f6fc; font-weight: 600; margin-bottom: 0.75rem; }
-        .notice-list {
-            margin: 0 0 1rem 1.25rem;
-            color: #8b949e;
-            font-size: 0.85rem;
-            line-height: 1.6;
-        }
         .create-form {
             display: flex;
             gap: 0.5rem;
@@ -265,22 +259,22 @@
             border-color: var(--accent);
         }
         /* Positive — green (lily stamen): Run, and the launched "Open". */
-        .btn-github, .btn-ready {
+        .btn-run, .btn-ready {
             background: var(--green-soft);
             color: var(--green);
             border-color: var(--green-line);
         }
-        .btn-github:hover, .btn-ready:hover {
+        .btn-run:hover, .btn-ready:hover {
             background: var(--green-softer);
             border-color: var(--green);
         }
-        /* Neutral — Save and any muted secondary. */
-        .btn-save, .btn-muted {
+        /* Neutral — any muted secondary. */
+        .btn-muted {
             background: transparent;
             color: var(--text-dim);
             border-color: var(--border);
         }
-        .btn-save:hover, .btn-muted:hover {
+        .btn-muted:hover {
             background: var(--surface-2);
             border-color: var(--border-strong);
             color: var(--text);
@@ -585,14 +579,6 @@
             border-bottom: 1px solid #30363d;
             margin-bottom: 0.3rem;
         }
-        .user-menu .menu-item {
-            display: block;
-            padding: 0.4rem 0.9rem;
-            color: #c9d1d9;
-            text-decoration: none;
-            font-size: 0.9rem;
-        }
-        .user-menu .menu-item:hover { background: #0d1117; }
         .spinner {
             display: inline-block;
             width: 24px; height: 24px;

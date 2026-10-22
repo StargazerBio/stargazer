@@ -77,32 +77,18 @@ class TaskRegistry:
 
     def __post_init__(self):
         """Discover all tasks and workflows on initialization."""
-        self._discover()
+        import stargazer.tasks
+        import stargazer.workflows
 
-    def _discover(self):
-        """Walk task and workflow modules to register all Flyte tasks."""
-        self._discover_tasks()
-        self._discover_workflows()
+        self._discover_from(stargazer.tasks, "task")
+        self._discover_from(stargazer.workflows, "workflow")
 
-    def _discover_tasks(self):
-        """Register all tasks from stargazer.tasks.__all__."""
-        import stargazer.tasks as tasks_mod
-
-        for name in tasks_mod.__all__:
-            obj = getattr(tasks_mod, name)
-            if not hasattr(obj, "func"):
-                continue
-            self._register(obj.short_name, obj, category="task")
-
-    def _discover_workflows(self):
-        """Register all workflows from stargazer.workflows.__all__."""
-        import stargazer.workflows as workflows_mod
-
-        for name in workflows_mod.__all__:
-            obj = getattr(workflows_mod, name)
-            if not hasattr(obj, "func"):
-                continue
-            self._register(obj.short_name, obj, category="workflow")
+    def _discover_from(self, module: Any, category: str):
+        """Register every Flyte task in `module.__all__` under `category`."""
+        for name in module.__all__:
+            obj = getattr(module, name)
+            if hasattr(obj, "func"):
+                self._register(obj.short_name, obj, category=category)
 
     def _register(self, name: str, task_obj: Any, category: str):
         """Register a single task by introspecting its wrapped function."""
@@ -127,8 +113,7 @@ class TaskRegistry:
         return_hint = hints.get("return", type(None))
         outputs = _parse_outputs(return_hint)
 
-        doc = func.__doc__ or ""
-        description = doc.strip().split("\n")[0] if doc.strip() else ""
+        description = (func.__doc__ or "").strip().split("\n")[0]
 
         self._tasks[name] = TaskInfo(
             name=name,
@@ -164,9 +149,7 @@ class TaskRegistry:
                             "name": p.name,
                             "type": p.type_name,
                             "required": p.required,
-                            "default": _serialize_default(p.default)
-                            if not p.required
-                            else None,
+                            "default": _serialize_default(p.default),
                         }
                         for p in info.params
                     ],

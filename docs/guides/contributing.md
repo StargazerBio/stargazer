@@ -146,4 +146,4 @@ CI publishes it. When a merge to `main` changes the image's own files (the `Dock
 gh workflow run stargazer-image.yml
 ```
 
-The hosted notebook pods run `notebook-app`, built by the onboarding command (`stargazer-users`) — see [App → Images](../architecture/app.md#images). The `Dockerfile` mirrors that recipe but shares no code with it. A unit test fails when the `Dockerfile` is missing a pip package of the recipe's or a file the proxy reads at startup; tool versions can still drift, so bring them up to date when you bump one in `notebook_app_img_recipe` (`app/per_notebook.py`).
+The hosted notebook pods run `notebook-app`, built by the dashboard deploy (`app.deploy.build_notebook_image`) — see [App → Images](../architecture/app.md#images). The `Dockerfile` mirrors that recipe but shares no code with it. A unit test fails when the `Dockerfile` is missing a pip package of the recipe's or a file the proxy reads at startup; tool versions can still drift, so bring them up to date when you bump one in `notebook_app_img_recipe` (`app/per_notebook.py`).

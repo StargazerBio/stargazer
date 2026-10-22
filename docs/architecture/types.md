@@ -66,7 +66,7 @@ A bare `Asset` (no `_asset_key`) carries a free-form `keyvalues` dict, serialize
 
 ### Ownership (`_owner`)
 
-`_owner` is a reserved keyvalue stamped automatically for attribution — never typed by users (`build_asset()` rejects `_*` keys). The storage client stamps it from `STARGAZER_OWNER` on every index row it writes (`upload()` and `update_metadata()`), and `PinataClient` on public uploads; the env wins over any stale value, and with it unset nothing is stamped. The asset browser stamps the signed-in user. Every public record has one: `PinataClient` refuses an upload or edit that would leave a public record without `_owner`, and its reads skip any public file that has none, since anyone holding the key can upload straight to Pinata. It records who made a record and decides which public companions `fetch()` takes; it grants or denies nothing else, and on Pinata's public network anyone holding the key can edit or delete any record. Hosted-deployment plumbing is in [App → Asset Manager](app.md#asset-manager).
+`_owner` is a reserved keyvalue stamped automatically for attribution — never typed by users (`build_asset()` rejects `_*` keys). The storage client stamps it from `STARGAZER_OWNER` on every index row it writes (`upload()` and `update_metadata()`), and `PinataClient.upload()` on public uploads; the env wins over any stale value, and with it unset nothing is stamped. `PinataClient.update_metadata()` stamps nothing: its caller names the owner in the patch, and the asset browser's edit route sets the signed-in user's subject. The browser's uploads stamp the signed-in user too. Every public record has one: `PinataClient` refuses an upload or edit that would leave a public record without `_owner`, and its reads skip any public file that has none, since anyone holding the key can upload straight to Pinata. It records who made a record and decides which public companions `fetch()` takes; it grants or denies nothing else, and on Pinata's public network anyone holding the key can edit or delete any record. Hosted-deployment plumbing is in [App → Asset Manager](app.md#asset-manager).
 
 ### Core Methods
 
@@ -105,7 +105,7 @@ Workflows filter the returned list with `isinstance` to pick out the types they 
 
 ## Storage Layer
 
-`utils/storage.py` defines `StorageClient`, the one storage interface: `upload()`, `download()`, `query()`, `get()`, `delete()` and `update_metadata()`. The module-level `default_client` is built lazily from the environment, so it sees credentials Flyte injects just before a task runs.
+`utils/storage.py` defines `StorageClient`, the one storage interface: `upload()`, `download()`, `query()`, `companions()`, `delete()`, `publish()` and `update_metadata()`. The module-level `default_client` is built lazily from the environment, so it sees credentials Flyte injects just before a task runs.
 
 - **Bytes** go to the object store at `<store root>/users/<owner>/assets/<cid>/<name>`.
 - **Metadata** goes to the index (`utils/index.py`), one row per CID; on Union it's the user's own table on Aurora DSQL.

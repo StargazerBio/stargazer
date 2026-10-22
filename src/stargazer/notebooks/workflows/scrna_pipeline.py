@@ -86,9 +86,8 @@ def _(mo):
         [
             mo.md(
                 "## Task Catalog\n\n"
-                "Every task and workflow the Stargazer package exports, as the MCP "
-                "server lists them. The two workflows this notebook defines below run "
-                "here and aren't registered."
+                "Every task and workflow the Stargazer package exports. The two "
+                "workflows this notebook defines below run here and aren't registered."
             ),
             mo.ui.table(
                 _task_rows,
@@ -132,8 +131,7 @@ async def _(mo, sample_picker):
     from stargazer.assets.asset import assemble
     from stargazer.bundles import fetch_bundle
 
-    if not sample_picker.value:
-        mo.stop(True, mo.md("Pick at least one sample."))
+    mo.stop(not sample_picker.value, mo.md("Pick at least one sample."))
 
     async def _resolve(sid):
         """Look up a single raw AnnData asset by sample_id, or None if missing."""
@@ -175,15 +173,26 @@ async def _(mo, sample_picker):
 @app.cell
 def _(mo, plt, raw_ads, raw_assets, sc):
     """Section 2 — per-sample raw QC histograms (one row per sample)."""
+    from stargazer.tasks.scrna.qc_filter import GENE_PATTERNS
+
+    _unknown = sorted(
+        {a.organism for a in raw_assets if a.organism.lower() not in GENE_PATTERNS}
+    )
+    mo.stop(
+        bool(_unknown),
+        mo.md(
+            f"Organism {', '.join(map(repr, _unknown))} isn't supported for QC; "
+            f"set each sample's organism to one of: {', '.join(GENE_PATTERNS)}."
+        ),
+    )
     _n = len(raw_ads)
     _fig, _axes = plt.subplots(_n, 4, figsize=(16, 3.5 * _n), squeeze=False)
 
     for _row, (_asset, _ad) in enumerate(zip(raw_assets, raw_ads)):
         _ad = _ad.copy()
-        _ad.var["mt"] = _ad.var_names.str.startswith(
-            "MT-"
-        ) | _ad.var_names.str.startswith("mt-")
-        _ad.var["ribo"] = _ad.var_names.str.startswith(("RPS", "RPL", "Rps", "Rpl"))
+        _mt, _ribo, _hb = GENE_PATTERNS[_asset.organism.lower()]
+        _ad.var["mt"] = _ad.var_names.str.startswith(_mt)
+        _ad.var["ribo"] = _ad.var_names.str.startswith(_ribo)
         sc.pp.calculate_qc_metrics(
             _ad, qc_vars=["mt", "ribo"], inplace=True, log1p=False
         )
@@ -434,7 +443,7 @@ def _(annotated_ads, annotated_assets, mo):
             mo.md(
                 "## Summary\n\n"
                 "Final per-sample stats. Each `cid` is a content-addressed "
-                "handle to the annotated AnnData stored locally — the same "
+                "handle to the annotated AnnData in storage — the same "
                 "asset can be loaded from any other Stargazer task or notebook."
             ),
             mo.ui.table(_rows, selection=None),

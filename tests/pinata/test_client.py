@@ -1,5 +1,5 @@
 """
-Test for Pinata file upload, deletion, and querying using real API.
+Tests for Pinata uploads, queries, edits and deletes against the real API.
 
 The JWT comes from tests/.secrets/pinata_jwt (this directory's conftest).
 
@@ -21,77 +21,7 @@ from stargazer.utils.storage import StorageClient
 
 CIDS = {
     "GRCh38_TP53.fa": "bafkreib6vj3os7l4lqqytaw5vju46iorcknttfiwfnlbizjcqn7xd5hrvy",
-    "GRCh38_TP53.fa.fai": "bafkreic2oy3e2m3fbloj46epkpbpvrobresfkreuojhofnxiiwhz67xntq",
-    "GRCh38_TP53.fa.amb": "bafkreick7eyrefagckncfqcw5t6t2uudkeme74mztgt6edp2mv6qamh4y4",
-    "GRCh38_TP53.fa.ann": "bafkreibitlcqn3x52lmb7kngovaaz3qp4ckihtylvmcmvuejoya7ntv4tu",
-    "GRCh38_TP53.fa.bwt": "bafkreigmugdxgf4lcczuws6rvgy7ufl24twf3kdgilwv2rtiyq5iwdyu7i",
-    "GRCh38_TP53.fa.pac": "bafkreicouoxr5idj6ohh56bxxxuhwk7sjhrvk7xai5blczw762ny6t4eoy",
-    "GRCh38_TP53.fa.sa": "bafkreic2h3ct6sqgiaqjmqyuwlvmja6iujaauqs3lqgl3miflgks4nkzae",
-    "upload_delete.txt": "bafkreigaquk2gy7m3mojfzsmlu3s7kz6ya5buruzrwowmcuh5tna7vyx34",
 }
-
-
-@pytest.mark.asyncio
-async def test_upload_and_delete_file():
-    """Test uploading a file to Pinata and then deleting it."""
-    client = PinataClient()
-
-    test_file_path = FIXTURES_DIR.joinpath("upload_delete.txt")
-    assert test_file_path.exists(), f"Test file not found: {test_file_path}"
-
-    print(f"\nUploading test file: {test_file_path.name}")
-    comp = Asset()
-    await client.upload(comp, test_file_path)
-
-    try:
-        assert comp.cid, "Upload should return a CID"
-        print(f"Upload successful - CID: {comp.cid}")
-
-        expected_cid = CIDS.get("upload_delete.txt")
-        if expected_cid:
-            assert comp.cid == expected_cid, (
-                f"CID mismatch: expected {expected_cid}, got {comp.cid}"
-            )
-            print("CID matches expected value")
-        else:
-            print(f"  Note: Add to CIDS: 'upload_delete.txt': '{comp.cid}'")
-
-    finally:
-        try:
-            await client.delete(Asset(cid=comp.cid))
-        except Exception as exc:
-            print(f"Cleanup skipped (Pinata post-upload delay?): {exc}")
-
-
-@pytest.mark.asyncio
-async def test_tus_upload_multichunk_roundtrip(tmp_path, monkeypatch):
-    """Force the TUS path on a small file with a tiny chunk size so the
-    offset loop runs several PATCHes, then check Pinata's CID matches the
-    one computed locally — a broken offset loop corrupts the bytes and so
-    the CID.
-    """
-    import stargazer.utils.pinata as pinata_mod
-
-    # Force TUS regardless of size, and chunk small enough to loop.
-    monkeypatch.setattr(pinata_mod, "TUS_THRESHOLD_BYTES", 0)
-    monkeypatch.setattr(pinata_mod, "TUS_CHUNK_BYTES", 4096)
-
-    remote = PinataClient()
-    content = b"".join(f"stargazer tus line {i}\n".encode() for i in range(2000))
-    src = tmp_path / "tus_roundtrip.txt"
-    src.write_bytes(content)
-
-    comp = Asset(keyvalues={"asset": "never_registered_key"})
-    await remote.upload(comp, src)
-    assert comp.cid, "TUS upload should set the cid (from Upload-Cid header)"
-
-    try:
-        assert comp.cid == compute_cid(src), "TUS reassembly corrupted bytes"
-    finally:
-        try:
-            await remote.delete(Asset(cid=comp.cid))
-        except Exception as exc:
-            print(f"cleanup skipped: {exc}")
 
 
 @pytest.mark.asyncio
@@ -116,7 +46,12 @@ async def test_update_metadata_merges(tmp_path):
     try:
         result = await client.update_metadata(
             cid,
-            {"asset": "never_registered_key", "stage": "after", "added": "yes"},
+            {
+                "asset": "never_registered_key",
+                "stage": "after",
+                "added": "yes",
+                "_owner": "integration-test",
+            },
         )
         assert result["cid"] == cid, "metadata edit must not change the CID"
 

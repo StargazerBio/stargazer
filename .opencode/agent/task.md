@@ -119,7 +119,7 @@ from stargazer.utils import _run               # Subprocess helper
 
 ## Resources
 
-Resources live on the `TaskEnvironment` in `config.py`, shared by every task on it. The devbox node has about 7.5 GiB in all (the header of `devbox/setup.sh`), so a task's limit has to fit beside its workflow's parent task.
+Resources live on the `TaskEnvironment` in `config.py`, shared by every task on it. The devbox node has ~7.75 GiB allocatable and a workflow's pods must fit together in ~6 GiB (the header of `devbox/setup.sh`), so a task's limit has to fit beside its workflow's parent task.
 
 ## File Organization
 

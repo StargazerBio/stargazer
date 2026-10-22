@@ -25,7 +25,7 @@ Steps:
 - **Run the tests.** Run `uv run --all-extras pytest -m devbox -rP tests/devbox/test_germline.py`. Both tests pass and it exits `0`. Their shared setup seeds the TP53 reference and NA12829's reads from a pod (`devbox-germline-seed`), then runs the workflow for a fresh cohort, which has to succeed (`devbox-germline-run`).
   - `test_workflow_joint_calls_the_cohort` covers `devbox-germline-joint-call`: the workflow returns a VCF from `joint_call_gvcfs` for the cohort, built from `NA12829` on `GRCh38`.
   - `test_cohort_vcf_found_from_another_pod` covers `devbox-germline-output`: another pod finds the VCF by cohort, and it holds sample `NA12829`, contig `chr17:7658421-7697490`, and at least one record.
-- **Proof.** Keep the pytest output. `-rP` prints each run's URL. With the images already built, the workflow run takes about a minute and a half (1m26s measured 2026-10-08).
+- **Proof.** Keep the pytest output. `-rP` prints each run's URL. With the images already built, the workflow run takes about a minute and a half (1m26s measured).
 
 ## Gotchas
 

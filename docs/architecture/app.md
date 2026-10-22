@@ -57,19 +57,19 @@ sequenceDiagram
 
 ## Core Concepts
 
-**The platform owns sign-in.** There is no login page, OAuth flow or session cookie in the app tier. The platform gates every request to both app kinds and forwards the signed-in user's stable id (the *subject*), display claims and the signed token its login checked. Through an app's public address it overwrites any client-sent copy. But every app also answers at an in-cluster address that skips the login, where any pod can send whatever it likes, so on the hosted deploy the app tier trusts only the token: it checks the platform's signature on it and takes the subject from it. The subject keys everything per-user: the workspace store prefix, the `_owner` stamped on assets, and the label that ties a user to their project.
+**The platform owns sign-in.** There is no login page, OAuth flow or session cookie in the app tier. The platform gates every request to both app kinds and forwards the signed-in user's stable id (the *subject*), display claims and the signed token its login checked. Through an app's public address it overwrites any client-sent copy. But every app also answers at an in-cluster address that skips the login, where any pod can send whatever it likes, so on the hosted deploy the app tier trusts only the token: it checks the platform's signature on it and takes the subject from it. The subject keys everything per-user: the workspace store prefix, and the `_owner` stamped on assets.
 
-**One project per user.** The platform admits a signed-in user to an app only if they can view the app's project, and anyone who can view a project sees every app in it. So each user gets their own project, `u-<handle>`, with access to that project and nothing else. Their dashboard and notebooks live there, and in the platform console they see only their own work. The project id is readable (from their email by default) and permanent; the subject on its label is what onboarding looks it up by.
+**One project per user.** The platform admits a signed-in user to an app only if they can view the app's project, and anyone who can view a project sees every app in it. So each user gets their own project, `u-<handle>`, with access to that project and nothing else. Their dashboard and notebooks live there, and in the platform console they see only their own work. The project id is readable (from their email by default) and permanent.
 
 **Runs are seen in the platform console.** The dashboard doesn't show runs itself. Its header links to the runs list of the dashboard's own project and domain in the platform console, where each run's graph, logs, inputs and outputs already are, so the owner lands on their own runs rather than the console's front page. The console is on the tenant's own address, which the platform gives every app pod. The devbox has no console, so its dashboard shows no link.
 
 **The owner and the org's admins get in.** The platform admits whoever can view a project, but that check never runs on the in-cluster address, so the dashboard and its notebooks check for themselves: the token's subject must be the owner's, or one of the admins named when the dashboards are deployed. Anyone else signed in is turned away. A dashboard knows its owner from its deploy and keys its state by that owner, not by the visitor, so an admin sees the owner's notebooks. The asset index isn't behind the dashboard at all: the database admits only pods in the owner's project ([Asset Index](#asset-index)).
 
-**Onboarding is an admin step.** New users need an invite to the org anyway, so the same command does the rest: invite (or find) the user, create their project, grant them access to it, and deploy their dashboard at a stable, bookmarkable address. Running it again only redeploys. Nothing that runs on the platform needs the right to create projects or grant access, and no privileged credential is deployed anywhere. Releasing a new version redeploys every user's dashboard from the same images, each deployed under the commit it came from, so the platform console shows what every dashboard runs. A release needs no admin rights, so it can also run under an API key; offboarding stops a user's apps, removes their access and archives their project, and leaves their notebooks in the store.
+**Onboarding is an admin step, kept in the infra repository.** An org admin runs it to give a user their project, access and dashboard; the CLI, its flags and its checks live there. This repo owns what it deploys through: `app.deploy.deploy_dashboard` serves the dashboard into the user's project at a stable, bookmarkable address, and `login_for`, `iam_role_name` and `dsql_index_url` name the user's index. Nothing that runs on the platform needs the right to create projects or grant access, and no privileged credential is deployed anywhere. Releasing a new version redeploys every user's dashboard from the same images, each deployed under the commit it came from, so the platform console shows what every dashboard runs. A release needs no admin rights, so it can also run under an API key.
 
 **Notebook pods are gated by the platform too.** Each pod is baked with its owner's subject, which only keys where it loads and saves notebooks. Platform cookies and identity headers are stripped before a request reaches the notebook, so notebook code never sees a visitor's platform token through a request.
 
-**Users are separated by Flyte project boundaries**, not by varying the env definition. Every per-notebook env is served into the user's project, so each user's runs, apps and cache stay in their own project, and their files sit under their own prefix in the store. The factory is parameterized by notebook (slug, mode, path, declared environment) and owner, so which project the env lands in is what separates users. **Storage isn't isolated yet:** every project runs as the same cloud role, so code in one user's notebook could read another user's objects. That stays soft until it needs hardening (a bucket and role per user, ticket `per-user-storage-isolation`); meanwhile the dashboard and the asset upload form carry an alpha notice asking users not to upload sensitive data.
+**Users are separated by Flyte project boundaries**, not by varying the env definition. Every per-notebook env is served into the user's project, so each user's runs, apps and cache stay in their own project, and their files sit under their own prefix in the store. The factory is parameterized by notebook (slug, mode, path, declared environment) and owner, so which project the env lands in is what separates users. **Storage isn't isolated per user:** every project runs as the same cloud role, so code in one user's notebook can read another user's objects. The dashboard carries an alpha notice asking users not to upload sensitive data.
 
 **Saving just works.** A user's workspace lives in the workspace store: object storage, one object per file at its path, under the user's subject. Notebooks are files like any other, and so is whatever the user keeps beside them: data, helper modules, outputs. There's no opt-in and no setup. The store is the durable copy and pods are working copies. A pod loads its owner's whole workspace when it starts and writes changed files back every 30 seconds, unless the user picks another interval in the dashboard's Settings section, and at 0 only when the pod stops. The interval is read when a notebook starts, so a change applies to notebooks started afterwards. The settings are stored beside the user's workspace, not in it. A file deleted in the pod is deleted from the store. The pod does a final save when it scales to zero. A pod that dies without warning loses what changed since its last save. Each pod writes only the files it changed, so two running notebooks overwrite each other's work only when both change the same file. Dotfiles and Python's and marimo's caches aren't saved.
 
@@ -116,87 +116,63 @@ dashboard's memory: a dropped connection or a reloaded page resumes from what
 arrived, while a dashboard restart starts it over, and an upload left idle
 for an hour is dropped. Downloads stream back out through the dashboard.
 
-**Public is Pinata's public network**, called directly. The dashboard gets
-the org's Pinata key as a Flyte secret: Union injects it into the pod and
-keeps only a reference in the app's spec, so the user who owns the dashboard
-can't read it there. Pinata's private network is never used: the key is
-shared across the org, and anyone who can run a task can reach it, so it
-would keep nothing private. The devbox drops app secrets, so a devbox
-dashboard's Public tab says shared data isn't available. A deploy can also
-turn public assets off for its dashboards: the Public tab says the same, and
-the upload form offers only private storage. That's the dashboard alone; the
-user's tasks and notebooks still read the public tier.
+**Public is Pinata's public network**, called directly with the org's Pinata
+key, which the dashboard holds as a Flyte secret that its owner can't read
+from the app's spec (see [Configuration → The public tier](configuration.md#the-public-tier)).
+Pinata's private network is never used: the key is shared across the org, so
+it would keep nothing private. The devbox drops app secrets, so a devbox
+dashboard has no public tier. A deploy can also turn public assets off for its
+dashboards: the Public tab says shared data isn't available, and the upload
+form offers only private storage. That's the dashboard alone; the user's tasks
+and notebooks still read the public tier.
 
 **Public uploads are resumable, up to 10 GB, through the dashboard.** The
 browser sends the file in pieces over TUS to the same endpoint as a private
 upload, and the dashboard passes each piece on to a TUS upload of Pinata's,
-one piece per request, working out the CID as they go by. The CID Pinata
-answers the last piece with has to be the dashboard's; a different one means
-the file didn't arrive intact, so it's deleted from Pinata and the upload
-fails. The dashboard stamps the signed-in user as `_owner`, and Pinata's
-upload is created with the validated, stamped keyvalues, so the browser
-supplies bytes only, never metadata the server didn't validate. Validation
-is the *same* `build_asset()` choke point the MCP server uses, so the page
-and the SDK agree on what a valid upload is, and it runs before any of the
-file is sent, for both networks. **A registered type's form takes extra
+working out the CID as they go by. A CID from Pinata that differs from the
+dashboard's means the file didn't arrive intact, so it's deleted from Pinata
+and the upload fails. Only the user who started an upload can continue it.
+Validation is the *same* `build_asset()` choke point the MCP server uses, so
+the page and the SDK agree on what a valid upload is, and it runs before any
+of the file is sent, for both networks. **A registered type's form takes extra
 fields** below its declared ones, stored as text on the typed asset (see
-[Types → Extra keys](types.md#extra-keys)); an upload with more fields than
-a Pinata file holds is refused before Pinata's upload is created. Public
-downloads redirect to Pinata's gateway: those bytes go browser↔Pinata, not
-through the pod.
+[Types → Extra keys](types.md#extra-keys)). Public downloads redirect to
+Pinata's gateway: those bytes go browser↔Pinata, not through the pod. The
+numbers and status codes are in `app_internals.md`; Pinata's limits are in
+[Configuration](configuration.md#pinata-upload-paths).
 
-**Ownership is server-stamped attribution, not enforcement.** Every hosted
-write path stamps an `_owner` keyvalue (the user's subject) — the page from the signed-in user when
-an upload starts, workspace SDK/MCP uploads from a launcher-injected `STARGAZER_OWNER`,
-pipeline outputs from that var forwarded into task pods. Users never type
-it (`_`-prefixed keys are a reserved namespace `build_asset()` rejects). So
-an unowned record on the hosted deployment is legacy data or a bug, never
-expected. Because the Pinata key is shared, this is attribution only — it
-drives default filtering, not access control; anyone holding the key can
-still edit or delete any record. See [Types → Ownership](types.md#ownership-_owner).
+**Ownership is attribution, not enforcement.** Every hosted write stamps the
+user's subject as `_owner`, and the page's edit route checks it server-side;
+[Types → Ownership](types.md#ownership-_owner) owns the rest.
 
-**Reading public data needs no ownership.** Public-network bytes are world-readable on
-IPFS, and the public routes answer an anonymous request (a local run). The listing is served
-from a short in-process TTL cache (a semi-static mirror, not a per-request
-proxy to the Pinata API), and every download, anonymous or not, redirects to
-`PINATA_GATEWAY`, the account's dedicated gateway, which meters bandwidth.
-Free public gateways rate-limit full downloads, and `dweb.link` no longer
-serves files. `_owner` is stamped on uploads as a publisher byline. Rate
-limiting of the anonymous surface is deferred.
+**Reading public data needs no ownership.** Public-network bytes are
+world-readable on IPFS, and the public routes answer an anonymous request (a
+local run). The listing is served from a short in-process TTL cache, and every
+download, anonymous or not, redirects to `PINATA_GATEWAY`, the account's
+dedicated gateway, which meters bandwidth. Free public gateways rate-limit
+full downloads.
 
 **The browser sits on the dashboard's home page**, below the Workflows,
-Workspace and Tutorials sections and in the same glassy card, and the
-reactive starfield background is left untouched —
-the asset graph is a separate foreground canvas. The browse surface offers two
-interchangeable renderings of the same listing, switched by a Graph/List
-toggle (Graph is the default):
+Workspace and Tutorials sections, and offers two interchangeable renderings of
+the same listing, switched by a Graph/List toggle (Graph is the default):
 
-- **Graph** draws assets as nodes and their links as edges: `companion_of`,
-  and the `*_cid` provenance links (`reference_cid`, `mate_cid`,
-  `alignment_cid`, …) — a foreground
-  constellation echoing the background field. Hovering a node peeks its
-  metadata; clicking pins a detail card with the full metadata, its linked
-  assets, and a download button. It's rendered with **Cytoscape.js** (vendored,
-  no build step), so it's interactive: scroll to zoom, drag to pan, drag a node
-  to reposition it, double-click to reset, capped at 150 nodes. Links to assets
-  outside the current view (on the other tab, or filtered out) aren't drawn but
-  are listed on the card, so provenance is never hidden. On a record the signed-in user owns, the card also
-  offers **Edit metadata** — an in-place fix for a mis-tagged record that
-  merges the change (the CID is unchanged, so provenance edges survive). The
-  edit route fail-closes on ownership server-side; the same fix is available
-  via the MCP `update_file` tool.
+- **Graph** draws assets as nodes and their links (`companion_of` and the
+  `*_cid` provenance links) as edges. Hovering a node peeks its metadata;
+  clicking pins a detail card with the full metadata, its linked assets and a
+  download button, and on a record the signed-in user owns, **Edit metadata**,
+  an in-place fix for a mis-tagged record. Zoom, pan and drag are
+  interactive; the mechanics are in `app_internals.md`.
 - **List** is the same records as a sortable table (CID, name, owner, type,
-  metadata, download). The upload panel below is schema-driven — pick a
+  metadata, download). The upload panel below is schema-driven: pick a
   registered type or a bare/custom asset, fill metadata, choose Private or
-  Public — and the upload appears in the listing straight away, before
-  Pinata's listing catches up on a public one.
+  Public. The upload appears in the listing straight away.
 
 ## Images
 
 The dashboard and the per-notebook pods use **different images by design**:
 
 - `app_env.image` is Flyte-built via `with_uv_project` — the dashboard is small Python with no heavy deps.
-- Per-notebook envs use the programmatically-defined `notebook-app` image. Onboarding builds it and hands each dashboard the exact build, so every notebook pod runs the image that shipped with its dashboard and the dashboard pod (no Docker daemon) never rebuilds it. A notebook that declares its own image runs on a build layered on that one, which `serve` builds on Union's remote builder; that needs only the Flyte API, no Docker.
+- Per-notebook envs use the programmatically-defined `notebook-app` image. The deploy builds it and hands each dashboard the exact build, so every notebook pod runs the image that shipped with its dashboard and the dashboard pod (no Docker daemon) never rebuilds it. A notebook that declares its own image runs on a build layered on that one, which `serve` builds on Union's remote builder; that needs only the Flyte API, no Docker.
 
 Both images are content-hashed, so a release builds each once however many users it deploys, and every user's dashboard runs the same build.
 

@@ -36,22 +36,7 @@ Press ++ctrl+grave++ in the notebook to drop down a terminal, and run `claude` t
 
 ## MCP Client Configuration
 
-The MCP server runs from a source install with the `mcp` extra. Point your MCP client at the `stargazer` command:
-
-**Claude Code** — add to `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "stargazer": {
-      "command": "stargazer",
-      "args": []
-    }
-  }
-}
-```
-
-**OpenCode / Cursor** — same `command` + `args` pattern in your client's MCP config. More in [Using the MCP Server](guides/mcp-server.md).
+The MCP server runs from a source install with the `mcp` extra. Point your MCP client (Claude Code, OpenCode, Cursor) at the `stargazer` command; the config is in [Using the MCP Server](guides/mcp-server.md#connecting-a-client).
 
 ## Configuration
 

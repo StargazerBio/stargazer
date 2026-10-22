@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Launch script baked into the notebook-app image at
-# /usr/local/bin/launch-notebook.sh. Invoked as the per-notebook
-# AppEnvironment's args:
+# Launch script for notebook pods: baked at /usr/local/bin/launch-notebook.sh
+# in both the hosted notebook-app image and the local `stargazer` image.
+# Invoked as the per-notebook AppEnvironment's args:
 #
 #     /usr/local/bin/launch-notebook.sh <mode> <notebook_path>
 #

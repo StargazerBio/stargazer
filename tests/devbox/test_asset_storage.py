@@ -16,6 +16,7 @@ import psycopg
 import pytest
 
 from . import pod_tasks
+from .conftest import STORAGE
 
 N = 3
 
@@ -46,10 +47,10 @@ def test_indexed_in_postgres(tag, index_query):
     assert [row["name"] for row in rows] == [f"probe_{tag}_{i}.txt" for i in range(N)]
     for row in rows:
         assert row["uri"] == (
-            "s3://flyte-data/stargazer/users/devbox-user/assets/"
-            f"{row['cid']}/{row['name']}"
+            f"{STORAGE['STARGAZER_STORE_ROOT']}/users/{STORAGE['STARGAZER_OWNER']}"
+            f"/assets/{row['cid']}/{row['name']}"
         )
-        assert row["keyvalues"]["_owner"] == "devbox-user"
+        assert row["keyvalues"]["_owner"] == STORAGE["STARGAZER_OWNER"]
 
 
 def test_dashboard_lists_the_rows(tag, dashboard):
@@ -76,7 +77,7 @@ def test_extra_keyvalue_travels_between_pods(devbox_run):
     # The stored row carries the stamped owner, and a found asset keeps it.
     assert (found["type"], found["keyvalues"]) == (
         "R1",
-        {"lane": lane, "_owner": "devbox-user"},
+        {"lane": lane, "_owner": STORAGE["STARGAZER_OWNER"]},
     )
 
 

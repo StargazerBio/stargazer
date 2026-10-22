@@ -1,11 +1,13 @@
 """
 ### App-tier configuration — one home for the web tier's env-derived settings.
 
-Mirrors `stargazer.config` (the SDK tier) for the deployment / web tier. Every
-**non-secret** setting the app reads from the environment is resolved here once,
-at import, with its default visible in one place — so the rest of `app/` reads
-`config.FLYTE_DOMAIN` instead of sprinkling `os.environ.get(...)` with ad-hoc
-defaults across modules.
+Mirrors `stargazer.config` (the SDK tier) for the deployment / web tier. The
+**non-secret** settings the app reads from the environment are resolved here
+once, at import, with their defaults visible in one place — so the rest of
+`app/` reads `config.FLYTE_DOMAIN` instead of sprinkling `os.environ.get(...)`
+with ad-hoc defaults across modules. The few that a request handler reads per
+launch (the dashboard's index URL) and the asset browser's own limits
+(`app.assets`) stay with their readers.
 
 What does **not** live here:
 
@@ -49,6 +51,14 @@ NOTEBOOK_IMAGE: str | None = os.environ.get("STARGAZER_NOTEBOOK_IMAGE") or None
 # per-notebook app is served and looked up — `production` for a prod deploy.
 FLYTE_PROJECT: str = os.environ.get("FLYTE_PROJECT", "flytesnacks")
 FLYTE_DOMAIN: str = os.environ.get("FLYTE_DOMAIN", "development")
+
+# The Flyte org. App pods aren't given `_U_ORG_NAME`, so the deployer bakes it
+# (`app.deploy`); empty where there's no org to name.
+FLYTE_ORG: str = os.environ.get("FLYTE_ORG", "")
+
+# The registry the dashboard and notebook images push to (`stargazer.config`
+# defaults it on the devbox).
+REGISTRY: str | None = os.environ.get("STARGAZER_REGISTRY")
 
 # Root URI of the workspace store (`app.workspace_store`): every user's
 # notebooks live under `<root>/users/<subject>/`. On Union this is a prefix in

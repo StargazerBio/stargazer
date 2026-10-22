@@ -174,15 +174,13 @@ class Asset:
     async def fetch(self) -> Path:
         """Make a local copy of this asset and its companions; return its path.
 
-        The asset lands at `<STARGAZER_LOCAL>/<cid>/<name>`, and every asset
-        with ``companion_of`` set to its CID (an index, a sequence
-        dictionary) lands in the same directory, where tools look for it.
-        Companions are the user's own, then public ones the user published,
-        then the asset publisher's public ones for any name still missing;
-        nobody else's are taken (see `StorageClient.companions`). Outputs that record it as an input
-        under another key, such as an Alignment's ``reference_cid``, stay
-        behind. An asset built from a local file that was never uploaded is
-        returned in place. Copies already on disk are reused.
+        The asset lands at `<STARGAZER_LOCAL>/<cid>/<name>`, and its
+        companions (`StorageClient.companions`: an index, a sequence
+        dictionary) land in the same directory, where tools look for them.
+        Outputs that record it as an input under another key, such as an
+        Alignment's ``reference_cid``, stay behind. An asset built from a
+        local file that was never uploaded is returned in place. Copies
+        already on disk are reused.
         """
         import stargazer.utils.storage as _storage
         from stargazer.assets import specialize

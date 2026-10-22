@@ -50,9 +50,6 @@ def test_to_catalog_structure():
     reg = TaskRegistry()
     catalog = reg.to_catalog()
 
-    assert isinstance(catalog, list)
-    assert len(catalog) > 0
-
     bwa_mem_entry = next(e for e in catalog if e["name"] == "bwa_mem")
     assert bwa_mem_entry["category"] == "task"
     assert bwa_mem_entry["description"]  # non-empty
@@ -90,8 +87,4 @@ def test_list_tasks_no_filter():
 
 def test_task_info_has_task_obj():
     """TaskInfo stores the original Flyte task object."""
-    reg = TaskRegistry()
-    info = reg.get("bwa_mem")
-    assert info is not None
-    assert hasattr(info.task_obj, "func")
-    assert callable(info.task_obj.func)
+    assert TaskRegistry().get("bwa_mem").task_obj is stargazer.tasks.bwa_mem

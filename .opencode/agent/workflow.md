@@ -184,7 +184,7 @@ async def prepare_reference(build: str) -> Reference:
     return ref
 ```
 
-The index tasks store their outputs as companions of the reference (`reference_cid`), so later tasks get them by fetching the reference.
+The index tasks store their outputs as companions of the reference (`companion_of`), so later tasks get them by fetching the reference.
 
 ### Per-sample Fan-out (`germline_short_variant_discovery`)
 ```python

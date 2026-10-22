@@ -150,8 +150,7 @@ def _(audit_cohorts, flyte, mo, sheets, summaries_local, time):
     _t0 = time.perf_counter()
     remote_run = flyte.run(audit_cohorts, sheets=sheets)
 
-    # Flush the console URL to the cell output *before* blocking on wait()
-    # — otherwise the URL would appear only after the run completes.
+    # Show the URL before blocking on `wait()`.
     mo.output.append(
         mo.md(
             f"""

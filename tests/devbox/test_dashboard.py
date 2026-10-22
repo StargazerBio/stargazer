@@ -2,9 +2,11 @@
 
 import httpx
 
+from .conftest import STORAGE
+
 
 def test_dashboard_serves_the_stand_in_user(dashboard):
-    """The deployed dashboard answers and shows `devbox-user` as signed in."""
+    """The deployed dashboard answers and shows the stand-in user as signed in."""
     page = httpx.get(f"{dashboard}/", timeout=30)
     assert page.status_code == 200
-    assert "devbox-user" in page.text
+    assert STORAGE["STARGAZER_OWNER"] in page.text

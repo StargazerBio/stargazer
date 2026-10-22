@@ -5,7 +5,6 @@ spec: [docs/architecture/overview.md](../architecture/overview.md)
 """
 
 from stargazer.utils.pinata import PinataClient
-from stargazer.utils.query import generate_query_combinations
 from stargazer.utils.storage import StorageClient, default_client, get_client
 from stargazer.utils.subprocess import _run
 
@@ -14,6 +13,5 @@ __all__ = [
     "StorageClient",
     "_run",
     "default_client",
-    "generate_query_combinations",
     "get_client",
 ]

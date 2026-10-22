@@ -4,11 +4,10 @@ The local Flyte devbox's own infrastructure. Run these from the repo root.
 
 ## setup.sh
 
-Readies a fresh `flyte-devbox` container: the storage signed-URL endpoint,
-the serving domain, a CoreDNS wildcard, the `PINATA_JWT` secret every task
-environment declares, the asset index's Postgres server, and a clear of
-Flyte's local cache. These are lost whenever the container is recreated, so
-re-run it after every fresh devbox. It's safe to re-run.
+Readies a fresh `flyte-devbox` container for Stargazer. Its header lists the
+steps and what the devbox can't fix. The changes are lost whenever the
+container is recreated, so re-run it after every fresh devbox. It's safe to
+re-run.
 
 ```bash
 devbox/setup.sh [--dry-run] [--laptop] [--verify-pod]

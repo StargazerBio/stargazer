@@ -23,7 +23,7 @@ The architecture agent owns *what* the docs say (contracts, structure, sync with
 - **Don't gatekeep surfaces.** The notebook is the most approachable entry point, and the SDK is a first-class surface in its own right — authoring workflows in an IDE by importing SDK tasks directly is a fully supported way to work. Present options by what they're good at, never by who is allowed to use them.
 - **Describe what users do, not what they don't.** "The image provides everything" beats "No fork, no setup required." Frame archetypes, ladders, and progressions as descriptions of common shapes of use — never as permission tiers, prerequisites, or ceilings.
 - **Don't be patronizing.** No "Learner" framing, no hand-holding tone, no congratulating the reader for following along. Tutorials are reference material for picking up the building blocks, not a course to graduate from.
-- **Restrictions belong to the system, not the user.** It's fine (and necessary) to document hard invariants — "the SDK never imports notebooks", "snapshots are run-only" — because those are design guarantees that make the system trustworthy. The line to avoid is implying a *person* lacks standing to do something.
+- **Restrictions belong to the system, not the user.** It's fine (and necessary) to document hard invariants — "the SDK never imports notebooks", "a module never imports from a layer above its own" — because those are design guarantees that make the system trustworthy. The line to avoid is implying a *person* lacks standing to do something.
 
 ## Project Doc Conventions
 

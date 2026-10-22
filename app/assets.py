@@ -14,25 +14,20 @@ page (`templates/_assets.html`) over two networks:
   never used: with a shared key it would keep nothing private. Without a
   key (the devbox, which drops app secrets, or a local run with none), or
   with public assets turned off for the deploy (`config.PUBLIC_ASSETS`), the
-  public routes 503 and the browser's Public tab says shared data isn't
-  available.
+  public listing, edits and uploads 503 and the browser's Public tab says
+  shared data isn't available.
 
-Auth model: Union's login sits in front of these routes, so on the hosted
-deploy every request is a signed-in user. The routes still degrade for an
-anonymous request (a local run): public browsing works, while private
-routes, uploads and edits 401. The public listing is served from an
-in-process TTL cache so the dashboard acts as a semi-static read-only mirror
-rather than an open proxy to the Pinata API. Public edits fail closed: only
-a record's `_owner` may change it.
+Auth model: on the hosted deploy a request's identity is its signed Union
+token (`app.identity`). The routes still degrade for an anonymous request (a
+local run): public browsing works, while private routes, uploads and edits
+401. The public listing is served from an in-process TTL cache so the
+dashboard acts as a semi-static read-only mirror rather than an open proxy
+to the Pinata API. Public edits fail closed: only a record's `_owner` may
+change it.
 
 Uploads to either network come in resumable pieces over the TUS protocol
 (`/assets/tus`), up to 10 GB, while the file's CID is worked out as they
-pass (`CidBuilder`), so it never touches the dashboard's disk. A private
-upload's pieces go to the store as parts of one multipart upload, and the
-last piece indexes it (`StorageClient.adopt`). A public upload's pieces go
-on to a TUS upload of Pinata's, one `PATCH` each, and the CID Pinata
-answers the last one with has to be the one worked out here, or the file is
-deleted from Pinata.
+pass (`CidBuilder`), so it never touches the dashboard's disk.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
@@ -58,16 +53,15 @@ from app.identity import User, user_from_request
 from stargazer.assets import ASSET_REGISTRY, build_asset
 from stargazer.assets.asset import _BASE_FIELDS, Asset
 from stargazer.utils.cid import CidBuilder
-from stargazer.utils.index import PostgresIndex, SqliteIndex
+from stargazer.utils.index import SqlIndex, make_index
 from stargazer.utils.pinata import TUS_CHUNK_BYTES, PinataClient, _stamp_owner
-from stargazer.utils.storage import StorageClient, make_index
+from stargazer.utils.storage import StorageClient
 
 router = APIRouter()
 
 # Uploads over TUS. The browser sends `TUS_CHUNK_BYTES` pieces: small enough
-# for one request through Cloudflare, for the dashboard's memory, and for one
-# PATCH of Pinata's TUS, so a public piece is held whole and passed on as one.
-# Pinata's TUS takes files up to 10 GiB.
+# for one request through Cloudflare and for the dashboard's memory. Pinata's
+# TUS takes files up to 10 GiB.
 TUS_VERSION = "1.0.0"
 TUS_MAX_BYTES = 10 * 1024**3
 # An upload no request has touched for this long is dropped. Its multipart
@@ -80,7 +74,7 @@ TUS_IDLE_SECONDS = 3600.0
 PUBLIC_CACHE_TTL = 60.0
 
 # Module attributes resolved at call time so tests can swap in fakes.
-_index: SqliteIndex | PostgresIndex | None = None
+_index: SqlIndex | None = None
 _pinata_client: PinataClient | None = None
 _public_cache: tuple[float, list[dict]] | None = None
 # Single-flight guard for cache refreshes: concurrent anonymous requests on a
@@ -88,7 +82,7 @@ _public_cache: tuple[float, list[dict]] | None = None
 _public_cache_lock = asyncio.Lock()
 
 
-def _get_index() -> SqliteIndex | PostgresIndex:
+def _get_index() -> SqlIndex:
     """The owner's asset index (`STARGAZER_INDEX_URL`), opened on first use.
 
     The same index their tasks and notebooks write to: their DSQL table on
@@ -101,7 +95,7 @@ def _get_index() -> SqliteIndex | PostgresIndex:
 
 
 def _pinata() -> PinataClient:
-    """The shared Pinata client, created lazily (keeps its gateway cache)."""
+    """The shared Pinata client, created lazily."""
     global _pinata_client
     if _pinata_client is None:
         _pinata_client = PinataClient()
@@ -117,18 +111,30 @@ def _require_user(request: Request) -> User:
 
 
 def _require_owner(request: Request) -> User:
-    """The signed-in user if they own this dashboard, else a 401 or 403.
+    """The signed-in user if they own this dashboard, else a 401 or 403."""
+    return _check_owner(_require_user(request))
+
+
+def _check_owner(user: User) -> User:
+    """`user` if they own this dashboard, else a 403.
 
     Locally, with no owner baked in (`SG_OWNER_SUBJECT`), any signed-in
     user is the owner.
     """
-    user = _require_user(request)
     if config.OWNER_SUBJECT and user.subject != config.OWNER_SUBJECT:
         raise HTTPException(
             status_code=403,
             detail="Only this dashboard's owner can reach its private assets.",
         )
     return user
+
+
+def _validated(keyvalues: Any, status_code: int = 400) -> Asset:
+    """The asset `keyvalues` describe (`build_asset`), or an HTTP error saying why."""
+    try:
+        return build_asset(keyvalues if isinstance(keyvalues, dict) else {})
+    except ValueError as exc:
+        raise HTTPException(status_code=status_code, detail=str(exc))
 
 
 def _require_network(network: str) -> None:
@@ -144,7 +150,7 @@ def public_assets_on() -> bool:
     return config.PUBLIC_ASSETS and bool(os.environ.get("PINATA_JWT"))
 
 
-def _require_pinata() -> None:
+def _require_public() -> None:
     """Raise 503 when the dashboard doesn't offer public assets."""
     if not public_assets_on():
         raise HTTPException(
@@ -162,7 +168,7 @@ async def _public_records() -> list[dict]:
     global _public_cache
 
     def _fresh() -> bool:
-        """Whether the cache exists and is within its TTL."""
+        """Whether the cache is within its TTL."""
         return (
             _public_cache is not None
             and time.monotonic() - _public_cache[0] <= PUBLIC_CACHE_TTL
@@ -187,13 +193,7 @@ async def assets_schema() -> dict:
     for key, cls in sorted(ASSET_REGISTRY.items()):
         hints = get_type_hints(cls)
         schema[key] = [
-            {
-                "name": f.name,
-                "type": getattr(hints.get(f.name), "__name__", "str"),
-                "default": (
-                    f.default if f.default is not dataclasses.MISSING else None
-                ),
-            }
+            {"name": f.name, "type": getattr(hints.get(f.name), "__name__", "str")}
             for f in dataclasses.fields(cls)
             if f.name not in _BASE_FIELDS
         ]
@@ -213,7 +213,7 @@ async def assets_list(request: Request):
     if network == "private":
         _require_owner(request)
         return await _get_index().query(params)
-    _require_pinata()
+    _require_public()
     records = await _public_records()
     return [
         r for r in records if all(r["keyvalues"].get(k) == v for k, v in params.items())
@@ -227,40 +227,34 @@ async def assets_update(request: Request):
     Fail-closed ownership: the record's current `_owner` must match the
     user's subject (checked server-side, never trusted from the request), so
     nobody can rewrite another user's — or an unowned — record from the page
-    even though the Pinata JWT is shared. Validation reuses `build_asset()`,
-    `_owner` is re-stamped after it, and Pinata merges the patch onto the
-    existing keyvalues (the CID and bytes are untouched, so provenance edges
-    survive). A key or value past Pinata's length limit is a 400, raised
-    before the request. SDK/MCP edits stay unenforced by design (shared JWT).
-    A private record is the owner's index row instead (`_update_private`).
+    even though the Pinata JWT is shared. Ownership is read fresh, not from
+    the public TTL cache, so a mutation never decides off stale ownership.
+    Validation reuses `build_asset()`, `_owner` is set after it, and Pinata
+    merges the patch onto the existing keyvalues (the CID and bytes are
+    untouched, so provenance edges survive). A key or value past Pinata's
+    length limit is a 400, raised before the request. SDK/MCP edits stay
+    unenforced by design (shared JWT). A private record is the owner's index
+    row instead (`_update_private`).
     """
     body = await request.json()
     cid = body.get("cid", "")
+    keyvalues = body.get("keyvalues") or {}
     network = body.get("network", "public")
     _require_network(network)
-    if network == "private":
-        if not cid:
-            raise HTTPException(status_code=400, detail="cid is required")
-        return await _update_private(request, cid, body.get("keyvalues") or {})
-    _require_pinata()
-    user = _require_user(request)
     if not cid:
         raise HTTPException(status_code=400, detail="cid is required")
+    if network == "private":
+        return await _update_private(request, cid, keyvalues)
+    _require_public()
+    user = _require_user(request)
 
-    # Fail-closed: only the owner of record may edit it. Read fresh (not the
-    # public TTL cache) so a mutation never decides off stale ownership.
     records = await _pinata().query({})
     current = next((r for r in records if r["cid"] == cid), None)
     if current is None or current["keyvalues"].get("_owner") != user.subject:
         raise HTTPException(status_code=403, detail="you can only edit assets you own")
 
-    try:
-        build_asset(body.get("keyvalues") or {})
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    patch = dict(body.get("keyvalues") or {})
-    patch["_owner"] = user.subject
+    _validated(keyvalues)
+    patch = {**keyvalues, "_owner": user.subject}
     try:
         return await _pinata().update_metadata(cid, patch)
     except ValueError as exc:
@@ -311,10 +305,7 @@ async def _download_private(request: Request, cid: str) -> StreamingResponse:
 async def _update_private(request: Request, cid: str, keyvalues: dict) -> dict:
     """Merge a validated patch onto the owner's index row, restamping `_owner`."""
     _require_owner(request)
-    try:
-        build_asset(keyvalues)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    _validated(keyvalues)
     try:
         return await _get_index().merge(cid, _stamp_owner(dict(keyvalues)))
     except ValueError as exc:
@@ -359,7 +350,7 @@ class _TusUpload:
 
     subject: str
     length: int
-    asset: Any
+    asset: Asset
     uri: str = ""
     writer: Any = None
     pinata_url: str = ""
@@ -389,6 +380,27 @@ def _drop_idle_uploads() -> None:
             del _tus_uploads[upload_id]
 
 
+def _check_room(upload: _TusUpload, size: int) -> None:
+    """A 400 when `size` more bytes would run past `Upload-Length`."""
+    if upload.offset + size > upload.length:
+        raise HTTPException(status_code=400, detail="More bytes than Upload-Length")
+
+
+def _count(upload: _TusUpload, piece: bytes) -> None:
+    """Take `piece` as received: into the CID and the offset."""
+    upload.builder.update(piece)
+    upload.offset += len(piece)
+    upload.touched = time.monotonic()
+
+
+def _tus_done(upload: _TusUpload, cid: str | None) -> Response:
+    """The reply to a piece: the new offset, and the CID once the file's whole."""
+    headers = {"Upload-Offset": str(upload.offset)}
+    if cid:
+        headers["Stargazer-Cid"] = cid
+    return _tus(204, **headers)
+
+
 def _tus_metadata(header: str) -> dict[str, str]:
     """Decode `Upload-Metadata`: comma-separated `key base64(value)` pairs."""
     pairs = (p.strip().partition(" ") for p in header.split(",") if p.strip())
@@ -410,8 +422,8 @@ def _store_client() -> StorageClient:
 def _tus_upload(request: Request, upload_id: str) -> _TusUpload:
     """The upload in progress under `upload_id`, if the request may send it.
 
-    A private upload is the owner's; a public one, whoever started it.
-    Unknown or expired is a 404.
+    Only whoever started an upload may continue it. Unknown or expired is a
+    404.
     """
     user = _require_user(request)
     _drop_idle_uploads()
@@ -420,11 +432,8 @@ def _tus_upload(request: Request, upload_id: str) -> _TusUpload:
         raise HTTPException(
             status_code=404, detail="This upload has expired; start it again."
         )
-    if upload.pinata_url:
-        if user.subject != upload.subject:
-            raise HTTPException(status_code=403, detail="This isn't your upload.")
-    else:
-        _require_owner(request)
+    if user.subject != upload.subject:
+        raise HTTPException(status_code=403, detail="This isn't your upload.")
     return upload
 
 
@@ -436,10 +445,10 @@ async def tus_create(request: Request) -> Response:
     `Upload-Metadata` carries the `filename`, the `network` (`private`, the
     default, or `public`) and the `keyvalues` (a JSON object), checked with
     `build_asset()` before any bytes move. A private upload is the owner's
-    and opens a writer onto their store. A public one is any signed-in
-    user's, stamped as its `_owner`, and creates Pinata's TUS upload, which
-    checks the stamped keyvalues against Pinata's limits first. Returns the
-    upload's URL in `Location`.
+    and opens a writer onto their store, as one multipart upload. A public
+    one is any signed-in user's, stamped as its `_owner`, and creates
+    Pinata's TUS upload, which checks the stamped keyvalues against Pinata's
+    limits first. Returns the upload's URL in `Location`.
     """
     user = _require_user(request)
     _drop_idle_uploads()
@@ -461,14 +470,14 @@ async def tus_create(request: Request) -> Response:
     network = meta.get("network", "private")
     _require_network(network)
     if network == "private":
-        _require_owner(request)
+        _check_owner(user)
     else:
-        _require_pinata()
+        _require_public()
     try:
         keyvalues = json.loads(meta.get("keyvalues", "{}"))
-        asset = build_asset(keyvalues if isinstance(keyvalues, dict) else {})
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    asset = _validated(keyvalues, status_code=422)
     upload_id = uuid.uuid4().hex
     upload = _TusUpload(subject=user.subject, length=length, asset=asset)
     if network == "private":
@@ -505,9 +514,10 @@ async def tus_patch(request: Request, upload_id: str) -> Response:
     A private piece goes to the store and the CID builder as it arrives, and
     the offset counts each piece written, so a dropped connection resumes
     from what landed; the piece that completes the file finishes the
-    multipart upload and indexes it. A public piece goes on to Pinata
-    (`_patch_public`). A wrong offset is a 409. The response to the piece
-    that completes the file carries its CID in `Stargazer-Cid`.
+    multipart upload and indexes it (`StorageClient.adopt`). A public piece
+    goes on to Pinata (`_patch_public`). A wrong offset is a 409. The
+    response to the piece that completes the file carries its CID in
+    `Stargazer-Cid`.
     """
     upload = _tus_upload(request, upload_id)
     if request.headers.get("Content-Type") != "application/offset+octet-stream":
@@ -520,22 +530,16 @@ async def tus_patch(request: Request, upload_id: str) -> Response:
         if upload.pinata_url:
             return await _patch_public(request, upload_id, upload)
         async for piece in request.stream():
-            if upload.offset + len(piece) > upload.length:
-                raise HTTPException(
-                    status_code=400, detail="More bytes than Upload-Length"
-                )
+            _check_room(upload, len(piece))
             await upload.writer.write(piece)
-            upload.builder.update(piece)
-            upload.offset += len(piece)
-            upload.touched = time.monotonic()
-        headers = {"Upload-Offset": str(upload.offset)}
+            _count(upload, piece)
+        cid = None
         if upload.offset == upload.length:
             del _tus_uploads[upload_id]
             await upload.writer.close()
             cid = upload.builder.cid()
             await _store_client().adopt(upload.asset, upload.uri, cid)
-            headers["Stargazer-Cid"] = cid
-    return _tus(204, **headers)
+    return _tus_done(upload, cid)
 
 
 async def _patch_public(
@@ -552,20 +556,16 @@ async def _patch_public(
     chunk = bytearray()
     async for piece in request.stream():
         chunk += piece
-        if upload.offset + len(chunk) > upload.length:
-            raise HTTPException(status_code=400, detail="More bytes than Upload-Length")
+        _check_room(upload, len(chunk))
         if len(chunk) > TUS_CHUNK_BYTES:
             raise HTTPException(
                 status_code=413,
                 detail=f"Send pieces of at most {TUS_CHUNK_BYTES} bytes.",
             )
-    stored_cid = await _pinata().tus_patch(
-        upload.pinata_url, upload.offset, bytes(chunk)
-    )
-    upload.builder.update(bytes(chunk))
-    upload.offset += len(chunk)
-    upload.touched = time.monotonic()
-    headers = {"Upload-Offset": str(upload.offset)}
+    chunk = bytes(chunk)
+    stored_cid = await _pinata().tus_patch(upload.pinata_url, upload.offset, chunk)
+    _count(upload, chunk)
+    cid = None
     if upload.offset == upload.length:
         del _tus_uploads[upload_id]
         cid = upload.builder.cid()
@@ -577,5 +577,4 @@ async def _patch_public(
                 detail="The upload didn't arrive intact, so it was removed. "
                 "Try it again.",
             )
-        headers["Stargazer-Cid"] = cid
-    return _tus(204, **headers)
+    return _tus_done(upload, cid)

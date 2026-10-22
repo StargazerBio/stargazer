@@ -65,7 +65,7 @@ async def fetch_bundle(bundle_name: str) -> list[dict]:
         cid = entry["cid"]
         keyvalues = entry["keyvalues"]
         name = entry.get("name") or cid
-        uri = f"{client.gateway}/ipfs/{cid}"
+        uri = client.gateway_uri(cid)
 
         await client.index.upsert(
             {"cid": cid, "uri": uri, "name": name, "keyvalues": keyvalues}
