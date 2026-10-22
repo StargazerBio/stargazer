@@ -216,11 +216,31 @@ Measured on 2026-10-20 after onboarding the test account from the branch:
 - [x] Every Union pod declares its project's key (stargazer `f0edb6e`).
 - [x] `onboard` and `upgrade` give a project without one its key and
   secret; `offboard` removes them (infra `08dcab3`, 24 tests).
-- [ ] Verify on Union: `upgrade` from the branch, a keyed parent/child run,
-  cross-project refusal, a notebook launch with a custom image, a
-  notebook-started run.
-- [ ] Delete the org key `393067446845621194` and its secret (an admin's
-  step): nothing should call Union as it now.
+- [x] Verify on Union (2026-10-22, test account, branch at `f0edb6e`):
+  - `./stargazer-users upgrade` with `STARGAZER_CHECKOUT` on the branch
+    replaced `u-pryce`'s 10-20 key with `396274977512389267`, whose only
+    policy is `stargazer-u-pryce`, wrote the secret, and redeployed the
+    dashboard. Its spec references `UNION_API_KEY` and `PINATA_JWT` by name
+    only.
+  - The notebook and dashboard images built in `flytesnacks`, which has no
+    key: image builds need none.
+  - A keyed parent launched its child in 13 s (run `uglnjvlhjtrvlws4khgd`).
+    From that pod the key was refused listing runs and starting one in
+    `flytesnacks` ("permission denied … Identity: app/396274977512389267").
+  - A Basic notebook ("Key 1022") launched from the dashboard: its image
+    built in `u-pryce` as `stargazer-u-pryce` (run `unsmh2c2t4kwgr4gjmd2`),
+    the app's `creator` is the key, and section 0 read
+    `bcftools → /usr/bin/bcftools`.
+  - The Execution tutorial's remote run from its notebook kernel,
+    `audit_cohorts` with three `summarize_cohort` children, succeeded as
+    the key (run `uzdk7d4z6vmjjk4n6svz`).
+  - Torn down: both notebooks and the dashboard stopped, no live runs. The
+    notebook "Key 1022" is left in the test account's workspace.
+- [ ] Delete the org key `393067446845621194` (an admin's step). Its
+  org-scoped secret `EAGER_API_KEY-union-us-west-2` still reaches any pod
+  that declares it: a `u-pryce` task declaring it got it (run
+  `uxs49wn5ht5x4shbqwbp`, checked set/unset only), so until the key is gone
+  any user's code can act as org-wide `contributor`.
 - [ ] Clean up what the injection era left: the `EAGER_API_KEY` secrets in
   `u-pryce` and `flytesnacks` (three domains each, in Secrets Manager only)
   and key `stargazer-flytesnacks`.
