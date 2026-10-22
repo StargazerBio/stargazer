@@ -1,4 +1,4 @@
-"""Tests for `notebook_base`, the image a notebook's `main_img` builds on."""
+"""Tests for `notebook_base`, the image a notebook's `main_env` builds on."""
 
 from stargazer.notebooks import notebook_image_base
 

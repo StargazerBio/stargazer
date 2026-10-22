@@ -19,17 +19,18 @@ integration. It has three jobs:
    console (`config.CONSOLE_URL`).
 
 2. **Workspace actions.** Create, setup, delete, copy and download, all
-   against the workspace store. A notebook's tile name, description and pod
-   resources are declared in its setup block (`app.notebook_meta`), which
-   the tile's gear edits.
+   against the workspace store. A notebook's tile name and description
+   (`app.notebook_meta`) and its pod's environment (`main_env`,
+   `app.notebook_environment`) are declared in its setup block, which the
+   tile's gear edits.
 
 3. **Launch broker.** `POST /launch` builds a per-notebook AppEnvironment via
-   `app.per_notebook.per_notebook_env(...)`, owned by the same user, serves
-   it into the dashboard's project, and returns its URL. A notebook that
-   declares its own image (`main_img`, `app.notebook_image`) is served on
-   it, which builds it first. The dashboard never
-   calls a notebook pod: the pod hydrates and saves its own workspace and
-   shows its own starting page while it warms up.
+   `app.per_notebook.per_notebook_env(...)` from the environment the
+   notebook declares, owned by the same user, serves it into the
+   dashboard's project, and returns its URL. Serving builds a declared image
+   first. The dashboard never calls a notebook pod: the pod hydrates and
+   saves its own workspace and shows its own starting page while it warms
+   up.
 
 The user's asset index isn't the dashboard's: it's their table on Aurora
 DSQL (a Postgres server on the devbox), which the dashboard's asset browser
@@ -74,12 +75,16 @@ from app.assets import TUS_MAX_BYTES, public_assets_on
 from app.assets import router as assets_router
 from app.identity import CurrentUser, User
 from app.init import init
-from app.notebook_image import MainImgError, evaluate_main_img, extract_main_img
+from app.notebook_environment import (
+    MainEnvError,
+    evaluate_main_env,
+    extract_main_env,
+    forget_new_environments,
+)
 from app.notebook_meta import (
     SetupError,
     notebook_description,
     notebook_name,
-    notebook_resources,
     replace_setup_body,
     setup_body,
     with_setup_values,
@@ -557,8 +562,12 @@ async def workspace_copy(
 _STARTER_SETUP = (
     "import flyte\n"
     "\n"
+    "from stargazer.notebooks import notebook_env\n"
+    "\n"
     'main_description = ""\n'
-    'main_resources = flyte.Resources(cpu=2, memory="4Gi")\n'
+    "main_env = notebook_env.clone_with(\n"
+    '    name="notebook", resources=flyte.Resources(cpu=2, memory="4Gi")\n'
+    ")\n"
 )
 
 
@@ -586,9 +595,9 @@ async def workspace_setup_save(
     """Replace a workspace notebook's setup block body with the gear editor's.
 
     The body is indented back under the block's own `with app.setup:` line.
-    A body that won't parse, or declares a name, description or resources
-    the dashboard can't read, is a 400 with the reason, and nothing is
-    written. Resource and image changes take effect at the **next**
+    A body that won't parse, declares a name or description the dashboard
+    can't read, or a `main_env` it can't serve, is a 400 with the reason, and
+    nothing is written. Environment changes take effect at the **next**
     `/launch`; the tile's name and description, which this returns, change
     right away.
     """
@@ -605,7 +614,10 @@ async def workspace_setup_save(
             )
         try:
             content = replace_setup_body(source, setup)
-        except SetupError as exc:
+            if (expr := extract_main_env(content)) is not None:
+                with forget_new_environments():
+                    evaluate_main_env(expr)
+        except (SetupError, MainEnvError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
         await store.update_workspace_notebook(user.subject, filename, content)
     except Exception as exc:
@@ -716,9 +728,8 @@ async def _launch_target(
     """Resolve a launch to `(notebook_path, source)`, or None if unknown.
 
     `source` is a workspace notebook's, whose setup block can declare its
-    pod's resources and image. It's None for tutorials and workflows, which
-    run on the deployed notebook image with the default resources, and for
-    a workspace notebook that can't be read.
+    pod's environment. It's None for tutorials and workflows, which run in
+    `notebook_env`, and for a workspace notebook that can't be read.
     """
     if section == "workspace":
         path = f"{WORKSPACE_NOTEBOOK_DIR}/{slug}.py"
@@ -749,11 +760,11 @@ async def launch(
     until the notebook is ready, so the URL is returned as soon as the app is
     admitted.
 
-    The pod gets the resources the notebook declares. A notebook that
-    declares its own image is served on it, and `serve` builds it first when
+    The pod runs in the environment the notebook declares (`main_env`), with
+    the dashboard's fields on top. `serve` builds a declared image first when
     it isn't built yet, so the first launch after a change waits for the
-    build. Resources that can't be read, or an image that won't evaluate or
-    build, are a 422 with the reason, never a pod sized or built wrong.
+    build. An environment that won't evaluate, or an image that won't build,
+    is a 422 with the reason, never a pod sized or built wrong.
     """
     if mode not in ("edit", "run"):
         return JSONResponse({"error": f"invalid mode: {mode}"}, status_code=400)
@@ -769,13 +780,24 @@ async def launch(
     if target is None:
         return JSONResponse({"error": f"unknown notebook: {slug}"}, status_code=404)
     notebook_path, source = target
-    resources, image = None, None
-    if source:
+    with forget_new_environments():
+        return await _serve_notebook(request, user, slug, mode, notebook_path, source)
+
+
+async def _serve_notebook(
+    request: Request,
+    user: User,
+    slug: str,
+    mode: str,
+    notebook_path: str,
+    source: str | None,
+) -> JSONResponse:
+    """Evaluate the notebook's `main_env`, serve its pod, and answer `/launch`."""
+    declared = None
+    if source and (expr := extract_main_env(source)) is not None:
         try:
-            resources = notebook_resources(source)
-            if (main_img := extract_main_img(source)) is not None:
-                image = evaluate_main_img(main_img)
-        except (SetupError, MainImgError) as exc:
+            declared = evaluate_main_env(expr)
+        except MainEnvError as exc:
             return JSONResponse({"error": str(exc)}, status_code=422)
 
     project = config.FLYTE_PROJECT
@@ -786,8 +808,7 @@ async def launch(
         owner_subject=user.subject,
         admin_url=str(request.base_url).rstrip("/"),
         index_url=os.environ["STARGAZER_INDEX_URL"],
-        resources=resources,
-        image=image,
+        declared=declared,
     )
     env.env_vars["FLYTE_PROJECT"] = project
     # App pods aren't given the org (task pods get `_U_ORG_NAME`); pass ours on
@@ -817,7 +838,7 @@ async def launch(
     except flyte.errors.ImageBuildError as exc:
         # Before the watch recovery below, which would hand back the app as it
         # was last served: on its old image.
-        logger.error(f"main_img build failed for {slug!r}: {exc}")
+        logger.error(f"main_env image build failed for {slug!r}: {exc}")
         return JSONResponse(
             {"error": f"This notebook's image failed to build: {exc}"},
             status_code=422,

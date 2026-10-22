@@ -1,30 +1,28 @@
 """Tests for `app.notebook_meta`: what the dashboard reads from a notebook's setup block.
 
-A notebook declares its tile name, description and pod resources in marimo's
-`with app.setup:` block, beside its image. The dashboard reads them with a
-parse (no notebook code runs) and rewrites the block from the gear's editor.
+A notebook declares its tile name and description in marimo's
+`with app.setup:` block, beside its pod's environment. The dashboard reads them
+with a parse (no notebook code runs) and rewrites the block from the gear's
+editor.
 """
 
-import flyte
 import pytest
 
 from app.notebook_meta import (
     SetupError,
     notebook_description,
     notebook_name,
-    notebook_resources,
     replace_setup_body,
     setup_body,
     with_setup_values,
 )
-from app.notebooks import seed_source
 
 BODY = (
     "import flyte\n"
     "\n"
     'main_name = "QC run"\n'
     'main_description = "Quality control."\n'
-    'main_resources = flyte.Resources(cpu=4, memory="8Gi")\n'
+    'main_env = notebook_env.clone_with(name="qc", resources=flyte.Resources(cpu=4))\n'
 )
 
 SETUP = "with app.setup:\n" + "".join(
@@ -50,32 +48,18 @@ def _notebook(setup: str = SETUP) -> str:
 # ---------------------------------------------------------------------------
 
 
-def test_reads_name_description_and_resources():
+def test_reads_name_and_description():
     """The setup block's declarations come back as values."""
     src = _notebook()
     assert notebook_name(src) == "QC run"
     assert notebook_description(src) == "Quality control."
-    assert notebook_resources(src) == flyte.Resources(cpu=4, memory="8Gi")
-
-
-def test_resources_keep_a_request_limit_pair_and_disk():
-    """Any literal `flyte.Resources` argument is honored as written."""
-    src = _notebook(
-        "with app.setup:\n"
-        '    main_resources = flyte.Resources(cpu=2, memory=("2Gi", "6Gi"), '
-        'disk="50Gi")\n'
-    )
-    assert notebook_resources(src) == flyte.Resources(
-        cpu=2, memory=("2Gi", "6Gi"), disk="50Gi"
-    )
 
 
 def test_undeclared_values_are_empty():
-    """A setup block without the declarations has no name, blurb or resources."""
+    """A setup block without the declarations has no name or blurb."""
     src = _notebook("with app.setup:\n    import flyte\n")
     assert notebook_name(src) == ""
     assert notebook_description(src) == ""
-    assert notebook_resources(src) is None
 
 
 def test_assignments_inside_a_cell_are_ignored():
@@ -86,23 +70,8 @@ def test_assignments_inside_a_cell_are_ignored():
 
 def test_unparseable_source_reads_as_undeclared():
     """A notebook mid-edit with a syntax error still tiles."""
-    src = 'with app.setup:\n    main_name = "x"\n    main_resources = (\n'
+    src = 'with app.setup:\n    main_name = "x"\n    main_env = (\n'
     assert notebook_name(src) == ""
-    assert notebook_resources(src) is None
-
-
-def test_resources_that_are_not_literal_are_an_error():
-    """Resources are read without running code, so they must be literals."""
-    src = _notebook("with app.setup:\n    main_resources = flyte.Resources(cpu=CPUS)\n")
-    with pytest.raises(SetupError, match="main_resources"):
-        notebook_resources(src)
-
-
-def test_resources_that_are_not_a_resources_call_are_an_error():
-    """`main_resources` has to be a `flyte.Resources(...)` call."""
-    src = _notebook('with app.setup:\n    main_resources = {"cpu": 2}\n')
-    with pytest.raises(SetupError, match=r"flyte\.Resources"):
-        notebook_resources(src)
 
 
 def test_setup_body_is_the_block_without_its_header_and_indent():
@@ -129,15 +98,10 @@ def test_setup_body_without_a_block_is_none():
 def test_replace_swaps_only_the_body():
     """The new body lands under the block's own header; cells are untouched."""
     src = _notebook(SETUP.replace("with app.setup:", "with app.setup(hide_code=True):"))
-    out = replace_setup_body(
-        src, 'import flyte\nmain_resources = flyte.Resources(cpu=8, memory="32Gi")\n'
-    )
+    out = replace_setup_body(src, 'import flyte\nmain_name = "Bigger"\n')
     assert out == _notebook(
-        "with app.setup(hide_code=True):\n"
-        "    import flyte\n"
-        '    main_resources = flyte.Resources(cpu=8, memory="32Gi")\n'
+        'with app.setup(hide_code=True):\n    import flyte\n    main_name = "Bigger"\n'
     )
-    assert notebook_resources(out) == flyte.Resources(cpu=8, memory="32Gi")
 
 
 def test_replace_round_trips_the_body():
@@ -161,7 +125,6 @@ def test_replace_adds_a_block_to_a_notebook_without_one():
     ("body", "error"),
     [
         ("import flyte\nmain_name = (\n", "line 2"),
-        ("main_resources = flyte.Resources(cpu=n)\n", "literal"),
         ("main_name = 3\n", "main_name"),
     ],
 )
@@ -180,15 +143,10 @@ def test_with_setup_values_replaces_a_declared_value():
 
 def test_with_setup_values_declares_a_missing_value_after_the_imports():
     """A value the block lacks gets its own line after the imports, before the rest."""
-    setup = (
-        "with app.setup:\n"
-        "    import flyte\n"
-        "\n"
-        "    main_resources = flyte.Resources(cpu=1)\n"
-    )
+    setup = "with app.setup:\n    import flyte\n\n    main_env = notebook_env\n"
     src = with_setup_values(_notebook(setup), main_name="QC")
     assert setup_body(src) == (
-        'import flyte\n\nmain_name = "QC"\n\nmain_resources = flyte.Resources(cpu=1)\n'
+        'import flyte\n\nmain_name = "QC"\n\nmain_env = notebook_env\n'
     )
 
 
@@ -198,9 +156,3 @@ def test_with_setup_values_adds_a_block_when_there_is_none():
     out = with_setup_values(src, main_name="scRNA-seq", main_description="UMAPs.")
     assert notebook_name(out) == "scRNA-seq"
     assert notebook_description(out) == "UMAPs."
-
-
-@pytest.mark.parametrize("seed", ["blank", "basic"])
-def test_seeds_declare_resources_to_edit(seed):
-    """New notebooks start with resources in their setup block."""
-    assert isinstance(notebook_resources(seed_source(seed)), flyte.Resources)

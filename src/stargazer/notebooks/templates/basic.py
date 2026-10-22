@@ -29,15 +29,19 @@ with app.setup:
 
     import flyte
 
-    from stargazer.notebooks import notebook_base
+    from stargazer.notebooks import notebook_base, notebook_env
 
-    # TODO: the dashboard tile's blurb, and the pod this notebook runs in.
+    # TODO: the dashboard tile's blurb.
     main_description = ""
-    main_resources = flyte.Resources(cpu=2, memory="4Gi")
 
-    # TODO: the image this notebook runs on. System tools go here, Python
-    # packages in the script header above.
-    main_img = notebook_base.with_apt_packages("bcftools")
+    # TODO: the pod this notebook runs in. System tools go in its image,
+    # Python packages in the script header above. The dashboard names the pod
+    # after the notebook.
+    main_env = notebook_env.clone_with(
+        name="notebook",
+        image=notebook_base.with_apt_packages("bcftools"),
+        resources=flyte.Resources(cpu=2, memory="4Gi"),
+    )
 
 
 @app.cell
@@ -78,13 +82,13 @@ def _(mo):
         f"""
         ## 0. Pod
 
-        The setup block declares the pod this notebook runs in.
-        `main_resources` is its CPU and memory, and `main_img` is its
-        image: add system tools to it (apt packages, or `with_commands` for
-        bioconda tools) and they're there the next time you launch the
-        notebook. Python packages go in the script header instead and
-        install when it starts. The dashboard tile's gear edits the same
-        block, along with the tile's name and description.
+        The setup block declares the pod this notebook runs in as
+        `main_env`: its CPU and memory, and its image. Add system tools to
+        the image (apt packages, or `with_commands` for bioconda tools) and
+        they're there the next time you launch the notebook. Python packages
+        go in the script header instead and install when it starts. The
+        dashboard tile's gear edits the same block, along with the tile's
+        name and description.
 
         `bcftools` → `{shutil.which("bcftools") or "not installed here"}`
         """

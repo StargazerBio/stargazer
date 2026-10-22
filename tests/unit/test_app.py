@@ -17,6 +17,7 @@ import flyte.app
 import flyte.errors
 import pytest
 from fastapi.testclient import TestClient
+from flyte._environment import list_loaded_environments
 
 from app import config, notebooks
 from app import workspace_store as ws
@@ -26,12 +27,8 @@ from app.admin_app import (
     app_env,
     asgi_app,
 )
-from app.notebook_meta import (
-    notebook_description,
-    notebook_name,
-    notebook_resources,
-    setup_body,
-)
+from app.notebook_environment import evaluate_main_env, extract_main_env
+from app.notebook_meta import notebook_description, notebook_name, setup_body
 from stargazer.notebooks import notebook_image_base
 
 ALICE = "387300641116005877"
@@ -41,9 +38,11 @@ PROJECT = f"u-{ALICE}"
 NB_BODY = (
     "import flyte\n"
     "\n"
+    "from stargazer.notebooks import notebook_env\n"
+    "\n"
     'main_name = "QC run"\n'
     'main_description = "Quality control."\n'
-    'main_resources = flyte.Resources(cpu=4, memory="8Gi")\n'
+    'main_env = notebook_env.clone_with(name="qc", resources=flyte.Resources(cpu=4, memory="8Gi"))\n'
 )
 
 NB_SETUP = "with app.setup:\n" + "".join(
@@ -450,7 +449,9 @@ def test_setup_save_rewrites_the_block_and_retitles_the_tile(client):
     assert resp.json() == {"slug": "qc-run", "title": "QC run", "description": "New"}
     stored = _get(ALICE, "qc-run.py")
     assert setup_body(stored) == body
-    assert notebook_resources(stored) == flyte.Resources(cpu=2, memory="8Gi")
+    assert evaluate_main_env(extract_main_env(stored)).resources == flyte.Resources(
+        cpu=2, memory="8Gi"
+    )
 
 
 def test_setup_save_takes_the_browsers_line_endings(client):
@@ -473,6 +474,17 @@ def test_setup_save_refuses_a_broken_block(client):
     )
     assert resp.status_code == 400
     assert "line 2" in resp.json()["error"]
+    assert _get(ALICE, "qc-run.py") == NB_SRC
+
+
+def test_setup_save_refuses_an_environment_it_cannot_serve(client):
+    """A `main_env` that won't evaluate is a 400 with the reason; nothing is written."""
+    _put(ALICE, "qc-run.py")
+    _as(client)
+    body = NB_BODY.replace("cpu=4", "cpu=CPUS")
+    resp = client.post("/workspace/setup", data={"slug": "qc-run", "setup": body})
+    assert resp.status_code == 400
+    assert "NameError" in resp.json()["error"]
     assert _get(ALICE, "qc-run.py") == NB_SRC
 
 
@@ -604,7 +616,7 @@ def test_launch_workspace_serves_the_owners_pod(client, served):
     assert kw["owner_subject"] == ALICE
     assert kw["slug"] == "qc-run"
     assert kw["mode"] == "edit"
-    assert kw["resources"] == flyte.Resources(cpu=4, memory="8Gi")
+    assert kw["declared"].resources == flyte.Resources(cpu=4, memory="8Gi")
     assert served["env"].env_vars == {
         "FLYTE_PROJECT": PROJECT,
         "STARGAZER_OWNER": ALICE,
@@ -670,15 +682,17 @@ def test_launch_tutorial_uses_the_image_path(client, served):
     assert (
         served["kwargs"]["notebook_path"] == notebooks.by_slug("assets").path_in_image
     )
-    assert served["kwargs"]["resources"] is None
+    assert served["kwargs"]["declared"] is None
 
 
 IMG_SRC = (
     "import marimo\n"
     "app = marimo.App()\n"
     "with app.setup:\n"
-    "    from stargazer.notebooks import notebook_base\n"
-    "    main_img = notebook_base.with_apt_packages('bcftools')\n"
+    "    from stargazer.notebooks import notebook_base, notebook_env\n"
+    "    main_env = notebook_env.clone_with(\n"
+    "        name='qc', image=notebook_base.with_apt_packages('bcftools')\n"
+    "    )\n"
 )
 
 
@@ -688,27 +702,27 @@ def union(monkeypatch):
     monkeypatch.setattr(config, "TARGET", "union")
 
 
-def test_launch_without_main_img_serves_the_deployed_image(client, served):
-    """A notebook that declares no image runs on the deployed one."""
-    _put(ALICE, "qc-run.py")
+def test_launch_without_main_env_serves_the_default_environment(client, served):
+    """A notebook that declares no environment runs on `notebook_env`."""
+    _put(ALICE, "qc-run.py", NB_SRC.replace("main_env", "other_env"))
     _as(client)
     assert _launch(client, "qc-run", "workspace").status_code == 200
-    assert served["kwargs"]["image"] is None
+    assert served["kwargs"]["declared"] is None
 
 
-def test_launch_serves_the_declared_image(client, served, union):
-    """A declared image is handed to serve, which builds it before deploying."""
+def test_launch_serves_the_declared_environment(client, served, union):
+    """A declared environment is handed to serve, which builds its image first."""
     _put(ALICE, "qc-run.py", IMG_SRC)
     _as(client)
     resp = _launch(client, "qc-run", "workspace")
     assert resp.json() == {"url": "https://nb.example"}
-    assert served["kwargs"]["image"] == notebook_image_base(
+    assert served["kwargs"]["declared"].image == notebook_image_base(
         config.NOTEBOOK_IMAGE
     ).with_apt_packages("bcftools")
 
 
-def test_launch_refuses_a_broken_main_img(client, served, union):
-    """A `main_img` that doesn't evaluate is a launch error, not a default pod."""
+def test_launch_refuses_a_broken_main_env(client, served, union):
+    """A `main_env` that doesn't evaluate is a launch error, not a default pod."""
     _put(ALICE, "qc-run.py", IMG_SRC.replace("'bcftools'", "*TOOLS"))
     _as(client)
     resp = _launch(client, "qc-run", "workspace")
@@ -717,14 +731,13 @@ def test_launch_refuses_a_broken_main_img(client, served, union):
     assert "kwargs" not in served
 
 
-def test_launch_refuses_resources_it_cannot_read(client, served):
-    """Resources that aren't literal are a launch error, not a default pod."""
-    _put(ALICE, "qc-run.py", NB_SRC.replace("cpu=4", "cpu=CPUS"))
+def test_launch_leaves_the_environment_registry_as_it_was(client, served, union):
+    """A long-lived dashboard doesn't keep every launch's environments."""
+    _put(ALICE, "qc-run.py", IMG_SRC)
     _as(client)
-    resp = _launch(client, "qc-run", "workspace")
-    assert resp.status_code == 422
-    assert "main_resources" in resp.json()["error"]
-    assert "kwargs" not in served
+    before = [id(env) for env in list_loaded_environments()]
+    assert _launch(client, "qc-run", "workspace").status_code == 200
+    assert [id(env) for env in list_loaded_environments()] == before
 
 
 def test_launch_refuses_when_the_image_fails_to_build(
