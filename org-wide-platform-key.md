@@ -1,6 +1,6 @@
 ---
 title: Org-wide platform key in every pod
-status: backlog
+status: doing
 priority: high
 created: 2026-10-05
 ---
@@ -156,18 +156,47 @@ recreated the secret an hour later.
   is implicitDeny for the pod role `userflyterole` and every node role,
   and the user-workload nodes set the metadata hop limit to 1.
 
-## The project key (branch `fix/org-wide-platform-key`)
+## Union turned injection off (2026-10-22)
 
-`onboard` gives each user's project API key `stargazer-<project>`. The key
-is created without Union's default policies and assigned the user's
-`stargazer-<project>` policy, which holds `contributor` on each of the
-project's three domains. It's stored as `EAGER_API_KEY` in each domain,
-because neither a secret nor a role binding can name a project without a
-domain. `upgrade` does the same for any project that lacks a key, and
-both commands key the deployer's build project first. Since the secrets
-can't be read back, an existing key is what says a project is done.
-Re-running keeps it, measured by key ids before and after. `offboard`
-deletes the key, and its secrets stay behind holding a dead key.
+The user confirmed it, and `flyte get cluster-config union-us-west-2` shows
+`unionAuth: {injectSecret: false, secretName: EAGER_API_KEY}` in both
+`leaseworker` and `operator.apps.controller`. The org secret
+`EAGER_API_KEY-union-us-west-2` is still in Secrets Manager (created
+2026-10-20 10:10), and its key `393067446845621194` still exists, but no
+pod gets it.
+
+- Pods start without any key: nothing refuses them now.
+- A pod without a key has no identity. A parent task's child launch fell
+  back to a browser sign-in and failed on its localhost callback
+  (`address already in use`), twelve attempts in a row (run
+  `u9xjvq5xth227xmngxwv` in `u-pryce`, aborted). So every workflow with
+  child tasks on Union broke, and #81's dashboard hung on its in-pod image
+  build.
+- The project `EAGER_API_KEY` secrets from 2026-10-20 aren't injected
+  either: only the org-wide switch did that.
+
+## The project key (branch `fix/org-wide-platform-key`, infra `08dcab3`)
+
+Every pod declares its project's key itself. On the `union` target
+`STARGAZER_SECRETS` (`stargazer.config`) adds
+`flyte.Secret(key="UNION_API_KEY", as_env_var="_UNION_EAGER_API_KEY")`, the
+variable flyte's `init_in_cluster` reads first; task environments, the
+dashboard and notebook pods all share the list. The devbox declares none,
+since its webhook refuses a pod whose declared secret is missing.
+
+Infra's `onboard` and `upgrade` give a project without the secret its key:
+API key `stargazer-<project>`, created without Union's default policies and
+assigned the user's `stargazer-<project>` policy, stored as the project's
+secret `UNION_API_KEY` (`PROJECT_KEY_SECRET`) in the deploy domain. Any key
+left from an earlier try is deleted first, since a key's value can't be read
+back, and a key whose secret fails to land is deleted. `offboard` deletes
+the key and its secret. The secret isn't `EAGER_API_KEY`, which Union's
+control plane hides and can't delete; `UNION_API_KEY` is the name
+`flyteplugins.union` gives the value, and it reads back and deletes like any
+other secret. One domain only: the user's policy covers `FLYTE_DOMAIN`, and
+their dashboard, notebooks and runs are all there.
+
+### Measured 2026-10-20, while Union injected project keys
 
 Measured on 2026-10-20 after onboarding the test account from the branch:
 
@@ -184,9 +213,15 @@ Measured on 2026-10-20 after onboarding the test account from the branch:
 
 ## Our side
 
-- [x] `stargazer-users onboard` creates the user's key, its policy, and
-  the project secrets holding it. `offboard` removes them, and `upgrade`
-  creates them for any project without them.
-- [x] Dashboard, notebook and task pods get the key from Union's injection,
-  with nothing declared on their envs.
+- [x] Every Union pod declares its project's key (stargazer `f0edb6e`).
+- [x] `onboard` and `upgrade` give a project without one its key and
+  secret; `offboard` removes them (infra `08dcab3`, 24 tests).
+- [ ] Verify on Union: `upgrade` from the branch, a keyed parent/child run,
+  cross-project refusal, a notebook launch with a custom image, a
+  notebook-started run.
+- [ ] Delete the org key `393067446845621194` and its secret (an admin's
+  step): nothing should call Union as it now.
+- [ ] Clean up what the injection era left: the `EAGER_API_KEY` secrets in
+  `u-pryce` and `flytesnacks` (three domains each, in Secrets Manager only)
+  and key `stargazer-flytesnacks`.
 - [ ] `pause` / `resume` in `stargazer-users`.
