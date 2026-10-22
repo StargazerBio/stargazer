@@ -4,8 +4,7 @@
 Researchers use these notebooks to explore data, run tasks, and visualize
 results in a familiar Python-native environment. The hosted launch path
 goes through the dashboard's `/launch` handler, which spawns a
-per-notebook AppEnvironment whose image is built programmatically by
-`app.per_notebook.notebook_app_img_recipe`.
+per-notebook AppEnvironment.
 
 A notebook declares the environment its pod runs in as `main_env` in its
 setup block: a `flyte.app.AppEnvironment` cloned from `notebook_env`, whose
@@ -44,15 +43,12 @@ import flyte.app
 # supplies the real one.
 _LOCAL_NOTEBOOK_IMAGE = "notebook-app:local"
 
-# The pod's disk holds the kernel's sandbox venv, uv's cache, the hydrated
-# workspace and whatever the notebook writes. Without a limit of its own, the
-# pod's only ephemeral-storage limit is the Knative queue-proxy sidecar's 1Gi,
-# which a notebook with numpy and matplotlib outgrows while its venv installs,
-# and the kubelet evicts the pod. Union turns the request into a limit too.
+# Ephemeral disk for the kernel's sandbox venv, uv cache and workspace; set
+# explicitly because the sidecar's 1Gi default is too small.
 NOTEBOOK_DISK = "20Gi"
 
-# What a notebook pod gets for each resource its `main_env` leaves unset. The
-# 6Gi memory limit is the scRNA workflow's, which declares no environment.
+# Defaults for resources a notebook's `main_env` leaves unset; the 6Gi limit
+# fits the scRNA workflow notebook.
 NOTEBOOK_RESOURCES = flyte.Resources(cpu=1, memory=("2Gi", "6Gi"), disk=NOTEBOOK_DISK)
 
 

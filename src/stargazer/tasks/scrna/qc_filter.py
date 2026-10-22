@@ -67,10 +67,7 @@ async def qc_filter(
         ad, qc_vars=["mt", "ribo", "hb"], inplace=True, log1p=True
     )
 
-    scrublet_kwargs = {}
-    if batch_key:
-        scrublet_kwargs["batch_key"] = batch_key
-    sc.pp.scrublet(ad, **scrublet_kwargs)
+    sc.pp.scrublet(ad, batch_key=batch_key or None)
 
     ad = ad[ad.obs["pct_counts_mt"] < max_pct_mt]
     ad = ad[~ad.obs["predicted_doublet"]]

@@ -12,9 +12,9 @@
 
 A choose-your-own-adventure scaffold for authoring your own notebook from
 scratch: pick the image it runs on, ingest a file, define an asset for it,
-process it with a task, and fan that task out in a workflow. Each section is a TODO-style
-template — pair with `assets.py` and `tasks.py` for the
-why and the deeper patterns.
+process it with a task, and fan that task out in a workflow. Each section is
+a TODO-style template — pair with `assets.py` and `tasks.py` for the why and
+the deeper patterns.
 
 spec: [docs/architecture/notebook.md](../architecture/notebook.md)
 """

@@ -7,10 +7,11 @@
 # [tool.uv.sources]
 # stargazer = { path = "/stargazer", editable = true }
 # ///
-"""### Blank workspace notebook.
+"""
+### Blank workspace notebook.
 
 An empty marimo notebook for authoring from scratch. `/workspace/create`
-copies this seed under your chosen name, which it sets as `main_name` in the
+copies this seed under your chosen name and declares it as `main_name` in the
 setup block. Edit `main_env` there to rightsize the pod for your workload.
 
 spec: [docs/architecture/notebook.md](../architecture/notebook.md)

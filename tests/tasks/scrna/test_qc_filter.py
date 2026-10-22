@@ -13,7 +13,7 @@ RAW_FIXTURE = SCRNA_FIXTURES_DIR / "synthetic_200x500.h5ad"
 
 @pytest.mark.asyncio
 async def test_qc_filter_output_shape(fixtures_db):
-    """qc_filter reduces obs count and annotates QC metrics."""
+    """qc_filter drops cells (doublets) and annotates QC metrics on the output."""
     adata = AnnData(
         path=RAW_FIXTURE,
         sample_id="test_sample",
@@ -32,11 +32,11 @@ async def test_qc_filter_output_shape(fixtures_db):
         max_pct_mt=80.0,
     )
 
+    out = sc.read_h5ad(await result.fetch())
     assert result.stage == "qc_filtered"
-    assert result.n_obs > 0
-    assert result.n_vars > 0
-    assert result.path is not None
-    assert (await result.fetch()).exists()
+    assert 0 < out.n_obs < 200
+    assert out.n_vars > 0
+    assert {"pct_counts_mt", "pct_counts_ribo", "predicted_doublet"} <= set(out.obs)
     assert result.sample_id == "test_sample"
     assert result.organism == "human"
 
@@ -77,10 +77,3 @@ async def test_qc_filter_rejects_unsupported_organism(fixtures_db, organism):
 
     with pytest.raises(ValueError, match=r"organism.*human, mouse"):
         await qc_filter(adata=adata, min_genes=1, min_cells=1, max_pct_mt=80.0)
-
-
-@pytest.mark.asyncio
-async def test_qc_filter_task_is_callable():
-    """Test that qc_filter is a callable task."""
-    assert callable(qc_filter)
-    assert "qc_filter" in str(qc_filter)

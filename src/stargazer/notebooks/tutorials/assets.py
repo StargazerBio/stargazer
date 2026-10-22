@@ -14,10 +14,7 @@ A guided walkthrough of why typed `Asset` subclasses exist, the three
 layers each Asset has (cid, path, fields), defining a new asset class,
 and the round-trip from Python object to storage and back.
 
-`SampleSheet` is defined here as a marimo *reusable* top-level symbol
-(`with app.setup:` + `@app.class_definition`) so the Tasks tutorial
-imports this exact class rather than redefining it — one definition, no
-drift across the tutorial sequence.
+`SampleSheet` is exported for the later tutorials.
 
 spec: [docs/architecture/types.md](../architecture/types.md)
 """
@@ -543,7 +540,7 @@ def _():
         | `to_keyvalues()` / `from_keyvalues()` | Round-trip across a flat-string storage boundary |
         | `update(path, **kwargs)` | Single call: set fields, upload, get a CID |
         | `assemble(**filters)` | Discovery by metadata, not folders |
-        | Companion pattern via `<key>_cid` | Index/data pairs travel together |
+        | Companion pattern via `companion_of` | Index/data pairs travel together |
 
         That's the whole system.
 
@@ -552,7 +549,7 @@ def _():
         The follow-on notebook **imports the `SampleSheet` you defined
         here** and wraps a Flyte task around it. From there the arc is:
 
-        1. **Tasks** — one task, run locally two ways.
+        1. **Tasks** — define one task over typed assets.
         2. **Workflows** — compose tasks into a fan-out workflow.
         3. **Execution** — the same code on a remote cluster, no changes.
 

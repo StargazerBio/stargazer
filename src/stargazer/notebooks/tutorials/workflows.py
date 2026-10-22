@@ -14,9 +14,7 @@ Imports the `summarize_cohort` task from the tasks tutorial and composes
 it into a fan-out workflow. In Flyte v2 a workflow is just a task that
 calls other tasks, so fan-out is plain `asyncio.gather` over task calls.
 
-`audit_cohorts` is defined here as a marimo *reusable* top-level symbol
-(`with app.setup:` + `@app.function`), so the Execution tutorial runs
-this exact workflow object — no copy, no drift.
+`audit_cohorts` is exported for the Execution tutorial.
 
 spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
@@ -76,7 +74,7 @@ def _():
         These come from the previous tutorials, not redefined:
 
         - `SampleSheet` (input) and `CohortSummary` (output) — the asset
-          types from the assets tutorial.
+          types from the assets and tasks tutorials.
         - `summarize_cohort` — the task from the tasks tutorial.
 
         Below we add the workflow that fans `summarize_cohort` out, plus
@@ -99,7 +97,6 @@ def _():
         cohort and gathers the results.
 
         ```python
-        @app.function
         @tutorial_env.task
         async def audit_cohorts(
             sheets: list[SampleSheet],

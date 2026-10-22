@@ -26,15 +26,8 @@ _notebook_modules = [
 
 
 @pytest.mark.parametrize("notebook", _notebook_modules)
-def test_notebook_imports(notebook):
-    """Verify notebook module imports without errors."""
-    mod = importlib.import_module(notebook)
-    assert hasattr(mod, "app"), f"{notebook} missing marimo App object"
-
-
-@pytest.mark.parametrize("notebook", _notebook_modules)
-def test_notebook_no_multiply_defined(notebook):
-    """Verify no cell redefines variables from other cells."""
+def test_notebook_parses_without_redefinitions(notebook):
+    """Verify the notebook imports, exposes `app`, and no cell redefines another's variables."""
     mod = importlib.import_module(notebook)
     app = mod.app
     app._maybe_initialize()

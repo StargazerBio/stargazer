@@ -16,9 +16,8 @@ environments live. Running the task — locally and remotely — is saved
 for the execution tutorial; composing it into a workflow is the one
 before that.
 
-`CohortSummary`, `tutorial_env`, and `summarize_cohort` are defined here
-as marimo *reusable* top-level symbols, so the later tutorials import
-these exact objects rather than redefining them — no drift.
+`CohortSummary`, `tutorial_env`, and `summarize_cohort` are exported for the
+later tutorials.
 
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
@@ -47,11 +46,9 @@ with app.setup:
     )
     from stargazer.notebooks.tutorials.assets import SampleSheet
 
-    # Declared here (not in a cell) so the reusable task/asset below can
-    # reference it and stay importable. No Flyte init happens in this
-    # notebook — defining a task needs none, and running it is the
-    # execution tutorial's job. A cluster pod imports this module to find
-    # the task, so its image carries stargazer and marimo.
+    # Declared in the setup block so `summarize_cohort` can use it and stay
+    # importable. A cluster pod imports this module to find the task, so the
+    # image carries stargazer and marimo.
     tutorial_env = flyte.TaskEnvironment(
         name="tutorial",
         description="Lightweight env for the tutorial notebooks.",
@@ -160,7 +157,7 @@ def _():
           naming where the stored bytes live. A task called remotely
           receives the same typed object it would have received
           locally.
-        - **Same function, two execution shapes.** `await fn(...)` runs
+        - **Same function, three execution shapes.** `await fn(...)` runs
           it in-process; `flyte.with_runcontext(mode="local").run(...)`
           goes through the full Flyte machinery (caching, retries, typed
           I/O); `flyte.run(...)` ships it to a cluster. The execution
