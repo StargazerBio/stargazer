@@ -1,6 +1,6 @@
 ---
 title: The hosted asset index moves to Aurora DSQL
-status: review
+status: done
 priority: high
 created: 2026-10-20
 pr: 77
@@ -617,3 +617,11 @@ dashboard pods side by side, and both replicate to the same path (measured
 `App.deactivate(wait=True)` returns while the pods take another 30–50 s to
 exit. Until this ticket lands, stop a dashboard and wait about 90 s before
 redeploying it (`onboard` re-runs and `upgrade`).
+
+## Outcome
+
+Shipped in PR #77 (merge `ef05a1a`): `DsqlIndex` (a user's table on Aurora DSQL, logged in with their IAM role from their namespace), `PostgresIndex` retrying serialization failures, and dashboards deployed with `STARGAZER_DSQL_CLUSTER_ARN` indexing in their user's table. Onboarding moved to infra on the way (ticket `onboarding-to-infra`), where it makes each user's IAM role, table, login and grants; the cluster is in infra's OpenTofu (`aws/`).
+
+Verified on the tenant: Piece 0 (the cluster's SQL, per-user isolation, `flytesnacks` refused), Piece 1 (every index call from a `u-pryce` task, ~30 ms a call), and end to end (onboarding the test account from infra, a dashboard upload listed from DSQL and found by a task). Unit tier 538, postgres tier 20, infra 24 plus 2 against Postgres. No comments on the PR.
+
+Left: migrating users' rows, switching every dashboard over, removing Litestream and the dashboard's index API, the docs, and the germline workflow on DSQL: ticket `dsql-switchover`.
