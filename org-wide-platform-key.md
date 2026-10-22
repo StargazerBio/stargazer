@@ -94,8 +94,10 @@ its PR lists under its own heading: "Stage the image's notebooks as
 /opt/notebooks and copy the folder itself" (`Dockerfile` only; the image's
 `/workspace/notebooks/` comes out the same, verified on its original
 commit `41c03a4`). It's harmless while the org secret exists, since that one wins.
-Its `app/onboard.py` changes overlap `dsql-asset-index`'s onboarding piece,
-so whichever of the two lands second rebases on the other.
+Its `app/onboard.py` changes predate onboarding's move to infra (ticket
+`onboarding-to-infra`): when it's unparked, the key creation goes into infra's
+`stargazer_users/onboard.py`, and only what's left of the branch stays in
+stargazer.
 
 ## Experiment: delete the org key (2026-10-20)
 
