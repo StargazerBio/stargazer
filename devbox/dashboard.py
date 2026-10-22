@@ -16,10 +16,9 @@ target-agnostic:
   `app.config.stand_in_subject` ignores it when `STARGAZER_TARGET=union`, and
   this script refuses to run off the devbox. A real subject header still wins.
 - The store under `s3://flyte-data/stargazer`, the devbox's bucket (rustfs).
-- The index on the devbox's Postgres server (`devbox/postgres.yaml`). With a
-  Postgres URL the dashboard's asset browser reads that database, the notebook
-  pods it launches get the same URL rather than the dashboard's address, and
-  its launcher skips Litestream, which has no file to replicate.
+- The index on the devbox's Postgres server (`devbox/postgres.yaml`), standing
+  in for the user's DSQL table on Union: the dashboard's asset browser reads
+  that database, and the notebook pods it launches get the same URL.
 - A `kubectl` port-forward to the object store while the code bundle uploads,
   since uploads go to the in-cluster signed-URL host (`devbox/setup.sh`).
 

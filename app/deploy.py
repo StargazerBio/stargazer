@@ -8,9 +8,11 @@ the subdomain differ. Union doesn't reject a second app asking for a taken
 subdomain (it hangs), so uniqueness comes from project ids being unique.
 
 Each dashboard is deployed under the commit it came from (`release_version`)
-as its version, and shows it on its page. A redeploy waits for the user's
-runs to finish (`active_runs`, `refuse_while_running`): the dashboard holds
-their asset index, and a write that lands on the outgoing version is lost.
+as its version, and shows it on its page. Its asset index is its user's
+table on the org's DSQL cluster (`dsql_index_url`), or on the devbox the
+Postgres URL `devbox/dashboard.py` passes in: a server that every pod in the
+user's project reaches directly, so redeploying a dashboard never touches
+the index or waits for runs.
 
 Onboarding, which makes users, their projects and their access and calls
 this for each, lives in the infra repo. The devbox's dashboard
@@ -29,8 +31,7 @@ from pathlib import Path
 import flyte
 import flyte.app
 from flyte._initialize import get_init_config
-from flyte.models import ActionPhase
-from flyte.remote import App, Run
+from flyte.remote import App
 
 from app import config
 from app.admin_app import app_env
@@ -43,17 +44,8 @@ _ACTIVE_POLLS, _ACTIVE_POLL_SECONDS = 24, 5
 # The dashboard's env as defined, before any user's settings are applied, so
 # deploying several users in one run never carries one user's values over.
 _BASE_ENV_VARS = dict(app_env.env_vars)
-# Where the dashboard keeps its SQLite index without a DSQL cluster, on its
-# own disk (Litestream makes it durable). `~` expands in the pod.
-_DASHBOARD_INDEX = "~/.stargazer/index.db"
 # The schema every user's index table sits in on the DSQL cluster.
 DSQL_SCHEMA = "assets"
-_UNFINISHED = (
-    ActionPhase.QUEUED,
-    ActionPhase.WAITING_FOR_RESOURCES,
-    ActionPhase.INITIALIZING,
-    ActionPhase.RUNNING,
-)
 
 
 def login_for(project: str) -> str:
@@ -140,8 +132,23 @@ def deploy_dashboard(
     once and every user's dashboard runs the same build. The deploy is
     versioned with `release_version()`, which the dashboard also shows on its
     page; redeploying under a version the app already has still updates it.
-    `extra_env` is applied last.
+    `extra_env` is applied last; a `STARGAZER_INDEX_URL` in it stands in for
+    the DSQL table, as the devbox's Postgres does.
+
+    Raises:
+        RuntimeError: with neither `STARGAZER_DSQL_CLUSTER_ARN` set nor an
+            index in `extra_env`. The dashboard would fall back to a file on
+            its own disk, which its pods can't reach and scale-to-zero erases.
     """
+    extra_env = extra_env or {}
+    index_url = extra_env.get("STARGAZER_INDEX_URL")
+    if index_url is None:
+        if not config.DSQL_CLUSTER_ARN:
+            raise RuntimeError(
+                "STARGAZER_DSQL_CLUSTER_ARN is not set; export it before "
+                "deploying, since each dashboard indexes in its user's DSQL table"
+            )
+        index_url = dsql_index_url(project, config.DSQL_CLUSTER_ARN)
     version = release_version()
     env_vars = {
         **_BASE_ENV_VARS,
@@ -149,21 +156,13 @@ def deploy_dashboard(
         "SG_OWNER_SUBJECT": owner_subject,
         "STARGAZER_OWNER": owner_subject,
         "STARGAZER_NOTEBOOK_IMAGE": _notebook_image(),
-        "STARGAZER_INDEX_URL": (
-            dsql_index_url(project, config.DSQL_CLUSTER_ARN)
-            if config.DSQL_CLUSTER_ARN
-            else _DASHBOARD_INDEX
-        ),
+        "STARGAZER_INDEX_URL": index_url,
         "STARGAZER_VERSION": version,
     }
     # Assets live under the same root as the workspace notebooks.
     env_vars.pop("STARGAZER_STORE_ROOT", None)
     if config.WORKSPACE_ROOT:
         env_vars["STARGAZER_STORE_ROOT"] = config.WORKSPACE_ROOT
-    # The bucket's region, for Litestream (app.dashboard_launch), when the
-    # deployer gives one; the pod's AWS_REGION wins if it has one.
-    if region := os.environ.get("STARGAZER_STORE_REGION"):
-        env_vars["STARGAZER_STORE_REGION"] = region
     # The org admins who may open every user's dashboard and notebooks
     # (`app.identity`), when the deployer names them.
     if admins := os.environ.get("STARGAZER_ADMIN_SUBJECTS"):
@@ -175,7 +174,7 @@ def deploy_dashboard(
     # In-cluster init can't discover the org in an app pod; bake the deployer's.
     if org := get_init_config().org:
         env_vars["FLYTE_ORG"] = org
-    env_vars.update(extra_env or {})
+    env_vars.update(extra_env)
     # Serve `app_env` itself, set up for this user, rather than a
     # `clone_with` copy: the copy records `dataclasses.py` as the frame it was
     # created in, and Flyte resolves `include=` and the pod's loader from that
@@ -202,35 +201,6 @@ def deploy_dashboard(
                 return app.endpoint
             time.sleep(_ACTIVE_POLL_SECONDS)
         raise
-
-
-def active_runs(project: str) -> list[str]:
-    """Names of the project's runs that haven't finished."""
-    return [
-        run.name
-        for run in Run.listall(
-            in_phase=_UNFINISHED,
-            project=project,
-            domain=config.FLYTE_DOMAIN,
-            limit=50,
-        )
-    ]
-
-
-def refuse_while_running(projects: list[str]) -> None:
-    """Raise if any of these projects has a run that hasn't finished.
-
-    A dashboard redeploy briefly runs the old and new versions side by side;
-    an index write the old one accepts after the new one has restored its
-    database is lost. Until that's handled properly, redeploys wait for runs
-    to finish.
-    """
-    busy = {p: runs for p in projects if (runs := active_runs(p))}
-    if busy:
-        detail = "; ".join(f"{p}: {', '.join(runs)}" for p, runs in busy.items())
-        raise RuntimeError(
-            f"runs still going, so their dashboards can't be redeployed yet ({detail})"
-        )
 
 
 def stop_project_apps(project: str) -> list[str]:

@@ -210,9 +210,10 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 5. The asset index's Postgres server. On Union each user's index is a SQLite
-#    file on their dashboard; here one Postgres server serves the dashboard and
-#    every pod. Applied on every run; an unchanged spec is a no-op.
+# 5. The asset index's Postgres server. On Union each user's index is their
+#    table on Aurora DSQL, which there's no local stand-in for; here one
+#    Postgres server serves the dashboard and every pod. Applied on every run;
+#    an unchanged spec is a no-op.
 # ---------------------------------------------------------------------------
 log "Applying the asset index's Postgres server (devbox/postgres.yaml)"
 if [ "$DRY_RUN" = 1 ]; then

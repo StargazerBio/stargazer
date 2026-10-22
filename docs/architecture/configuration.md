@@ -5,11 +5,11 @@ Asset storage has three parts: an **object store** for the bytes, an **index** f
 | Part | Locally | On Union | Set by |
 |------|---------|----------|--------|
 | Object store | `~/.stargazer/store` | The tenant bucket, under the deploy's root | `STARGAZER_STORE_ROOT` |
-| Index | `~/.stargazer/index.db` (SQLite) | The user's dashboard, over HTTP | `STARGAZER_INDEX_URL` |
+| Index | `~/.stargazer/index.db` (SQLite) | The user's own table on Aurora DSQL | `STARGAZER_INDEX_URL` |
 | Local cache | `~/.stargazer/local` | The pod's disk | `STARGAZER_LOCAL` |
 | Public tier | Off without a key | Pinata's public network | `PINATA_JWT` |
 
-On the devbox, the local cluster for development, the index is a Postgres server that every pod and the dashboard reach directly ([Contributing → Running on the Devbox](../guides/contributing.md#running-on-the-devbox)).
+On Union the dashboard and every pod in the user's project reach their table directly, logged in as the user ([App → Asset Index](app.md#asset-index)). On the devbox, the local cluster for development, the index is a Postgres server that every pod and the dashboard reach the same way ([Contributing → Running on the Devbox](../guides/contributing.md#running-on-the-devbox)).
 
 ## Identity and layout
 
@@ -26,7 +26,7 @@ All env var defaults are set in `config.py`. If set (even to empty string), the 
 | Variable | Purpose | Default | Required |
 |----------|---------|---------|----------|
 | `STARGAZER_STORE_ROOT` | Object-store root: a directory or a bucket URI | `~/.stargazer/store` | No |
-| `STARGAZER_INDEX_URL` | Index: a SQLite file path, a `postgresql://` URL, a `dsql://` URL naming a user's table and login on Aurora DSQL, or a dashboard URL | `~/.stargazer/index.db` | No |
+| `STARGAZER_INDEX_URL` | Index: a SQLite file path, a `postgresql://` URL, or a `dsql://` URL naming a user's table and login on Aurora DSQL | `~/.stargazer/index.db` | No |
 | `STARGAZER_LOCAL` | Scratch space for task outputs, and the download cache | `~/.stargazer/local` | No |
 | `STARGAZER_OWNER` | Owner of new assets: their folder in the store, and `_owner` | None (unset → `local`) | No |
 | `PINATA_JWT` | Turns on the public tier | None (unset) | Only for public data |

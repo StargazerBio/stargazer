@@ -108,7 +108,7 @@ Workflows filter the returned list with `isinstance` to pick out the types they 
 `utils/storage.py` defines `StorageClient`, the one storage interface: `upload()`, `download()`, `query()`, `get()`, `delete()` and `update_metadata()`. The module-level `default_client` is built lazily from the environment, so it sees credentials Flyte injects just before a task runs.
 
 - **Bytes** go to the object store at `<store root>/users/<owner>/assets/<cid>/<name>`.
-- **Metadata** goes to the index (`utils/index.py`), one row per CID; on Union the user's dashboard owns it.
+- **Metadata** goes to the index (`utils/index.py`), one row per CID; on Union it's the user's own table on Aurora DSQL.
 - **Public data** joins queries from Pinata's public network when `PINATA_JWT` is set.
 - **The cache** at `<STARGAZER_LOCAL>/<cid>/<name>` sits in front of downloads.
 
