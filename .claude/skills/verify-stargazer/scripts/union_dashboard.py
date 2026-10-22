@@ -5,7 +5,7 @@ every user's. Run from the checkout root with `STARGAZER_TARGET=union`
 exported (and the deploy settings, for `deploy`).
 
     union_dashboard.py deploy        # redeploy it from this checkout
-    union_dashboard.py check <app>   # an app's served image, its pod's base, recent runs
+    union_dashboard.py check <app>   # an app's served image and resources, its pod's base, recent runs
     union_dashboard.py teardown      # stop every active app in the project
 """
 
@@ -22,12 +22,17 @@ PROJECT, SUBJECT = "u-pryce", "387300641116005877"
 
 
 def check(name: str) -> None:
-    """Print the app's served image, its pod's notebook base, and the newest runs."""
+    """Print the app's served image and resources, its pod's notebook base, and the newest runs."""
     app = App.get(name=name, project=PROJECT, domain=config.FLYTE_DOMAIN)
     container = app.pb2.spec.container
     env = {e.key: e.value for e in container.env}
     print("active:", app.is_active())
     print("served image:", container.image)
+    for kind in ("requests", "limits"):
+        print(
+            f"{kind}:",
+            {r.name: r.value for r in getattr(container.resources, kind)},
+        )
     print("pod STARGAZER_NOTEBOOK_IMAGE:", env.get("STARGAZER_NOTEBOOK_IMAGE"))
     for run in Run.listall(
         project=PROJECT,
