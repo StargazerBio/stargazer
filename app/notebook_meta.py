@@ -1,22 +1,16 @@
 """
 ### A notebook's setup block: what the dashboard reads from it, and rewriting it.
 
-A notebook declares what the dashboard needs to know about it in marimo's
-`with app.setup:` block, beside the image its pod runs on (`main_img`,
-`app.notebook_image`):
+A notebook declares what the dashboard tile shows about it in marimo's
+`with app.setup:` block, beside the environment its pod runs in (`main_env`,
+`app.notebook_environment`):
 
     with app.setup:
-        import flyte
-
         main_name = "QC run"
         main_description = "Quality control on new runs."
-        main_resources = flyte.Resources(cpu=2, memory="4Gi")
 
-The tile shows the name and description, and `/launch` sizes the pod from the
-resources. The dashboard reads them with `ast` and runs no notebook code, so
-the name and description are string literals and `main_resources` is a
-`flyte.Resources(...)` call whose arguments are literals. Whatever a notebook
-declares is honored as-is; there is no ceiling.
+The dashboard reads them with `ast` and runs no notebook code, so both are
+string literals.
 
 The gear on a workspace tile edits the block's body, flush left
 (`setup_body`, `replace_setup_body`), and create and copy set the name and
@@ -28,8 +22,6 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 import ast
 import json
 import textwrap
-
-import flyte
 
 
 class SetupError(Exception):
@@ -118,40 +110,6 @@ def notebook_description(source: str) -> str:
     return _string(setup_assignments(source).get("main_description")) or ""
 
 
-def _resources(stmt: ast.Assign | ast.AnnAssign) -> flyte.Resources:
-    """Build the `flyte.Resources` a `main_resources` assignment declares.
-
-    Raises `SetupError` when the value isn't a `flyte.Resources(...)` call or
-    an argument isn't a literal.
-    """
-    call = stmt.value
-    if not (
-        isinstance(call, ast.Call)
-        and ast.unparse(call.func) in ("flyte.Resources", "Resources")
-    ):
-        raise SetupError("main_resources must be a flyte.Resources(...) call.")
-    try:
-        args = [ast.literal_eval(arg) for arg in call.args]
-        kwargs = {kw.arg: ast.literal_eval(kw.value) for kw in call.keywords}
-    except ValueError, TypeError, SyntaxError, MemoryError, RecursionError:
-        raise SetupError(
-            'main_resources: every argument must be a literal value, like cpu=2 or memory="4Gi".'
-        ) from None
-    try:
-        return flyte.Resources(*args, **kwargs)
-    except (TypeError, ValueError) as exc:
-        raise SetupError(f"main_resources: {exc}") from exc
-
-
-def notebook_resources(source: str) -> flyte.Resources | None:
-    """The notebook's `main_resources`, or None when it declares none.
-
-    Raises `SetupError` when they're declared but can't be read.
-    """
-    stmt = setup_assignments(source).get("main_resources")
-    return _resources(stmt) if stmt is not None else None
-
-
 def _block_span(source: str) -> tuple[int, int] | None:
     """The setup block's lines in `source`, as a `[start, end)` index range.
 
@@ -213,8 +171,6 @@ def _check_block(block: str) -> None:
     if len(tree.body) != 1 or not is_setup_block(tree.body[0]):
         raise SetupError("The setup block must be one `with app.setup:` block.")
     found = _assignments(tree.body[0])
-    if "main_resources" in found:
-        _resources(found["main_resources"])
     for name in ("main_name", "main_description"):
         if name in found and _string(found[name]) is None:
             raise SetupError(f"{name} must be a string.")
@@ -257,7 +213,7 @@ def replace_setup_body(source: str, body: str) -> str:
     the block's own `with` line, which keeps any options (`hide_code=True`).
     A notebook without a setup block gets one. Raises `SetupError`, and
     changes nothing, when `body` doesn't parse (the line number is the
-    body's) or declares a name, description or resources that can't be read.
+    body's) or declares a name or description that can't be read.
     """
     body = body.replace("\r\n", "\n").rstrip() + "\n"
     try:

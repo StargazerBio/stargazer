@@ -11,8 +11,7 @@
 
 An empty marimo notebook for authoring from scratch. `/workspace/create`
 copies this seed under your chosen name, which it sets as `main_name` in the
-setup block. Edit `main_resources` there to rightsize the pod for your
-workload.
+setup block. Edit `main_env` there to rightsize the pod for your workload.
 
 spec: [docs/architecture/notebook.md](../architecture/notebook.md)
 """
@@ -25,8 +24,12 @@ app = marimo.App(width="medium")
 with app.setup:
     import flyte
 
+    from stargazer.notebooks import notebook_env
+
     main_description = ""
-    main_resources = flyte.Resources(cpu=2, memory="4Gi")
+    main_env = notebook_env.clone_with(
+        name="notebook", resources=flyte.Resources(cpu=2, memory="4Gi")
+    )
 
 
 @app.cell

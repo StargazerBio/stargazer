@@ -4,8 +4,8 @@
 Defines the `notebook-app` programmatic `flyte.Image` every per-notebook
 Knative pod runs on, and `per_notebook_env(...)` — the AppEnvironment
 factory the dashboard's `/launch` handler invokes. A notebook that declares
-its own `main_img` runs on that image instead, layered on this one
-(`app.notebook_image`).
+its own environment (`main_env`, `app.notebook_environment`) runs on it, with
+the dashboard's fields on top; a declared image is layered on this one.
 
 The image layers, on top of the Flyte debian base:
 
@@ -76,6 +76,11 @@ from stargazer.config import (
     STARGAZER_ENV_VARS,
     STARGAZER_SECRETS,
 )
+from stargazer.notebooks import (
+    NOTEBOOK_RESOURCES,
+    notebook_environment,
+    notebook_image_base,
+)
 
 # Bake the proxy as a TOP-LEVEL module (not under `app/`) because Flyte's
 # loaded_modules code bundle ships an `app/` package into the pod's cwd
@@ -93,18 +98,6 @@ WORKSPACE_NOTEBOOK_DIR = "/workspace"
 # Flyte refuses to deploy an app whose name is over 30 characters, whatever
 # the project, and a notebook's app is `nb-<slug>-<mode>`, longest in `edit`.
 NOTEBOOK_SLUG_MAX = 30 - len("nb--edit")
-
-# The pod's disk holds the kernel's sandbox venv, uv's cache, the hydrated
-# workspace and whatever the notebook writes. Without a limit of its own, the
-# pod's only ephemeral-storage limit is the Knative queue-proxy sidecar's 1Gi,
-# which a notebook with numpy and matplotlib outgrows while its venv installs,
-# and the kubelet evicts the pod. Union turns the request into a limit too.
-NOTEBOOK_DISK = "20Gi"
-
-# What a notebook pod gets for each resource its notebook doesn't declare
-# (`main_resources`). The 6Gi memory limit is the scRNA workflow's, which
-# declares none.
-NOTEBOOK_RESOURCES = flyte.Resources(cpu=1, memory=("2Gi", "6Gi"), disk=NOTEBOOK_DISK)
 
 
 # Layered build recipe. Consumed only by the deployer's build step
@@ -221,10 +214,20 @@ def per_notebook_env(
     owner_subject: str,
     admin_url: str,
     index_url: str,
-    resources: flyte.Resources | None = None,
-    image: flyte.Image | None = None,
+    declared: flyte.app.AppEnvironment | None = None,
 ) -> flyte.app.AppEnvironment:
     """Build a per-notebook AppEnvironment for one (slug, mode) launch.
+
+    `declared` is the notebook's `main_env` (`app.notebook_environment`), or
+    None for `notebook_env`. The pod runs on its image, resources and env
+    vars, and on anything else it sets that the dashboard doesn't. The
+    dashboard sets the app's name, description, launch args, port, auth,
+    scaling, URL and secrets, and its own env vars win over the notebook's.
+    Each resource the declaration leaves unset comes from
+    `NOTEBOOK_RESOURCES`. An image with no layers beyond the deployed one runs
+    as that prebuilt image; a layered one is for `serve` to build. The pod's
+    `STARGAZER_NOTEBOOK_IMAGE` is always the deployed image, since that's what
+    the kernel's `notebook_base` builds on.
 
     `notebook_path` is the absolute path inside the spawned pod: image-baked
     notebooks live under `/stargazer/...`, the owner's notebooks under
@@ -233,43 +236,37 @@ def per_notebook_env(
     `owner_subject` is the owner's platform user id. The pod sits behind the
     platform login (`requires_auth=True`), and on Union its proxy lets in only
     signed tokens from the owner or an admin (`SG_AUTH_ISSUER`,
-    `SG_ADMIN_SUBJECTS`). `SG_OWNER_SUBJECT` also keys where the pod hydrates from and saves to in the
-    workspace store
-    (`STARGAZER_WORKSPACE_ROOT`). `admin_url` is the dashboard's public base
-    URL, which the proxy's `/__sg__/dashboard` route redirects to.
-    `index_url` is the dashboard's own index (`STARGAZER_INDEX_URL`), the
-    owner's, where the pod and the runs it starts index their assets; the
-    assets themselves go under the workspace root (`STARGAZER_STORE_ROOT`). No
-    credential is baked into the env, since the owner can read the app's
-    spec. The Pinata key comes as a secret instead, which the spec only
-    references.
-
-    `resources` is the notebook's declared `main_resources`, honored
-    as-authored (no ceiling). Each resource it leaves unset, or all of them
-    when it's None, comes from `NOTEBOOK_RESOURCES`.
-
-    `image` is the notebook's own `main_img`, which `serve` builds before it
-    deploys, or None to run on the deployed notebook image. The pod's
-    `STARGAZER_NOTEBOOK_IMAGE` is always the deployed image, since that's what
-    the kernel's `notebook_base` builds on.
+    `SG_ADMIN_SUBJECTS`). `SG_OWNER_SUBJECT` also keys where the pod hydrates
+    from and saves to in the workspace store (`STARGAZER_WORKSPACE_ROOT`).
+    `admin_url` is the dashboard's public base URL, which the proxy's
+    `/__sg__/dashboard` route redirects to. `index_url` is the dashboard's own
+    index (`STARGAZER_INDEX_URL`), the owner's, where the pod and the runs it
+    starts index their assets; the assets themselves go under the workspace
+    root (`STARGAZER_STORE_ROOT`). No credential is baked into the env, since
+    the owner can read the app's spec. The Pinata key comes as a secret
+    instead, which the spec only references.
     """
     if not config.NOTEBOOK_IMAGE:
         raise RuntimeError(
             "STARGAZER_NOTEBOOK_IMAGE is unset: deploy with `stargazer-users`, "
             "which builds the notebook image and bakes its URI in."
         )
-    declared = {
+    base = notebook_image_base(config.NOTEBOOK_IMAGE)
+    declared = declared or notebook_environment(base)
+    declared_resources = {
         field.name: value
         for field in dataclasses.fields(flyte.Resources)
-        if resources is not None
-        and (value := getattr(resources, field.name)) is not None
+        if declared.resources is not None
+        and (value := getattr(declared.resources, field.name)) is not None
     }
-    return flyte.app.AppEnvironment(
+    return declared.clone_with(
         name=f"nb-{slug}-{mode}",
         description=f"Per-notebook app: {slug} ({mode})",
         # `from_base` marks the URI as prebuilt, so serving skips any build or
         # existence check and just hands the URI to Flyte.
-        image=image or flyte.Image.from_base(config.NOTEBOOK_IMAGE),
+        image=declared.image
+        if declared.image != base
+        else flyte.Image.from_base(config.NOTEBOOK_IMAGE),
         # `exec` is load-bearing, not cosmetic. Flyte's `fserve` (PID 1) runs
         # these args via `Popen(" ".join(args), shell=True)` and, on the Knative
         # SIGTERM at scale-to-zero, forwards the signal to that single direct
@@ -288,7 +285,7 @@ def per_notebook_env(
         ],
         port=8080,
         requires_auth=True,
-        resources=dataclasses.replace(NOTEBOOK_RESOURCES, **declared),
+        resources=dataclasses.replace(NOTEBOOK_RESOURCES, **declared_resources),
         scaling=flyte.app.Scaling(
             replicas=(0, 1), scaledown_after=timedelta(minutes=30)
         ),
@@ -297,6 +294,7 @@ def per_notebook_env(
             subdomain=flyte.app.Subdomain.from_app_name(f"{slug}-{mode}")
         ),
         env_vars={
+            **(declared.env_vars or {}),
             **STARGAZER_ENV_VARS,
             "FLYTE_DOMAIN": config.FLYTE_DOMAIN,
             "STARGAZER_NOTEBOOK_IMAGE": config.NOTEBOOK_IMAGE,

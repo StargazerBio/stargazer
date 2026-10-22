@@ -23,7 +23,8 @@ project, access and dashboard.
 
 Plus supporting modules: `identity`, `workspace_store`,
 `notebooks`, `notebook_meta` (what the dashboard reads from a notebook's
-setup block), `assets` (the asset browser, on the user's asset index),
+setup block), `notebook_environment` (the pod environment a notebook
+declares there), `assets` (the asset browser, on the user's asset index),
 `proxy`, `templates`, `init`.
 Lives outside `src/stargazer` because it is deployment glue, not part of
 the bioinformatics SDK.
