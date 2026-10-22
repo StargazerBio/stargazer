@@ -1,6 +1,6 @@
 ---
 title: Notebooks declare their own app environment
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-16
 ---
