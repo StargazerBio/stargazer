@@ -110,7 +110,7 @@ pygraphviz, whose wheels bundle Graphviz, so nothing is installed outside uv.
 
 ```bash
 cli/diagrams.sh                                         # the standard set
-cli/diagrams.sh src/stargazer/server.py app/onboard.py  # one diagram per module
+cli/diagrams.sh src/stargazer/server.py app/deploy.py  # one diagram per module
 ```
 
 The standard set is `sdk.svg` (the SDK by package, the layers at a glance),

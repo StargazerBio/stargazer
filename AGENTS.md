@@ -161,7 +161,7 @@ The `spec:` line is **module-level only** — class and function docstrings do n
 ### Directory Organization
 
 The project follows this structure:
-- `app/` - Deployment / web tier (FastAPI apps, `flyte.app.AppEnvironment` definitions, Union-identity helpers, HTML templates, deploy entrypoints). Installed alongside the main package via `[tool.setuptools.packages.find] where = ["src", "."]`. The dashboard's uvicorn import path is `app.admin_app:asgi_app`; the deploy entry is `stargazer-users` (`app.onboard:main`), and `devbox/dashboard.py` on the devbox.
+- `app/` - Deployment / web tier (FastAPI apps, `flyte.app.AppEnvironment` definitions, Union-identity helpers, HTML templates, deploy entrypoints). Installed alongside the main package via `[tool.setuptools.packages.find] where = ["src", "."]`. The dashboard's uvicorn import path is `app.admin_app:asgi_app`; dashboards deploy through `app.deploy`, called by onboarding (`stargazer-users`) in the `StargazerBio/infra` repo, which holds every AWS operation too, and by `devbox/dashboard.py` on the devbox.
 - `devbox/` - The local devbox's setup script, its dashboard deploy and the Kubernetes YAML they apply (see Specs, Tickets and Reference Materials).
 - `src/stargazer/` - Main package
   - `__init__.py` - Package root, re-exports key symbols

@@ -14,14 +14,14 @@ import argparse
 from flyte.remote import App, Run
 
 from app import config
-from app.init import init
-from app.onboard import (
+from app.deploy import (
     active_runs,
     deploy_dashboard,
     refuse_while_running,
     release_version,
     stop_project_apps,
 )
+from app.init import init
 from stargazer.config import PROJECT_ROOT
 
 PROJECT, SUBJECT = "u-pryce", "387300641116005877"

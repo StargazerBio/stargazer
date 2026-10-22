@@ -42,12 +42,13 @@ dashboard gets as a Flyte secret: injected into the pod, never in the app
 spec the owner can read.
 
 `app_env` (this app's own AppEnvironment) is also defined here. It is
-deployed per user by `app.onboard` (`stargazer-users`), never on its own.
+deployed per user by `app.deploy.deploy_dashboard`, which onboarding
+(`stargazer-users`, in the infra repo) calls; never on its own.
 
 Local development (identity comes from the `X-User-*` headers Union would set):
     SG_OWNER_SUBJECT=<subject> uvicorn app.admin_app:asgi_app --reload --port 8080
 
-Deploy hosted to Flyte, one per user:
+Deploy hosted to Flyte, one per user, from the infra repo:
     stargazer-users onboard --email … --first-name … --last-name …
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)

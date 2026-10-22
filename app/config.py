@@ -40,7 +40,7 @@ FLYTE_CONFIG = (
 )
 
 # The notebook-app image every per-notebook pod runs, as the exact URI built at
-# deploy time (`app.onboard` bakes it into each dashboard's env). Unset in a
+# deploy time (`app.deploy` bakes it into each dashboard's env). Unset in a
 # bare local `uvicorn` run, where launching a notebook then errors clearly.
 NOTEBOOK_IMAGE: str | None = os.environ.get("STARGAZER_NOTEBOOK_IMAGE") or None
 
@@ -74,7 +74,7 @@ STAND_IN_SUBJECT: str = stand_in_subject(os.environ)
 # onboarding passes on to each dashboard. Tasks and notebooks aren't affected.
 PUBLIC_ASSETS: bool = os.environ.get("STARGAZER_PUBLIC_ASSETS", "on") != "off"
 
-# The commit this dashboard was deployed from (`app.onboard.release_version`),
+# The commit this dashboard was deployed from (`app.deploy.release_version`),
 # shown on its page for debugging. Unset in a bare local run, which shows none.
 VERSION: str = os.environ.get("STARGAZER_VERSION", "")
 
@@ -109,7 +109,7 @@ def admin_subjects(env) -> frozenset[str]:
 
 
 # Who besides the owner may open this dashboard and its notebooks on Union: org
-# admins, set by the deployer (`app.onboard` bakes it). Union's own check,
+# admins, set by the deployer (`app.deploy` bakes it). Union's own check,
 # that the visitor can view the project, never runs on the in-cluster address.
 ADMIN_SUBJECTS: frozenset[str] = admin_subjects(os.environ)
 
