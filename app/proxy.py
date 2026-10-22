@@ -17,6 +17,15 @@ Platform cookies and `X-User-*` headers are stripped before anything reaches
 marimo, so notebook code never sees the visitor's platform token through a
 request.
 
+**One notebook.** A pod runs only the notebook it was launched for
+(`SG_NOTEBOOK_PATH`), in the environment that notebook declares. marimo in edit
+mode opens any other notebook in the same server, as a page load and a kernel
+session with a `?file=` naming it, so `_OneNotebook` turns away every request
+whose `file` names another notebook, or a new one: a page load gets a page
+pointing back to the dashboard, where that notebook launches on its own pod, and
+a websocket is closed with 1008. Off when `SG_NOTEBOOK_PATH` is unset, as in the
+local image, which serves every notebook from one server.
+
 **Workspace.** Every file in the user's workspace lives in the workspace store,
 one object per file at its path, under
 `<STARGAZER_WORKSPACE_ROOT>/users/<subject>/workspace/` — the layout
@@ -63,6 +72,7 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 
 import asyncio
 import fcntl
+import html
 import json
 import os
 import pty
@@ -72,6 +82,7 @@ import termios
 from contextlib import asynccontextmanager, suppress
 from functools import cache
 from pathlib import Path
+from urllib.parse import parse_qsl
 
 import flyte
 import flyte.storage
@@ -123,6 +134,15 @@ _STARTING_PAGE = """<!doctype html>
 display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
 </style></head>
 <body><p>Starting your notebook… this page refreshes on its own.</p></body></html>
+"""
+
+_OTHER_NOTEBOOK_PAGE = """<!doctype html>
+<html><head><meta charset="utf-8"><title>Open it from your dashboard</title>
+<style>body{{font-family:system-ui,sans-serif;background:#0b0b14;color:#ddd;
+display:flex;align-items:center;justify-content:center;height:100vh;margin:0}}
+a{{color:#9db4ff}}</style></head>
+<body><p>Each notebook launches on its own. Open <code>{name}</code> from
+<a href="/__sg__/dashboard">your dashboard</a>.</p></body></html>
 """
 
 # One shared client with keep-alive to the loopback marimo server, reused for
@@ -465,9 +485,69 @@ class _TokenGate:
         await self.app(scope, receive, send)
 
 
+def _other_notebook(query: bytes) -> str | None:
+    """The notebook a request's `file` names, when it isn't the one launched here.
+
+    None when the request names none, names the launched notebook however it's
+    spelled, or the pod wasn't launched for one. marimo reads a relative name
+    against its working directory, `WORKSPACE_DIR`.
+    """
+    launched = os.environ.get("SG_NOTEBOOK_PATH")
+    if not launched:
+        return None
+    for key, value in parse_qsl(query.decode("latin-1"), keep_blank_values=True):
+        if (
+            key == "file"
+            and value
+            and os.path.normpath(WORKSPACE_DIR / value) != os.path.normpath(launched)
+        ):
+            return value
+    return None
+
+
+class _OneNotebook:
+    """ASGI middleware: a request for any notebook but the launched one goes no further.
+
+    A browser gets a 409 page linking to the dashboard, another HTTP caller a
+    plain 409, and a websocket is closed with 1008 before it's accepted.
+    """
+
+    def __init__(self, app):
+        """Wrap `app`."""
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        """Check the request's `file`, then pass it on or turn it away."""
+        if scope["type"] in ("http", "websocket") and (
+            name := _other_notebook(scope.get("query_string", b""))
+        ):
+            if scope["type"] == "websocket":
+                await send({"type": "websocket.close", "code": 1008})
+                return
+            accept = dict(scope["headers"]).get(b"accept", b"")
+            if b"text/html" in accept:
+                body = _OTHER_NOTEBOOK_PAGE.format(name=html.escape(name)).encode()
+                content_type = b"text/html; charset=utf-8"
+            else:
+                body = b"open this notebook from the dashboard"
+                content_type = b"text/plain"
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 409,
+                    "headers": [(b"content-type", content_type)],
+                }
+            )
+            await send({"type": "http.response.body", "body": body})
+            return
+        await self.app(scope, receive, send)
+
+
 asgi_app = FastAPI(
     title="stargazer-notebook-proxy", docs_url=None, redoc_url=None, lifespan=lifespan
 )
+# The last added runs first: the token gate, then the one-notebook check.
+asgi_app.add_middleware(_OneNotebook)
 asgi_app.add_middleware(_TokenGate)
 
 
