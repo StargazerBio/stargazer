@@ -1,8 +1,9 @@
 ---
 title: Public uploads over TUS, up to 10 GB
-status: doing
+status: review
 priority: normal
 created: 2026-10-21
+pr: 80
 ---
 
 The Pinata half of ticket `tus-browser-uploads`, split out when its store
