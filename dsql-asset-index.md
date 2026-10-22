@@ -125,7 +125,7 @@ This doesn't need that.
   a token from the assumed per-user role, retrying serialization errors, and
   reconnecting when a connection times out. `make_index` accepts the DSQL
   URL form.
-- [ ] **Onboarding** (code done in infra, tenant check left):
+- [x] **Onboarding** (in infra):
   - `stargazer-users onboard` creates, on every call and safely when it
     already exists, the IAM role (trust as above, `dsql:DbConnect` on the
     cluster), then the user's table, role and grants as the DSQL admin.
@@ -593,11 +593,15 @@ On branch `feat/dsql-asset-index` (`5237f5a`). `make_index` opens `dsql://<login
   - `flytesnacks` (run `u6kxp9r62c7vl4k7x7vg`): the same URL fails at `AssumeRoleWithWebIdentity` (`not authorized`).
 - **Not done, not needed yet:** connection reuse. ~30 ms a call is about what a call to the dashboard costs.
 
-## Onboarding and deploys (2026-10-21, unverified on the tenant)
+## Onboarding and deploys (2026-10-21)
 
 - **stargazer** `feat/dsql-asset-index` (`abf8e3d`): with `STARGAZER_DSQL_CLUSTER_ARN` set, `app.deploy` gives the dashboard the user's `dsql://` URL, built from names alone (`dsql_index_url`, `login_for`, `iam_role_name`, `DSQL_SCHEMA`); the dashboard hands it to its notebook pods, and the launcher skips Litestream. Unit tier 538 passed, postgres tier 20 passed.
 - **infra** `feat/dsql-user-index` (`b890b23`, local): `onboard` makes the IAM role, then the table, login, grants and IAM mapping as the DSQL admin (`stargazer_users/user_index.py`), each step checked first; `offboard` deletes the role. 24 tests passed, plus 2 against Postgres: `ensure_table_and_login` twice, then the login does every index call on its own table and is refused another user's table, `CREATE TABLE` and dropping its own.
-- Left to check: onboarding the test account with both, which needs the admin's AWS profile.
+- **Tenant check** (2026-10-22 01:4x UTC): the user ran `./stargazer-users onboard` for the test account from infra, with `STARGAZER_CHECKOUT` on the branch and the cluster ARN set.
+  - The dashboard came up at `0adf003` with `STARGAZER_INDEX_URL=dsql://u_pryce@ajufqlufrijtcts2ekxc4ovea4.dsql.us-west-2.on.aws/assets.u_pryce?role_arn=…stargazer-index-u-pryce`. The IAM role kept its Piece 0 creation time (23:26:52 UTC), so onboarding reused what existed.
+  - In Chrome as the test account: the private list was `[]` (the empty table; rows aren't migrated yet). A TUS upload of `dsql-check.txt` through the dashboard gave CID `bafkreie6fahn3ftj57c3kbbl5yajvprf4ptspktvle2jobsrhz3j7usyja`, and the private list returned its row at once.
+  - A task in `u-pryce` (run `ut7t84cgsvq99x5xkt9k`, SUCCEEDED) opened the same URL, found that row (name, owner), then deleted the row and its object; the dashboard's list was `[]` again.
+  - Teardown: `dashboard` deactivated, no active apps and no running runs in `u-pryce`.
 
 ## Meanwhile
 
