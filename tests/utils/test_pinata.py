@@ -97,11 +97,9 @@ async def test_update_metadata_refuses_a_patch_with_no_owner_before_sending():
 
 
 @pytest.mark.asyncio
-async def test_sign_upload_refuses_keyvalues_with_no_owner_before_sending():
+async def test_tus_create_refuses_keyvalues_with_no_owner_before_sending():
     with pytest.raises(ValueError, match="no `_owner`"):
-        await PinataClient(jwt="unused").create_signed_upload_url(
-            "x.txt", {"asset": "x"}
-        )
+        await PinataClient(jwt="unused").tus_create("x.txt", {"asset": "x"}, 1)
 
 
 @pytest.mark.asyncio

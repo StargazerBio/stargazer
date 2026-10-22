@@ -4,14 +4,15 @@ Route tests mount the router on a bare FastAPI app: the dashboard's owner
 gate (tested in `test_app.py`) sits in front of these routes there, and is
 not what's under test here. Identity comes from the `X-User-Subject`
 header Union's auth layer sets on every request. The Pinata client is swapped for a fake via the
-`app.assets._pinata_client` module attribute — sign returns a canned URL,
-query returns canned records, and both capture their call args. Sign runs
-the real client's keyvalue-count check, which happens before any request.
+`app.assets._pinata_client` module attribute — query returns canned records,
+and its TUS upload keeps the chunks it's sent and answers the last one with
+their CID. Each call captures its args, and creating an upload runs the real
+client's keyvalue checks, which happen before any request.
 
 Auth model: public browsing (schema, list, download) is anonymous — public
 bytes are world-readable on IPFS anyway, and the listing is served from an
 in-process TTL cache so the admin is a semi-static mirror, not an open proxy
-to the Pinata API. Sign minting and metadata edits require a signed-in user.
+to the Pinata API. Public uploads and metadata edits require a signed-in user.
 Private assets are the dashboard owner's own index and store, tested against
 a real `SqliteIndex` and a temp-dir store: only the owner reaches them.
 """
@@ -29,7 +30,7 @@ from fastapi.testclient import TestClient
 import app.assets as assets_mod
 from app import config
 from app.assets import router
-from stargazer.utils.cid import compute_cid
+from stargazer.utils.cid import CidBuilder, compute_cid
 from stargazer.utils.index import SqliteIndex
 from stargazer.utils.pinata import _check_keyvalue_count, _check_keyvalue_lengths
 
@@ -56,24 +57,36 @@ class FakePinata:
 
     def __init__(self):
         self.query_calls = []
-        self.sign_calls = []
         self.update_calls = []
+        self.tus_created = []
+        self.tus_patches = []
+        self.deleted = []
+        # The CID Pinata answers the last chunk with, when it isn't theirs.
+        self.stored_cid = None
 
     async def query(self, keyvalues):
         self.query_calls.append({"keyvalues": dict(keyvalues)})
         return list(CANNED_RECORDS)
 
-    async def create_signed_upload_url(self, filename, keyvalues, max_file_size=None):
+    async def tus_create(self, filename, keyvalues, length):
         _check_keyvalue_count(keyvalues)
         _check_keyvalue_lengths(keyvalues)
-        self.sign_calls.append(
-            {
-                "filename": filename,
-                "keyvalues": dict(keyvalues),
-                "max_file_size": max_file_size,
-            }
+        self.tus_created.append(
+            {"filename": filename, "keyvalues": dict(keyvalues), "length": length}
         )
-        return "https://uploads.example/signed"
+        return "https://uploads.example/files/up1"
+
+    async def tus_patch(self, location, offset, chunk):
+        self.tus_patches.append((location, offset, chunk))
+        received = b"".join(c for _, _, c in self.tus_patches)
+        if len(received) < self.tus_created[-1]["length"]:
+            return None
+        builder = CidBuilder()
+        builder.update(received)
+        return self.stored_cid or builder.cid()
+
+    async def delete(self, component):
+        self.deleted.append(component.cid)
 
     async def update_metadata(self, cid, keyvalues):
         _check_keyvalue_lengths(keyvalues)
@@ -111,7 +124,7 @@ def _auth(client: TestClient, subject: str = "octocat") -> None:
 
 
 class TestAuth:
-    """Anonymous: browsing OK; sign requires a session."""
+    """Anonymous: browsing OK; uploading requires a session."""
 
     def test_anonymous_can_read_schema(self, fake_pinata, client):
         assert client.get("/assets/schema").status_code == 200
@@ -131,12 +144,9 @@ class TestAuth:
         assert resp.json() == CANNED_RECORDS
         assert len(fake_pinata.query_calls) == 1
 
-    def test_anonymous_sign_401(self, fake_pinata, client):
-        resp = client.post(
-            "/assets/sign",
-            json={"filename": "x", "keyvalues": {"asset": "alignment"}},
-        )
-        assert resp.status_code == 401
+    def test_anonymous_public_upload_401(self, fake_pinata, client):
+        assert _tus_create(client, network="public").status_code == 401
+        assert fake_pinata.tus_created == []
 
 
 class TestSchema:
@@ -214,7 +224,7 @@ class TestPrivate:
         ]
         (stored,) = [p for p in _uploads_dir(private_store).rglob("r1.fq")]
         assert stored.read_bytes() == READS
-        assert fake_pinata.sign_calls == []
+        assert fake_pinata.tus_created == []
 
     def test_list_filters_by_keyvalue(self, fake_pinata, private_store, client):
         _auth(client, OWNER)
@@ -321,95 +331,6 @@ class TestPublicList:
         assert [r["cid"] for r in resp.json()] == ["bafyr1"]
         # Filtering happened app-side, not via Pinata params.
         assert fake_pinata.query_calls[0]["keyvalues"] == {}
-
-
-class TestSign:
-    def test_registered_key_returns_url_and_stamped_keyvalues(
-        self, fake_pinata, client
-    ):
-        _auth(client)
-        resp = client.post(
-            "/assets/sign",
-            json={
-                "filename": "r1.fq",
-                "keyvalues": {"asset": "r1", "sample_id": "S1"},
-            },
-        )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["url"] == "https://uploads.example/signed"
-        assert body["keyvalues"]["_owner"] == "octocat"
-        assert body["keyvalues"]["asset"] == "r1"
-        call = fake_pinata.sign_calls[0]
-        assert call["filename"] == "r1.fq"
-        assert call["keyvalues"]["_owner"] == "octocat"
-        assert call["max_file_size"] is not None
-
-    def test_unregistered_key_signs_verbatim(self, fake_pinata, client):
-        _auth(client)
-        resp = client.post(
-            "/assets/sign",
-            json={
-                "filename": "sheet.tsv",
-                "keyvalues": {"asset": "never_registered_key", "lanes": "4"},
-                "network": "public",
-            },
-        )
-        assert resp.status_code == 200
-        call = fake_pinata.sign_calls[0]
-        assert call["keyvalues"]["lanes"] == "4"
-        assert call["keyvalues"]["_owner"] == "octocat"
-
-    def test_registered_key_signs_extra_field(self, fake_pinata, client):
-        _auth(client)
-        resp = client.post(
-            "/assets/sign",
-            json={
-                "filename": "r1.fq",
-                "keyvalues": {"asset": "r1", "flowcell": "X"},
-            },
-        )
-        assert resp.status_code == 200
-        assert resp.json()["keyvalues"]["flowcell"] == "X"
-        assert fake_pinata.sign_calls[0]["keyvalues"]["flowcell"] == "X"
-
-    def test_too_many_fields_is_400(self, fake_pinata, client):
-        """Nine keys fit; the stamped owner makes this R1's tenth."""
-        _auth(client)
-        extras = {f"x{i}": "v" for i in range(5)}
-        resp = client.post(
-            "/assets/sign",
-            json={"filename": "r1.fq", "keyvalues": {"asset": "r1", **extras}},
-        )
-        assert resp.status_code == 400
-        assert resp.json()["detail"] == (
-            "An upload can carry at most 9 metadata fields, counting the "
-            "asset type and owner; this one has 10."
-        )
-        assert fake_pinata.sign_calls == []
-
-    def test_validation_errors_are_400(self, fake_pinata, client):
-        _auth(client)
-        no_asset = client.post(
-            "/assets/sign", json={"filename": "x", "keyvalues": {"a": "1"}}
-        )
-        assert no_asset.status_code == 400
-        assert "asset" in no_asset.json()["detail"]
-
-        reserved = client.post(
-            "/assets/sign",
-            json={
-                "filename": "x.bam",
-                "keyvalues": {"asset": "alignment", "_owner": "me"},
-            },
-        )
-        assert reserved.status_code == 400
-        assert fake_pinata.sign_calls == []
-
-    def test_missing_filename_400(self, fake_pinata, client):
-        _auth(client)
-        resp = client.post("/assets/sign", json={"keyvalues": {"asset": "alignment"}})
-        assert resp.status_code == 400
 
 
 class TestUpdate:
@@ -536,12 +457,8 @@ class TestNotConfigured:
         assert (
             client.get("/assets/list", params={"network": "public"}).status_code == 503
         )
-        resp = client.post(
-            "/assets/sign",
-            json={"filename": "x.bam", "keyvalues": {"asset": "alignment"}},
-        )
-        assert resp.status_code == 503
-        assert fake_pinata.query_calls == fake_pinata.sign_calls == []
+        assert _tus_create(client, network="public").status_code == 503
+        assert fake_pinata.query_calls == fake_pinata.tus_created == []
         assert (
             client.get("/assets/list", params={"network": "private"}).status_code == 200
         )
@@ -553,11 +470,7 @@ class TestNotConfigured:
         assert (
             client.get("/assets/list", params={"network": "public"}).status_code == 503
         )
-        resp = client.post(
-            "/assets/sign",
-            json={"filename": "x.bam", "keyvalues": {"asset": "alignment"}},
-        )
-        assert resp.status_code == 503
+        assert _tus_create(client, network="public").status_code == 503
 
 
 BIG = random.Random(0).randbytes(700_000)
@@ -571,8 +484,10 @@ def _metadata(**pairs: str) -> str:
     )
 
 
-def _tus_create(client, length=None, filename="big.fq", keyvalues=None):
-    """POST a new private TUS upload; returns the response."""
+def _tus_create(
+    client, length=None, filename="big.fq", keyvalues=None, network="private"
+):
+    """POST a new TUS upload to `network`; returns the response."""
     keyvalues = keyvalues or {"asset": "r1", "sample_id": "S1"}
     return client.post(
         "/assets/tus",
@@ -580,7 +495,7 @@ def _tus_create(client, length=None, filename="big.fq", keyvalues=None):
             **TUS,
             "Upload-Length": str(len(BIG) if length is None else length),
             "Upload-Metadata": _metadata(
-                filename=filename, network="private", keyvalues=json.dumps(keyvalues)
+                filename=filename, network=network, keyvalues=json.dumps(keyvalues)
             ),
         },
     )
@@ -685,3 +600,66 @@ class TestTus:
         monkeypatch.setattr(assets_mod, "TUS_IDLE_SECONDS", 0)
         _tus_create(client)
         assert _tus_patch(client, location, 1000, BIG[1000:2000]).status_code == 404
+
+
+class TestTusPublic:
+    """Public uploads over TUS, each piece passed on to Pinata's TUS upload."""
+
+    def test_three_chunks_are_passed_on_in_order(self, fake_pinata, client, tmp_path):
+        _auth(client, "someone-signed-in")
+        _, done = _tus_upload(client, network="public")
+        cid = _expected_cid(tmp_path, BIG)
+        assert done.headers["Stargazer-Cid"] == cid
+        assert [(loc, off) for loc, off, _ in fake_pinata.tus_patches] == [
+            ("https://uploads.example/files/up1", 0),
+            ("https://uploads.example/files/up1", 250_000),
+            ("https://uploads.example/files/up1", 500_000),
+        ]
+        assert b"".join(c for _, _, c in fake_pinata.tus_patches) == BIG
+        (created,) = fake_pinata.tus_created
+        assert (created["filename"], created["length"]) == ("big.fq", len(BIG))
+        assert created["keyvalues"]["_owner"] == "someone-signed-in"
+        assert created["keyvalues"]["sample_id"] == "S1"
+        assert fake_pinata.deleted == []
+
+    def test_a_cid_mismatch_removes_the_file(self, fake_pinata, client):
+        _auth(client)
+        fake_pinata.stored_cid = "bafywrong"
+        location = _tus_create(client, network="public").headers["Location"]
+        assert _tus_patch(client, location, 0, BIG[:300_000]).status_code == 204
+        done = _tus_patch(client, location, 300_000, BIG[300_000:])
+        assert done.status_code == 422
+        assert "Stargazer-Cid" not in done.headers
+        assert fake_pinata.deleted == ["bafywrong"]
+        assert client.head(location, headers=TUS).status_code == 404
+
+    def test_too_many_fields_are_refused_before_pinata(self, fake_pinata, client):
+        """Nine keys fit; the stamped owner makes this R1's tenth."""
+        _auth(client)
+        extras = {f"x{i}": "v" for i in range(5)}
+        resp = _tus_create(
+            client, network="public", keyvalues={"asset": "r1", **extras}
+        )
+        assert resp.status_code == 422
+        assert resp.json()["detail"] == (
+            "An upload can carry at most 9 metadata fields, counting the "
+            "asset type and owner; this one has 10."
+        )
+        assert fake_pinata.tus_created == []
+
+    def test_only_its_uploader_sends_the_pieces(self, fake_pinata, client):
+        _auth(client, "uploader")
+        location = _tus_create(client, network="public").headers["Location"]
+        _auth(client, "someone-else")
+        assert client.head(location, headers=TUS).status_code == 403
+        assert _tus_patch(client, location, 0, BIG[:1000]).status_code == 403
+        assert fake_pinata.tus_patches == []
+
+    def test_a_piece_bigger_than_a_chunk_is_refused(
+        self, fake_pinata, client, monkeypatch
+    ):
+        _auth(client)
+        monkeypatch.setattr(assets_mod, "TUS_CHUNK_BYTES", 1000)
+        location = _tus_create(client, network="public").headers["Location"]
+        assert _tus_patch(client, location, 0, BIG[:2000]).status_code == 413
+        assert fake_pinata.tus_patches == []

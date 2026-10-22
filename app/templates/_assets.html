@@ -380,9 +380,8 @@
             </div>
 
             <p class="upload-note">
-                Private uploads go up to <strong>10&nbsp;GB</strong>, and one that's
-                interrupted picks up where it stopped. Public uploads are capped at
-                <strong>100&nbsp;MB</strong>.
+                Uploads go up to <strong>10&nbsp;GB</strong>, and one that's
+                interrupted picks up where it stopped.
             </p>
 
             <div class="upload-row">
@@ -400,6 +399,7 @@ const USERNAME = {{ username | tojson }};
 // Public data needs a Pinata key; private data is the dashboard's own store.
 const PUBLIC_ON = {{ 'true' if pinata_configured else 'false' }};
 const TUS_MAX_BYTES = {{ tus_max_bytes }};
+const TUS_CHUNK_BYTES = {{ tus_chunk_bytes }};
 
 const NODE_CAP = 150;
 const state = {
@@ -1050,25 +1050,29 @@ async function doUpload() {
     const network = document.querySelector('input[name="net"]:checked').value;
     const btn = $("up-submit");
     btn.disabled = true;
-    status.textContent = network === "private" ? "Uploading…" : "Validating…";
+    status.textContent = "Uploading…";
 
-    // Private: resumable pieces over TUS, which the dashboard passes on to
-    // the user's own store and indexes when the last one lands. A piece fits
-    // one request through the platform's proxy. The client retries only while
-    // the browser is online, so going offline waits for the connection and
-    // starts again, resuming from what the dashboard already has. A reload
-    // resumes too, from the upload the client remembers for this file.
-    function uploadPrivate() {
+    // Resumable pieces over TUS to the dashboard, which passes them on to
+    // the user's own store (private) or the public network and answers the
+    // last one with the file's CID. A piece fits one request through the
+    // platform's proxy. The client retries only while the browser is online,
+    // so going offline waits for the connection and starts again, resuming
+    // from what the dashboard already has. A reload resumes too, from the
+    // upload the client remembers for this file.
+    function uploadTus() {
         if (file.size > TUS_MAX_BYTES) {
-            return Promise.reject(new Error("Private uploads are capped at " + TUS_MAX_BYTES / 1024 ** 3 + " GB."));
+            return Promise.reject(new Error("Uploads are capped at " + TUS_MAX_BYTES / 1024 ** 3 + " GB."));
         }
         return new Promise((resolve, reject) => {
             const upload = new tus.Upload(file, {
                 endpoint: "/assets/tus",
-                chunkSize: 48 * 1024 * 1024,
+                chunkSize: TUS_CHUNK_BYTES,
                 retryDelays: [0, 1000, 3000, 5000, 10000, 20000],
                 removeFingerprintOnSuccess: true,
-                metadata: { filename: file.name, network: "private", keyvalues: JSON.stringify(keyvalues) },
+                // Both networks share the endpoint, so the network is part of
+                // what identifies an upload to resume.
+                fingerprint: (f) => Promise.resolve(["stargazer", network, f.name, f.type, f.size, f.lastModified].join("-")),
+                metadata: { filename: file.name, network, keyvalues: JSON.stringify(keyvalues) },
                 onProgress(sent, total) {
                     status.textContent = "Uploading… " + Math.floor((100 * sent) / total) + "%";
                 },
@@ -1094,56 +1098,21 @@ async function doUpload() {
         });
     }
 
-    // Public phase 1: mint. Single-use URL, so a mint pairs with exactly one PUT.
-    async function mint() {
-        const resp = await fetch("/assets/sign", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({ filename: file.name, keyvalues }),
-        });
-        const body = await resp.json().catch(() => ({}));
-        if (!resp.ok) throw new Error(body.detail || "HTTP " + resp.status);
-        return body;
-    }
-
     try {
+        const cid = await uploadTus();
         if (network === "private") {
-            const cid = await uploadPrivate();
             if (state.network === "private") await fetchRecords();
-            status.className = "upload-status ok";
-            status.textContent = "Uploaded ✓ " + shortCid(cid);
-            $("up-file").value = "";
-            return;
-        }
-        let minted = await mint();
-        status.textContent = "Uploading…";
-        const fd = new FormData();
-        fd.append("file", file, file.name);
-        let upResp = await fetch(minted.url, { method: "POST", body: fd });
-        if (!upResp.ok) {
-            // Signed URLs are single-use; re-mint once and retry.
-            minted = await mint();
-            const fd2 = new FormData();
-            fd2.append("file", file, file.name);
-            upResp = await fetch(minted.url, { method: "POST", body: fd2 });
-        }
-        if (!upResp.ok) throw new Error("upload failed: HTTP " + upResp.status);
-        const upBody = await upResp.json().catch(() => ({}));
-        const rec = upBody.data || upBody;
-        // Optimistic insert — Pinata's list can lag a fresh upload. The row
-        // persists in memory until a later fetchRecords() reflects it.
-        const optimistic = {
-            cid: rec.cid,
-            name: rec.name || file.name,
-            keyvalues: rec.keyvalues || minted.keyvalues,
-            network: "public",
-        };
-        if (state.network === "public" && !state.records.some((r) => r.cid === optimistic.cid)) {
-            state.records = [optimistic, ...state.records];
+        } else if (state.network === "public" && !state.records.some((r) => r.cid === cid)) {
+            // Optimistic insert — Pinata's list can lag a fresh upload. The row
+            // persists in memory until a later fetchRecords() reflects it.
+            state.records = [
+                { cid, name: file.name, keyvalues: { ...keyvalues, _owner: USERNAME }, network: "public" },
+                ...state.records,
+            ];
             renderView();
         }
         status.className = "upload-status ok";
-        status.textContent = "Uploaded ✓ " + shortCid(rec.cid);
+        status.textContent = "Uploaded ✓ " + shortCid(cid);
         $("up-file").value = "";
     } catch (err) {
         status.className = "upload-status err";

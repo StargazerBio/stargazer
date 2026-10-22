@@ -5,7 +5,7 @@ Provides async interface for authenticated Pinata operations:
 - Uploading files with keyvalue metadata
 - Querying files by keyvalue pairs
 - Updating metadata and deleting files
-- Minting signed upload and download URLs
+- Resumable (TUS) uploads, chunk by chunk, for a caller relaying a file
 
 Stargazer uses Pinata's public network only: shared data lives there,
 readable by everyone and attributed by `_owner`. Every public write needs an
@@ -19,7 +19,6 @@ spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 import base64
 import json
 import os
-import time
 from pathlib import Path
 
 import aiofiles
@@ -113,8 +112,7 @@ def _check_keyvalue_count(kv: dict[str, str]) -> None:
     """Raise unless `kv` fits on a new Pinata file (``MAX_KEYVALUES`` keys).
 
     Checked before anything is sent: a plain upload past the cap would ship
-    the whole file to get a 400, and a signed URL past it mints fine and
-    then fails in the browser with an unrelated-looking parse error.
+    the whole file to get a 400.
     """
     if len(kv) > MAX_KEYVALUES:
         raise ValueError(
@@ -142,7 +140,7 @@ class PinataClient:
     """Async client for Pinata API v3.
 
     Handles authenticated operations against the Pinata API: uploads,
-    signed upload URLs, metadata queries, and deletions, all on Pinata's
+    metadata queries, and deletions, all on Pinata's
     public network (`NETWORK`).
 
     A pure remote transport: caching and gateway downloads are the storage
@@ -202,28 +200,18 @@ class PinataClient:
                 self._gateway_domain = f"https://{domain}.mypinata.cloud"
         return self._gateway_domain
 
-    async def create_signed_upload_url(
-        self,
-        filename: str,
-        keyvalues: dict[str, str],
-        expires: int = 300,
-        max_file_size: int | None = None,
+    async def tus_create(
+        self, filename: str, keyvalues: dict[str, str], length: int
     ) -> str:
-        """Mint a signed upload URL for a direct browser→Pinata upload.
-
-        All metadata is fixed at mint time — Pinata bakes ``filename``,
-        ``keyvalues``, and the size cap into the URL, so the uploader
-        supplies bytes only and can never attach unvalidated metadata.
+        """Start a resumable TUS upload of ``length`` bytes on the public network.
 
         Args:
-            filename: Name the uploaded file will carry (downloads resolve
-                their on-disk name from it)
-            keyvalues: Validated, already-stamped metadata to bake in
-            expires: URL lifetime in seconds after minting
-            max_file_size: Upload size cap in bytes, if any
+            filename: Name the uploaded file will carry
+            keyvalues: Validated, already-stamped metadata for the file
+            length: The whole file's size in bytes
 
         Returns:
-            The signed upload URL
+            The upload's URL, which each chunk is sent to (``tus_patch``)
 
         Raises:
             ValueError: when ``keyvalues`` has no ``_owner``, more than
@@ -233,27 +221,48 @@ class PinataClient:
         _check_keyvalue_count(keyvalues)
         _check_keyvalue_lengths(keyvalues)
         _check_owner(keyvalues)
-        payload: dict = {
-            "date": int(time.time()),
-            "expires": expires,
-            "filename": filename,
-            "keyvalues": keyvalues,
-            "network": NETWORK,
-        }
-        if max_file_size is not None:
-            payload["max_file_size"] = max_file_size
-
         async with (
             aiohttp.ClientSession() as session,
             session.post(
-                f"{self.UPLOAD_BASE}/files/sign",
-                headers=self._headers(),
-                json=payload,
+                f"{self.UPLOAD_BASE}/files",
+                headers={
+                    **self._headers(),
+                    "Tus-Resumable": "1.0.0",
+                    "Content-Type": "application/offset+octet-stream",
+                    "Upload-Length": str(length),
+                    "Upload-Metadata": _tus_metadata(filename, keyvalues),
+                },
             ) as response,
         ):
             response.raise_for_status()
-            data = await response.json()
-            return data["data"]
+            return response.headers["Location"]
+
+    async def tus_patch(self, location: str, offset: int, chunk: bytes) -> str | None:
+        """Send one chunk of a TUS upload, at most ``TUS_CHUNK_BYTES``.
+
+        Args:
+            location: The upload's URL, from ``tus_create``
+            offset: Where in the file ``chunk`` starts
+            chunk: The bytes
+
+        Returns:
+            The file's CID once the chunk completing it lands, else None
+        """
+        async with (
+            aiohttp.ClientSession() as session,
+            session.patch(
+                location,
+                headers={
+                    **self._headers(),
+                    "Tus-Resumable": "1.0.0",
+                    "Upload-Offset": str(offset),
+                    "Content-Type": "application/offset+octet-stream",
+                },
+                data=chunk,
+            ) as response,
+        ):
+            response.raise_for_status()
+            return response.headers.get("Upload-Cid")
 
     async def upload(self, component: Asset, path: Path) -> None:
         """Upload a local file to IPFS via Pinata as `component`. Sets component.cid.
@@ -307,47 +316,16 @@ class PinataClient:
     ) -> None:
         """Resumable TUS upload for large files (chunked, no resume yet).
 
-        Creates an upload, streams the file in ``TUS_CHUNK_BYTES`` chunks via
-        ``PATCH``, and reads the resulting CID from the ``Upload-Cid`` header
-        on the completing response.
+        Sends the file in ``TUS_CHUNK_BYTES`` chunks and takes the CID Pinata
+        answers the last one with.
         """
-        metadata = _tus_metadata(path.name, kv)
-
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{self.UPLOAD_BASE}/files",
-                headers={
-                    **self._headers(),
-                    "Tus-Resumable": "1.0.0",
-                    "Content-Type": "application/offset+octet-stream",
-                    "Upload-Length": str(path.stat().st_size),
-                    "Upload-Metadata": metadata,
-                },
-            ) as response:
-                response.raise_for_status()
-                location = response.headers["Location"]
-
-            offset = 0
-            cid = None
-            async with aiofiles.open(path, "rb") as f:
-                while True:
-                    chunk = await f.read(TUS_CHUNK_BYTES)
-                    if not chunk:
-                        break
-                    async with session.patch(
-                        location,
-                        headers={
-                            **self._headers(),
-                            "Tus-Resumable": "1.0.0",
-                            "Upload-Offset": str(offset),
-                            "Content-Type": "application/offset+octet-stream",
-                        },
-                        data=chunk,
-                    ) as response:
-                        response.raise_for_status()
-                        offset = int(response.headers["Upload-Offset"])
-                        cid = response.headers.get("Upload-Cid", cid)
-
+        location = await self.tus_create(path.name, kv, path.stat().st_size)
+        offset = 0
+        cid = None
+        async with aiofiles.open(path, "rb") as f:
+            while chunk := await f.read(TUS_CHUNK_BYTES):
+                cid = await self.tus_patch(location, offset, chunk)
+                offset += len(chunk)
         if not cid:
             raise ValueError("TUS upload completed but returned no Upload-Cid")
         component.cid = cid

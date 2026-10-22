@@ -71,7 +71,7 @@ from flyte.remote import App
 
 from app import config
 from app import workspace_store as store
-from app.assets import TUS_MAX_BYTES, public_assets_on
+from app.assets import TUS_CHUNK_BYTES, TUS_MAX_BYTES, public_assets_on
 from app.assets import router as assets_router
 from app.identity import CurrentUser, User
 from app.init import init
@@ -432,6 +432,7 @@ async def dashboard(request: Request, user: CurrentUser):
             "username": user.subject,
             "pinata_configured": public_assets_on(),
             "tus_max_bytes": TUS_MAX_BYTES,
+            "tus_chunk_bytes": TUS_CHUNK_BYTES,
         },
     )
 
