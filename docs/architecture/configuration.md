@@ -85,17 +85,16 @@ limit, not an IPFS one (IPFS chunks files into a DAG with no inherent size
 cap).
 
 **A new Pinata file holds at most 9 keyvalues, `_owner` included.** Pinata
-refuses more on both upload paths, so `upload()` and
-`create_signed_upload_url()` check the count first and raise before anything
-is sent: a plain POST would ship the whole file to get a 400, and a signed
-URL would mint fine and then fail in the browser. Metadata updates aren't
+refuses more, so `upload()` and `tus_create()` check the count first and
+raise before anything is sent: a plain POST would ship the whole file to get
+a 400. Metadata updates aren't
 capped by Pinata and aren't checked. The limit bounds how many
 [extra keys](types.md#extra-keys) a typed asset can carry on the public tier;
 the user's own index has no such cap.
 
 **Each Pinata key and value is at most 250 characters.** A new file refuses
 251; an update allows 255 and answers 256 with a 400 that doesn't say why.
-`upload()`, `create_signed_upload_url()` and `update_metadata()` hold every
+`upload()`, `tus_create()` and `update_metadata()` hold every
 key and value to 250 and raise before anything is sent, so whatever can be
 edited onto a record could also be uploaded with it. A list stored as one
 value reaches it first: a cohort's `source_samples` passes 250 characters at
@@ -104,12 +103,11 @@ about 20 sample IDs. The user's own index has no such limit.
 Every `PinataClient` call is on the public network (`NETWORK`). `query(keyvalues)`
 returns its matching records.
 
-`create_signed_upload_url(filename, keyvalues, ...)` mints a signed
-URL with the filename and keyvalues fixed at mint time — used by the
-dashboard's asset browser so a browser can upload bytes directly to Pinata without the
-metadata ever passing through (or being chooseable at) the upload client.
-`_owner` attribution and the size cap are baked in there too — see
-[App → Asset Manager](app.md#asset-manager).
+`tus_create(filename, keyvalues, length)` and `tus_patch(location, offset,
+chunk)` are the TUS path's two steps on their own, for a caller that has the
+file one chunk at a time: the dashboard's asset browser passes on a public
+upload's pieces as the browser sends them, and `tus_patch` returns the CID
+once the last one lands — see [App → Asset Manager](app.md#asset-manager).
 
 ## Container Images
 

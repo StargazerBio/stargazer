@@ -73,7 +73,7 @@ sequenceDiagram
 
 **Saving just works.** A user's workspace lives in the workspace store: object storage, one object per file at its path, under the user's subject. Notebooks are files like any other, and so is whatever the user keeps beside them: data, helper modules, outputs. There's no opt-in and no setup. The store is the durable copy and pods are working copies. A pod loads its owner's whole workspace when it starts and writes changed files back every 30 seconds, unless the user picks another interval in the dashboard's Settings section, and at 0 only when the pod stops. The interval is read when a notebook starts, so a change applies to notebooks started afterwards. The settings are stored beside the user's workspace, not in it. A file deleted in the pod is deleted from the store. The pod does a final save when it scales to zero. A pod that dies without warning loses what changed since its last save. Each pod writes only the files it changed, so two running notebooks overwrite each other's work only when both change the same file. Dotfiles and Python's and marimo's caches aren't saved.
 
-**Big files belong in the asset store.** A file over 100 MB isn't saved with the workspace. It stays on the pod's disk until the pod stops, and the notebook page names it, with a cell that stores it as an asset straight from the pod, which has no size limit. The limit matches the asset browser's upload limit, and it keeps the final save small enough to finish before the pod is killed.
+**Big files belong in the asset store.** A file over 100 MB isn't saved with the workspace. It stays on the pod's disk until the pod stops, and the notebook page names it, with a cell that stores it as an asset straight from the pod, which has no size limit. The limit keeps the final save small enough to finish before the pod is killed.
 
 **Sharing upstream is a download.** Any workspace notebook can be downloaded as its `.py` file and contributed to the repository like any other change. The app tier has no GitHub integration.
 
@@ -129,23 +129,27 @@ turn public assets off for its dashboards: the Public tab says the same, and
 the upload form offers only private storage. That's the dashboard alone; the
 user's tasks and notebooks still read the public tier.
 
-**Public uploads never transit the dashboard pod.** The page validates metadata and
-mints a Pinata **signed upload URL** (`POST /assets/sign`); the browser then
-PUTs bytes straight to Pinata. Because Pinata bakes the filename and
-keyvalues into the URL at mint time, the uploader can supply bytes only —
-never metadata the server didn't validate. Validation is the *same*
-`build_asset()` choke point the MCP server uses, so the page and the SDK
-agree on what a valid upload is. **A registered type's form takes extra
+**Public uploads are resumable, up to 10 GB, through the dashboard.** The
+browser sends the file in pieces over TUS to the same endpoint as a private
+upload, and the dashboard passes each piece on to a TUS upload of Pinata's,
+one piece per request, working out the CID as they go by. The CID Pinata
+answers the last piece with has to be the dashboard's; a different one means
+the file didn't arrive intact, so it's deleted from Pinata and the upload
+fails. The dashboard stamps the signed-in user as `_owner`, and Pinata's
+upload is created with the validated, stamped keyvalues, so the browser
+supplies bytes only, never metadata the server didn't validate. Validation
+is the *same* `build_asset()` choke point the MCP server uses, so the page
+and the SDK agree on what a valid upload is, and it runs before any of the
+file is sent, for both networks. **A registered type's form takes extra
 fields** below its declared ones, stored as text on the typed asset (see
 [Types → Extra keys](types.md#extra-keys)); an upload with more fields than
-a Pinata file holds is refused before the URL is minted. Public downloads redirect the same way: bytes go
-browser↔Pinata, not through the pod, and public uploads are capped at
-100 MB. Private uploads use the same validation before any of the file is
-sent.
+a Pinata file holds is refused before Pinata's upload is created. Public
+downloads redirect to Pinata's gateway: those bytes go browser↔Pinata, not
+through the pod.
 
 **Ownership is server-stamped attribution, not enforcement.** Every hosted
-write path stamps an `_owner` keyvalue (the user's subject) — the page from the signed-in user at sign
-time, workspace SDK/MCP uploads from a launcher-injected `STARGAZER_OWNER`,
+write path stamps an `_owner` keyvalue (the user's subject) — the page from the signed-in user when
+an upload starts, workspace SDK/MCP uploads from a launcher-injected `STARGAZER_OWNER`,
 pipeline outputs from that var forwarded into task pods. Users never type
 it (`_`-prefixed keys are a reserved namespace `build_asset()` rejects). So
 an unowned record on the hosted deployment is legacy data or a bug, never

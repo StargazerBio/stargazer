@@ -95,69 +95,6 @@ async def test_tus_upload_multichunk_roundtrip(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_create_signed_upload_url_end_to_end(tmp_path):
-    """Mint a signed upload URL, upload bytes to it like a browser would,
-    and verify the mint-time metadata reached the stored record.
-
-    Also probes (informationally, no assert — undocumented semantics) what
-    a second upload to the same URL does, answering plan 20's open
-    single-use question.
-    """
-    import aiohttp
-
-    client = PinataClient()
-
-    url = await client.create_signed_upload_url(
-        filename="signed_upload_test.txt",
-        keyvalues={
-            "asset": "never_registered_key",
-            "purpose": "signed-url-test",
-            "_owner": "integration-test",
-        },
-        expires=120,
-        max_file_size=1024,
-    )
-    assert url.startswith("https://"), f"Unexpected signed URL: {url!r}"
-    print(f"\nSigned URL minted: {url[:80]}...")
-
-    test_file = tmp_path / "signed_upload_test.txt"
-    test_file.write_text("stargazer signed upload test\n")
-
-    async with aiohttp.ClientSession() as session:
-        data = aiohttp.FormData()
-        data.add_field("file", test_file.open("rb"), filename=test_file.name)
-        async with session.post(url, data=data) as resp:
-            body = await resp.json()
-            assert resp.status in (200, 201), f"Upload failed: {resp.status} {body}"
-
-    record = body.get("data", body)
-    cid = record.get("cid")
-    assert cid, f"Upload response carries no cid: {body}"
-    print(f"Upload response cid: {cid}")
-    print(f"Upload response keyvalues: {record.get('keyvalues')}")
-
-    try:
-        # Mint-time metadata must be on the stored record (the whole point
-        # of the signed-URL design: the uploader can't choose keyvalues).
-        assert record.get("keyvalues", {}).get("purpose") == "signed-url-test"
-        assert record.get("keyvalues", {}).get("_owner") == "integration-test"
-        assert record.get("name") == "signed_upload_test.txt"
-
-        # Single-use probe: second upload to the same URL.
-        async with aiohttp.ClientSession() as session:
-            data = aiohttp.FormData()
-            data.add_field("file", test_file.open("rb"), filename=test_file.name)
-            async with session.post(url, data=data) as resp:
-                print(f"Second upload to same signed URL: HTTP {resp.status}")
-    finally:
-        try:
-            await client.delete(Asset(cid=cid))
-            print(f"Cleaned up {cid}")
-        except Exception as exc:
-            print(f"Cleanup skipped (Pinata post-upload delay?): {exc}")
-
-
-@pytest.mark.asyncio
 async def test_update_metadata_merges(tmp_path):
     """Update metadata on an existing public file and verify Pinata MERGES.
 
@@ -166,28 +103,15 @@ async def test_update_metadata_merges(tmp_path):
     not replace) and the CID must be unchanged (metadata edit doesn't touch
     bytes). Cleans up regardless.
     """
-    import aiohttp
-
     client = PinataClient()
 
-    url = await client.create_signed_upload_url(
-        filename="update_meta_test.txt",
-        keyvalues={
-            "asset": "never_registered_key",
-            "stage": "before",
-            "keep": "me",
-            "_owner": "integration-test",
-        },
-        expires=120,
-        max_file_size=1024,
-    )
     test_file = tmp_path / "update_meta_test.txt"
-    test_file.write_text("update metadata test\n")
-    async with aiohttp.ClientSession() as session:
-        data = aiohttp.FormData()
-        data.add_field("file", test_file.open("rb"), filename=test_file.name)
-        async with session.post(url, data=data) as resp:
-            cid = (await resp.json())["data"]["cid"]
+    test_file.write_text(f"update metadata test {uuid.uuid4()}\n")
+    probe = Asset(
+        keyvalues={"asset": "never_registered_key", "stage": "before", "keep": "me"}
+    )
+    await client.upload(probe, test_file)
+    cid = probe.cid
 
     try:
         result = await client.update_metadata(
