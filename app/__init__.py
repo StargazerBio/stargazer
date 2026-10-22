@@ -23,10 +23,8 @@ project, access and dashboard.
 
 Plus supporting modules: `identity`, `workspace_store`,
 `notebooks`, `notebook_meta` (what the dashboard reads from a notebook's
-setup block), `assets`, `index_api` (the user's asset index,
-served by their dashboard), `dashboard_launch` (the dashboard's startup:
-restore the index, then serve under Litestream), `proxy`, `templates`,
-`init`.
+setup block), `assets` (the asset browser, on the user's asset index),
+`proxy`, `templates`, `init`.
 Lives outside `src/stargazer` because it is deployment glue, not part of
 the bioinformatics SDK.
 

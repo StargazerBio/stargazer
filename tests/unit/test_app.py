@@ -21,7 +21,6 @@ from fastapi.testclient import TestClient
 from app import config, notebooks
 from app import workspace_store as ws
 from app.admin_app import (
-    _index_url,
     _notebook_slug,
     _parse_nb_name,
     app_env,
@@ -614,6 +613,18 @@ def test_launch_workspace_serves_the_owners_pod(client, served):
     assert served["servecontext"] == {"project": PROJECT, "domain": "development"}
 
 
+def test_launch_hands_the_pod_the_dashboards_index(client, served, monkeypatch):
+    """The notebook pod indexes in the owner's DSQL table, as the dashboard does."""
+    url = (
+        "dsql://u_jane@abc123.dsql.us-west-2.on.aws/assets.u_jane"
+        "?role_arn=arn:aws:iam::111122223333:role/stargazer-index-u-jane"
+    )
+    monkeypatch.setenv("STARGAZER_INDEX_URL", url)
+    _as(client)
+    assert _launch(client, "assets", "tutorials").status_code == 200
+    assert served["kwargs"]["index_url"] == url
+
+
 def _save_settings(client, interval):
     """POST /settings as the dashboard's Settings form does."""
     return client.post(
@@ -938,66 +949,3 @@ def test_created_notebook_slug_is_a_launchable_app_name(name, slug):
     assert _notebook_slug(name) == slug
     env = flyte.app.AppEnvironment(name=f"nb-{_notebook_slug(name)}-edit", image="img")
     assert env.name == f"nb-{slug}-edit"
-
-
-def test_index_url_uses_the_platform_pattern(monkeypatch):
-    """Inside an app pod the in-cluster pattern names the dashboard."""
-    monkeypatch.setenv(
-        "INTERNAL_APP_ENDPOINT_PATTERN",
-        "http://{app_fqdn}.u-jane-development.svc.cluster.local",
-    )
-    assert _index_url() == "http://dashboard.u-jane-development.svc.cluster.local"
-
-
-def test_index_url_without_the_pattern(monkeypatch):
-    """Elsewhere it's built from the dashboard's project and domain."""
-    monkeypatch.delenv("INTERNAL_APP_ENDPOINT_PATTERN", raising=False)
-    monkeypatch.setattr(config, "FLYTE_PROJECT", "u-jane")
-    monkeypatch.setattr(config, "FLYTE_DOMAIN", "production")
-    assert _index_url() == "http://dashboard.u-jane-production.svc.cluster.local"
-
-
-def test_index_url_passes_on_a_postgres_index(monkeypatch):
-    """A dashboard on a Postgres index hands pods that index, not its address."""
-    url = "postgresql://sg:pw@postgres.stargazer.svc.cluster.local:5432/stargazer"
-    monkeypatch.setenv("STARGAZER_INDEX_URL", url)
-    monkeypatch.setenv(
-        "INTERNAL_APP_ENDPOINT_PATTERN",
-        "http://{app_fqdn}.u-jane-development.svc.cluster.local",
-    )
-    assert _index_url() == url
-
-
-def test_index_url_passes_on_a_dsql_index(monkeypatch):
-    """A dashboard on its user's DSQL table hands pods that table, not its address."""
-    url = (
-        "dsql://u_jane@abc123.dsql.us-west-2.on.aws/assets.u_jane"
-        "?role_arn=arn:aws:iam::111122223333:role/stargazer-index-u-jane"
-    )
-    monkeypatch.setenv("STARGAZER_INDEX_URL", url)
-    monkeypatch.setenv(
-        "INTERNAL_APP_ENDPOINT_PATTERN",
-        "http://{app_fqdn}.u-jane-development.svc.cluster.local",
-    )
-    assert _index_url() == url
-
-
-def test_index_routes_are_mounted(client, tmp_path, monkeypatch):
-    """The dashboard serves its index without needing a signed-in user."""
-    from app import index_api
-    from stargazer.utils.index import SqliteIndex
-
-    monkeypatch.setattr(index_api, "_index", SqliteIndex(tmp_path / "i.db"))
-    resp = client.post("/index/query", json={"filters": {}})
-    assert resp.status_code == 200
-    assert resp.json() == []
-
-
-def test_dashboard_launcher_ships_in_the_code_bundle():
-    """The startup module must be bundled: nothing the deployer imports pulls it in.
-
-    The bundle's `app/` lands in the pod's working directory and shadows the
-    installed package, so a module missing from it can't be imported at all.
-    """
-    assert app_env.args == ["exec", "python", "-m", "app.dashboard_launch"]
-    assert "dashboard_launch.py" in app_env.include

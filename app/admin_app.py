@@ -31,11 +31,10 @@ integration. It has three jobs:
    calls a notebook pod: the pod hydrates and saves its own workspace and
    shows its own starting page while it warms up.
 
-The dashboard also owns the user's asset index (`app.index_api`): a SQLite
-file on its own disk, served to the user's task and notebook pods at the
-dashboard's in-cluster address, and kept durable in the bucket by Litestream.
-On the devbox the index is a Postgres server instead, which the dashboard
-and its pods all reach directly.
+The user's asset index isn't the dashboard's: it's their table on Aurora
+DSQL (a Postgres server on the devbox), which the dashboard's asset browser
+(`app.assets`), their notebook pods and the runs those start all reach
+directly, at the URL the deploy bakes in (`STARGAZER_INDEX_URL`).
 
 The asset manager (`app.assets`) reaches Pinata with the org's key, which the
 dashboard gets as a Flyte secret: injected into the pod, never in the app
@@ -74,7 +73,6 @@ from app import workspace_store as store
 from app.assets import TUS_MAX_BYTES, public_assets_on
 from app.assets import router as assets_router
 from app.identity import CurrentUser, User
-from app.index_api import router as index_router
 from app.init import init
 from app.notebook_image import MainImgError, evaluate_main_img, extract_main_img
 from app.notebook_meta import (
@@ -109,7 +107,6 @@ from stargazer.config import (
     STARGAZER_SECRETS,
     logger,
 )
-from stargazer.utils.index import DSQL_SCHEME, POSTGRES_SCHEMES
 
 # ---------------------------------------------------------------------------
 # Flyte AppEnvironment for the dashboard itself.
@@ -136,9 +133,6 @@ _PUBLIC_CONFIG = {
 }
 
 
-# Litestream release baked into the dashboard image.
-_LITESTREAM = "0.5.17"
-
 app_env = flyte.app.AppEnvironment(
     name="dashboard",
     description="Stargazer dashboard and notebook launcher",
@@ -148,17 +142,7 @@ app_env = flyte.app.AppEnvironment(
             registry=os.environ.get("STARGAZER_REGISTRY"),
             platform=IMAGE_PLATFORM,
         )
-        .with_apt_packages("ca-certificates", "curl")
-        .with_commands(
-            [
-                # Litestream keeps the asset index durable in the bucket
-                # (app.dashboard_launch).
-                "curl -fsSL -o /tmp/litestream.deb "
-                f"https://github.com/benbjohnson/litestream/releases/download/v{_LITESTREAM}/litestream-{_LITESTREAM}-linux-x86_64.deb "
-                "&& dpkg -i /tmp/litestream.deb && rm /tmp/litestream.deb "
-                "&& litestream version",
-            ]
-        )
+        .with_apt_packages("ca-certificates")
         .with_uv_project(
             PROJECT_ROOT / "pyproject.toml",
             project_install_mode="install_project",
@@ -166,10 +150,17 @@ app_env = flyte.app.AppEnvironment(
         )
         .with_commands(["flyte create config --local-persistence"])
     ),
-    # `exec` so the shell `fserve` starts becomes Python, which execs
-    # Litestream, which runs uvicorn: Litestream is then the process `fserve`
-    # signals at scale-to-zero, and it syncs the index after uvicorn exits.
-    args=["exec", "python", "-m", "app.dashboard_launch"],
+    # `exec` so the shell `fserve` starts becomes uvicorn, the process
+    # `fserve` signals at scale-to-zero (see `app.per_notebook`).
+    args=[
+        "exec",
+        "uvicorn",
+        "app.admin_app:asgi_app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
+    ],
     port=8080,
     # Union's login gates every request and forwards the user's identity.
     requires_auth=True,
@@ -185,10 +176,10 @@ app_env = flyte.app.AppEnvironment(
     # drops app secrets, so a devbox dashboard has no public tier.
     secrets=STARGAZER_SECRETS,
     # Flyte's loaded_modules bundler ships only the .py files the deployer
-    # imported; HTML and the landing-page logo must be enumerated, and so must
-    # the startup module, which nothing imports. The bundle's `app/` shadows
-    # the installed package in the pod, so a missing module can't be found.
-    include=("templates/", "static/", "dashboard_launch.py"),
+    # imported; HTML and the landing-page logo must be enumerated. The
+    # bundle's `app/` shadows the installed package in the pod, so a missing
+    # file can't be found.
+    include=("templates/", "static/"),
 )
 
 
@@ -233,7 +224,6 @@ asgi_app.mount(
     name="static",
 )
 asgi_app.include_router(assets_router)
-asgi_app.include_router(index_router)
 
 
 # ---------------------------------------------------------------------------
@@ -241,27 +231,6 @@ asgi_app.include_router(index_router)
 # ---------------------------------------------------------------------------
 
 _STORE_OFF = "saving notebooks isn't available on this deployment"
-
-
-def _index_url() -> str:
-    """Where this dashboard's notebook pods, and the runs they start, index.
-
-    A Postgres index (the devbox's) is a server every pod reaches, and a
-    DSQL index is the owner's table, which every pod in their project
-    reaches, so pods get the dashboard's own URL. A SQLite index is a file on the dashboard's
-    disk, so pods get the dashboard's in-cluster address: App pods get
-    `INTERNAL_APP_ENDPOINT_PATTERN` from the platform; outside one, the
-    address is built from the dashboard's project and domain the same way
-    (`<app>.<project>-<domain>.svc.cluster.local`).
-    """
-    own = os.environ.get("STARGAZER_INDEX_URL", "")
-    if own.startswith((*POSTGRES_SCHEMES, DSQL_SCHEME)):
-        return own
-    pattern = os.environ.get("INTERNAL_APP_ENDPOINT_PATTERN") or (
-        f"http://{{app_fqdn}}.{config.FLYTE_PROJECT}-{config.FLYTE_DOMAIN}"
-        ".svc.cluster.local"
-    )
-    return pattern.format(app_fqdn=app_env.name)
 
 
 def _console_runs_url() -> str:
@@ -816,7 +785,7 @@ async def launch(
         notebook_path=notebook_path,
         owner_subject=user.subject,
         admin_url=str(request.base_url).rstrip("/"),
-        index_url=_index_url(),
+        index_url=os.environ["STARGAZER_INDEX_URL"],
         resources=resources,
         image=image,
     )

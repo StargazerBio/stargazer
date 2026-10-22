@@ -135,6 +135,6 @@ CONSOLE_URL: str = console_url(os.environ)
 # The org's Aurora DSQL cluster, where each user's asset index is a table:
 # its ARN, which names its region, account and id. Onboarding (in infra)
 # makes each user's table and login there; every deploy gives the dashboard
-# the user's `dsql://` URL (`app.deploy.dsql_index_url`). Unset, dashboards
-# keep their own index.
+# the user's `dsql://` URL (`app.deploy.dsql_index_url`), and refuses without
+# it unless it's given an index of its own (the devbox's Postgres).
 DSQL_CLUSTER_ARN: str = os.environ.get("STARGAZER_DSQL_CLUSTER_ARN", "")

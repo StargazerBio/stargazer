@@ -26,7 +26,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app import config, index_api
+import app.assets as assets_mod
+from app import config
 from app.assets import router
 from stargazer.utils.cid import compute_cid
 from stargazer.utils.index import SqliteIndex
@@ -88,8 +89,6 @@ class FakePinata:
 @pytest.fixture
 def fake_pinata(monkeypatch):
     """Swap the route-level Pinata client, reset the public cache, set env."""
-    import app.assets as assets_mod
-
     fake = FakePinata()
     monkeypatch.setattr(assets_mod, "_pinata_client", fake)
     monkeypatch.setattr(assets_mod, "_public_cache", None)
@@ -162,7 +161,7 @@ READS = b"@r1\nACGT\n+\nIIII\n"
 def private_store(tmp_path, monkeypatch):
     """The dashboard's own index and store, in a temp dir, owned by OWNER."""
     index = SqliteIndex(tmp_path / "index.db")
-    monkeypatch.setattr(index_api, "_index", index)
+    monkeypatch.setattr(assets_mod, "_index", index)
     monkeypatch.setenv("STARGAZER_STORE_ROOT", str(tmp_path / "store"))
     monkeypatch.setenv("STARGAZER_OWNER", OWNER)
     monkeypatch.setattr(config, "OWNER_SUBJECT", OWNER)
@@ -680,8 +679,6 @@ class TestTus:
     def test_an_idle_upload_is_dropped(
         self, fake_pinata, private_store, client, monkeypatch
     ):
-        import app.assets as assets_mod
-
         _auth(client, OWNER)
         location = _tus_create(client).headers["Location"]
         _tus_patch(client, location, 0, BIG[:1000])

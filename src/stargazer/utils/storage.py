@@ -50,7 +50,6 @@ from stargazer.utils.index import (
     DSQL_SCHEME,
     POSTGRES_SCHEMES,
     DsqlIndex,
-    HttpIndex,
     PostgresIndex,
     SqliteIndex,
 )
@@ -113,7 +112,7 @@ class StorageClient:
         self,
         local_dir: Path,
         store_root: str,
-        index: SqliteIndex | HttpIndex,
+        index: SqliteIndex | PostgresIndex,
         public: PinataClient | None = None,
         gateway: str | None = None,
     ):
@@ -397,20 +396,18 @@ class StorageClient:
         return await self.index.merge(cid, _stamp_owner(dict(keyvalues)))
 
 
-def make_index(url: str) -> SqliteIndex | PostgresIndex | HttpIndex:
+def make_index(url: str) -> SqliteIndex | PostgresIndex:
     """The index named by `STARGAZER_INDEX_URL`.
 
     A `postgresql://` (or `postgres://`) URL is a Postgres database; a
-    `dsql://` URL is a user's table on Aurora DSQL (see `DsqlIndex`); an
-    `http(s)://` URL is a user's dashboard; anything else is a SQLite file
-    path (a `sqlite://` prefix is accepted and stripped, `~` is expanded).
+    `dsql://` URL is a user's table on Aurora DSQL (see `DsqlIndex`);
+    anything else is a SQLite file path (a `sqlite://` prefix is accepted and
+    stripped, `~` is expanded).
     """
     if url.startswith(DSQL_SCHEME):
         return DsqlIndex(url)
     if url.startswith(POSTGRES_SCHEMES):
         return PostgresIndex(url)
-    if url.startswith(("http://", "https://")):
-        return HttpIndex(url)
     return SqliteIndex(Path(url.removeprefix("sqlite://")).expanduser())
 
 

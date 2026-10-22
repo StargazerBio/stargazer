@@ -14,13 +14,7 @@ import argparse
 from flyte.remote import App, Run
 
 from app import config
-from app.deploy import (
-    active_runs,
-    deploy_dashboard,
-    refuse_while_running,
-    release_version,
-    stop_project_apps,
-)
+from app.deploy import deploy_dashboard, release_version, stop_project_apps
 from app.init import init
 from stargazer.config import PROJECT_ROOT
 
@@ -55,14 +49,18 @@ def main() -> None:
 
     init(config.FLYTE_CONFIG, root_dir=PROJECT_ROOT)
     if args.command == "deploy":
-        refuse_while_running([PROJECT])
         print("version:", release_version())
         print("Dashboard:", deploy_dashboard(PROJECT, SUBJECT))
     elif args.command == "check":
         check(args.app)
     else:
         print("stopped:", stop_project_apps(PROJECT))
-        print("live runs:", active_runs(PROJECT))
+        live = Run.listall(
+            in_phase=("queued", "waiting_for_resources", "initializing", "running"),
+            project=PROJECT,
+            domain=config.FLYTE_DOMAIN,
+        )
+        print("live runs:", [run.name for run in live])
 
 
 if __name__ == "__main__":

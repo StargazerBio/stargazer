@@ -237,9 +237,9 @@ def per_notebook_env(
     workspace store
     (`STARGAZER_WORKSPACE_ROOT`). `admin_url` is the dashboard's public base
     URL, which the proxy's `/__sg__/dashboard` route redirects to.
-    `index_url` is the dashboard's in-cluster address, where the pod and the
-    runs it starts index their assets (`STARGAZER_INDEX_URL`); the assets
-    themselves go under the workspace root (`STARGAZER_STORE_ROOT`). No
+    `index_url` is the dashboard's own index (`STARGAZER_INDEX_URL`), the
+    owner's, where the pod and the runs it starts index their assets; the
+    assets themselves go under the workspace root (`STARGAZER_STORE_ROOT`). No
     credential is baked into the env, since the owner can read the app's
     spec. The Pinata key comes as a secret instead, which the spec only
     references.

@@ -23,7 +23,7 @@ def _nb_env():
         notebook_path="/workspace/x.py",
         owner_subject="387300641116005877",
         admin_url="http://admin",
-        index_url="http://dashboard.u-x-development.svc.cluster.local",
+        index_url="dsql://u_x@abc123.dsql.us-west-2.on.aws/assets.u_x?role_arn=arn",
     )
 
 

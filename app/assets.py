@@ -50,12 +50,12 @@ from fastapi.responses import RedirectResponse, StreamingResponse
 
 from app import config
 from app.identity import User, user_from_request
-from app.index_api import _get_index
 from stargazer.assets import ASSET_REGISTRY, build_asset
 from stargazer.assets.asset import _BASE_FIELDS
 from stargazer.utils.cid import CidBuilder
+from stargazer.utils.index import PostgresIndex, SqliteIndex
 from stargazer.utils.pinata import PinataClient, _stamp_owner
-from stargazer.utils.storage import StorageClient
+from stargazer.utils.storage import StorageClient, make_index
 
 router = APIRouter()
 
@@ -81,11 +81,24 @@ TUS_IDLE_SECONDS = 3600.0
 PUBLIC_CACHE_TTL = 60.0
 
 # Module attributes resolved at call time so tests can swap in fakes.
+_index: SqliteIndex | PostgresIndex | None = None
 _pinata_client: PinataClient | None = None
 _public_cache: tuple[float, list[dict]] | None = None
 # Single-flight guard for cache refreshes: concurrent anonymous requests on a
 # cold/expired cache would otherwise each fan out their own Pinata listing.
 _public_cache_lock = asyncio.Lock()
+
+
+def _get_index() -> SqliteIndex | PostgresIndex:
+    """The owner's asset index (`STARGAZER_INDEX_URL`), opened on first use.
+
+    The same index their tasks and notebooks write to: their DSQL table on
+    Union, the devbox's Postgres server, a SQLite file locally.
+    """
+    global _index
+    if _index is None:
+        _index = make_index(os.environ["STARGAZER_INDEX_URL"])
+    return _index
 
 
 def _pinata() -> PinataClient:

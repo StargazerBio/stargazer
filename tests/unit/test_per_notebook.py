@@ -17,7 +17,7 @@ def _env(**overrides):
         "notebook_path": f"{WORKSPACE_NOTEBOOK_DIR}/demo.py",
         "owner_subject": SUBJECT,
         "admin_url": "http://admin",
-        "index_url": "http://dashboard.u-x-development.svc.cluster.local",
+        "index_url": "dsql://u_x@abc123.dsql.us-west-2.on.aws/assets.u_x?role_arn=arn",
     }
     kwargs.update(overrides)
     return per_notebook_env(**kwargs)
@@ -57,13 +57,13 @@ def test_pod_env_carries_owner_and_store_root(monkeypatch):
 
 
 def test_pod_env_carries_the_asset_store_and_index(monkeypatch):
-    """Assets go under the workspace root and are indexed through the dashboard."""
+    """Assets go under the workspace root and are indexed in the owner's table."""
     monkeypatch.setattr(config, "WORKSPACE_ROOT", "s3://bucket/stargazer")
     env = _env()
     assert env.env_vars["STARGAZER_STORE_ROOT"] == "s3://bucket/stargazer"
     assert (
         env.env_vars["STARGAZER_INDEX_URL"]
-        == "http://dashboard.u-x-development.svc.cluster.local"
+        == "dsql://u_x@abc123.dsql.us-west-2.on.aws/assets.u_x?role_arn=arn"
     )
 
 
