@@ -103,6 +103,13 @@ only thing that writes a notebook's code. Today the gear rewrites the stored
 source while a running pod holds its own copy, so a later save from the pod
 overwrites the gear's change. That's inferred from the code, not reproduced.
 
+Overtaken 2026-10-21, before this ticket started: commit `1e93fd5` (riding on
+PR #67) moved the resources into the setup block as `main_resources` and made
+the gear an editor on the whole setup block. So `[tool.stargazer]` and the
+gear's resource fields were already gone, and the gear stays a setup-block
+editor here: its save now evaluates `main_env` as launch does. The race with a
+running pod's save is unchanged and still unreproduced.
+
 **One notebook per pod.** The proxy refuses a kernel session for any
 notebook other than the one the pod was launched for, and sends the user to
 launch that notebook from the dashboard, on its own pod. That matches Colab,
@@ -128,16 +135,21 @@ visible in the explorer.
 
 ## Open questions
 
-- [ ] **Which requests open a notebook from the explorer?** It could be a
-      `?file=` page load, a websocket, or both. The proxy has to catch each
-      one. Not checked.
+- [x] **Which requests open a notebook from the explorer?** Both. Measured
+      on marimo 0.23.6 (2026-10-21), launched on `alpha.py`: `/?file=beta.py`
+      opened beta.py in the same server, and its page then opens
+      `/ws?session_id=…&file=…`. Edit mode adds any `file` to its allowlist
+      (`SessionManager.create_session` → `register_allowed_path`); run mode
+      keeps a fixed one. The launched notebook's own page and socket carry no
+      `file`. The frontend builds `?file=<encoded path>` for "Open notebook",
+      and `?file=__new__<id>` for a new notebook.
 - [ ] **Should a notebook own `scaledown_after`?** Leave it with the
       dashboard until a notebook needs it.
 
 ## Pieces (once the proposal is agreed)
 
-- [ ] `notebook_env` in `stargazer.notebooks`, beside `notebook_base`.
-- [ ] Find and evaluate `main_env` in `app/notebook_image.py`, the way
+- [x] `notebook_env` in `stargazer.notebooks`, beside `notebook_base`.
+- [x] Find and evaluate `main_env` in `app/notebook_image.py`, the way
       `main_img` is found and evaluated, and layer the dashboard's fields in
       `per_notebook_env`. Tests:
   - a notebook declaring `cpu=2, memory="4Gi"` and an apt package → the
@@ -150,12 +162,12 @@ visible in the explorer.
   - an expression that raises, or an image not built on `notebook_base` →
     a 422, as `main_img` gives today
   - the registry is the same size before and after a launch
-- [ ] The proxy refuses sessions for other notebooks and links to the
+- [x] The proxy refuses sessions for other notebooks and links to the
       dashboard. Test it against marimo's real requests, once the first open
       question is answered.
-- [ ] Remove the `[tool.stargazer]` resources, `main_img`, and the gear's
+- [x] Remove the `[tool.stargazer]` resources, `main_img`, and the gear's
       resource fields. The workspace template declares a `main_env`.
-- [ ] Docs:
+- [x] Docs:
   - `docs/architecture/notebook.md`: Notebook Environment
   - `docs/architecture/app.md`: "Resources live in the notebook" and
     "So does the image"
@@ -164,3 +176,26 @@ visible in the explorer.
 - [ ] Verify on Union with the `union-main-img` feature. Check the pod's
       cgroup limits against the declared resources, and check that opening a
       second notebook from the explorer sends you to the dashboard.
+
+## Progress
+
+Branch `feat/notebook-environment`, worktree `.claude/worktrees/notebook-environment`.
+
+- `5544c68` `main_env`: `notebook_env` and the default resources in
+  `stargazer.notebooks`; `app/notebook_environment.py` (renamed from
+  `notebook_image.py`) finds and evaluates it, and `forget_new_environments`
+  takes what a launch or gear save registered back out of flyte's registry
+  (only the CLI reads it, not `serve`). `per_notebook_env(declared=…)` clones
+  the declaration with the dashboard's fields; fields it doesn't set (pod
+  template, service account, interruptible, timeouts) pass through. An image
+  with no layers of its own serves as the prebuilt one, so sizing a pod works
+  on the devbox. Both templates declare a `main_env`.
+- `802cd02` one notebook per pod: the dashboard sets `SG_NOTEBOOK_PATH`, and
+  the proxy's `_OneNotebook` (inside the token gate) answers a request whose
+  `file` names another notebook, or `__new__…`, with a 409 page linking the
+  dashboard, or closes its websocket. Measured locally with the real proxy in
+  front of marimo 0.23.6 in Chrome: the refusal page for `?file=beta.py`, both
+  `beta.py` sockets refused before marimo, the launched notebook's socket
+  accepted.
+- `9801642` docs, and the verify-stargazer feature renamed `union-main-env`.
+- Unit tier: 553 passed.
