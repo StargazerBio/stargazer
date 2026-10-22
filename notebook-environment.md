@@ -111,7 +111,8 @@ gear's resource fields were already gone, and the gear stays a setup-block
 editor here: its save now evaluates `main_env` as launch does. The race with a
 running pod's save is unchanged and still unreproduced.
 
-**One notebook per pod.** The proxy refuses a kernel session for any
+**One notebook per pod** (dropped in review, 2026-10-22: other notebooks
+open in the pod and run in its environment, as the docs say). The proxy refuses a kernel session for any
 notebook other than the one the pod was launched for, and sends the user to
 launch that notebook from the dashboard, on its own pod. That matches Colab,
 and it keeps the declaration true: a notebook always runs on its own
@@ -216,3 +217,7 @@ Branch `feat/notebook-environment`, worktree `.claude/worktrees/notebook-environ
   redeploy. Only my notebook app was stopped, and that session's dashboard
   was left running. Not re-run, per the user.
 - In review as PR #79.
+- Review (2026-10-22): don't enforce one notebook per pod; marimo opening
+  other notebooks is fine, and a line in the docs says they run in the
+  launched notebook's environment. `7c28e90` reverts the proxy refusal and
+  `SG_NOTEBOOK_PATH` and adds that line. Unit tier: 521 passed.
