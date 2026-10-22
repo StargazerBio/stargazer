@@ -4,7 +4,7 @@ Deploy a Stargazer dashboard on the local devbox.
 
 The app tier is built for Union, where onboarding gives each user a project
 and Union's login sits in front of every app. The devbox has neither, so this
-calls the same `app.onboard.deploy_dashboard` with devbox settings, and
+calls the same `app.deploy.deploy_dashboard` with devbox settings, and
 everything devbox-specific about the dashboard lives here; `app/` stays
 target-agnostic:
 
@@ -43,8 +43,8 @@ import time
 from contextlib import contextmanager
 
 from app import config
+from app.deploy import deploy_dashboard
 from app.init import init
-from app.onboard import deploy_dashboard
 from stargazer.config import PROJECT_ROOT
 
 # The stand-in user, the bucket every devbox deploy stores under, and the

@@ -17,8 +17,9 @@ deployed into the owning user's own Flyte project (`u-<handle>`):
   to it; the store (`app.workspace_store`, object storage keyed by the
   user's Union subject) is the durable copy, pods are working copies.
 
-Both are deployed by `app.onboard` (`stargazer-users`), which an org admin
-runs to give a user their project, access and dashboard.
+Both are deployed through `app.deploy`, which onboarding (`stargazer-users`,
+in the infra repo) calls when an org admin gives a user their
+project, access and dashboard.
 
 Plus supporting modules: `identity`, `workspace_store`,
 `notebooks`, `notebook_meta` (what the dashboard reads from a notebook's

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app import config, onboard
+from app import config, deploy
 from stargazer.config import PROJECT_ROOT
 
 _spec = importlib.util.spec_from_file_location(
@@ -40,9 +40,9 @@ def test_deploys_the_dashboard_for_a_stand_in_on_the_devbox_store(monkeypatch):
         yield
         steps.append("closed")
 
-    monkeypatch.setattr(onboard.flyte, "with_servecontext", fake_servecontext)
-    monkeypatch.setattr(onboard, "_notebook_image", lambda: "reg/notebook-app:h1")
-    monkeypatch.setattr(onboard, "get_init_config", lambda: SimpleNamespace(org=None))
+    monkeypatch.setattr(deploy.flyte, "with_servecontext", fake_servecontext)
+    monkeypatch.setattr(deploy, "_notebook_image", lambda: "reg/notebook-app:h1")
+    monkeypatch.setattr(deploy, "get_init_config", lambda: SimpleNamespace(org=None))
     monkeypatch.setattr(devbox_dashboard, "storage_port_forward", fake_forward)
     assert devbox_dashboard.deploy() == "http://dashboard.devbox.example:30081"
     assert steps == ["open", "served", "closed"]

@@ -108,7 +108,7 @@ NOTEBOOK_RESOURCES = flyte.Resources(cpu=1, memory=("2Gi", "6Gi"), disk=NOTEBOOK
 
 
 # Layered build recipe. Consumed only by the deployer's build step
-# (`onboard.build_notebook_image`), which bakes the built, content-hashed URI
+# (`deploy.build_notebook_image`), which bakes the built, content-hashed URI
 # into each dashboard as `STARGAZER_NOTEBOOK_IMAGE`. A dashboard never resolves
 # this recipe itself: it has no Docker daemon or project layout, and the hash
 # its Python state would compute could differ from the deployer's. A unique URI

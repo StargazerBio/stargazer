@@ -9,7 +9,7 @@ Two kinds of Flyte `AppEnvironment` are defined here, and both sit behind the pl
 - **`app_env`** (the dashboard) — one per user, deployed into that user's own Flyte project. Renders their notebooks, keeps them in the workspace store, and launches notebook apps. It is keyed to its owner, and only its owner and the org's admins may open it.
 - **Per-notebook envs** — built by the `per_notebook_env()` factory (`app/per_notebook.py`), one `nb-{slug}-{mode}` env per launch, deployed into the same project and owned by the same user.
 
-A third piece runs outside the platform: **onboarding** (`app/onboard.py`, the `stargazer-users` command), which an org admin runs from their own machine to give a user their project, access and dashboard.
+A third piece runs outside the platform: **onboarding** (the `stargazer-users` command, kept in the infra repository beside the org's cloud infrastructure, which deploys dashboards through `app/deploy.py`), which an org admin runs from their own machine to give a user their project, access and dashboard.
 
 ## Topology
 
