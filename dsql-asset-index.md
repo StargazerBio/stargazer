@@ -125,7 +125,7 @@ This doesn't need that.
   a token from the assumed per-user role, retrying serialization errors, and
   reconnecting when a connection times out. `make_index` accepts the DSQL
   URL form.
-- [ ] **Onboarding:**
+- [ ] **Onboarding** (code done in infra, tenant check left):
   - `stargazer-users onboard` creates, on every call and safely when it
     already exists, the IAM role (trust as above, `dsql:DbConnect` on the
     cluster), then the user's table, role and grants as the DSQL admin.
@@ -134,7 +134,7 @@ This doesn't need that.
     only Flyte credentials. `upgrade` needs no AWS access.
   - `offboard` deletes the IAM role and keeps the table, as it keeps the
     user's notebooks.
-- [ ] **Deploys:** dashboards, notebook pods and the runs they start get
+- [x] **Deploys:** dashboards, notebook pods and the runs they start get
   the DSQL `STARGAZER_INDEX_URL`.
 - [ ] **Migration:** each existing user's rows (the test account and
   `u-pryce`) are restored from their Litestream replica once and inserted.
@@ -592,6 +592,12 @@ On branch `feat/dsql-asset-index` (`5237f5a`). `make_index` opens `dsql://<login
   - `u-pryce` (runs `u6kf7m48wzvl5j57htn5`, `ucwzjgc2hjh5ct6x6nwq`): upsert, a list-filter query, a miss, 10 concurrent merges on one row (all landed, 438–575 ms), get, delete. First call 723 ms cold (assume, sign, connect). Steady-state calls 21–41 ms on a fresh connection; on one reused connection a query is 2–3 ms. DNS 3 ms.
   - `flytesnacks` (run `u6kxp9r62c7vl4k7x7vg`): the same URL fails at `AssumeRoleWithWebIdentity` (`not authorized`).
 - **Not done, not needed yet:** connection reuse. ~30 ms a call is about what a call to the dashboard costs.
+
+## Onboarding and deploys (2026-10-21, unverified on the tenant)
+
+- **stargazer** `feat/dsql-asset-index` (`abf8e3d`): with `STARGAZER_DSQL_CLUSTER_ARN` set, `app.deploy` gives the dashboard the user's `dsql://` URL, built from names alone (`dsql_index_url`, `login_for`, `iam_role_name`, `DSQL_SCHEMA`); the dashboard hands it to its notebook pods, and the launcher skips Litestream. Unit tier 538 passed, postgres tier 20 passed.
+- **infra** `feat/dsql-user-index` (`b890b23`, local): `onboard` makes the IAM role, then the table, login, grants and IAM mapping as the DSQL admin (`stargazer_users/user_index.py`), each step checked first; `offboard` deletes the role. 24 tests passed, plus 2 against Postgres: `ensure_table_and_login` twice, then the login does every index call on its own table and is refused another user's table, `CREATE TABLE` and dropping its own.
+- Left to check: onboarding the test account with both, which needs the admin's AWS profile.
 
 ## Meanwhile
 
