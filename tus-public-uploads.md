@@ -1,6 +1,6 @@
 ---
 title: Public uploads over TUS, up to 10 GB
-status: review
+status: done
 priority: normal
 created: 2026-10-21
 pr: 80
@@ -43,3 +43,11 @@ On branch `feat/tus-public-uploads`:
   same bytes all `bafybeiakwauhpou45iceifmplyjqmla3anxe4dt3lkgnjka4r26c7vwefu`;
   the row showed green as the user's own. Then deleted from Pinata
   (`query` empty, `get` None) and every app in `u-pryce` stopped.
+
+## Outcome
+
+Shipped in PR #80 (merge `e38dd2c`). Public uploads from the asset page go over TUS through the dashboard to Pinata, up to 10 GB, and are kept only when Pinata's CID equals `CidBuilder`'s. `/assets/sign` and the browser→Pinata upload are gone.
+
+Verified with tests written first (unit tier 517, Pinata tier 13) and on Union with the test account in Chrome: a 150 MiB public upload in ~45 s, with the page's CID, the Public tab's record and `compute_cid` all matching, then deleted from Pinata. No comments on the PR.
+
+Left: nothing.

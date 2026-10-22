@@ -1,6 +1,6 @@
 ---
 title: Notebooks declare their own app environment
-status: review
+status: done
 priority: normal
 created: 2026-10-16
 pr: 79
@@ -221,3 +221,11 @@ Branch `feat/notebook-environment`, worktree `.claude/worktrees/notebook-environ
   other notebooks is fine, and a line in the docs says they run in the
   launched notebook's environment. `7c28e90` reverts the proxy refusal and
   `SG_NOTEBOOK_PATH` and adds that line. Unit tier: 521 passed.
+
+## Outcome
+
+Shipped in PR #79 (merge `f978578`). A notebook declares its pod as `main_env`, an `AppEnvironment` cloned from `stargazer.notebooks.notebook_env`. The dashboard evaluates it at launch and in the gear's save, clones it with the fields it owns, and takes both environments back out of flyte's registry. `main_img` and `main_resources` are gone. Review dropped the one-notebook-per-pod refusal (`7c28e90`): other notebooks open in the pod and run in its environment, as `docs/architecture/notebook.md` says.
+
+Verified on Union with the test account from `9801642`: a custom image with `bcftools` built and served, and the Edit pod's cgroup limits matching the declared 2 CPU and 4Gi. Unit tier 521 after the review commit. The rebased branch wasn't re-run on Union, per the user.
+
+Left: the race between a gear save and a running pod's save (ticket `gear-save-race`). Whether a notebook should own `scaledown_after` stays open until one needs it.
