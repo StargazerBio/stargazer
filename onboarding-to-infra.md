@@ -20,6 +20,6 @@ The per-user DSQL setup from ticket `dsql-asset-index` lands in infra after this
 ## Verification (2026-10-21)
 
 - stargazer, branch `refactor/onboarding-to-infra` (`fc74634`): unit tier 531 passed (the 20 onboarding tests moved out; the 9 deploy tests are `tests/unit/test_deploy.py`).
-- infra, branch `feat/onboarding` (`d1ca57e`, local, unmerged): its 20 onboarding tests pass against the stargazer branch on `PYTHONPATH`. The fake control plane also patches `app.deploy.active_runs`; without it ten tests reached a real, uninitialized Flyte client.
+- infra, branch `feat/onboarding` (`515c82b`, local, unmerged): its 20 onboarding tests pass against the stargazer branch on `PYTHONPATH`. The fake control plane also patches `app.deploy.active_runs`; without it ten tests reached a real, uninitialized Flyte client.
 - Real surface: `stargazer-users onboard --email pryce@stargazer.bio` from infra, against the branch. It found the existing user and project (no invite, no create), built `notebook-app-3921aa04…`, and deployed `dashboard` in `u-pryce` at version `69f99a2` (the branch before a wording-only amend): `DEPLOYMENT_STATUS_ACTIVE`, `STARGAZER_VERSION=69f99a2`, public URL 302 to Union's login. Then deactivated: `DESIRED_STATE_STOPPED`, no active apps in `u-pryce`, no running runs.
 - Order: infra's `main` imports `app.deploy`, so `feat/onboarding` merges there only after stargazer's PR merges.
