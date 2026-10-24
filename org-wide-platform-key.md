@@ -236,11 +236,14 @@ Measured on 2026-10-20 after onboarding the test account from the branch:
     the key (run `uzdk7d4z6vmjjk4n6svz`).
   - Torn down: both notebooks and the dashboard stopped, no live runs. The
     notebook "Key 1022" is left in the test account's workspace.
-- [ ] Delete the org key `393067446845621194` (an admin's step). Its
-  org-scoped secret `EAGER_API_KEY-union-us-west-2` still reaches any pod
-  that declares it: a `u-pryce` task declaring it got it (run
-  `uxs49wn5ht5x4shbqwbp`, checked set/unset only), so until the key is gone
-  any user's code can act as org-wide `contributor`.
+- [x] Delete the org secret `EAGER_API_KEY-union-us-west-2` (the user,
+  2026-10-24). Before, a `u-pryce` task declaring it got it (run
+  `uxs49wn5ht5x4shbqwbp`, checked set/unset only); now the pod webhook
+  refuses such a task at admission (run `u2wqkphhwpqw6x9nz44c`).
+- [ ] Delete the org key `393067446845621194` (an admin's step). It still
+  holds org-wide `contributor`, so any copy of it taken while Union
+  injected it still works. The admin console doesn't list it (nor
+  `stargazer-flytesnacks`); `ApiKey.delete` under an admin login does.
 - [ ] Clean up what the injection era left: the `EAGER_API_KEY` secrets in
   `u-pryce` and `flytesnacks` (three domains each, in Secrets Manager only)
   and key `stargazer-flytesnacks`.
