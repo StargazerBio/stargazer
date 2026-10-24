@@ -1,8 +1,9 @@
 ---
 title: Org-wide platform key in every pod
-status: doing
+status: review
 priority: high
 created: 2026-10-05
+pr: 82
 ---
 
 Every app and task pod authenticated as `stargazerbio-EAGER_API_KEY-union-us-west-2`, which
