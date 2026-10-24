@@ -41,7 +41,7 @@ On Union, `PINATA_JWT` is a Flyte secret ([The public tier](#the-public-tier)).
 
 ## Connecting to Flyte
 
-Notebooks, the MCP server and the tests connect with `init_flyte()` from `config.py`. Locally it reads `.flyte/config.yaml`, and with no config file runs stay in the caller's own process. A hosted notebook pod has no config file, so there it connects to the owner's project on the cluster the pod runs on. The app tier has its own init (`app.init`), which also accepts an API key, since the SDK never imports the app tier.
+Notebooks, the MCP server and the tests connect with `init_flyte()` from `config.py`. Locally it reads `.flyte/config.yaml`, and with no config file runs stay in the caller's own process. A hosted notebook pod has no config file, so there it connects to the owner's project on the cluster the pod runs on, with the project's own API key. On Union every task environment, dashboard and notebook pod declares that key as a secret (`PROJECT_KEY_SECRET`), as it does the Pinata key, since the platform gives pods none of its own ([App Tier → Core Concepts](app.md#core-concepts)). The app tier has its own init (`app.init`), which also accepts an API key, since the SDK never imports the app tier.
 
 ## Writing and reading
 

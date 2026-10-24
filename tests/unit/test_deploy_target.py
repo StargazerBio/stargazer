@@ -62,6 +62,24 @@ def test_target_is_forwarded_into_pods():
     assert _fresh(code, STARGAZER_TARGET="union") == "union"
 
 
+_SECRETS = (
+    "from stargazer.config import STARGAZER_SECRETS as s; "
+    "print(sorted((x.key, x.as_env_var) for x in s))"
+)
+
+
+def test_union_pods_call_union_as_their_project():
+    """Every pod on Union gets its project's key where flyte's in-cluster client reads it."""
+    assert "('UNION_API_KEY', '_UNION_EAGER_API_KEY')" in _fresh(
+        _SECRETS, STARGAZER_TARGET="union"
+    )
+
+
+def test_devbox_pods_get_no_union_key():
+    """The devbox has no key to give, and a declared secret it lacks stops the pod."""
+    assert "UNION_API_KEY" not in _fresh(_SECRETS)
+
+
 _APP = "from app import config as c; print(c.TARGET, c.FLYTE_CONFIG.name)"
 
 
