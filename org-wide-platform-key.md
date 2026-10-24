@@ -1,6 +1,6 @@
 ---
 title: Org-wide platform key in every pod
-status: review
+status: done
 priority: high
 created: 2026-10-05
 pr: 82
@@ -249,3 +249,25 @@ Measured on 2026-10-20 after onboarding the test account from the branch:
   `u-pryce` and `flytesnacks` (three domains each, in Secrets Manager only)
   and key `stargazer-flytesnacks`.
 - [ ] `pause` / `resume` in `stargazer-users`.
+
+## Outcome
+
+Shipped in PR #82 (`f0edb6e`, merged 2026-10-24 as `403fefb`) and infra
+`08dcab3` and `48c18be` (pushed 2026-10-24). On Union every pod declares its
+project's key, secret `UNION_API_KEY`, as `_UNION_EAGER_API_KEY`.
+`stargazer-users` `onboard` and `upgrade` create the key, holding only the
+project's policy, and its secret; `offboard` deletes both. `48c18be` lifts
+`ApiKey.listall`'s 100-key cap, found after the PR by checking the tests'
+fakes against Union's API.
+
+Verified on Union with the test account (Our side, above): `upgrade` keyed
+`u-pryce`, a parent launched its child, the key was refused in
+`flytesnacks`, and a dashboard notebook launched and its kernel's remote run
+succeeded, all as the project key. The user deleted the org secret on
+2026-10-24. Not run on Union: `onboard` for a new user and `offboard`, which
+create and archive projects that can't be deleted, and registering a task or
+serving an app in another project under the project key.
+
+Left: deleting the org key and the injection era's other keys and secrets
+(ticket `retire-org-key`), and `pause` / `resume` (ticket
+`pause-resume-users`).
