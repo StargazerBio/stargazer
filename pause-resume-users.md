@@ -1,6 +1,6 @@
 ---
 title: Pause and resume a user
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-24
 ---
