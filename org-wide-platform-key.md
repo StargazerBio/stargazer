@@ -264,9 +264,14 @@ Verified on Union with the test account (Our side, above): `upgrade` keyed
 `u-pryce`, a parent launched its child, the key was refused in
 `flytesnacks`, and a dashboard notebook launched and its kernel's remote run
 succeeded, all as the project key. The user deleted the org secret on
-2026-10-24. Not run on Union: `onboard` for a new user and `offboard`, which
-create and archive projects that can't be deleted, and registering a task or
-serving an app in another project under the project key.
+2026-10-24. After the org key's deletion that day, a `u-pryce` task holding
+the project key launched its child and was refused everything else it tried
+(run `uf424d77g8nrhl9sfnwb`): in `flytesnacks`, listing runs, starting a
+run, registering a task, serving an app, and listing or writing secrets; and
+org-wide, listing API keys, granting itself `contributor`, and minting a key
+with Union's default policies (`ACTION_MANAGE_PERMISSIONS`). Not run on
+Union: `onboard` for a new user and `offboard`, which create and archive
+projects that can't be deleted.
 
 Left: deleting the org key and the injection era's other keys and secrets
 (ticket `retire-org-key`), and `pause` / `resume` (ticket
