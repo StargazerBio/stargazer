@@ -189,7 +189,7 @@ Rewritten after measuring the cap (see Decisions): 9, not 10, and uploads only.
   which round-trips it through Flyte's type engine, and also finds it with
   `assemble(lane=...)`. Both copies must be `R1` with the extra key intact. Add
   the test to `tests/devbox/test_asset_storage.py` and a sub-feature line to
-  `.claude/skills/verify-stargazer/features/devbox-asset-storage.md`. Run with
+  the asset storage recipe, now in ticket `devbox-postgres-index`. Run with
   the `verify-stargazer` skill.
 - [x] **MCP.** `upload_file` with `asset=alignment, lane=3`, then `query_files`
   with `lane=3`: the record comes back with `lane`.
