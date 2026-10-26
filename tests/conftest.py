@@ -3,7 +3,7 @@
 Every top-level directory under tests/ belongs to exactly one tier, and its
 tests carry that tier's marker (`TIERS`). A bare run selects the unit tier
 (`addopts` in pyproject.toml); `-m tasks`, `-m devbox`, `-m pinata` or
-`-m postgres` selects another. .opencode/agent/test.md → Test Tiers has where each one runs.
+`-m postgres` selects another. The write-tests skill's Test Tiers has where each one runs.
 
 PINATA_JWT is stripped before any stargazer imports, so storage runs without
 the public tier; the pinata tier's conftest sets it back for its own tests.

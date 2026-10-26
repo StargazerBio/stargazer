@@ -61,7 +61,7 @@ uv run --all-extras pytest -m postgres                # the index on Postgres, i
 - **Pinata** (`tests/pinata`) calls the real Pinata API with the key in `tests/.secrets/pinata_jwt`, and fails without it.
 - **Postgres** (`tests/postgres`) runs the index tests against a Postgres 16 container it starts and removes itself, so it needs Docker running. Run it when you change the index.
 
-Outside its tier a test is deselected, never skipped, and inside it a missing tool or service fails the run. A new directory under `tests/` needs a tier in `TIERS` in `tests/conftest.py`. The full testing conventions are in [`.opencode/agent/test.md`](https://github.com/StargazerBio/stargazer/blob/main/.opencode/agent/test.md).
+Outside its tier a test is deselected, never skipped, and inside it a missing tool or service fails the run. A new directory under `tests/` needs a tier in `TIERS` in `tests/conftest.py`. The full testing conventions are in [the `write-tests` skill](https://github.com/StargazerBio/stargazer/blob/main/.claude/skills/write-tests/SKILL.md).
 
 ## Code Style
 

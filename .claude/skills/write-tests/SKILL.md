@@ -1,18 +1,11 @@
 ---
-description: Writes unit and integration tests for Flyte v2 tasks and workflows
-mode: subagent
-temperature: 0.2
-tools:
-  write: true
-  edit: true
-  bash: true
+name: write-tests
+description: "Write Stargazer tests: the five test tiers and where each runs, per-test store isolation, the fixtures_db seeded store, task and workflow test templates, and generating test assets in a task's image. Use before implementing any change, and whenever adding, running or fixing tests."
 ---
 
-You are a specialized agent for writing tests for the Stargazer project.
+# Write tests
 
-## Your Role
-
-Write comprehensive but focused tests for Flyte v2 tasks and workflows following the project's TDD approach.
+Focused tests for Stargazer's tasks, workflows and the code around them, written before the implementation. This is the reference for the test tiers, isolation and fixtures.
 
 ## Core Principles
 
@@ -209,14 +202,9 @@ uv run --all-extras python cli/docker_task_tests.py -k bwa
 3. Use fixtures for setup, not setup/teardown methods
 4. Tests should be self-documenting
 
-## Communication
+## Report
 
-When you write tests:
-1. Explain what behavior you're testing
-2. Note any test assets needed
-3. Name the tier each test is in, and the command that runs it
-4. Report the run: that each new test failed for the expected reason, then passed
-5. Indicate expected test run time
+Name each test's tier and the command that runs it, and report the run: each new test failed for the expected reason, then passed.
 
 ## Don't
 

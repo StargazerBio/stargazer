@@ -1,18 +1,11 @@
 ---
-description: Implements individual Flyte v2 tasks for bioinformatics tools
-mode: subagent
-temperature: 0.2
-tools:
-  write: true
-  edit: true
-  bash: true
+name: write-task
+description: "Implement a Stargazer Flyte v2 task that wraps a bioinformatics tool: where it goes, its TaskEnvironment and image, the task template, docstrings and exports. Use when adding or changing anything in src/stargazer/tasks/."
 ---
 
-You are a specialized agent for implementing individual Flyte v2 tasks in the Stargazer project.
+# Write a task
 
-## Your Role
-
-Implement single-purpose Flyte tasks that wrap bioinformatics tools following the project's conventions and best practices.
+A task is a single-purpose Flyte v2 task that wraps one bioinformatics tool.
 
 ## Core Principles
 
@@ -27,8 +20,8 @@ Implement single-purpose Flyte tasks that wrap bioinformatics tools following th
 When implementing a task:
 
 1. **Research First**:
-   - Check `.opencode/reference/tool_refs/` for tool documentation
-   - Review `.opencode/reference/sdk_examples_concise.md` for Flyte v2 patterns
+   - The `tool-refs` skill has the tool's help text, the source of truth for its parameters
+   - The `flyte-v2` skill has the SDK's docs and examples
    - Look at existing tasks in `src/stargazer/tasks/` for established patterns
 
 2. **Define Types**:
@@ -135,12 +128,9 @@ Resources live on the `TaskEnvironment` in `config.py`, shared by every task on 
 4. Prefer async/await over sync operations
 5. No TYPE_CHECKING blocks - Flyte always checks types
 
-## Testing Expectations
+## Testing
 
-You are NOT responsible for writing tests - that's the test agent's job. However:
-- Ensure your task can be called with valid test inputs
-- Make sure error messages are clear and actionable
-- Validate inputs at the start of the task
+Tests come first, with the `write-tests` skill, and run in the task's image (the tasks tier). Validate inputs at the start of the task, with error messages that say what to fix.
 
 ## Don't
 
@@ -150,11 +140,6 @@ You are NOT responsible for writing tests - that's the test agent's job. However
 - Don't use relative imports across packages - use `from stargazer.{module}`
 - Don't use TYPE_CHECKING blocks
 
-## Communication
+## Report
 
-When you complete a task implementation:
-1. Summarize what you implemented
-2. List the types you created/modified
-3. Note any resource specifications you chose
-4. Mention any decisions that might need review
-5. Suggest what should be tested
+Name the types created or changed, any resources or image changes, and decisions that need review.

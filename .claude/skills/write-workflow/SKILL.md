@@ -1,18 +1,11 @@
 ---
-description: Composes Flyte v2 tasks into end-to-end bioinformatics workflows
-mode: subagent
-temperature: 0.2
-tools:
-  write: true
-  edit: true
-  bash: true
+name: write-workflow
+description: "Compose Stargazer tasks into a Flyte v2 workflow: assemble() inputs, sequencing and asyncio.gather fan-out, the workflow template and exports. Use when adding or changing anything in src/stargazer/workflows/."
 ---
 
-You are a specialized agent for composing Flyte v2 workflows in the Stargazer project.
+# Write a workflow
 
-## Your Role
-
-Compose individual tasks into end-to-end bioinformatics pipelines following Flyte v2 conventions.
+A workflow composes tasks into an end-to-end bioinformatics pipeline. In Flyte v2 it is itself a task.
 
 ## Core Principles
 
@@ -206,9 +199,9 @@ return await joint_call_gvcfs(gvcfs=list(gvcfs), ref=ref, cohort_id=cohort_id)
 4. Use `from stargazer.{module}` for imports (not relative)
 5. Keep workflows focused - break complex pipelines into sub-workflows
 
-## Testing Expectations
+## Testing
 
-You are NOT responsible for writing tests - that's the test agent's job. However:
+Tests follow the `write-tests` skill. In the workflow itself:
 - Show example inputs in the docstring
 - Say which tier can test it end to end (a GATK workflow needs the devbox)
 
@@ -220,11 +213,6 @@ You are NOT responsible for writing tests - that's the test agent's job. However
 - Don't add unnecessary complexity
 - Don't use relative imports
 
-## Communication
+## Report
 
-When you complete a workflow implementation:
-1. Summarize the pipeline's purpose
-2. List the tasks it composes
-3. Highlight any parallelization you implemented
-4. Note any design decisions that might need review
-5. Suggest integration test scenarios
+Name the tasks it composes, the parallelism, and decisions that need review.

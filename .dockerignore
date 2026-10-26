@@ -17,10 +17,8 @@ __marimo__/
 .git
 .github
 .codex
-.opencode
-.claude/skills
-.claude/worktrees
-.claude/settings.local.json
+.claude
+.mcp.json
 docs
 site
 tests

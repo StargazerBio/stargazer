@@ -154,7 +154,6 @@ cython_debug/
 flyte-*.yaml
 _pb_output/
 *.pb
-.opencode/reference/raw/*
 
 # OS-specific
 .DS_Store
@@ -170,10 +169,12 @@ Thumbs.db
 *.temp
 *.bak
 
-# Local configuration
+# Local configuration. Claude Code's shared config is tracked; the rest of
+# .claude/ (worktrees, local settings, brainstorm) is local.
 .claude/*
 !.claude/settings.json
 !.claude/skills/
+!.claude/agents/
 *.local.*
 
 # Test secrets (JWT tokens, API keys). No trailing slash, so a worktree's
@@ -183,14 +184,6 @@ tests/.secrets
 # Marimo cache
 src/stargazer/notebooks/**/__marimo__/
 .codex/config.toml
-
-# Frozen v1 snapshot, kept out of the repo. Was tracked reference material;
-# untracked deliberately — nothing imports it and it is not maintained.
-.opencode/reference/stargazer_flyte_v1/
-
-# Unslotted, not-yet-planned ideas (moonshots, economics). Local only; promote
-# to a ticket in planning/ when the work is activated.
-.opencode/brainstorm/
 
 # The planning branch's worktree: tickets live there, never on main.
 /planning/

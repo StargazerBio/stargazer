@@ -1,3 +1,8 @@
+---
+name: marimo-inline-deps
+description: "marimo's docs on inlining a notebook's dependencies: PEP 723 script metadata, --sandbox runs, and how marimo manages the block. Use when a notebook's `# /// script` dependencies or a sandboxed marimo run are in play."
+---
+
 <!-- Source: https://docs.marimo.io/guides/package_management/inlining_dependencies/ -->
 
 # Inlining dependencies

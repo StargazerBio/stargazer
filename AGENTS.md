@@ -1,7 +1,6 @@
 # Stargazer
 
 **General Guidelines**
-- Always call `ToolSearch` to fetch the schema of any deferred MCP tool before invoking it.
 - When I say task, I am referring to a Flyte V2 task, not a raw python function
 - Tasks are collected into workflows which are just regular tasks calling other tasks, sync or async
 - This project uses UV so the appropriate commands are `uv add` and `uv pip install -e .`
@@ -13,7 +12,7 @@
 - Every change gets its own worktree, on its own branch cut from an up-to-date `origin/main`. Name the branch after the change in short kebab-case (e.g. `fix/scrna-oom`, `docs/branch-pr-workflow`) and the worktree after its slug, under `.claude/worktrees/` (gitignored): `git fetch origin && git worktree add --no-track .claude/worktrees/scrna-oom -b fix/scrna-oom origin/main`. Claude Code's `EnterWorktree` makes them in the same place. All work happens in the worktree; the main checkout stays on a clean `main`. Never commit directly to `main`
 - A new worktree has none of the gitignored local state. `uv run` builds it its own `.venv`, but link the rest from the main checkout as the work needs it: `.flyte/config.yaml` and `.flyte/union.yaml` for anything that talks to Flyte (devbox tier, deploys), `tests/.secrets` for the pinata tier. From the worktree root: `MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")`, then `mkdir -p .flyte && ln -s "$MAIN"/.flyte/{config,union}.yaml .flyte/` and `ln -s "$MAIN/tests/.secrets" tests/.secrets`
 - One change per worktree. An unrelated fix spotted along the way gets its own worktree and PR, or a ticket
-- Small doc-only edits (a rule in this file, a stale reference in `docs/` or `.opencode/reference/`) don't get their own PR. Commit them on whichever branch is in progress or next to open, related or not, and list them under their own heading in that PR's description
+- Small doc-only edits (a rule in this file, a stale reference in `docs/` or a skill) don't get their own PR. Commit them on whichever branch is in progress or next to open, related or not, and list them under their own heading in that PR's description
 - Follow-up work on a branch that is still unmerged (changes to the same feature, fixes, or review feedback) is committed in that branch's worktree, not on a new branch cut from it. Keep the merge tree flat: a new branch is only for a new, independent change cut from `main`
 - Commit on the branch as the work progresses; no need to ask first. Never force-push `main`
 - When the change is done (tests pass, verified on its real surface), push the branch and open a PR against `main` with `gh pr create`. The description says what changed and why, the verification evidence, and anything deferred
@@ -45,65 +44,33 @@
 - When adding a task that wraps a new CLI tool, check the `TaskEnvironment` it is decorated against in `src/stargazer/config.py` and confirm the tool is layered onto that env's `flyte.Image` (via `with_apt_packages`, `with_commands`, or the bioconda block in `_BIOCONDA_INSTALL`). If it is missing, add it and notify the user.
 - When defining a new `TaskEnvironment` in `src/stargazer/config.py`, always call `.with_uv_project(PROJECT_ROOT / "pyproject.toml")` on its image so the stargazer package and its pip deps end up installed, and set explicit `resources=` (e.g. `flyte.Resources(memory=("2Gi", "6Gi"))`). The devbox node has ~7.75 GiB allocatable and a workflow's pods must fit together in ~6 GiB — see the header of `devbox/setup.sh`.
 - **CRITICAL** Do not consider backwards compatibility unless explicitly requested!
-- **Keep development minutiae out of user-facing surfaces.** App UI strings/pages, user guides, and the README describe behavior in product terms — a limit, what a control does, what an error means. Do **not** leak implementation detail into them: internal vendor/service names, env vars, workaround mechanisms, ticket/plan references, or "X limit, not ours" rationalizations. (E.g. an upload cap reads "100 MB", not "100 MB — a Pinata limit; larger needs TUS".) That rationale lives in code comments, `.opencode/` references, and tickets — and architecture docs under `docs/architecture/` may name internals since they're the technical spec, not a product surface.
+- **Keep development minutiae out of user-facing surfaces.** App UI strings/pages, user guides, and the README describe behavior in product terms — a limit, what a control does, what an error means. Do **not** leak implementation detail into them: internal vendor/service names, env vars, workaround mechanisms, ticket/plan references, or "X limit, not ours" rationalizations. (E.g. an upload cap reads "100 MB", not "100 MB — a Pinata limit; larger needs TUS".) That rationale lives in code comments, skills, and tickets — and architecture docs under `docs/architecture/` may name internals since they're the technical spec, not a product surface.
 - Run `uv run ruff check --fix . && uv run ruff format .` after every set of changes to satisfy the pre-commit. This only holds because the ruff version is pinned in **two** places that must match: `rev:` in `.pre-commit-config.yaml` (pre-commit builds its own isolated env) and the `ruff` pin in `pyproject.toml`'s dev group. Bump them together — when they drifted across 0.14→0.16, ruff's *default* rule set went from 59 rules to 413 and the two gates silently enforced different things. Deliberate rule exceptions live in `[tool.ruff.lint]` in `pyproject.toml`, each with a comment saying why.
 - Ruff also enforces the import layers (`TID251`): a module never imports from a layer above its own. Each layer's directory has a `ruff.toml` banning the layers above it; the rules are in `src/stargazer/ruff.toml`. A nested file's ban list replaces its parent's, so a new layer directory lists every ban that applies to it. To see the import graph, `cli/diagrams.sh` draws it into the gitignored `diagrams/`, with its own `diagrams` dependency group (see `cli/README.md`).
 - Prefer bounded version ranges (`>=X,<Y`) over open-ended ones for anything whose API you import. Two breakages this project has actually hit came from unbounded pins walking across a major: `ruff` (rule-set change) and `mcp` (1.x→2.0 renamed `FastMCP`/`mcp.server.fastmcp` to `MCPServer`/`mcp.server`).
 
-## OpenCode Agent Definitions
+## Skills and Agents
 
-The `.opencode/agent/` directory contains specialized agent definitions for [OpenCode](https://github.com/sst/opencode), an AI coding assistant. These markdown files define role-specific personas that can be invoked as subagents, each with tailored instructions, temperature settings, and tool permissions.
-
-### Available Agents
-
-| Agent | File | Purpose |
-|-------|------|---------|
-| **Architecture** | `architecture.md` | Designs features as tickets in `planning/` and maintains docs in `docs/` |
-| **Task** | `task.md` | Implements individual Flyte v2 tasks for bioinformatics tools |
-| **Test** | `test.md` | Writes tests following the TDD approach; the reference for test tiers, isolation and fixtures |
-| **Workflow** | `workflow.md` | Composes Flyte v2 tasks into end-to-end pipelines |
-| **Code Review** | `code-review.md` | Strict code reviewer that audits for edge cases, UX issues, and data provenance |
-| **Technical Writer** | `technical-writer.md` | Writes and edits user-facing docs — assumes competent readers, never gatekeeps surfaces by role |
-
-### Agent File Format
-
-Each agent file uses YAML frontmatter to configure behavior:
-```yaml
----
-description: Brief description of the agent's role
-mode: subagent
-temperature: 0.2  # Lower = more deterministic
-tools:
-  write: true
-  edit: true
-  bash: true
----
-```
-
-The markdown body contains detailed instructions including:
-- Role definition and core principles
-- Implementation templates and patterns
-- Project-specific rules (imports, async patterns, types)
-- Checklists and communication guidelines
-
-### When to Use
-
-- **architecture agent**: When designing a new feature or updating system specs
-- **task agent**: When implementing a new bioinformatics tool wrapper
-- **test agent**: When writing tests for tasks or workflows
-- **workflow agent**: When composing tasks into pipelines
-- **code-review agent**: Before merging code, to catch issues early
-- **technical-writer agent**: When writing or revising prose in `docs/` — tone, framing, and doc conventions
-
-## Agent Skills
-
-`.claude/skills/<name>/SKILL.md` holds workflow skills in the shared Agent Skills format. Claude Code and OpenCode both discover this directory. Several are adapted from [pstack](https://github.com/cursor/plugins/tree/main/pstack) (MIT).
+The agent harness is Claude Code's, kept in the formats other harnesses read too: this file for instructions, `.claude/skills/<name>/SKILL.md` for skills (the shared Agent Skills format), `.claude/agents/` for subagents, `.mcp.json` for the Stargazer MCP server and `.claude/settings.json` for shared settings. A skill's description says when to use it; its body loads only then, and the files beside it only when the body points to them. Several skills are adapted from [pstack](https://github.com/cursor/plugins/tree/main/pstack) (MIT).
 
 | Skill | Use it when |
 |-------|-------------|
+| `write-task` | Adding or changing a task in `src/stargazer/tasks/` |
+| `write-workflow` | Adding or changing a workflow in `src/stargazer/workflows/` |
+| `write-tests` | Writing or running tests. The reference for the test tiers, isolation and fixtures |
+| `architecture` | Planning a feature as a ticket, or checking whether a change needs a doc update |
+| `write-docs` | Writing or editing anything under `docs/`: voice and doc conventions |
 | `bug-fix` | A defect is reported. Reproduce on the same surface, find the cause by elimination, fix at the root, verify on the same surface |
 | `blast-radius` | A change could break something outside its diff (stored keyvalues, MCP wire format, Flyte images, notebook imports). Proves the one fact it's safe because of by running code |
 | `verify-stargazer` | Before declaring a task, workflow, or notebook change done. Drives notebooks headless against an isolated asset store and checks the stored outputs, and checks asset storage and the germline workflow on the devbox, and a notebook launched with `main_env` on the Union tenant. Its `features/` map is the maintained list of what can be verified and how; add a feature file once a feature has been driven end to end |
+| `flyte-v2` | Reference: the Flyte v2 SDK's docs and example patterns |
+| `tool-refs` | Reference: the help text of the GATK and Parabricks commands tasks wrap, the source of truth for their parameters |
+| `marimo-inline-deps` | Reference: marimo's inline script dependencies and sandboxed runs |
+| `app-internals` | Reference: the `app/` tier's multi-module internals, companion to `docs/architecture/app.md` |
+
+| Subagent | Use it for |
+|----------|------------|
+| `code-reviewer` | A strict, evidence-backed review of a diff or branch before its PR opens, in its own context |
 
 ## Docstring Spec References
 
@@ -128,19 +95,16 @@ The `spec:` line is **module-level only** — class and function docstrings do n
 
 ## Specs, Tickets and Reference Materials
 
-- **`.opencode/reference/flyte_v2_docs.md`** - Official Flyte v2 documentation
-- **`.opencode/reference/sdk_examples_concise.md`** - Flyte SDK v2 examples
 - **`devbox/`** - The local devbox's own infrastructure. [`devbox/setup.sh`](./devbox/setup.sh) readies a fresh devbox, and each of its steps carries the quirk it works around, and its header lists the steps and what it can't fix. Kubernetes objects live beside it as YAML files it applies. Check it first when deploying to or debugging the devbox, and run it after recreating the container. A new devbox quirk becomes a step with its reason in the comments, or, when the fix is in app code, a comment at that code. When one is fixed upstream or no longer applies, delete its step; a retired workaround is noise.
-- **`.opencode/reference/tool_refs/`** - Bioinformatics tool documentation, use as the source of truth for tool parameters and behavior
-- **`.opencode/reference/architecture/`** - Deep, agent-facing internals for Stargazer's *own* subsystems (vs. `tool_refs/` and the Flyte docs, which are external). Verbose by design — the cross-cutting, multi-module implementation detail that's too granular for the human-facing `docs/architecture/` doc but valuable context when working on that subsystem. Each file is the companion to a `docs/architecture/*.md` doc, which links to it. Keep them in sync when you change the subsystem. (e.g. `app_internals.md` ↔ `docs/architecture/app.md`.)
+- **Internals skills** (`app-internals`) - Deep, agent-facing internals for Stargazer's *own* subsystems (vs. `tool-refs` and `flyte-v2`, which are external). Verbose by design — the cross-cutting, multi-module implementation detail that's too granular for the human-facing `docs/architecture/` doc but valuable context when working on that subsystem. Each is the companion to a `docs/architecture/*.md` doc, which links to it. Keep them in sync when you change the subsystem
 - **`docs/`** - Project documentation (architecture, guides, reference)
   - **Critical**: Docs must be updated as the project evolves to stay in sync with the current state
   - No code in architecture docs - these are high-level references supported by docstrings in the actual functions
-  - Durable docs (`docs/`, `.opencode/reference/`, this file) describe how things are now. Don't log what changed, what's gone or which ticket did it: that history is in commit messages and PR descriptions, and in a durable doc it only adds to every agent's context
+  - Durable docs (`docs/`, skills, this file) describe how things are now. Don't log what changed, what's gone or which ticket did it: that history is in commit messages and PR descriptions, and in a durable doc it only adds to every agent's context
   - Guides are the only docs that contain code examples
   - **Every doc must be reachable from the `nav` in `zensical.toml`.** The nav is hand-maintained, so a new `docs/**/*.md` is invisible (built but unlinked) until you add it. Whenever you add, rename, move, or delete a doc, update `nav` to match, then verify nothing is orphaned: every file under `find docs -name '*.md'` must appear in `zensical.toml`'s `nav` (mkdocstrings-target files like `reference/api.md` included). A new architecture/notebook subpackage also needs an `__init__.py` with the `###` heading + `spec:` line, or the docs build fails to collect it.
 - **`planning/`** - Tickets, one markdown file per piece of work, on the `planning` branch. That branch is never merged into anything. Its only history in common with `main` is `main`'s first commit, which lets it hold a standing draft PR (#22) so GitHub doesn't offer to open a PR after every ticket push. Leave that PR open and don't treat it as review work. It is checked out exactly once, as a worktree at the main checkout's `planning/` (gitignored on `main`), and every session and the Obsidian board use that one copy, so a ticket edit is visible everywhere as soon as it's saved. From any worktree it's `$MAIN/planning`, with `MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")`. A fresh clone sets it up from the main checkout with `git fetch origin planning && git worktree add planning planning`.
-  - **What's a ticket:** each is named after its slug, which is also its branch's slug (`planning/scrna-oom.md` ↔ `fix/scrna-oom`). Known gaps, deferred work and "open issues" are tickets, **not** notes scattered across `docs/`: when you defer something or surface a production gap while working, write a ticket rather than leaving an "Open Issues" section in an architecture doc. A sub-item that will ship in its own PR is its own ticket. An idea that's being weighed but isn't committed to is a ticket with `status: maybe`; like every ticket, it's public. Private drafts go in `.opencode/brainstorm/` (below), never here.
+  - **What's a ticket:** each is named after its slug, which is also its branch's slug (`planning/scrna-oom.md` ↔ `fix/scrna-oom`). Known gaps, deferred work and "open issues" are tickets, **not** notes scattered across `docs/`: when you defer something or surface a production gap while working, write a ticket rather than leaving an "Open Issues" section in an architecture doc. A sub-item that will ship in its own PR is its own ticket. An idea that's being weighed but isn't committed to is a ticket with `status: maybe`; like every ticket, it's public. Private drafts go in `.claude/brainstorm/` (below), never here.
   - **Frontmatter:** `title` (plain text, no markdown), `status` (`maybe`, `backlog`, `next`, `doing`, `review` or `done`), `priority` (`high`, `normal` or `low`), `created` (`YYYY-MM-DD`). Add `blocked_by` (a list of slugs) or `pr` only when a ticket needs them. Obsidian rewrites the whole block when a card is dragged, so write it the way Obsidian would: no comments, lists one item per line. The `planning` branch's pre-commit checks this.
   - **Body:** what and why first. A small ticket is a paragraph; a big one carries the full plan, with pieces as checkboxes ticked as the work lands, and the verification evidence. Tickets are the only place outside `src/` where code snippets are allowed.
   - **Lifecycle:** `maybe` until it's decided the work will happen, then `backlog`; `doing` when you cut the change's worktree; `review` and `pr: <number>` when its PR opens; after it merges, `done` and an `## Outcome` section (what shipped, how it was verified, what's left), in the same step that removes the worktree. In that step, also take the ticket out of every other ticket's `blocked_by` (dropping the key once its list is empty), and move a ticket it was holding back to `next` if it's next in line. Done tickets stay in place.
@@ -149,10 +113,10 @@ The `spec:` line is **module-level only** — class and function docstrings do n
   - **Referencing:** files on `main` mention a ticket by slug (ticket `internal-address-auth`), never by path, since `main` can't link into another branch.
   - **Board:** `board.base` is a kanban grouped by `status`; open `$MAIN/planning` as an Obsidian vault to see it. From a shell, `grep -l '^status: next' "$MAIN"/planning/*.md`.
   - **`archive/`** is frozen history from before tickets: the numbered plans `01`–`27`, and `COMPLETE.md`, the old roadmap's Complete list.
-- **`.opencode/brainstorm/`** - Unslotted ideas, moonshots, and exploratory design that are not tickets yet. **Gitignored and local only** — nothing here is committed or pushed, so it is the place for drafts that should not become public history.
+- **`.claude/brainstorm/`** - Unslotted ideas, moonshots, and exploratory design that are not tickets yet. **Gitignored and local only** — nothing here is committed or pushed, so it is the place for drafts that should not become public history.
   - Files are unnumbered and free-form; they don't follow ticket conventions or need to stay in sync with the code
   - Never link to a brainstorm file from anything tracked (`docs/`, tickets, code comments) — the link would dangle for everyone else
-  - Read it for context when asked about future direction, but don't treat it as a spec or a commitment
+  - From a worktree it's `$MAIN/.claude/brainstorm`. Read it for context when asked about future direction, but don't treat it as a spec or a commitment
   - **Promoting** an idea: write a ticket in `planning/` (`maybe` or `backlog`). Copy in what survives rather than moving the brainstorm file, and leave the brainstorm file in place
 
 ## Project Structure
@@ -187,17 +151,15 @@ The project follows this structure:
   - `devbox/` - The devbox tier: dashboard deploy, asset storage across pods, the germline workflow. `pod_tasks.py` holds what runs in their pods
   - `pinata/` - The pinata tier: the Pinata client against the real API
   - `postgres/` - The postgres tier: the index tests against a throwaway Postgres container
-  - Each top-level directory here belongs to exactly one tier (`TIERS` in `conftest.py`); `.opencode/agent/test.md` → Test Tiers says how each runs. A bare `uv run --all-extras pytest` is the `unit` tier and runs in pre-commit
+  - Each top-level directory here belongs to exactly one tier (`TIERS` in `conftest.py`); the `write-tests` skill's Test Tiers says how each runs. A bare `uv run --all-extras pytest` is the `unit` tier and runs in pre-commit
 - `cli/` - Developer scripts: `docker_task_tests.py` (the tasks tier), `upload_to_pinata.py`, `diagrams.sh` (see `cli/README.md`)
 - `.github/workflows/` - CI: `stargazer-image.yml` (publishes the `stargazer` container image) and `docs.yml` (the docs site)
 - `docs/` - Project documentation
   - `architecture/` - System design and contracts
   - `guides/` - Step-by-step walkthroughs with code examples
   - `reference/` - API reference (catalog of tasks and types)
-- `.opencode/reference/` - Agent-facing reference materials (Flyte docs, tool refs)
-- `.opencode/brainstorm/` - Gitignored, local-only unslotted ideas and moonshots
 - `planning/` - Gitignored on `main`: the `planning` branch's worktree, holding the tickets and the Obsidian board
-- `.claude/skills/` - Agent workflow skills (see Agent Skills above)
+- `.claude/` - The agent harness (see Skills and Agents above): `skills/` and `agents/` are tracked; `worktrees/`, `brainstorm/` (local-only unslotted ideas and moonshots) and `settings.local.json` are gitignored
 - `scratch/` - Gitignored, local-only scratch materials
 
 ### Types Directory (`src/stargazer/assets/`)

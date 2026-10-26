@@ -1,18 +1,11 @@
 ---
-description: Writes and edits user-facing documentation with a voice that respects the reader
-mode: subagent
-temperature: 0.3
-tools:
-  write: true
-  edit: true
-  read: true
-  glob: true
-  grep: true
+name: write-docs
+description: "Voice and conventions for Stargazer's user-facing docs in docs/: a competent reader, no gatekeeping, no code in architecture docs, one home per example, present tense, nav in zensical.toml. Use when writing or editing anything under docs/."
 ---
 
-You are the technical writer agent for the Stargazer project. Your role is to write and edit user-facing documentation in `docs/` — architecture overviews, guides, and reference material — and to keep its voice consistent.
+# Write docs
 
-The architecture agent owns *what* the docs say (contracts, structure, sync with code); you own *how* they say it. When a doc is both structurally stale and badly written, fix the writing and flag the staleness.
+How Stargazer's documentation in `docs/` reads: architecture overviews, guides and reference. The `architecture` skill covers *what* the docs say (contracts, structure, sync with code); this one covers *how* they say it.
 
 ## Voice and Audience
 
@@ -27,7 +20,7 @@ The architecture agent owns *what* the docs say (contracts, structure, sync with
 
 ## Project Doc Conventions
 
-These are hard rules from AGENTS.md — enforce them in everything you touch:
+Hard rules from AGENTS.md, enforced in everything touched:
 
 - **No code in architecture docs.** `docs/architecture/` describes contracts and concepts; code examples live only in `docs/guides/` (`getting-started.md` is a guide in spirit and may carry code too; mermaid diagrams are not code and are encouraged). When you find a code block in an architecture doc, move it to the guide that owns the topic — or, if a guide already shows it, delete the block and link there. Distill what the block *demonstrated* into a prose clause so the doc loses no meaning.
 - **Every example has exactly one home.** Commands, config snippets, and worked examples live in one guide; every other doc links to it. Side-by-side copies drift independently — that's the main way these docs have rotted.
@@ -35,7 +28,7 @@ These are hard rules from AGENTS.md — enforce them in everything you touch:
 - **Verify paths while you're there.** When a doc names a file, module, or symbol, check it exists in the repo — docs have kept referencing modules months after a rename. A dead path usually marks a whole stale passage, not just a typo; rewrite against the current code or flag it.
 - **The README is written exclusively by humans.** Never modify it; notify if it's out of spec.
 - **Every doc must be reachable from `nav` in `zensical.toml`.** When you add, rename, move, or delete a doc, update the nav to match.
-- **Human docs vs. agent reference.** `docs/architecture/*.md` is the high-level human-facing map; deep implementation detail belongs in the companion `.opencode/reference/architecture/*.md` file. When a doc accumulates route tables, token lifetimes, or per-function mechanics, move that detail to the companion and link to it.
+- **Human docs vs. agent skills.** `docs/architecture/*.md` is the high-level human-facing map; deep implementation detail belongs in the subsystem's internals skill (`.claude/skills/app-internals/` for `docs/architecture/app.md`). When a doc accumulates route tables, token lifetimes, or per-function mechanics, move that detail to the companion and link to it.
 - **Mermaid for structure, tables for enumerable facts, prose for everything else.** One concept per diagram.
 
 ## Style
@@ -46,6 +39,6 @@ These are hard rules from AGENTS.md — enforce them in everything you touch:
 - Explain *why* a design is the way it is in one clause, then move on — rationale earns trust, sermons lose it.
 - Link to the doc that owns a concept instead of re-explaining it.
 
-## Communication
+## Report
 
-When you complete work, summarize what changed and why, list affected files, and flag anything you noticed that is out of scope for writing (stale contracts, missing nav entries, docs that should move to the agent reference).
+Flag what's out of scope for writing: stale contracts, missing nav entries, detail that should move to an internals skill.
