@@ -12,14 +12,24 @@ control re-runs the dispatching cell:
 
     summaries = await dispatch(where, audit_cohorts, sheets=sheets)
 
+A cluster run's code bundle comes from where the dispatched task's module was
+imported from: the notebook's own directory when the notebook defining it is the
+one running, as a workspace notebook in its pod is, or the package root for one
+imported by its dotted name. The task has to be importable there, which a task
+defined in a regular cell isn't: it goes in an `@app.function`.
+
 A module of its own rather than part of the package `__init__`, because it
 imports marimo and the dashboard imports `stargazer.notebooks` without it.
 
 spec: [docs/architecture/notebook.md](../architecture/notebook.md)
 """
 
+import inspect
+from pathlib import Path
+
 import flyte
 import marimo as mo
+from flyte._initialize import get_init_config, init_config_context
 
 
 def run_location() -> mo.ui.radio:
@@ -42,8 +52,28 @@ async def dispatch(location: mo.ui.radio, task: flyte.TaskTemplate, /, **inputs)
     Waits for the run to finish either way, so the result is the value awaiting
     the task directly would give. Handles tasks with one output. "On the
     cluster" asks for a remote run outright: `flyte.run` would quietly run
-    in-process when no cluster is configured.
+    in-process when no cluster is configured, and it bundles the run's code
+    from `task`'s own root (`_bundle_root`).
     """
-    run = await flyte.with_runcontext(mode=location.value).run.aio(task, **inputs)
+    runner = flyte.with_runcontext(mode=location.value)
+    if location.value == "remote":
+        # A context-scoped override, so samples dispatched together with
+        # `asyncio.gather` each keep their own.
+        with init_config_context(
+            get_init_config().replace(root_dir=_bundle_root(task))
+        ):
+            run = await runner.run.aio(task, **inputs)
+    else:
+        run = await runner.run.aio(task, **inputs)
     await run.wait.aio()
     return (await run.outputs.aio())[0]
+
+
+def _bundle_root(task: flyte.TaskTemplate) -> Path:
+    """The directory `task`'s module was imported from.
+
+    A module named `a.b.c` sits two directories below it, and a top-level one,
+    the running notebook (`__main__`) included, sits in it.
+    """
+    module = inspect.getmodule(task.func)
+    return Path(module.__file__).absolute().parents[module.__name__.count(".")]

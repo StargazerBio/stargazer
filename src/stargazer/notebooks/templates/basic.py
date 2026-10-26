@@ -25,10 +25,22 @@ __generated_with = "0.21.1"
 app = marimo.App(width="medium")
 
 with app.setup:
+    import asyncio
+    import os
     import shutil
+    from dataclasses import dataclass
+    from typing import ClassVar
 
     import flyte
+    import marimo as mo
 
+    from stargazer.assets.asset import Asset
+    from stargazer.config import (
+        IMAGE_PLATFORM,
+        PROJECT_ROOT,
+        STARGAZER_ENV_VARS,
+        STARGAZER_SECRETS,
+    )
     from stargazer.notebooks import notebook_base, notebook_env
 
     # TODO: the dashboard tile's blurb.
@@ -43,17 +55,33 @@ with app.setup:
         resources=flyte.Resources(cpu=2, memory="4Gi"),
     )
 
+    # TODO: the pods your tasks run in. A cluster pod imports this notebook to
+    # find them, so the image carries stargazer and marimo; add what your
+    # tasks need with `.with_pip_packages(...)` or `.with_apt_packages(...)`.
+    my_env = flyte.TaskEnvironment(
+        name="template",
+        image=(
+            flyte.Image.from_debian_base(
+                name="stargazer-template",
+                registry=os.environ.get("STARGAZER_REGISTRY"),
+                platform=IMAGE_PLATFORM,
+            )
+            .with_uv_project(
+                PROJECT_ROOT / "pyproject.toml", project_install_mode="install_project"
+            )
+            .with_pip_packages("marimo>=0.23,<0.24")
+        ),
+        resources=flyte.Resources(cpu=1, memory="512Mi"),
+        env_vars=STARGAZER_ENV_VARS,
+        secrets=STARGAZER_SECRETS,
+    )
+
 
 @app.cell
 def _():
     """Imports and Flyte init."""
-    import asyncio
     import tempfile
-    from dataclasses import dataclass
     from pathlib import Path
-    from typing import ClassVar
-
-    import marimo as mo
 
     from stargazer.config import init_flyte
 
@@ -63,7 +91,7 @@ def _():
         """
         # Bring Your Own Data — Skeleton
 
-        Six fillable sections: **image → asset → upload → task → workflow →
+        Six fillable sections: **pod → asset → upload → task → workflow →
         run**.
         Defaults work as-is (your file round-trips through a no-op
         pipeline). Replace the TODOs to make it do real work.
@@ -72,11 +100,11 @@ def _():
         tasks, and Workflows for composition — all on your dashboard.
         """
     )
-    return ClassVar, Path, asyncio, dataclass, mo, tempfile
+    return Path, tempfile
 
 
 @app.cell
-def _(mo):
+def _():
     """Section 0 — the notebook's own pod."""
     mo.md(
         f"""
@@ -96,7 +124,7 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
+def _():
     """Section 1 — asset skeleton."""
     mo.md(
         """
@@ -108,26 +136,20 @@ def _(mo):
     )
 
 
-@app.cell
-def _(ClassVar, dataclass):
-    """Define your asset type."""
-    from stargazer.assets.asset import Asset
+@app.class_definition
+@dataclass
+class MyAsset(Asset):
+    """TODO: describe your file type."""
 
-    @dataclass
-    class MyAsset(Asset):
-        """TODO: describe your file type."""
-
-        _asset_key: ClassVar[str] = "my_asset"  # TODO: rename
-        # TODO: add typed metadata fields with defaults, e.g.:
-        # sample_id: str = ""
-        # n_records: int = 0
-        # source: str = ""
-
-    return Asset, MyAsset
+    _asset_key: ClassVar[str] = "my_asset"  # TODO: rename
+    # TODO: add typed metadata fields with defaults, e.g.:
+    # sample_id: str = ""
+    # n_records: int = 0
+    # source: str = ""
 
 
 @app.cell
-def _(mo):
+def _():
     """Section 2 — upload widget."""
     mo.md(
         """
@@ -141,7 +163,7 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
+def _():
     """File upload widget."""
     file_input = mo.ui.file(
         # TODO: filetypes=[".csv", ".h5ad"], multiple=False, kind="area"
@@ -152,7 +174,7 @@ def _(mo):
 
 
 @app.cell
-async def _(MyAsset, Path, file_input, mo, tempfile):
+async def _(Path, file_input, tempfile):
     """Persist the upload as a MyAsset."""
     if not file_input.value:
         mo.stop(True, mo.md("⬆ Upload a file above to continue."))
@@ -181,48 +203,34 @@ async def _(MyAsset, Path, file_input, mo, tempfile):
 
 
 @app.cell
-def _(mo):
+def _():
     """Section 3 — task skeleton."""
     mo.md(
         """
         ## 3. Task
 
-        One Flyte task that does one thing with your asset. The
-        environment pins the container — swap image / resources for
-        real workloads.
+        One Flyte task that does one thing with your asset. It runs in
+        `my_env`, declared in the setup block: swap its image and
+        resources for real workloads. The asset, the task and the
+        workflow below are the notebook's own functions, not cells, so
+        a cluster can import them; keep yours that way.
         """
     )
 
 
+@app.function
+@my_env.task
+async def my_task(asset: MyAsset) -> MyAsset:
+    """TODO: do work on the asset's file and return a (new) asset."""
+    local_path = await asset.fetch()  # noqa: F841 — the TODO below reads it
+    # TODO: read local_path, write a new file, then either:
+    #   1. mutate + re-upload this asset, OR
+    #   2. construct a NEW asset and `await new.update(path=..., **kw)`
+    return asset
+
+
 @app.cell
 def _():
-    """Task environment for your work."""
-    my_env = flyte.TaskEnvironment(
-        name="template",
-        # TODO: image=flyte.Image.from_debian_base().with_pip_packages(...),
-        resources=flyte.Resources(cpu=1, memory="512Mi"),
-    )
-    return (my_env,)
-
-
-@app.cell
-def _(MyAsset, my_env):
-    """Define your task."""
-
-    @my_env.task
-    async def my_task(asset: MyAsset) -> MyAsset:
-        """TODO: do work on the asset's file and return a (new) asset."""
-        local_path = await asset.fetch()  # noqa: F841 — the TODO below reads it
-        # TODO: read local_path, write a new file, then either:
-        #   1. mutate + re-upload this asset, OR
-        #   2. construct a NEW asset and `await new.update(path=..., **kw)`
-        return asset
-
-    return (my_task,)
-
-
-@app.cell
-def _(mo):
     """Section 4 — workflow skeleton."""
     mo.md(
         """
@@ -234,36 +242,40 @@ def _(mo):
     )
 
 
-@app.cell
-def _(MyAsset, asyncio, my_env, my_task):
-    """Define your workflow."""
-
-    @my_env.task
-    async def my_workflow(assets: list[MyAsset]) -> list[MyAsset]:
-        """TODO: orchestrate. Default = fan `my_task` out across inputs."""
-        return list(await asyncio.gather(*[my_task(a) for a in assets]))
-
-    return (my_workflow,)
+@app.function
+@my_env.task
+async def my_workflow(assets: list[MyAsset]) -> list[MyAsset]:
+    """TODO: orchestrate. Default = fan `my_task` out across inputs."""
+    return list(await asyncio.gather(*[my_task(a) for a in assets]))
 
 
 @app.cell
-def _(mo):
+def _():
     """Section 5 — run it."""
-    mo.md(
-        """
-        ## 5. Run
+    from stargazer.notebooks.ui import dispatch, run_location
 
-        `await` runs in-process. `flyte.run(my_workflow, assets=[...])`
-        goes through the full Flyte runtime — and against a remote
-        endpoint once `.flyte/config.yaml` points at one.
-        """
+    where = run_location()
+    mo.vstack(
+        [
+            mo.md(
+                """
+                ## 5. Run
+
+                **On this machine** runs the workflow in the notebook's
+                own process. **On the cluster** submits it as a run and
+                waits for it to finish.
+                """
+            ),
+            where,
+        ]
     )
+    return dispatch, where
 
 
 @app.cell
-async def _(mo, my_asset, my_workflow):
+async def _(dispatch, my_asset, where):
     """Run the workflow on your uploaded asset."""
-    results = await my_workflow([my_asset])
+    results = await dispatch(where, my_workflow, assets=[my_asset])
     mo.ui.table(
         [{"cid": _r.cid, "path": _r.path.path} for _r in results],
         selection=None,
