@@ -1,8 +1,9 @@
 ---
 title: Cluster runs for notebook-defined workflows
-status: doing
+status: review
 priority: normal
 created: 2026-10-20
+pr: 85
 ---
 
 The scRNA notebook and the `basic` template define their workflows in regular cells and await them in-process. A cluster can't run those: Flyte's task pod imports the notebook module and looks the task up as an attribute, and importing a marimo notebook runs its setup block and `@app.function` cells, not its regular cells. Measured 2026-10-20 with a throwaway notebook, resolving a task the way a pod does: defined in a cell, `AttributeError: module 'cell_task' has no attribute 'cell_task'`; the same task as `@app.function` over `@env.task`, loaded. The Execution tutorial already submits its remote run that way, importing `audit_cohorts` from the Workflows tutorial, where it's an `@app.function`.
