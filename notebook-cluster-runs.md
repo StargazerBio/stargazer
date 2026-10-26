@@ -1,6 +1,6 @@
 ---
 title: Cluster runs for notebook-defined workflows
-status: review
+status: done
 priority: normal
 created: 2026-10-20
 pr: 85
@@ -22,3 +22,6 @@ Branch `feat/notebook-cluster-runs`, test account's dashboard deployed from cc20
 - The first hosted drive found `run.outputs()` hands back schema-rebuilt look-alikes without `Asset` methods (`'AnnData' object has no attribute 'fetch'`); `dispatch` now decodes with `typed_outputs` into the task's declared types.
 - **On this machine** in a hosted scRNA notebook fails on a missing `scikit-image`, which predates this change: ticket `scrna-notebook-hosted-deps`.
 
+## Outcome
+
+Shipped in PR #85 (merge `9d10626`). The scRNA notebook's and the Basic template's workflows are `@app.function`s over setup-block envs, run through `dispatch()` with a `run_location()` control; `dispatch()` bundles from the dispatched task's own root and returns cluster outputs as the task's declared types. Verified by the unit tier (`test_cluster_runnable.py`, `test_ui.py`), a local drive of the scRNA notebook, and cluster runs on Union from both notebooks (run IDs in Verification above). Left: hosted **On this machine** for the scRNA notebook lacks `scikit-image` and `igraph`, ticket `scrna-notebook-hosted-deps`; `flyte.run` called directly from a workspace notebook still bundles from the SDK's directory, with `dispatch` as the supported path. No review comments.
