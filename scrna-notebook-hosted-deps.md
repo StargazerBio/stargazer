@@ -1,6 +1,6 @@
 ---
 title: The scRNA notebook runs on its own pod's machine
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-26
 ---
