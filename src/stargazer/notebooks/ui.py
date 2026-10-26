@@ -52,21 +52,24 @@ async def dispatch(location: mo.ui.radio, task: flyte.TaskTemplate, /, **inputs)
     Waits for the run to finish either way, so the result is the value awaiting
     the task directly would give. Handles tasks with one output. "On the
     cluster" asks for a remote run outright: `flyte.run` would quietly run
-    in-process when no cluster is configured, and it bundles the run's code
-    from `task`'s own root (`_bundle_root`).
+    in-process when no cluster is configured. It bundles the run's code from
+    `task`'s own root (`_bundle_root`), and returns the output as the type
+    `task` declares.
     """
     runner = flyte.with_runcontext(mode=location.value)
-    if location.value == "remote":
-        # A context-scoped override, so samples dispatched together with
-        # `asyncio.gather` each keep their own.
-        with init_config_context(
-            get_init_config().replace(root_dir=_bundle_root(task))
-        ):
-            run = await runner.run.aio(task, **inputs)
-    else:
+    if location.value == "local":
+        run = await runner.run.aio(task, **inputs)
+        await run.wait.aio()
+        return (await run.outputs.aio())[0]
+    # A context-scoped override, so samples dispatched together with
+    # `asyncio.gather` each keep their own.
+    with init_config_context(get_init_config().replace(root_dir=_bundle_root(task))):
         run = await runner.run.aio(task, **inputs)
     await run.wait.aio()
-    return (await run.outputs.aio())[0]
+    # A remote run's `outputs()` rebuilds each value from its stored schema, as
+    # a look-alike class without the real one's methods (an asset's `fetch`).
+    outputs = await run.typed_outputs.aio(task.native_interface.outputs)
+    return next(iter(outputs.values()))
 
 
 def _bundle_root(task: flyte.TaskTemplate) -> Path:

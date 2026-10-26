@@ -20,18 +20,28 @@ async def add_one(x: int) -> int:
     return x + 1
 
 
-def _finished_run(output):
-    """A remote run handle that has finished with `output`."""
+def _remote_run(stored, waited=None):
+    """A remote run handle whose one output is stored as the text `stored`.
+
+    Like a real one, it decodes outputs only into the types the caller asks for
+    (`typed_outputs`); its schema-guessed `outputs()` are look-alikes without the
+    real class's methods. Outputs are refused until `waited` is non-empty.
+    """
+    waited = [True] if waited is None else waited
 
     async def wait():
-        """Return at once: the run is done."""
+        """Mark the run finished."""
+        waited.append(True)
 
-    async def outputs():
-        """Return the run's one output."""
-        return (output,)
+    async def typed_outputs(types):
+        """Decode each stored output into the type asked for it."""
+        if not waited:
+            raise RuntimeError("Action is not in a terminal state")
+        return {name: kind(stored) for name, kind in types.items()}
 
     return SimpleNamespace(
-        wait=SimpleNamespace(aio=wait), outputs=SimpleNamespace(aio=outputs)
+        wait=SimpleNamespace(aio=wait),
+        typed_outputs=SimpleNamespace(aio=typed_outputs),
     )
 
 
@@ -57,23 +67,10 @@ async def test_dispatch_runs_on_this_machine_by_default(monkeypatch):
 
 
 async def test_dispatch_runs_on_the_cluster_when_picked(monkeypatch):
-    """Picking the cluster submits a remote run and returns its output once done."""
+    """Picking the cluster submits a remote run and returns its output once done,
+    as the type the task declares."""
     submitted = []
-    waited = []
-
-    async def wait():
-        """Mark the run finished."""
-        waited.append(True)
-
-    async def outputs():
-        """Refuse until the run has finished, as a remote run does."""
-        if not waited:
-            raise RuntimeError("Action is not in a terminal state")
-        return (7,)
-
-    run = SimpleNamespace(
-        wait=SimpleNamespace(aio=wait), outputs=SimpleNamespace(aio=outputs)
-    )
+    run = _remote_run("7", waited=[])
 
     async def submit(task, **inputs):
         """Record what was submitted and hand back the run."""
@@ -114,7 +111,7 @@ async def test_cluster_run_bundles_from_where_the_task_was_imported(
         """Record the bundle root and the loader args a submission would record."""
         root = get_init_config().root_dir
         submitted.append((root, DefaultTaskResolver().loader_args(task, root)))
-        return _finished_run(4)
+        return _remote_run("4")
 
     _record_modes(
         monkeypatch, lambda mode, **_: SimpleNamespace(run=SimpleNamespace(aio=submit))
