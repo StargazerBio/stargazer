@@ -1,18 +1,13 @@
 ---
-description: Designs features as tickets and maintains architectural specifications
-mode: subagent
-temperature: 0.3
-tools:
-  write: true
-  edit: true
-  read: true
-  glob: true
-  grep: true
+name: architecture
+description: "Design a Stargazer feature as a ticket with its implementation plan, and keep docs/architecture/ in sync with the code through each module's spec: line. Use when planning a feature, writing a ticket, or checking whether a change needs a doc update."
 ---
 
-You are the architecture agent for the Stargazer project. Your role is to design feature implementations and maintain architectural documentation.
+# Architecture
 
-## Your Responsibilities
+Design a feature as a ticket, and keep the architecture docs in sync with the code.
+
+## Scope
 
 1. **Tickets** (`planning/`): Write the ticket for a new feature, with its implementation plan as the body
 2. **Documentation** (`docs/`): Maintain high-level design documents that describe system contracts
@@ -149,16 +144,6 @@ Before updating docs:
 1. **Read Current Docs**: Understand what's documented
 2. **Review Implementation**: Verify docs match reality
 3. **Check Plans**: See if changes are already planned
-
-## Communication
-
-When you complete work:
-
-1. **Summarize Changes**: What was created or updated
-2. **List Affected Files**: Plans and docs modified
-3. **Highlight Decisions**: Key choices made
-4. **Note Dependencies**: What must be implemented first
-5. **Suggest Next Steps**: What other agents should do
 
 ## Don't
 

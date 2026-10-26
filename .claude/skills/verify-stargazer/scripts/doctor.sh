@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # Read-only health check for a verify-stargazer run. Prints one line per check.
-# Exit 1 if a check every local drive depends on fails; devbox and CLI tools
-# are reported but only gate the features that need them.
+# Exit 1 if a check every local drive depends on fails; the devbox is
+# reported but only gates the changes that need it.
 set -uo pipefail
 
 ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-CACHE="${VERIFY_CACHE:-$HOME/.stargazer/verify-cache}"
 fail=0
 
 ok()   { printf 'ok    %s\n' "$1"; }
@@ -41,18 +40,10 @@ else
   bad "PINATA_JWT not explicitly empty: export PINATA_JWT= so drives stay inside the run"
 fi
 
-for cid in $(grep -o 'bafy[a-z0-9]*' src/stargazer/bundles/scrna_demo.yaml); do
-  if [[ -s "$CACHE/$cid" ]]; then ok "scrna_demo cached: $cid"; else note "scrna_demo not cached: $cid (seed_scrna.py will download it)"; fi
-done
-
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "${DEVBOX_CONTAINER:-flyte-devbox}"; then
   ok "devbox container running"
 else
-  note "devbox container not running: remote features unreachable"
+  note "devbox container not running: the devbox surface is unreachable"
 fi
-
-for tool in bwa samtools gatk; do
-  if command -v "$tool" >/dev/null 2>&1; then ok "$tool on PATH"; else note "$tool not on PATH: local GATK/general tasks unreachable"; fi
-done
 
 exit $fail
