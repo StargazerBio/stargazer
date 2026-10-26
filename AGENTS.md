@@ -36,7 +36,7 @@
 - The review checkpoint is the pull request. The user reviews every PR before merging, so tests and implementation are reviewed together in its diff
 - Implementation will be tightly scoped so it can be understood
 - Tests will run until they pass
-- Passing tests are not proof a feature works. Before declaring user-facing work done, drive it on its real surface with the `verify-stargazer` skill when its feature map covers it, and report the evidence
+- Passing tests are not proof a feature works. Before declaring user-facing work done, drive it on its real surface with the `verify-stargazer` skill, and report the evidence
 - Every claim in a report carries its evidence or a label: measured, inferred, or guess. Never hand the user a check you could run yourself
 - Tear down what testing starts on the Union tenant as soon as its check is done. Scale-to-zero won't do it for you: an idle app holds its pod and node for its whole `scaledown_after` (an hour for the dashboard). Stop every app you deployed or woke, including probes, notebook apps and the test account's dashboard (`flyte --config .flyte/union.yaml update app <name> --deactivate -p <project> -d development`), and abort any run still going (`flyte --config .flyte/union.yaml abort run <name> -p <project> -d development`). Before reporting, list apps and live runs (`get app`, `get run --in-phase running`) in every project you touched and confirm nothing you started is still up. Leave real users' dashboards alone, since a stopped app stays down until it's reactivated
 - **kubectl is strictly read-only on the tenant's EKS cluster.** Never create, modify or delete anything there with kubectl, under any circumstances: no `apply`, `create`, `edit`, `patch`, `delete`, `scale`, `rollout`, `label`, `annotate`, `cordon`, `drain`, `exec` or `cp`. Use only `get`, `describe`, `logs`, `top`, `events` and `auth can-i`. Changes to what runs on the tenant go through Flyte (`flyte deploy`, `update app`, `abort run`) or to the user. The local devbox is exempt: anything goes there
@@ -51,7 +51,7 @@
 
 ## Skills and Agents
 
-The agent harness is Claude Code's, kept in the formats other harnesses read too: this file for instructions, `.claude/skills/<name>/SKILL.md` for skills (the shared Agent Skills format), `.claude/agents/` for subagents, `.mcp.json` for the Stargazer MCP server and `.claude/settings.json` for shared settings. A skill's description says when to use it, and its body loads only then. Skills are broad: each applies across the project, to any task, workflow or change, never to one task or tool. What the MCP server already serves (the tasks and workflows, their signatures) never becomes a skill, and reference material stays in `.claude/reference/`. Several skills are adapted from [pstack](https://github.com/cursor/plugins/tree/main/pstack) (MIT).
+The agent harness is Claude Code's, kept in the formats other harnesses read too: this file for instructions, `.claude/skills/<name>/SKILL.md` for skills (the shared Agent Skills format), `.claude/agents/` for subagents, `.mcp.json` for the Stargazer MCP server and `.claude/settings.json` for shared settings. A skill's description says when to use it, and its body loads only then. Skills are broad: each applies across the project, to any task, workflow or change. A skill or subagent never holds anything specific to one task, tool, workflow, notebook, asset type or feature: no per-feature recipes or maps, no scripts for one pipeline, no lists of a type's fields or a module's settings, which drift from the code they copy. The work for a particular change is written for that change and recorded in its PR; a check worth repeating becomes a test in its tier. What the MCP server already serves (the tasks and workflows, their signatures) never becomes a skill, and reference material stays in `.claude/reference/`. Several skills are adapted from [pstack](https://github.com/cursor/plugins/tree/main/pstack) (MIT).
 
 | Skill | Use it when |
 |-------|-------------|
@@ -61,7 +61,7 @@ The agent harness is Claude Code's, kept in the formats other harnesses read too
 | `write-docs` | Writing or editing anything under `docs/`: voice and doc conventions |
 | `bug-fix` | A defect is reported. Reproduce on the same surface, find the cause by elimination, fix at the root, verify on the same surface |
 | `blast-radius` | A change could break something outside its diff (stored keyvalues, MCP wire format, Flyte images, notebook imports). Proves the one fact it's safe because of by running code |
-| `verify-stargazer` | Before declaring a task, workflow, or notebook change done. Drives notebooks headless against an isolated asset store and checks the stored outputs, and checks asset storage and the germline workflow on the devbox, and a notebook launched with `main_env` on the Union tenant. Its `features/` map is the maintained list of what can be verified and how; add a feature file once a feature has been driven end to end |
+| `verify-stargazer` | Before declaring a task, workflow, notebook or app change done. How to drive and check a change on each surface: a notebook headless against an isolated asset store, the devbox, the Union tenant as the test account |
 
 | Subagent | Use it for |
 |----------|------------|

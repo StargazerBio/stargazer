@@ -28,37 +28,16 @@ Types (dataclasses) → Tasks (single-purpose) → Workflows (composition)
 - **Workflows**: Composed pipelines in `src/stargazer/workflows/`
 - **Utils**: Shared helpers in `src/stargazer/utils/` (subprocess, pinata, storage, index, cid, query)
 
-### Critical Configuration Parameters
+### Configuration and Environments
 
-You MUST scrutinize how code handles these environment-driven behaviors (see `config.py`):
-
-#### Storage & Network
-```
-PINATA_JWT                  → Turns on the public tier (Pinata's public network; no default)
-PINATA_GATEWAY              → Download gateway URL (default: the account's dedicated Pinata gateway)
-STARGAZER_STORE_ROOT        → Object-store root for asset bytes (default: ~/.stargazer/store)
-STARGAZER_INDEX_URL         → Asset index: SQLite path, postgresql:// URL, or dsql:// URL (default: ~/.stargazer/index.db)
-STARGAZER_LOCAL             → Scratch space and download cache (default: ~/.stargazer/local)
-```
+Environment-driven behavior lives in `config.py`: read it for the current settings and their defaults rather than trusting a list. Task environments (`TaskEnvironment`) are defined there too, each with its image and resources, set on the environment rather than per task.
 
 **Edge cases to catch:**
-- [ ] Code that assumes Pinata is always available (JWT may be absent)
-- [ ] Hard-coded storage paths instead of using `STARGAZER_LOCAL`
-- [ ] Assuming files exist locally without calling `fetch()` first
-- [ ] Not handling the case where `fetch()` returns a path that doesn't exist
-- [ ] Private data sent to Pinata (Pinata is the public tier only)
-
-#### Task Execution Environments
-```
-@gatk_env.task   → GATK, BWA, BWA-MEM2, samtools workloads (Debian + bioconda image)
-@scrna_env.task  → scanpy-based scRNA analysis (Debian + the `bio` extra)
-```
-Resources are set on the TaskEnvironment in `config.py`, not per-task.
-
-**Edge cases to catch:**
-- [ ] Using wrong environment for a task (e.g., GATK tool under scrna_env)
-- [ ] GPU tasks without proper GPU resource requests
-- [ ] Assuming bioinformatics tools are always available in every environment
+- [ ] Code that assumes an optional service or credential is present (the public tier, a key, a cluster)
+- [ ] Hard-coded paths or settings instead of the configured ones
+- [ ] Reading an asset's file without `fetch()` first, or assuming the fetched path exists
+- [ ] Private data sent to the public tier
+- [ ] A task on an environment whose image lacks its tool, or a GPU task without a GPU request
 
 ### Type System Rules
 
@@ -101,16 +80,16 @@ from typing import TYPE_CHECKING   # No TYPE_CHECKING blocks
 ```python
 # ALWAYS USE:
 import flyte
-from stargazer.config import gatk_env  # or scrna_env
-from stargazer.utils.subprocess import _run
-from stargazer.assets import Reference, Alignment, Variants, R1, R2
+from stargazer.config import <env>   # a TaskEnvironment from config.py
+from stargazer.utils import _run
+from stargazer.assets import <AssetTypes>
 ```
 
 ### Async/Await Patterns
 
 **Every task and workflow must be async:**
 ```python
-@gatk_env.task
+@<env>.task
 async def task_name(...) -> ...:
     await input.fetch()           # Fetch before accessing paths
     await _run(cmd, cwd=...)      # Async subprocess
@@ -143,10 +122,10 @@ step2 = await task_b(step1)  # Depends on step1
 **Emulate a real user running this code:**
 
 - What happens when a user runs this with default settings?
-- What if they haven't set `PINATA_JWT`?
+- What if an optional setting in `config.py` is unset?
 - What if the input files don't exist?
 - What if the output directory isn't writable?
-- What if `PINATA_JWT` is set and the public tier returns records they didn't make?
+- What if the public tier is on and returns records they didn't make?
 - What error message will they see? Is it actionable?
 
 **Common UX failures:**
@@ -164,15 +143,10 @@ step2 = await task_b(step1)  # Depends on step1
 - [ ] Outputs missing required provenance fields
 - [ ] `sample_id` not propagated through pipeline
 - [ ] `tool` not recorded on output assets
-- [ ] Provenance CID links missing (e.g., `reference_cid`, `alignment_cid`)
+- [ ] `*_cid` links to the inputs an output was made from missing
 - [ ] Fields not populated before storage (will serialize as empty strings)
 
-**Key provenance fields per type (check `src/stargazer/assets/`):**
-- `Reference`: `build`
-- `R1`/`R2`: `sample_id`, `mate_cid`
-- `Alignment`: `sample_id`, `format`, `sorted`, `duplicates_marked`, `bqsr_applied`, `tool`, `reference_cid`, `r1_cid`
-- `Variants`: `sample_id`, `caller`, `variant_type`, `build`, `sample_count`, `source_samples`
-- `docs/reference/catalog.md` lists every asset type's fields
+Each asset type's fields, and which link it to its inputs, are in its class in `src/stargazer/assets/` and in `docs/reference/catalog.md`. Check the change against those, not against memory.
 
 ### 3. Error Handling Violations
 
@@ -187,7 +161,7 @@ step2 = await task_b(step1)  # Depends on step1
 
 **Proper error handling pattern:**
 ```python
-@gatk_env.task
+@<env>.task
 async def task_name(input: InputType) -> OutputType:
     # Validate inputs FIRST
     if not input.cid:
@@ -210,25 +184,8 @@ async def task_name(input: InputType) -> OutputType:
 
 ### 4. Resource & Environment Violations
 
-**Resources are defined on TaskEnvironments in `config.py`, not per-task:**
-
-```python
-# Resources set on the environment definition:
-gatk_env = flyte.TaskEnvironment(
-    name="gatk",
-    resources=flyte.Resources(cpu=4, memory="16Gi"),
-    ...
-)
-
-# Tasks just reference the environment:
-@gatk_env.task
-async def my_task(...): ...
-```
-
-**Common issues:**
-- [ ] Task using wrong environment for its tool domain
-- [ ] GPU tasks missing gpu specification on the environment
-- [ ] Task requiring tools not available in its environment's image
+- [ ] Task on the wrong environment for its tool, or a tool missing from its environment's image
+- [ ] Resources set per task instead of on the environment, or too large to fit beside its workflow on the devbox (the header of `devbox/setup.sh`)
 
 ### 5. Documentation Violations
 
@@ -254,17 +211,7 @@ async def my_task(...): ...
 - [ ] Deep nesting instead of flat composition
 
 **Conditional logic must handle all cases:**
-```python
-# DANGEROUS - what if apply_bqsr=True but known_sites is empty?
-if apply_bqsr:
-    recal_table = await baserecalibrator(alignment, ref, known_sites)
-
-# SAFE - validate the condition
-if apply_bqsr:
-    if not known_sites:
-        raise ValueError("apply_bqsr=True requires known_sites to be provided")
-    recal_table = await baserecalibrator(alignment, ref, known_sites)
-```
+An optional step whose inputs may be absent validates them before it runs, and raises naming what's missing, rather than failing deep inside a tool.
 
 ### 7. Testing Violations
 
@@ -292,7 +239,7 @@ Check for absolute violations that require immediate rejection:
 
 1. **Import violations**: Any `flytekit`, relative imports, or `TYPE_CHECKING`
 2. **Sync functions**: Missing `async` on tasks/workflows
-3. **Wrong decorators**: Using `@workflow` instead of `@gatk_env.task` / `@scrna_env.task`
+3. **Wrong decorators**: Using `@workflow` instead of a `TaskEnvironment`'s `.task`
 4. **Wrong environment**: Task using an environment that doesn't have its required tools
 
 ### Phase 2: Structural Review
@@ -321,7 +268,7 @@ Actively search for edge cases:
 1. Empty inputs (empty lists, None values, empty strings)
 2. Missing files (input doesn't exist, fetch fails)
 3. Partial failures (tool runs but produces incomplete output)
-4. Environment variations (no `PINATA_JWT`, a public-gateway CID, the default local store vs a bucket)
+4. Environment variations (each optional setting in `config.py` absent or set, a local store vs a bucket)
 5. Resource exhaustion (disk full, OOM)
 
 ### Phase 5: Metadata Audit
@@ -368,45 +315,23 @@ Clarifying questions about design decisions.
 ## Example Review Output
 
 ```markdown
-## Code Review: `applybqsr.py`
+## Code Review: `<file or branch>`
 
 ### Summary
-**NEEDS REVISION** - 3 Critical, 5 Major, 2 Minor issues
+**NEEDS REVISION** - 1 Critical, 1 Major, 0 Minor
 
 ### Critical Issues
 
-1. **Output returned without being stored** (line 72)
-   ```python
-   # Current — the asset has no CID or stored file
-   return Alignment(sample_id=alignment.sample_id, bqsr_applied=True)
-
-   # Required
-   recal_bam = Alignment()
-   await recal_bam.update(output_bam, sample_id=alignment.sample_id, bqsr_applied=True)
-   return recal_bam
-   ```
-
-2. **Fixed output filename** (line 47)
-   `output_dir / "recalibrated.bam"` collides when two samples run in one
-   process; name it after `alignment.sample_id`.
-
-3. **Missing output verification** (line 78)
-   The task doesn't verify the recalibrated BAM was created before returning.
+1. **Output returned without being stored** (`<file>:<line>`)
+   The task builds its output asset but never calls `update()`, so it has
+   no CID or stored file and nothing downstream can fetch it. Breaks on any
+   run: the next task's `fetch()` raises.
 
 ### Major Issues
 
-1. **Provenance link missing** (line 72)
-   The output records no `reference_cid`, so nothing ties it to the
-   reference it was recalibrated against.
-
-2. **Incomplete metadata** (line 72)
-   `duplicates_marked` isn't carried over from the input alignment.
-
-### Edge Cases to Consider
-
-- What happens if `known_sites` contains files that don't exist?
-- What if the recalibration table wasn't generated in a previous step?
-- What if disk fills up during BAM writing?
+1. **Fixed output filename** (`<file>:<line>`)
+   Two samples fanned out in one process share `local_dir`, so the second
+   overwrites the first. Name the output after the sample.
 ```
 
 ## Remember
