@@ -1,8 +1,9 @@
 ---
 title: Agent harness on Claude Code defaults
-status: doing
+status: review
 priority: normal
 created: 2026-10-26
+pr: 84
 ---
 
 The agent harness was set up for OpenCode (`.opencode/agent/` personas, `.opencode/reference/`), which Claude Code doesn't discover. Move it to Claude Code's defaults, keeping AGENTS.md as the one instructions file, since Claude Code, OpenCode and Codex all read it.
