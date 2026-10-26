@@ -10,6 +10,7 @@ The agent harness was set up for OpenCode (`.opencode/agent/` personas, `.openco
 
 - [x] OpenCode agents become broad skills (`tasks-and-workflows`, `write-tests`, `architecture`, `write-docs`), and code-review the `code-reviewer` subagent
 - [x] `.opencode/reference/` moves unchanged to `.claude/reference/`; none of it is a skill
+- [x] `verify-stargazer` and `code-reviewer` hold nothing feature-specific: the `features/` recipes, scRNA-only scripts and per-type provenance fields are gone, and AGENTS.md forbids them
 - [x] Brainstorm moves to `.claude/brainstorm/` (local, ignored by `.claude/*`)
 - [x] Paths repointed in AGENTS.md, docs, `pyproject.toml`, `tests/conftest.py`, `.gitignore`, `.dockerignore`
 - [x] infra's `CLAUDE.md` (an `@AGENTS.md` import) deleted
