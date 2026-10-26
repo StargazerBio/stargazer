@@ -1,6 +1,6 @@
 ---
 title: Cluster runs for notebook-defined workflows
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-20
 ---
