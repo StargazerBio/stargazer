@@ -101,6 +101,7 @@ Notebook-to-notebook reuse *is* allowed: marimo notebooks can export importable 
 In production, each notebook's sandbox installs the SDK from the image's own source tree at `/stargazer` (the `[tool.uv.sources]` entry in its PEP 723 header), fixed when the image was built. This means:
 
 - **Package tasks** in `src/stargazer/tasks/` are available in every production notebook automatically.
+- **A package task run in the notebook's own process** needs its Python packages in the notebook's environment, so the header names the SDK extra that carries them: `stargazer[bio]` for the scRNA tasks.
 - **Notebook-defined tasks** run in the notebook that defines them, but are not importable elsewhere until promoted into the package.
 
 This is a feature — it prevents untested code from silently ending up in production. Locally a notebook imports your checkout, so contributors see SDK changes as they make them. It also means saved notebooks can't change execution: the workspace store carries notebook *sources*; the SDK they import always comes from the image.
