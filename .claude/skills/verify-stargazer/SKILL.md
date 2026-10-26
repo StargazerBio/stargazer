@@ -7,11 +7,30 @@ description: "Drive Stargazer the way a user does and capture evidence that a ch
 
 Proves user-visible behavior on the real surface: the notebook a user opens, the pods a workflow runs in, the dashboard a user clicks. A passing pytest run is not this proof. Adapted from [pstack](https://github.com/cursor/plugins/tree/main/pstack)'s verification skills (MIT).
 
-Pick the surface the change reaches, drive it, check what it stored, and record the evidence in the PR.
+Pick the surface the change reaches, write or reuse its recipe, drive it, check what it stored, and record the evidence in the PR.
 
 ## Keep it general
 
-This skill says how to verify any change on each surface. It holds no recipes, feature maps or scripts for one notebook, workflow or task. The drive and the check for a particular change are written for that change, run, and recorded as evidence in its PR. A check worth repeating becomes a test in its tier, not a file here.
+This skill says how to verify any change on each surface. It holds no recipes, feature maps or scripts for one notebook, workflow or task: those live in the change's ticket, below. A check worth repeating on every change becomes a test in its tier, not a file here.
+
+## Recipes
+
+A change's own verification is a recipe in its ticket, under `## Verification recipe: <feature>`, so it stays runnable without living on `main`. Before driving a change, look for earlier recipes on the same surface or feature and reuse what still holds; each sits beside its ticket's PR and outcome, which date it:
+
+```bash
+MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
+grep -n '^## Verification recipe' "$MAIN"/planning/*.md
+```
+
+Write the change's recipe into its ticket before driving it, in this shape (pstack's feature entry):
+
+- `## Verification recipe: <feature>`, then one paragraph on the user-visible behavior.
+- `### Sub-features`: one bullet per behavior, each with a short ID that evidence names.
+- `### How to get to it (user POV)`: where a user finds it.
+- `### Driving it`: preconditions, then steps whose commands run as written, each with the result that passes.
+- `### Gotchas`: what broke or misled along the way.
+
+A script a recipe needs goes in the ticket as a code block, or is pulled from history with `git show <sha>:<path>` into the run directory, never committed to this skill. Run the recipe, and record its evidence in the PR.
 
 ## Evidence
 
