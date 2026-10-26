@@ -28,7 +28,7 @@ Hard rules from AGENTS.md, enforced in everything touched:
 - **Verify paths while you're there.** When a doc names a file, module, or symbol, check it exists in the repo — docs have kept referencing modules months after a rename. A dead path usually marks a whole stale passage, not just a typo; rewrite against the current code or flag it.
 - **The README is written exclusively by humans.** Never modify it; notify if it's out of spec.
 - **Every doc must be reachable from `nav` in `zensical.toml`.** When you add, rename, move, or delete a doc, update the nav to match.
-- **Human docs vs. agent skills.** `docs/architecture/*.md` is the high-level human-facing map; deep implementation detail belongs in the subsystem's internals skill (`.claude/skills/app-internals/` for `docs/architecture/app.md`). When a doc accumulates route tables, token lifetimes, or per-function mechanics, move that detail to the companion and link to it.
+- **Human docs vs. agent reference.** `docs/architecture/*.md` is the high-level human-facing map; deep implementation detail belongs in the companion `.claude/reference/architecture/*.md` file. When a doc accumulates route tables, token lifetimes, or per-function mechanics, move that detail to the companion and link to it.
 - **Mermaid for structure, tables for enumerable facts, prose for everything else.** One concept per diagram.
 
 ## Style
@@ -41,4 +41,4 @@ Hard rules from AGENTS.md, enforced in everything touched:
 
 ## Report
 
-Flag what's out of scope for writing: stale contracts, missing nav entries, detail that should move to an internals skill.
+Flag what's out of scope for writing: stale contracts, missing nav entries, detail that should move to the agent reference.

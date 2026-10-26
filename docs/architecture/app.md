@@ -2,7 +2,7 @@
 
 The `app/` directory is **deployment glue**: FastAPI, Flyte AppEnvironment definitions, the workspace store. It lives outside `src/stargazer/` because it is not invokable by tasks or workflows; the SDK stays importable in environments without FastAPI or a Flyte control plane connection.
 
-This doc is the high-level map of the hosting tier. For what the dashboard's notebook sections *mean* (taxonomy, archetypes, promotion paths), see [Notebooks](notebook.md). For implementation-level detail (identity headers, route table, pod launch, hydrate and sync mechanics), see the `app-internals` agent skill (`.claude/skills/app-internals/SKILL.md`).
+This doc is the high-level map of the hosting tier. For what the dashboard's notebook sections *mean* (taxonomy, archetypes, promotion paths), see [Notebooks](notebook.md). For implementation-level detail (identity headers, route table, pod launch, hydrate and sync mechanics), see the agent reference `.claude/reference/architecture/app_internals.md`.
 
 Two kinds of Flyte `AppEnvironment` are defined here, and both sit behind the platform's login (`requires_auth=True`):
 
@@ -83,7 +83,7 @@ sequenceDiagram
 
 **Tiles are stateful and authoritative.** On load the dashboard asks the control plane which `nb-{slug}-{mode}` apps are live and hydrates those tiles to Open/Stop; a notebook runs in edit *or* run mode, never both. Discovery is a single project-scoped deployment list, re-checked per app for authoritative status. This is read from Flyte rather than in-memory state, so it survives dashboard restarts.
 
-**The tier is lightweight by construction.** Dashboard responses are gzip-compressed, and the notebook proxy streams everything except the HTML pages it decorates, so large notebook assets never sit in proxy memory. Details in `.claude/skills/app-internals/SKILL.md`.
+**The tier is lightweight by construction.** Dashboard responses are gzip-compressed, and the notebook proxy streams everything except the HTML pages it decorates, so large notebook assets never sit in proxy memory. Details in `.claude/reference/architecture/app_internals.md`.
 
 ## Asset Index
 
@@ -93,14 +93,14 @@ Each user's **asset index**, the metadata behind `assemble()` for every file the
 
 The devbox keeps its index on a Postgres server, which the dashboard and every pod reach the same way. DSQL accepts a subset of what Postgres does, so a failure only DSQL raises shows up only on the tenant.
 
-See [Configuration](configuration.md) for the storage model and `.claude/skills/app-internals/SKILL.md` for the mechanics.
+See [Configuration](configuration.md) for the storage model and `.claude/reference/architecture/app_internals.md` for the mechanics.
 
 ## Asset Manager
 
 The dashboard's home page holds the asset browser, below the notebook
 sections: a browse-and-upload surface with two tabs. Routes live in
 `app/assets.py`; mechanics and the route table are in
-`.claude/skills/app-internals/SKILL.md`.
+`.claude/reference/architecture/app_internals.md`.
 
 **Private is the user's own index and store**, the same ones their tasks
 and notebooks write to, so the tab shows everything they've stored. Only the
@@ -180,6 +180,6 @@ Both images are content-hashed, so a release builds each once however many users
 
 ## Deploy Targets
 
-One switch, `STARGAZER_TARGET`, picks the backend: `devbox` (the default, a local cluster for lightweight testing) or `union` (the hosted tenant). The app tier is built around the platform's login, which the devbox doesn't have, so the devbox gets one dashboard for a stand-in user instead of per-user onboarding, and a Postgres server for the asset index: enough to test asset storage and the dashboard locally. The stand-in is never honored on Union. Setup and rationale are in `devbox/`, its `setup.sh` and `dashboard.py`. It selects the deployer's Flyte config and where images are pushed. The Flyte domain is set separately, so the same target can serve a development or a production deployment. The per-target table is in `.claude/skills/app-internals/SKILL.md`.
+One switch, `STARGAZER_TARGET`, picks the backend: `devbox` (the default, a local cluster for lightweight testing) or `union` (the hosted tenant). The app tier is built around the platform's login, which the devbox doesn't have, so the devbox gets one dashboard for a stand-in user instead of per-user onboarding, and a Postgres server for the asset index: enough to test asset storage and the dashboard locally. The stand-in is never honored on Union. Setup and rationale are in `devbox/`, its `setup.sh` and `dashboard.py`. It selects the deployer's Flyte config and where images are pushed. The Flyte domain is set separately, so the same target can serve a development or a production deployment. The per-target table is in `.claude/reference/architecture/app_internals.md`.
 
-The project `Dockerfile`'s `stargazer` is the hosted notebook image's recipe as a local `docker run`, defined separately in the `Dockerfile`; it is not the hosted build. Build/publish detail in `.claude/skills/app-internals/SKILL.md`.
+The project `Dockerfile`'s `stargazer` is the hosted notebook image's recipe as a local `docker run`, defined separately in the `Dockerfile`; it is not the hosted build. Build/publish detail in `.claude/reference/architecture/app_internals.md`.

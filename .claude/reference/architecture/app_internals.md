@@ -1,9 +1,4 @@
----
-name: app-internals
-description: "Implementation internals of Stargazer's app/ tier that span several modules: Union identity headers, the workspace store, pod launch and lifecycle, hydrate and save, the notebook images. Read before changing auth, storage, pod launch or workspace sync under app/, and update it after."
----
-
-# App tier internals
+# App Tier — Internals (agent reference)
 
 Deep, implementation-level detail for the `app/` deployment tier. This is the verbose companion to the human-facing [docs/architecture/app.md](../../../docs/architecture/app.md) — it carries the cross-cutting protocol detail (identity, the workspace store, pod lifecycle, hydrate and save) that spans several modules and so belongs to no single module docstring. When you change auth, storage, pod launch, or workspace sync, read this first and update it after.
 

@@ -175,6 +175,7 @@ Thumbs.db
 !.claude/settings.json
 !.claude/skills/
 !.claude/agents/
+!.claude/reference/
 *.local.*
 
 # Test secrets (JWT tokens, API keys). No trailing slash, so a worktree's

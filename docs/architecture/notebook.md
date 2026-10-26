@@ -70,7 +70,7 @@ A workspace notebook that proves out a *reusable* pipeline — one others should
 
 ### Copy to workspace — read-only source → editable notebook
 
-The reverse of graduation: a **Copy to workspace** button on every Workflows tile drops an editable copy into the Workspace, so a shipped pipeline becomes a starting point to iterate on rather than just run. The original is untouched — the copy is a fresh notebook in the user's workspace store, free to edit or graduate. It takes the source's name, so if a notebook by that name already exists the copy is refused; rename the existing one and copy again. Mechanics in `.claude/skills/app-internals/SKILL.md`.
+The reverse of graduation: a **Copy to workspace** button on every Workflows tile drops an editable copy into the Workspace, so a shipped pipeline becomes a starting point to iterate on rather than just run. The original is untouched — the copy is a fresh notebook in the user's workspace store, free to edit or graduate. It takes the source's name, so if a notebook by that name already exists the copy is refused; rename the existing one and copy again. Mechanics in `.claude/reference/architecture/app_internals.md`.
 
 ## The SDK Loop
 
