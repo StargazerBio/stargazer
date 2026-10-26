@@ -15,7 +15,7 @@ Where *tasks* run. Notebooks call `stargazer.config.init_flyte()` at startup. Op
 
 For whoever runs a notebook, the choice is a control. `stargazer.notebooks.ui` provides `run_location()`, a two-way switch between *On this machine* (the default) and *On the cluster*, and `dispatch()`, which runs a task or workflow wherever the switch is set, waits for it, and returns its result. *On the cluster* always asks for a remote run, so with no cluster configured it fails instead of quietly running locally. The Execution tutorial ends by introducing it.
 
-A cluster can only run tasks its pods can import: the SDK's, and those a notebook declares as reusable top-level functions (`@app.function`, the way the Execution tutorial imports the Workflows tutorial's workflow). A task defined inside a regular cell runs only on the notebook's own machine. Its environment's image has to carry what the task's module imports, as the tutorials' `tutorial_env` carries stargazer and marimo.
+A cluster can only run tasks its pods can import: the SDK's, and those a notebook declares as reusable top-level functions (`@app.function`, the way the Execution tutorial imports the Workflows tutorial's workflow, and the scRNA-seq notebook and the basic template declare theirs). A task defined inside a regular cell runs only on the notebook's own machine. Its environment's image has to carry what the task's module imports, as the tutorials' `tutorial_env` carries stargazer and marimo. `dispatch()` sends a run's code from the directory the task's module was imported from, so a notebook's own tasks go with it from wherever it lives, a user's workspace included.
 
 ## Notebook Types
 
@@ -94,7 +94,7 @@ flowchart TD
 
 Notebooks are free to experiment, prototype, and visualize — but they are never a dependency of production code, so notebook changes cannot break tasks or workflows.
 
-Notebook-to-notebook reuse *is* allowed: marimo notebooks can export importable definitions via `app.setup` + `@app.function`, and the Execution tutorial imports the Workflows tutorial's workflow this way rather than duplicating it. The invariant is about the SDK layer, not about notebooks sharing code among themselves.
+Notebook-to-notebook reuse *is* allowed: marimo notebooks can export importable definitions via `app.setup` + `@app.function`, and the Execution tutorial imports the Workflows tutorial's workflow this way rather than duplicating it. The invariant is about the SDK layer, not about notebooks sharing code among themselves. marimo's [Importing code from marimo notebooks](https://www.youtube.com/watch?v=4AFcgd-s3Fg) walks through how it works.
 
 ### Packaging boundary
 

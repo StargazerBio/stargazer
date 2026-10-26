@@ -26,6 +26,33 @@ import marimo
 __generated_with = "0.21.1"
 app = marimo.App(width="medium")
 
+with app.setup:
+    import asyncio
+
+    import flyte
+    import marimo as mo
+
+    from stargazer.assets.scrna import AnnData
+    from stargazer.config import scrna_env
+    from stargazer.tasks.scrna import (
+        cluster,
+        find_markers,
+        normalize,
+        qc_filter,
+        reduce_dimensions,
+        select_features,
+    )
+
+    # A cluster pod imports this notebook to find its workflows, so their image
+    # is scrna_env's plus the marimo hosted notebooks run on. The tasks they
+    # call run on scrna_env, which a cluster run deploys along with them.
+    pipeline_env = scrna_env.clone_with(
+        name="scrna_pipeline",
+        image=scrna_env.image.with_pip_packages("marimo>=0.23,<0.24"),
+        resources=flyte.Resources(cpu=1, memory="1Gi"),
+        depends_on=[scrna_env],
+    )
+
 
 @app.cell
 def _():
@@ -35,9 +62,6 @@ def _():
     warnings.filterwarnings("ignore", message="Variable names are not unique")
     warnings.filterwarnings("ignore", category=RuntimeWarning, module="scanpy")
 
-    import asyncio
-
-    import marimo as mo
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -51,8 +75,8 @@ def _():
 
         A guided tour of how Stargazer wraps scanpy in a Flyte v2
         orchestrator. Pick samples from the `scrna_demo` bundle, then
-        watch two inline `@scrna_env.task` workflows process them in
-        parallel:
+        watch the two workflows this notebook defines process them in
+        parallel, on this machine or on the cluster:
 
         - **`preprocess`** (qc_filter → normalize → select_features →
           reduce_dimensions) runs once per sample, fanned out with
@@ -65,11 +89,11 @@ def _():
         eyeball the effect of each change across samples at once.
         """
     )
-    return asyncio, mo, np, plt
+    return np, plt
 
 
 @app.cell
-def _(mo):
+def _():
     """Task and workflow catalog."""
     from stargazer.registry import TaskRegistry
 
@@ -87,7 +111,7 @@ def _(mo):
             mo.md(
                 "## Task Catalog\n\n"
                 "Every task and workflow the Stargazer package exports. The two "
-                "workflows this notebook defines below run here and aren't registered."
+                "workflows this notebook defines below aren't registered."
             ),
             mo.ui.table(
                 _task_rows,
@@ -99,7 +123,7 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
+def _():
     """Section 1 — sample selection."""
     sample_picker = mo.ui.multiselect(
         options=["s1d1", "s1d3"], value=["s1d1", "s1d3"], label="Samples"
@@ -124,7 +148,7 @@ def _(mo):
 
 
 @app.cell
-async def _(mo, sample_picker):
+async def _(sample_picker):
     """Assemble raw AnnData for every selected sample (auto-fetch on miss)."""
     import scanpy as sc
 
@@ -171,7 +195,7 @@ async def _(mo, sample_picker):
 
 
 @app.cell
-def _(mo, plt, raw_ads, raw_assets, sc):
+def _(plt, raw_ads, raw_assets, sc):
     """Section 2 — per-sample raw QC histograms (one row per sample)."""
     from stargazer.tasks.scrna.qc_filter import GENE_PATTERNS
 
@@ -229,7 +253,7 @@ def _(mo, plt, raw_ads, raw_assets, sc):
 
 
 @app.cell
-def _(mo):
+def _():
     """Section 3 — narrative for the two-workflow design."""
     mo.md(
         """
@@ -237,8 +261,7 @@ def _(mo):
 
         Pure scanpy is a sequence of function calls. Stargazer tasks are
         Flyte tasks — they have caching, asset-typed I/O, and they fan
-        out. The next cell defines two `@scrna_env.task` workflows that
-        compose existing Stargazer tasks:
+        out. The two workflows below compose existing Stargazer tasks:
 
         - **`preprocess`** — qc_filter → normalize → select_features →
           reduce_dimensions. Expensive (PCA, neighbors, UMAP) so we only
@@ -251,43 +274,46 @@ def _(mo):
         interactive while reusing the expensive stage's outputs. Both
         workflows fan out across the picked samples with
         `asyncio.gather`, so multiple samples run concurrently.
+
+        They're defined as the notebook's own functions, not inside a
+        cell, so a cluster can import them. Set where they run here:
+        **On this machine** runs them in the notebook's process, and
+        **On the cluster** submits one run per sample and stage and
+        waits for them.
         """
     )
 
 
+@app.function
+@pipeline_env.task(cache="disable")
+async def preprocess(raw: AnnData, max_pct_mt: float, n_top_genes: int) -> AnnData:
+    """QC, normalize, select HVGs, and reduce dimensions for one sample."""
+    filtered = await qc_filter(adata=raw, max_pct_mt=max_pct_mt)
+    normalized = await normalize(adata=filtered)
+    featured = await select_features(adata=normalized, n_top_genes=n_top_genes)
+    return await reduce_dimensions(adata=featured)
+
+
+@app.function
+@pipeline_env.task(cache="disable")
+async def cluster_and_annotate(reduced: AnnData, resolution: float) -> AnnData:
+    """Leiden clustering followed by marker gene identification."""
+    clustered = await cluster(adata=reduced, resolution=resolution)
+    return await find_markers(adata=clustered)
+
+
 @app.cell
 def _():
-    """Define the preprocess and cluster_and_annotate workflows."""
-    from stargazer.assets.scrna import AnnData
-    from stargazer.config import scrna_env
-    from stargazer.tasks.scrna import (
-        cluster,
-        find_markers,
-        normalize,
-        qc_filter,
-        reduce_dimensions,
-        select_features,
-    )
+    """Where the workflows run."""
+    from stargazer.notebooks.ui import dispatch, run_location
 
-    @scrna_env.task(cache="disable")
-    async def preprocess(raw: AnnData, max_pct_mt: float, n_top_genes: int) -> AnnData:
-        """QC, normalize, select HVGs, and reduce dimensions for one sample."""
-        filtered = await qc_filter(adata=raw, max_pct_mt=max_pct_mt)
-        normalized = await normalize(adata=filtered)
-        featured = await select_features(adata=normalized, n_top_genes=n_top_genes)
-        return await reduce_dimensions(adata=featured)
-
-    @scrna_env.task(cache="disable")
-    async def cluster_and_annotate(reduced: AnnData, resolution: float) -> AnnData:
-        """Leiden clustering followed by marker gene identification."""
-        clustered = await cluster(adata=reduced, resolution=resolution)
-        return await find_markers(adata=clustered)
-
-    return cluster_and_annotate, preprocess
+    where = run_location()
+    where
+    return dispatch, where
 
 
 @app.cell
-def _(mo):
+def _():
     """Section 4 — preprocess parameters."""
     max_mt_slider = mo.ui.slider(
         start=5.0, stop=50.0, step=1.0, value=20.0, label="Max % mitochondrial"
@@ -313,7 +339,7 @@ def _(mo):
 
 
 @app.cell
-async def _(asyncio, max_mt_slider, mo, n_genes_slider, preprocess, raw_assets):
+async def _(dispatch, max_mt_slider, n_genes_slider, raw_assets, where):
     """Fan out preprocess across selected samples with asyncio.gather."""
     with mo.status.spinner(
         title=f"Preprocessing {len(raw_assets)} sample(s) in parallel..."
@@ -321,7 +347,9 @@ async def _(asyncio, max_mt_slider, mo, n_genes_slider, preprocess, raw_assets):
         reduced_assets = list(
             await asyncio.gather(
                 *[
-                    preprocess(
+                    dispatch(
+                        where,
+                        preprocess,
                         raw=_r,
                         max_pct_mt=max_mt_slider.value,
                         n_top_genes=n_genes_slider.value,
@@ -339,7 +367,7 @@ async def _(asyncio, max_mt_slider, mo, n_genes_slider, preprocess, raw_assets):
 
 
 @app.cell
-def _(mo):
+def _():
     """Section 5 — clustering parameter (drives the cheap stage)."""
     resolution_slider = mo.ui.slider(
         start=0.1, stop=2.0, step=0.1, value=0.5, label="Leiden resolution"
@@ -362,14 +390,7 @@ def _(mo):
 
 
 @app.cell
-async def _(
-    asyncio,
-    cluster_and_annotate,
-    mo,
-    reduced_assets,
-    resolution_slider,
-    sc,
-):
+async def _(dispatch, reduced_assets, resolution_slider, sc, where):
     """Fan out cluster + find_markers across samples."""
     with mo.status.spinner(
         title=f"Clustering {len(reduced_assets)} sample(s) in parallel..."
@@ -377,7 +398,12 @@ async def _(
         annotated_assets = list(
             await asyncio.gather(
                 *[
-                    cluster_and_annotate(reduced=_r, resolution=resolution_slider.value)
+                    dispatch(
+                        where,
+                        cluster_and_annotate,
+                        reduced=_r,
+                        resolution=resolution_slider.value,
+                    )
                     for _r in reduced_assets
                 ]
             )
@@ -390,7 +416,7 @@ async def _(
 
 
 @app.cell
-def _(annotated_ads, annotated_assets, mo, np, plt):
+def _(annotated_ads, annotated_assets, np, plt):
     """Side-by-side UMAPs across samples."""
     _n = len(annotated_assets)
     _fig, _axes = plt.subplots(1, _n, figsize=(7 * _n, 6), squeeze=False)
@@ -425,7 +451,7 @@ def _(annotated_ads, annotated_assets, mo, np, plt):
 
 
 @app.cell
-def _(annotated_ads, annotated_assets, mo):
+def _(annotated_ads, annotated_assets):
     """Comparison summary across samples."""
     _rows = [
         {
@@ -452,7 +478,7 @@ def _(annotated_ads, annotated_assets, mo):
 
 
 @app.cell
-def _(mo):
+def _():
     """Links to the tutorial sequence."""
     mo.md(
         """
