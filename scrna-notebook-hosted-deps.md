@@ -6,3 +6,36 @@ created: 2026-10-26
 ---
 
 In a hosted notebook, the scRNA notebook's **On this machine** fails at `preprocess`: `qc_filter`'s scrublet step raises `` `threshold` is None and thus scrublet requires `scikit-image` `` (measured 2026-10-26, test account, Edit mode). The notebook's PEP 723 header lists `scanpy`, `anndata`, `matplotlib`, `numpy` and `stargazer`, but not what the `bio` extra adds for scanpy's lazy imports (`scikit-image`, `igraph` for Leiden), so the sandbox venv `marimo --sandbox` builds lacks them. Locally it passes because the checkout's venv has every extra. **On the cluster** is unaffected: the tasks run on `scrna_env`'s image. Likely fix: depend on `stargazer[bio]` in the header instead of listing scanpy's packages; verify with a hosted Run-mode drive on the default setting.
+
+## Verification recipe: scRNA notebook on its own machine
+
+With **Run** on its default, **On this machine**, the scRNA notebook runs `preprocess` and `cluster_and_annotate` inside the notebook's own process, so every package those tasks import has to be in the sandbox environment `marimo --sandbox` builds from the notebook's PEP 723 header. A user who opens the notebook sees the pipeline run through to the side-by-side UMAPs and the summary table.
+
+### Sub-features
+
+- `sandbox-deps`: the header's environment imports everything the scRNA tasks import, scanpy's lazy imports included (`scikit-image` for scrublet, `igraph` for Leiden).
+- `hosted-local-run`: on a hosted pod, the notebook in Run mode finishes every section on its own machine.
+
+### How to get to it (user POV)
+
+- On the dashboard, the Workflows section's scRNA tile → **Run** → **Open: Run Mode**. The **Run** control above section 4 starts on **On this machine**.
+
+### Driving it
+
+Preconditions: the `verify-stargazer` local-notebook block has run and the scRNA samples are seeded (recipe `normalize-counts-layer`'s seed script); uv is 0.7.21 or newer, which `marimo --sandbox` needs.
+
+- **Sandbox export (`sandbox-deps`).** The header's source path points at `/stargazer`, so copy the notebook with it pointed at the checkout, then export in sandbox mode:
+
+```bash
+sed "s#path = \"/stargazer\"#path = \"$PWD\"#" src/stargazer/notebooks/workflows/scrna_pipeline.py > "$RUN_DIR/scrna_sandbox.py"
+uv run --all-extras marimo export html --sandbox "$RUN_DIR/scrna_sandbox.py" -o "$RUN_DIR/evidence/sandbox.html" > "$RUN_DIR/evidence/sandbox.log" 2>&1; echo $?
+uv run python "$RUN_DIR/check_anndata.py"
+```
+
+  Exit `0`, no `scikit-image` in the log, and every check line `ok`. Before the fix, exit `1` with `` `threshold` is None and thus scrublet requires `scikit-image` ``.
+- **Hosted Run mode (`hosted-local-run`).** Deploy the test account's dashboard from the checkout (`union_dashboard.py deploy`; the notebook image carries the notebook), open the scRNA tile in Run mode as the test account, leave **Run** on **On this machine**, and wait for the page to finish. Sections 4 to 6 render the UMAPs and the summary table, with no error. Then `union_dashboard.py teardown`: `live runs: []`.
+
+### Gotchas
+
+- A plain `marimo export` without `--sandbox` runs in the checkout's venv, which has every extra, so it passes even with the bug.
+- `marimo --sandbox` refuses uv older than 0.7.21.
