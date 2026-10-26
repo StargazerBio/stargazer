@@ -41,10 +41,10 @@ Every top-level directory under `tests/` belongs to exactly one tier, and its te
 | Postgres | `postgres` | `postgres/` | Against a throwaway Postgres container (Docker) | When the index changes | `uv run --all-extras pytest -m postgres` |
 
 - **Unit:** cheap tests that run on Python alone: the asset types, the app tier, storage and the index, the notebook smoke tests. `--all-extras` because the notebook smoke tests need the `notebook` extra and the app tests `landing`.
-- **Tasks:** every test of a task, in the image that task runs in. `tests/tasks/<domain>` runs in its domain's image (`IMAGES` in `cli/docker_task_tests.py`): `gatk/` and `general/` in `gatk_env`'s, which carries gatk, bwa, bwa-mem2 and samtools, and `scrna/` in `scrna_env`'s. So a task test checks what a pod gets, and no one installs the tools. The runner builds each image as a task pod gets it, with the project installed, and mounts only `tests/` and `pyproject.toml`, so a source change builds the images again before the tests run. x86_64 like Union, emulated on Apple silicon.
+- **Tasks:** every test of a task, in the image that task runs in. `tests/tasks/<domain>` runs in the image of its domain's `TaskEnvironment` (`IMAGES` in `cli/docker_task_tests.py` maps each). So a task test checks what a pod gets, and no one installs the tools. The runner builds each image as a task pod gets it, with the project installed, and mounts only `tests/` and `pyproject.toml`, so a source change builds the images again before the tests run. x86_64 like Union, emulated on Apple silicon.
 - **Devbox:** anything that needs a cluster: deploying the dashboard, running workflows across pods, the devbox's object store and its Postgres index. The session deploys the dashboard once for the tests that use it, passes the devbox storage settings to each run, and reads the index from this machine through a port-forward (`index_query`). It needs the devbox up, with `devbox/setup.sh` applied. Pod-side tasks live in `tests/devbox/pod_tasks.py`, which imports only what the task image carries.
-- **Pinata:** calls the real API with the key in `tests/.secrets/pinata_jwt` (`tests/pinata/conftest.py`), and fails without it. `tests/pinata/test_cid_drift.py` covers both upload paths (plain POST and TUS). Pinata-client tests that don't call the API are in `tests/utils/`.
-- **Postgres:** the index tests from `tests/utils/test_index.py`, imported by `tests/postgres/test_index.py` and run against a Postgres 16 container (the version Aurora DSQL is compatible with) that `tests/postgres/conftest.py` starts once per session and removes. Its `index` fixture overrides the SQLite one, and each test starts from a dropped table. A test that depends on SQLite's own behaviour, like its file lock, stays out of the import list. `tests/postgres/test_dsql_index.py` runs the same tests as a restricted login (only `USAGE` on the schema plus row rights on its own table), the way DSQL is set up. Fails without Docker.
+- **Pinata:** calls the real API with the key in `tests/.secrets/pinata_jwt` (`tests/pinata/conftest.py`), and fails without it. Pinata-client tests that don't call the API are in `tests/utils/`.
+- **Postgres:** the unit tier's index tests, imported into `tests/postgres/` and run against a throwaway Postgres container that `tests/postgres/conftest.py` starts once per session and removes. Its `index` fixture overrides the SQLite one, and each test starts from a dropped table. A test that depends on SQLite's own behaviour stays out of the import list. Fails without Docker.
 
 A test never skips for a missing tool or service. Outside its tier it's deselected; inside it, a missing tool or an unreachable devbox fails the test, so a run can't pass by testing nothing. Running a workflow locally, outside the tests, needs its tools on your own PATH; nothing here requires them.
 
@@ -53,16 +53,13 @@ A test never skips for a missing tool or service. Outside its tier it's deselect
 ```
 tests/
 ├── conftest.py      # Flyte init, no PINATA_JWT, an empty store per test, the seeded fixture store
-├── fixtures/        # Test data by domain (gatk/, general/, scrna/), plus seed.py
+├── fixtures/        # Test data by domain, plus seed.py
 ├── assets/          # unit: asset types, assemble()
 ├── notebooks/       # unit: every notebook imports and parses
-├── unit/            # unit: app tier, registry, MCP marshalling, bundles, Asset
-├── utils/           # unit: storage, index, CID, Pinata client (no API calls), query
+├── unit/            # unit: everything else that runs on Python alone
+├── utils/           # unit: src/stargazer/utils/, no external API calls
 ├── tasks/           # tasks: one directory per task domain, run in the task's image
-│   ├── gatk/
-│   ├── general/
-│   └── scrna/
-├── devbox/          # devbox: dashboard, asset storage across pods, the germline workflow
+├── devbox/          # devbox: anything that needs a cluster
 ├── pinata/          # pinata: the real Pinata API
 └── postgres/        # postgres: the index tests against a Postgres container
 ```
@@ -135,19 +132,19 @@ Calling a task directly skips Flyte's serialization of its inputs and outputs. T
 
 ## Workflow Tests
 
-A workflow is tested where its tasks run. GATK workflows need a cluster, so they're devbox-tier: `tests/devbox/test_germline.py` seeds inputs from a pod with `devbox_run`, runs the workflow, and checks its output from another pod. Code that runs in the pods lives in `tests/devbox/pod_tasks.py` and imports only what the task image carries.
+A workflow is tested where its tasks run. One whose tasks need tools off this machine needs a cluster, so it's devbox-tier: the test seeds inputs from a pod with `devbox_run`, runs the workflow, and checks its output from another pod. Code that runs in the pods lives in `tests/devbox/pod_tasks.py` and imports only what the task image carries.
 
 ## Unit Tests
 
-Tests of plain Python (assets, storage, the app tier, the registry) go in the unit-tier directory for their package and need no tools. App routes are tested with FastAPI's `TestClient`; swap module attributes (`_pinata_client`, `config.*`) with `monkeypatch` rather than patching the environment.
+Tests of plain Python (assets, storage, the app tier, the registry) go in the unit-tier directory for their package and need no tools. App routes are tested with FastAPI's `TestClient`; swap module attributes (clients, `config.*`) with `monkeypatch` rather than patching the environment.
 
 ## Test Asset Generation
 
 When a test needs a real bioinformatics file, generate it with the tool in the task's image, never on the dev machine, and commit it under `tests/fixtures/<domain>/`:
 
 ```bash
-docker run --rm --platform linux/amd64 -v "$PWD/tests/fixtures/general:/data" <gatk image> \
-  samtools faidx /data/GRCh38_TP53.fa
+docker run --rm --platform linux/amd64 -v "$PWD/tests/fixtures/<domain>:/data" <task image> \
+  <tool> <args> /data/<file>
 ```
 
 `uv run --all-extras python cli/docker_task_tests.py` prints the image it builds. Add a stored copy, with its metadata and `*_cid` links, to `tests/fixtures/seed.py` when tests need to query for it.
@@ -189,8 +186,8 @@ docker run --rm --platform linux/amd64 -v "$PWD/tests/fixtures/general:/data" <g
 Each tier's command is in the [tier table](#test-tiers). Paths or `-k` pick a subset:
 
 ```bash
-uv run --all-extras python cli/docker_task_tests.py tests/tasks/gatk/test_sort_sam.py
-uv run --all-extras python cli/docker_task_tests.py -k bwa
+uv run --all-extras python cli/docker_task_tests.py tests/tasks/<domain>/test_<tool>.py
+uv run --all-extras python cli/docker_task_tests.py -k <name>
 ```
 
 `pytest tests/tasks/` on its own selects nothing: the default `-m unit` deselects that tier.
