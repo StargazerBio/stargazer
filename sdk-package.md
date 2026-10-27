@@ -1,6 +1,6 @@
 ---
 title: Ship the SDK as its own package
-status: backlog
+status: maybe
 priority: low
 created: 2026-10-14
 ---
@@ -12,6 +12,21 @@ ships `app/` too, and the task images only build from a checkout. This is the
 groundwork for publishing (ticket `pypi-release`) and for notebook images
 that change base only when the SDK version does (see ticket
 `notebook-declared-image`, Deferred).
+
+## Shelved (2026-10-27)
+
+Back to `maybe`. The SDK runs from source everywhere: a checkout locally
+(`uv pip install -e .`), the checkout's recipe for task images, the source
+tree copied into the notebook image, Flyte's code bundle for dashboards, and
+the sibling checkout for infra. Shipping it as a package adds an installed
+copy with no source beside it, and every one of those places would need a
+second path for it. Splitting the app into its own repo would make that
+path mandatory, and 17 of the last 40 merged PRs touched both `src/` and
+`app/`. Public notebooks stay runnable without releases as long as the SDK
+in the image is the one they were written against; before 1.0 there's no
+compatibility promise. Revisit if an outside user needs to pin SDK
+versions, or a published notebook needs one (a git commit in its PEP 723
+header would do, without a release).
 
 Came out of a 2026-10-14 brainstorm on splitting the repo. The conclusion was
 to stay one repo and package only the SDK: `app/` is deployment code that runs
