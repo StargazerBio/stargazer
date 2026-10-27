@@ -351,8 +351,8 @@ def test_create_rejects_reserved_name(client):
     assert client.post("/workspace/create", data={"name": "basic"}).status_code == 400
 
 
-def test_create_refuses_a_shipped_notebooks_name(client):
-    """A workspace notebook can't take a shipped notebook's slug, and its app."""
+def test_create_refuses_a_builtin_notebooks_name(client):
+    """A workspace notebook can't take a built-in notebook's slug, and its app."""
     _as(client)
     resp = client.post("/workspace/create", data={"name": "Assets"})
     assert resp.status_code == 400
@@ -363,13 +363,13 @@ def test_create_refuses_a_shipped_notebooks_name(client):
 
 
 @pytest.mark.parametrize("nb", notebooks.NOTEBOOKS, ids=lambda nb: nb.slug)
-def test_every_shipped_slug_is_reserved(nb):
-    """Every shipped notebook's slug is refused as a workspace notebook's."""
+def test_every_builtin_slug_is_reserved(nb):
+    """Every built-in notebook's slug is refused as a workspace notebook's."""
     assert _new_notebook_slug(nb.slug) is None
 
 
-def test_a_stored_notebook_under_a_shipped_slug_stays_manageable(client):
-    """One saved before shipped names were reserved can still be downloaded and deleted."""
+def test_a_stored_notebook_under_a_builtin_slug_stays_manageable(client):
+    """One saved before built-in names were reserved can still be downloaded and deleted."""
     _put(ALICE, "assets.py")
     _as(client)
     assert client.get("/workspace/download?slug=assets").text == NB_SRC
@@ -521,8 +521,8 @@ def test_delete_removes_only_the_users_notebook(client):
     assert _get(BOB, "qc-run.py") == NB_SRC
 
 
-def test_copy_workflow_reads_the_shipped_notebook(client):
-    """Copying a workflow writes the shipped source as an editable notebook."""
+def test_copy_workflow_reads_the_builtin_notebook(client):
+    """Copying a workflow writes the built-in source as an editable notebook."""
     _as(client)
     resp = client.post(
         "/workspace/copy", data={"slug": "scrna-pipeline", "section": "workflows"}
@@ -534,10 +534,10 @@ def test_copy_workflow_reads_the_shipped_notebook(client):
     assert (
         notebook_description(stored) == notebooks.by_slug("scrna-pipeline").description
     )
-    shipped = (
+    builtin = (
         Path(notebooks.NOTEBOOKS_PKG_DIR) / "workflows" / "scrna_pipeline.py"
     ).read_text()
-    assert shipped.splitlines()[-1] in stored
+    assert builtin.splitlines()[-1] in stored
     # A second copy would clobber the first.
     again = client.post(
         "/workspace/copy", data={"slug": "scrna-pipeline", "section": "workflows"}
@@ -637,8 +637,8 @@ def test_github_name_taken_is_409(client, github):
     assert _get(ALICE, "qc-run.py") == "untouched"
 
 
-def test_github_refuses_a_shipped_notebooks_name(client, github):
-    """A file named like a shipped notebook isn't opened under its slug."""
+def test_github_refuses_a_builtin_notebooks_name(client, github):
+    """A file named like a built-in notebook isn't opened under its slug."""
     files, _ = github
     files[f"{RAW}/someone/repo/{COMMIT}/assets.py"] = BARE_NB.encode()
     _as(client)
@@ -895,7 +895,7 @@ def test_dashboard_shows_the_saved_interval(client):
 
 
 def test_launch_tutorial_uses_the_image_path(client, served):
-    """Shipped notebooks launch from the image with default resources."""
+    """Built-in notebooks launch from the image with default resources."""
     _as(client)
     assert _launch(client, "assets", "tutorials").status_code == 200
     assert (
