@@ -169,6 +169,40 @@ the same listing, switched by a Graph/List toggle (Graph is the default):
   registered type or a bare/custom asset, fill metadata, choose Private or
   Public. The upload appears in the listing straight away.
 
+## Contract with the SDK
+
+`app/` imports the SDK's public API, and the SDK never imports `app/` (the import layers enforce it). **At runtime the two also meet in three places their imports don't show**: the asset keyvalues, the asset index and the environment a deploy hands down. These are the API between the tiers, so a change to one on either side lands on the other in the same change.
+
+**Asset keyvalues.** Every stored record, an index row or a public file, carries a flat map of strings. `asset` names the type by its registry key. Each field the type declares, as `Asset.declared_fields()` lists them, holds its value as written if it's a string and as JSON otherwise. Any other key is an extra, kept as text. Keys starting with `_` are reserved for stamping, and `_owner` is the one in use. The asset browser builds its upload form from the registry and each type's declared fields, and validates uploads and edits with the SDK's `build_asset()`, so the page accepts exactly what the SDK does. The rules are in [Types → Serialization](types.md#serialization), [Extra keys](types.md#extra-keys) and [Ownership](types.md#ownership-_owner).
+
+**The asset index has no server.** Nothing in either tier serves the index over HTTP: the dashboard, its notebook pods and the task pods they start each open it directly from `STARGAZER_INDEX_URL`, through the SDK's `stargazer.utils.index`. The contract is that URL and the table it names.
+
+| `STARGAZER_INDEX_URL` | Index | Used |
+|---|---|---|
+| A file path | A SQLite file | Locally |
+| `postgresql://…` | A Postgres table | The devbox |
+| `dsql://<login>@<cluster endpoint>/assets.<login>?role_arn=<IAM role>` | The user's table on Aurora DSQL, opened as their own login | Union |
+
+The deploy writes the DSQL URL from the project's names alone (`app.deploy.dsql_index_url`), and onboarding creates the login, the IAM role and the table under those same names, the table from the SDK's own definition. The table has one row per CID: where the bytes live, the original filename, the keyvalues as JSON, and when the row was written.
+
+**The environment flows down from the deploy.** The deploy bakes four variables into each dashboard, the dashboard hands them to every notebook pod it launches, and the SDK forwards three of them into the task pods a run starts. The SDK reads them; the app tier only sets and passes them on.
+
+```mermaid
+flowchart LR
+    DEP[app.deploy] -->|bakes in| D[dashboard]
+    D -->|/launch passes on| N[notebook pod]
+    N -->|run submission forwards| T[task pods]
+```
+
+| Variable | Set by the app tier | Read by the SDK | Reaches task pods |
+|---|---|---|---|
+| `STARGAZER_INDEX_URL` | The user's index: their DSQL table, or the devbox's Postgres | The storage client and `make_index()` open the index from it | Yes |
+| `STARGAZER_STORE_ROOT` | The workspace root, so assets sit beside the user's notebooks; unset when the deploy names no root | The storage client stores bytes at `<root>/users/<owner>/assets/<cid>/<name>` | Yes, when set |
+| `STARGAZER_OWNER` | The owner's platform subject | The storage client's folder in the store, and the `_owner` stamped on every index row and public upload | Yes, when set |
+| `STARGAZER_NOTEBOOK_IMAGE` | The notebook image's content-hashed URI, built once per deploy | `stargazer.notebooks.notebook_base` builds on it, so a notebook's declared image layers on the one its pod runs | No |
+
+Defaults and the rest of the SDK's settings are in [Configuration → Environment Variables](configuration.md#environment-variables).
+
 ## Images
 
 The dashboard and the per-notebook pods use **different images by design**:
