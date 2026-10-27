@@ -856,7 +856,11 @@ let graphDrawn = null;
 function renderGraph() {
     const host = $("graph-host");
     const drawn = state.visible.map((r) => entryKey(r) + "\t" + displayName(r)).join("\n");
-    if (fg && drawn === graphDrawn) return;
+    if (fg && drawn === graphDrawn) {
+        // Nothing to lay out, so no settle to fit on; a later drag mustn't.
+        fitPending = false;
+        return;
+    }
     graphDrawn = drawn;
     const data = graphElements(state.visible);
 

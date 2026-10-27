@@ -207,7 +207,7 @@ switched by a Graph/List toggle (Graph is the default):
 
 - **Graph** draws entries as a constellation: each entry is a star, hued by
   its asset type (the type chips carry the same hues, so they're the legend)
-  and brighter when it's the user's own, and its links (`companion_of` and the
+  and dimmer when it's someone else's public record, and its links (`companion_of` and the
   `*_cid` provenance links) are the lines between them. Notebooks are
   four-point stars. The layout is a live simulation: same-type stars gather,
   dragging a star pulls its neighbors, and a filter change keeps the stars
