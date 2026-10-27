@@ -73,6 +73,7 @@ A bare `Asset` (no `_asset_key`) carries a free-form `keyvalues` dict, serialize
 - `fetch()` — downloads self, then every asset with `companion_of = self.cid` into the same directory (the user's own, plus public ones the user or the asset's publisher published); returns the local path
 - `update(path, **kwargs)` — sets the given attributes, stores the file, and sets `cid` and `path`
 - `to_dict()` / `from_dict()` — JSON serialization
+- `declared_fields()` — the names of the fields a type declares, in order: its typed keyvalues, without the base `cid`, `path` and `keyvalues`
 
 ## Asset Subclass Catalog
 

@@ -59,8 +59,9 @@ class Asset:
     Fields are plain Python attributes. ``to_keyvalues()`` serializes them to
     ``dict[str, str]`` at storage boundaries; ``from_keyvalues()`` reconstructs
     from storage. ``str`` fields pass through directly; all other types use
-    ``json.dumps`` / ``json.loads``. Attributes are strict (assigning an
-    undeclared one raises); extra keys go in ``keyvalues`` instead:
+    ``json.dumps`` / ``json.loads``. ``declared_fields()`` lists a type's
+    fields. Attributes are strict (assigning an undeclared one raises); extra
+    keys go in ``keyvalues`` instead:
 
         aln.keyvalues["lane"] = "3"
     """
@@ -84,13 +85,25 @@ class Asset:
         if name == "path":
             value = _as_file(value)
         elif self._asset_key and not name.startswith("_") and name not in _BASE_FIELDS:
-            allowed = {f.name for f in dataclasses.fields(type(self))} - _BASE_FIELDS
+            allowed = self.declared_fields()
             if name not in allowed:
                 raise AttributeError(
                     f"{type(self).__name__} has no field '{name}'. "
                     f"Allowed: {sorted(allowed)}"
                 )
         super().__setattr__(name, value)
+
+    @classmethod
+    def declared_fields(cls) -> tuple[str, ...]:
+        """Names of the fields this asset type declares, in declaration order.
+
+        These are the typed keyvalues it reads and writes: every dataclass
+        field except the base ``cid``, ``path`` and ``keyvalues``. Bare Asset
+        declares none.
+        """
+        return tuple(
+            f.name for f in dataclasses.fields(cls) if f.name not in _BASE_FIELDS
+        )
 
     def to_keyvalues(self) -> dict[str, str]:
         """Serialize to storage format.
@@ -108,9 +121,7 @@ class Asset:
         """
         if not self._asset_key:
             return dict(self.keyvalues)
-        declared = [
-            f.name for f in dataclasses.fields(self) if f.name not in _BASE_FIELDS
-        ]
+        declared = self.declared_fields()
         clash = sorted(set(self.keyvalues) & {"asset", *declared})
         if clash:
             raise ValueError(
@@ -141,7 +152,7 @@ class Asset:
         if not cls._asset_key:
             return cls(cid=cid, path=path, keyvalues=dict(kv))
         hints = get_type_hints(cls)
-        declared = {f.name for f in dataclasses.fields(cls)} - _BASE_FIELDS
+        declared = cls.declared_fields()
         kwargs = {
             name: value if hints.get(name) is str else json.loads(value)
             for name, value in kv.items()

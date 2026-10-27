@@ -51,7 +51,7 @@ from fastapi.responses import RedirectResponse, StreamingResponse
 from app import config
 from app.identity import User, user_from_request
 from stargazer.assets import ASSET_REGISTRY, build_asset
-from stargazer.assets.asset import _BASE_FIELDS, Asset
+from stargazer.assets.asset import Asset
 from stargazer.utils.cid import CidBuilder
 from stargazer.utils.index import SqlIndex, make_index
 from stargazer.utils.pinata import TUS_CHUNK_BYTES, PinataClient, _stamp_owner
@@ -193,9 +193,8 @@ async def assets_schema() -> dict:
     for key, cls in sorted(ASSET_REGISTRY.items()):
         hints = get_type_hints(cls)
         schema[key] = [
-            {"name": f.name, "type": getattr(hints.get(f.name), "__name__", "str")}
-            for f in dataclasses.fields(cls)
-            if f.name not in _BASE_FIELDS
+            {"name": name, "type": getattr(hints.get(name), "__name__", "str")}
+            for name in cls.declared_fields()
         ]
     return schema
 
