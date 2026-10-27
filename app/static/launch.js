@@ -276,7 +276,7 @@ document.addEventListener("submit", (e) => {
     handleLaunch(form);
 });
 
-// Copy a shipped workflow or a public notebook into the editable Workspace.
+// Copy a built-in workflow or a public notebook into the editable Workspace.
 // POST, then drop the returned workspace tile in before the New-notebook tile.
 async function copyToWorkspace(btn) {
     const slug = btn.dataset.copySlug;

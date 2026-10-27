@@ -870,16 +870,16 @@ function launchRow(slug, section, mode, label, cls) {
     );
 }
 
-// A notebook's card does what its tile did: a shipped one opens in Edit or
+// A notebook's card does what its tile did: a built-in one opens in Edit or
 // Run mode, a workflow or a public notebook copies into the workspace, and
 // any of them downloads its source. Its metadata is set where it's published,
 // so it has no editor here.
 function renderNotebookDetail(el, rec) {
     const kv = rec.keyvalues || {};
-    const shipped = rec.source === "stargazer";
+    const builtin = rec.source === "stargazer";
     const category = kv.category ? `<span class="badge">${esc(kv.category)}</span>` : "";
     let actions = "";
-    if (shipped) {
+    if (builtin) {
         const section = kv.category + "s";
         actions +=
             `<div class="launch-group">` +
@@ -887,7 +887,7 @@ function renderNotebookDetail(el, rec) {
             launchRow(kv.slug, section, "run", "Run", "btn-run") +
             `</div>`;
     }
-    const copyFrom = shipped
+    const copyFrom = builtin
         ? kv.category === "workflow" && { slug: kv.slug, section: "workflows" }
         : rec.source === "public" && { slug: rec.cid, section: "public" };
     if (copyFrom && WORKSPACE_ON) {
@@ -902,7 +902,7 @@ function renderNotebookDetail(el, rec) {
         `<div class="detail-cid">${esc(rec.name || "")}</div>` +
         detailCid(rec) +
         `<div class="detail-actions">${actions}</div>`;
-    if (shipped) hydrateLaunches(el);
+    if (builtin) hydrateLaunches(el);
 }
 
 // Inline metadata editor. Values of existing keys are editable (the headline

@@ -18,8 +18,8 @@ over the sources the explorer asks for, each entry stamped with its `source`:
   local run with none), or with public assets turned off for the deploy
   (`config.PUBLIC_ASSETS`), the public listing, edits and uploads 503 and
   the explorer doesn't offer Public.
-- **`stargazer`** is the notebooks shipped in the image
-  (`app.notebooks.shipped_entries`), listed but never stored. Anyone may
+- **`stargazer`** is the built-in notebooks, baked into the image
+  (`app.notebooks.builtin_entries`), listed but never stored. Anyone may
   list them, and their source downloads from the `stargazer` network.
 
 Auth model: on the hosted deploy a request's identity is its signed Union
@@ -219,7 +219,7 @@ async def _source_entries(source: str, filters: dict[str, str]) -> list[dict]:
         if source == "public":
             held = await _public_records()
         else:
-            held = notebooks.shipped_entries()
+            held = notebooks.builtin_entries()
         records = [
             r
             for r in held
@@ -254,7 +254,7 @@ async def assets_list(request: Request):
 
     `source` repeats: `mine` (the owner's index rows, newest first; a 401 or
     403 for anyone else), `public` (anonymous, from the TTL cache; a 503
-    when the dashboard has no public assets) and `stargazer` (the shipped
+    when the dashboard has no public assets) and `stargazer` (the built-in
     notebooks, anonymous). Every other query param is a keyvalue the entries
     must carry, applied to each source alike. Sources come back in that
     order, each entry carrying its `source`. A public tier that can't be
@@ -332,12 +332,12 @@ async def assets_download(request: Request, cid: str):
     Public files live on world-readable IPFS, so anyone gets a redirect to
     PINATA_GATEWAY, signed in or not, and the bytes never transit the pod.
     Private files stream from the owner's store (`_download_private`). A
-    shipped notebook (`network=stargazer`) is its file in the image, to
+    built-in notebook (`network=stargazer`) is its file in the image, to
     anyone.
     """
     network = request.query_params.get("network", "public")
     if network == "stargazer":
-        return _download_shipped(cid)
+        return _download_builtin(cid)
     _require_network(network)
     if network == "private":
         return await _download_private(request, cid)
@@ -345,11 +345,11 @@ async def assets_download(request: Request, cid: str):
     return RedirectResponse(f"{gateway}/ipfs/{cid}", status_code=302)
 
 
-def _download_shipped(cid: str) -> FileResponse:
-    """A shipped notebook's file as an attachment, or a 404."""
-    path = notebooks.shipped_path(cid)
+def _download_builtin(cid: str) -> FileResponse:
+    """A built-in notebook's file as an attachment, or a 404."""
+    path = notebooks.builtin_path(cid)
     if path is None:
-        raise HTTPException(status_code=404, detail=f"no shipped notebook {cid}")
+        raise HTTPException(status_code=404, detail=f"no built-in notebook {cid}")
     return FileResponse(path, filename=path.name)
 
 

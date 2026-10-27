@@ -108,7 +108,7 @@ in the explorer, which lists entries from three sources together:
 |---|---|---|
 | Mine | The user's stored assets | Their own index and store |
 | Public | Public assets and public notebooks | Pinata's public network |
-| Stargazer | Tutorials and Workflows | The notebooks shipped in the image |
+| Stargazer | Tutorials and Workflows | The built-in notebooks, baked into the image |
 
 The explorer starts on Mine and Stargazer, so the tutorials are in front of a
 new user without the whole public tier, and any mix of sources can be on at
@@ -190,7 +190,7 @@ switched by a Graph/List toggle (Graph is the default):
   download). A public record the user owns reads green in both.
 
 **A notebook's card acts like a tile.** It shows the notebook's title and
-description and the tile's actions: Edit and Run for a shipped notebook, with
+description and the tile's actions: Edit and Run for a built-in notebook, with
 Open and Stop once its pod runs; Copy to workspace for a workflow or a public
 notebook; and Download source for any of them. A notebook's metadata comes
 from where it's published, so its card has no metadata editor.
@@ -221,7 +221,7 @@ the dashboard refuses it and deletes nothing.
 **Public notebooks are entries in the explorer's Public source**, beside
 the other public records. Copying one into the workspace reads its bytes from the gateway and writes a
 fresh workspace notebook, saved like any other file; a later Republish by its
-author doesn't change the copy. The notebooks shipped in the repository
+author doesn't change the copy. The built-in notebooks
 aren't published: GitHub already makes them public, and the explorer lists
 them under Stargazer.
 

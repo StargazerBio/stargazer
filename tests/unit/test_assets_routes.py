@@ -325,9 +325,9 @@ def _list(client, *sources: str, **filters: str):
 
 
 class TestSources:
-    """One listing over the user's assets, the public tier and the shipped notebooks."""
+    """One listing over the user's assets, the public tier and the built-in notebooks."""
 
-    def test_stargazer_lists_every_shipped_notebook(self, client):
+    def test_stargazer_lists_every_builtin_notebook(self, client):
         entries = _list(client, "stargazer").json()
         assert {e["keyvalues"]["slug"] for e in entries} == {
             n.slug for n in notebooks.NOTEBOOKS
@@ -346,7 +346,7 @@ class TestSources:
             },
         }
 
-    def test_filters_apply_to_shipped_notebooks(self, client):
+    def test_filters_apply_to_builtin_notebooks(self, client):
         entries = _list(client, "stargazer", category="workflow").json()
         assert [e["keyvalues"]["slug"] for e in entries] == ["scrna-pipeline"]
 
@@ -360,7 +360,7 @@ class TestSources:
         assert len(entries) == len(notebooks.NOTEBOOKS) + 1
         assert {e["source"] for e in entries} == {"mine", "stargazer"}
 
-    def test_shipped_notebooks_arent_mine(self, fake_pinata, private_store, client):
+    def test_builtin_notebooks_arent_mine(self, fake_pinata, private_store, client):
         _auth(client, OWNER)
         assert _list(client, "mine", asset="notebook").json() == []
         assert len(_list(client, "stargazer", asset="notebook").json()) == len(
@@ -397,7 +397,7 @@ class TestSources:
         assert _list(client).status_code == 400
         assert _list(client, "elsewhere").status_code == 400
 
-    def test_shipped_notebook_downloads_its_source(self, client):
+    def test_builtin_notebook_downloads_its_source(self, client):
         path = notebooks.NOTEBOOKS_PKG_DIR / "tutorials" / "tasks.py"
         resp = client.get(
             f"/assets/download/{compute_cid(path)}", params={"network": "stargazer"}

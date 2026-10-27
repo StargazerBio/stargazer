@@ -1,10 +1,10 @@
 """
 ### Notebook registry consumed by the dashboard app.
 
-Curated, hand-maintained tuple of every notebook that ships in the
-`notebook-app` image, plus the helpers that read shipped notebook sources
-(seeds, workflows) out of the installed `stargazer` package. The asset
-explorer lists the shipped notebooks as entries (`shipped_entries`), each
+Curated, hand-maintained tuple of the built-in notebooks, the ones baked into
+the `notebook-app` image, plus the helpers that read packaged notebook sources
+(seeds, built-in workflows) out of the installed `stargazer` package. The asset
+explorer lists the built-in notebooks as entries (`builtin_entries`), each
 addressed by the CID of its file. Workspace notebooks are NOT here — they
 live in the workspace store (`app.workspace_store`).
 
@@ -43,7 +43,7 @@ SEED_SLUGS = frozenset({BASIC_SLUG, BLANK_SLUG})
 
 @dataclass(frozen=True)
 class Notebook:
-    """A notebook shipped in the `notebook-app` image.
+    """A built-in notebook, baked into the `notebook-app` image.
 
     `path_in_image` is the notebook's absolute `.py` path in the image.
     `section` is its kind, which the explorer shows as its `category` and a
@@ -107,15 +107,15 @@ def by_slug(slug: str) -> Notebook | None:
 
 
 def _package_path(path_in_image: str) -> Path | None:
-    """A shipped notebook's file in the installed package, or None if outside it."""
+    """A built-in notebook's file in the installed package, or None if outside it."""
     if not path_in_image.startswith(_IMAGE_NOTEBOOKS_PREFIX):
         return None
     return NOTEBOOKS_PKG_DIR / path_in_image.removeprefix(_IMAGE_NOTEBOOKS_PREFIX)
 
 
 @functools.cache
-def shipped_entries() -> tuple[dict, ...]:
-    """The shipped notebooks as asset explorer entries, worked out once.
+def builtin_entries() -> tuple[dict, ...]:
+    """The built-in notebooks as asset explorer entries, worked out once.
 
     Each is shaped like a listed record, with `source` `stargazer`: its CID
     is its file's, and its keyvalues a `Notebook` asset's plus `category`,
@@ -139,9 +139,9 @@ def shipped_entries() -> tuple[dict, ...]:
     return tuple(entries)
 
 
-def shipped_path(cid: str) -> Path | None:
-    """The file of the shipped notebook whose CID is `cid`, or None."""
-    for nb, entry in zip(NOTEBOOKS, shipped_entries(), strict=True):
+def builtin_path(cid: str) -> Path | None:
+    """The file of the built-in notebook whose CID is `cid`, or None."""
+    for nb, entry in zip(NOTEBOOKS, builtin_entries(), strict=True):
         if entry["cid"] == cid:
             return _package_path(nb.path_in_image)
     return None

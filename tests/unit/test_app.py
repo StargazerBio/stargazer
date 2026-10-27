@@ -179,7 +179,7 @@ def test_dashboard_shows_its_release_version(client, monkeypatch):
 def test_home_page_carries_the_asset_browser(client, monkeypatch):
     """The asset browser is on the dashboard's home page, below the workspace:
     graph and list, every source, and the upload panel. It starts on the
-    user's assets and the shipped notebooks."""
+    user's assets and the built-in notebooks."""
     monkeypatch.setenv("PINATA_JWT", "test-jwt")
     _as(client)
     html = client.get("/").text
@@ -203,7 +203,7 @@ def test_a_visitor_who_isnt_the_owner_isnt_offered_mine(client):
     assert '<button data-source="stargazer" aria-pressed="true">' in html
 
 
-def test_shipped_notebooks_have_no_section_of_their_own(client):
+def test_builtin_notebooks_have_no_section_of_their_own(client):
     """Tutorials and Workflows are explorer entries, not tiles on the page."""
     _as(client)
     html = client.get("/").text

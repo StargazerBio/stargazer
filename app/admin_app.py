@@ -9,7 +9,7 @@ Union's login gates the public address; `app.identity` decides who else gets
 in, and whoever does sees the owner's dashboard. It has three jobs:
 
 1. **Dashboard.** Renders the Workspace (the owner's notebooks, as tiles)
-   and the asset explorer (`app.assets`), where the notebooks shipped in the
+   and the asset explorer (`app.assets`), where the built-in notebooks in the
    per-notebook image and everyone's published ones are entries beside the
    owner's assets and the public ones. The owner's notebooks live in the
    workspace store (`app.workspace_store`), keyed by their Union subject, so
