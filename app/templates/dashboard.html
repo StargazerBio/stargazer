@@ -7,6 +7,30 @@
         </a>
 
         <div class="dash-header-end">
+            <div class="dash-header-icons">
+                <button
+                    id="cleanup-btn"
+                    class="icon-fab dash-icon"
+                    type="button"
+                    aria-label="Clean up stopped notebooks"
+                    data-tooltip="Clean up stopped notebooks"
+                >
+                    🧹
+                </button>
+                {% if workspace_configured %}
+                <button
+                    id="settings-btn"
+                    class="icon-fab dash-icon"
+                    type="button"
+                    aria-label="Settings"
+                    aria-haspopup="dialog"
+                    aria-controls="settings-modal"
+                    data-tooltip="Settings"
+                >
+                    ⚙️
+                </button>
+                {% endif %}
+            </div>
             {% if console_runs_url %}
             <a
                 class="dash-console"
@@ -145,81 +169,39 @@
 
     {{ assets.panel() }}
 
-    {% if workspace_configured %}
-    <section>
-        <h2>
-            Settings
-            <span class="section-tag">Yours, for every notebook you open.</span>
-        </h2>
-        <p class="section-desc">
-            While a notebook is open, your workspace saves on the interval
-            below, and once more when the notebook stops. At 0 it saves only when the
-            notebook stops, so anything since the last save is lost if the
-            notebook stops unexpectedly. A change applies to notebooks you start
-            from then on.
-        </p>
-        <form id="user-settings-form" class="create-form">
-            <label class="create-field">
-                Save every
-                <input
-                    type="number"
-                    name="save_interval_seconds"
-                    class="create-num"
-                    min="0"
-                    step="1"
-                    required
-                    value="{{ settings.save_interval_seconds }}"
-                />
-                <span class="create-unit">seconds</span>
-            </label>
-            <button type="submit" class="btn btn-notebook">Save</button>
-            <span id="user-settings-status" class="create-unit" role="status"></span>
-        </form>
-    </section>
-    {% endif %}
-
     <footer class="dash-footer">
         {% if version %}
         <span class="dash-version" title="Dashboard version">{{ version }}</span>
         {% endif %}
         {% include "_alpha_note.html" %}
-        <button
-            id="cleanup-btn"
-            class="icon-fab cleanup-fab"
-            type="button"
-            aria-label="Clean up stopped notebooks"
-            data-tooltip="Clean up stopped notebooks"
-        >
-            🧹
-        </button>
     </footer>
 </div>
 
 <!-- Outside .dashboard on purpose: an ancestor with backdrop-filter becomes the
-     containing block for the modal's position:fixed, which would center it
-     inside the (tall) dashboard card instead of the viewport. As a sibling of
-     .dashboard its only ancestors are body/html, so it centers on the screen. -->
-<dialog id="settings-modal" class="settings-modal">
-    <form id="settings-form" class="settings-form">
+     containing block for a modal's position:fixed, which would center it
+     inside the (tall) dashboard card instead of the viewport. As siblings of
+     .dashboard their only ancestors are body/html, so they center on the screen. -->
+<dialog id="setup-modal" class="modal">
+    <form id="setup-form" class="setup-form">
         <h3>Notebook setup</h3>
-        <p class="settings-target"><code></code></p>
+        <p class="setup-target"><code></code></p>
         <textarea
             name="setup"
-            class="settings-editor"
+            class="setup-editor"
             spellcheck="false"
             autocapitalize="off"
             autocomplete="off"
             aria-label="Setup block"
             required
         ></textarea>
-        <p class="settings-note">
+        <p class="setup-note">
             <code>main_name</code> and <code>main_description</code> title this
             tile. <code>main_env</code> is the notebook's pod, its image and
             resources, and takes effect the next time you launch this notebook.
             Stop the notebook before saving here, or edit the setup block in
             the notebook itself.
         </p>
-        <div class="settings-actions">
+        <div class="modal-actions">
             <button type="button" class="btn btn-muted" data-close>
                 Cancel
             </button>
@@ -227,6 +209,42 @@
         </div>
     </form>
 </dialog>
+
+{% if workspace_configured %}
+<dialog id="settings-modal" class="modal settings-modal" aria-labelledby="settings-title">
+    <h3 id="settings-title">
+        Settings
+        <span class="section-tag">Yours, for every notebook you open.</span>
+    </h3>
+    <p class="section-desc">
+        While a notebook is open, your workspace saves on the interval
+        below, and once more when the notebook stops. At 0 it saves only when the
+        notebook stops, so anything since the last save is lost if the
+        notebook stops unexpectedly. A change applies to notebooks you start
+        from then on.
+    </p>
+    <form id="user-settings-form" class="create-form">
+        <label class="create-field">
+            Save every
+            <input
+                type="number"
+                name="save_interval_seconds"
+                class="create-num"
+                min="0"
+                step="1"
+                required
+                value="{{ settings.save_interval_seconds }}"
+            />
+            <span class="create-unit">seconds</span>
+        </label>
+        <button type="submit" class="btn btn-notebook">Save</button>
+        <span id="user-settings-status" class="create-unit" role="status"></span>
+    </form>
+    <div class="modal-actions">
+        <button type="button" class="btn btn-muted" data-close>Close</button>
+    </div>
+</dialog>
+{% endif %}
 {% endblock %} {% block scripts %}
 {{ assets.script() }}
 <script>
@@ -610,29 +628,29 @@
     // Edit a workspace notebook's setup block via the gear → modal. The block
     // is fetched fresh on open, since an open notebook saves its edits back;
     // Save POSTs it and retitles the tile in place — no reload.
-    const settingsModal = document.getElementById("settings-modal");
-    const settingsForm = document.getElementById("settings-form");
-    let settingsSlug = null;
+    const setupModal = document.getElementById("setup-modal");
+    const setupForm = document.getElementById("setup-form");
+    let setupSlug = null;
 
-    async function openSettings(gear) {
-        const slug = gear.dataset.settingsSlug;
+    async function openSetup(gear) {
+        const slug = gear.dataset.setupSlug;
         try {
             const payload = await fetchJSON(
                 "/workspace/setup?slug=" + encodeURIComponent(slug),
             );
-            settingsSlug = slug;
-            settingsForm.setup.value = payload.setup;
+            setupSlug = slug;
+            setupForm.setup.value = payload.setup;
         } catch (err) {
             alert("Couldn't open the setup block: " + err.message);
             return;
         }
-        settingsModal.querySelector(".settings-target code").textContent =
-            settingsSlug + ".py";
-        settingsModal.showModal();
+        setupModal.querySelector(".setup-target code").textContent =
+            setupSlug + ".py";
+        setupModal.showModal();
     }
 
     // Tab indents in the editor (Python), instead of leaving the textarea.
-    settingsForm.setup.addEventListener("keydown", (e) => {
+    setupForm.setup.addEventListener("keydown", (e) => {
         if (e.key !== "Tab" || e.shiftKey) return;
         e.preventDefault();
         e.target.setRangeText(
@@ -644,21 +662,31 @@
     });
 
     document.addEventListener("click", (e) => {
-        const gear = e.target.closest("[data-settings-slug]");
+        const gear = e.target.closest("[data-setup-slug]");
         if (gear) {
             e.preventDefault();
-            openSettings(gear);
+            openSetup(gear);
             return;
         }
-        // Cancel button, or a click on the dialog backdrop, closes the modal.
-        if (e.target.closest("[data-close]") || e.target === settingsModal) {
-            settingsModal.close();
+        // A Cancel/Close button, or a click on a dialog's backdrop, closes it.
+        // A click on the backdrop targets the dialog itself, as does one on
+        // the dialog's own padding, so only a point outside its box counts.
+        const dialog = e.target.closest("dialog");
+        if (!dialog) return;
+        const box = dialog.getBoundingClientRect();
+        const outside =
+            e.clientX < box.left ||
+            e.clientX > box.right ||
+            e.clientY < box.top ||
+            e.clientY > box.bottom;
+        if (e.target.closest("[data-close]") || (e.target === dialog && outside)) {
+            dialog.close();
         }
     });
 
-    settingsForm.addEventListener("submit", async (e) => {
+    setupForm.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const saveBtn = settingsForm.querySelector('button[type="submit"]');
+        const saveBtn = setupForm.querySelector('button[type="submit"]');
         const label = saveBtn.textContent;
         saveBtn.disabled = true;
         saveBtn.innerHTML = '<span class="spinner-inline"></span>';
@@ -666,12 +694,12 @@
             const payload = await fetchJSON("/workspace/setup", {
                 method: "POST",
                 body: new URLSearchParams({
-                    slug: settingsSlug,
-                    setup: settingsForm.setup.value,
+                    slug: setupSlug,
+                    setup: setupForm.setup.value,
                 }),
             });
             const gear = document.querySelector(
-                `[data-settings-slug="${settingsSlug}"]`,
+                `[data-setup-slug="${setupSlug}"]`,
             );
             if (gear) {
                 const tile = gear.closest(".tile");
@@ -679,7 +707,7 @@
                 const p = tile.querySelector("p");
                 if (p) p.textContent = payload.description;
             }
-            settingsModal.close();
+            setupModal.close();
         } catch (err) {
             alert("Save failed: " + err.message);
         } finally {
@@ -780,11 +808,19 @@
         });
     }
 
-    // Save the user's settings. The outcome goes in the status line beside the
-    // button rather than an alert, which would block the page.
+    // The header's Settings button opens the user's settings. The outcome of
+    // a save goes in the status line beside the button rather than an alert,
+    // which would block the page. Opening starts from the last saved value
+    // with the status cleared, so an unsaved edit doesn't linger.
     const userSettingsForm = document.getElementById("user-settings-form");
     if (userSettingsForm) {
+        const settingsModal = document.getElementById("settings-modal");
         const status = document.getElementById("user-settings-status");
+        document.getElementById("settings-btn").addEventListener("click", () => {
+            userSettingsForm.reset();
+            status.textContent = "";
+            settingsModal.showModal();
+        });
         userSettingsForm.addEventListener("submit", async (e) => {
             e.preventDefault();
             const button = userSettingsForm.querySelector('button[type="submit"]');
@@ -795,6 +831,8 @@
                     method: "POST",
                     body: new FormData(userSettingsForm),
                 });
+                const interval = userSettingsForm.save_interval_seconds;
+                interval.defaultValue = interval.value;
                 status.textContent = "Saved. Notebooks you start from now on use it.";
             } catch (err) {
                 status.textContent = "Not saved: " + err.message;

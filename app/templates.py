@@ -12,9 +12,11 @@ Layout:
 
 - `base.html` — `<html>` shell and CSS, blocks `extra_css`, `body` and
   `scripts`.
-- `dashboard.html` — extends base for the post-login dashboard: the user-menu
-  avatar, the Workflows, Workspace and Tutorials tile sections, the asset
-  panel (`_assets.html`), the Settings section and the launch JS.
+- `dashboard.html` — extends base for the post-login dashboard: the header
+  (the cleanup broom, the Settings button, the runs link and the user-menu
+  avatar), the Workflows, Workspace and Tutorials tile sections, the asset
+  panel (`_assets.html`), the Settings and notebook-setup modals and the
+  launch JS.
 - `_tile.html` — partial for one notebook tile (rendered per tile
   in each dashboard section). Underscore prefix is convention for
   "not directly rendered, included only".
@@ -24,10 +26,10 @@ Context consumed by `dashboard.html` (built by `app.admin_app.dashboard`):
 - `title` (str), `version` (str, the deployed commit; empty shows nothing).
 - `user` (`app.identity.User`) — the avatar initial and "Signed in as".
 - `workspace_configured` (bool) — whether this deploy can save notebooks;
-  False renders a notice in place of the Workspace grid and Settings.
+  False renders a notice in place of the Workspace grid, and no Settings.
 - `workflows`, `workspace`, `tutorials` (lists of tile dicts with `slug`,
   `title`, `description`, `section`), included through `_tile.html`.
-- `settings` (dict) — the user's settings, filling the Settings form.
+- `settings` (dict) — the user's settings, filling the Settings modal.
 - `console_runs_url` (str) — header link to the project's runs; empty omits it.
 - The asset panel's: `username` (the visitor's subject), `public_assets`
   (bool), `tus_max_bytes` and `tus_chunk_bytes` (upload limits).
