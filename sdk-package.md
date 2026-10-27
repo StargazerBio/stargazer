@@ -69,12 +69,19 @@ a clean venv outside any checkout:
       The base then changes only when the SDK version or the pod
       infrastructure does, not on every commit. This also gives
       `bit-for-bit-snapshots` an SDK version to record.
-- [ ] **Clean the seam.** Remove `app/`'s import of the private
+- [x] **Clean the seam.** Remove `app/`'s import of the private
       `stargazer.assets.asset._BASE_FIELDS`. Write the runtime contracts down
       in one architecture doc, since they become the SDK/app API: the asset
       keyvalue schema, the index HTTP API (server in `app/`, client in the
       SDK), and the dashboard-to-pod env vars (`STARGAZER_INDEX_URL`,
       `STARGAZER_STORE_ROOT`, `STARGAZER_OWNER`, `STARGAZER_NOTEBOOK_IMAGE`).
+      Done on `refactor/sdk-seam`: `Asset.declared_fields()` replaces the
+      import, and the contract is the "Contract with the SDK" section of
+      `docs/architecture/app.md`. There is no index HTTP API (every pod opens
+      the index from its URL), so the doc records the URL and table instead.
+      Still crossing the seam privately: `app/assets.py` imports
+      `stargazer.utils.pinata._stamp_owner`, and `app/notebook_agent.md`
+      shows `from stargazer.utils import _run`.
 
 ## Decisions (2026-10-26)
 
