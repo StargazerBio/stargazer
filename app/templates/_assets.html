@@ -84,6 +84,7 @@
 .chip:hover { color: var(--text); border-color: var(--border-strong); }
 .chip[aria-pressed="true"], .chip.kv { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
 .chip .n { opacity: 0.7; }
+.chip .sw { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 0.35rem; vertical-align: 1px; box-shadow: 0 0 5px currentColor; }
 .filter-by {
     background: transparent;
     border: none;
@@ -124,6 +125,20 @@
 /* Graph — force-graph draws into a canvas in #graph-host; nodes and links are
    painted in JS (canvas-rendered, not CSS-selectable). */
 #graph-host { width: 100%; height: 420px; }
+/* A faint fixed starfield behind the graph's canvas. */
+#graph-region {
+    background:
+        radial-gradient(1px 1px at 12% 22%, rgba(240,246,252,0.5), transparent 60%),
+        radial-gradient(1px 1px at 68% 14%, rgba(240,246,252,0.35), transparent 60%),
+        radial-gradient(1px 1px at 41% 71%, rgba(240,246,252,0.4), transparent 60%),
+        radial-gradient(1px 1px at 86% 58%, rgba(240,246,252,0.3), transparent 60%),
+        radial-gradient(1px 1px at 23% 88%, rgba(240,246,252,0.35), transparent 60%),
+        radial-gradient(1px 1px at 57% 39%, rgba(240,246,252,0.25), transparent 60%),
+        radial-gradient(1px 1px at 93% 86%, rgba(240,246,252,0.4), transparent 60%),
+        radial-gradient(1px 1px at 5% 55%, rgba(240,246,252,0.3), transparent 60%),
+        radial-gradient(ellipse at 50% 40%, rgba(144,133,233,0.07), transparent 70%),
+        #070a10;
+}
 .graph-cap {
     position: absolute;
     top: 0.5rem;
@@ -583,10 +598,24 @@ function applyFilter(redrawCard = false) {
     if (redrawCard) renderDetail();
 }
 
+// One hue per asset type, shared by the graph's stars and the type chips: the
+// dataviz reference categorical order, stepped for a dark surface, in fixed
+// order over the loaded types sorted by name. Types past the eighth are gray.
+const TYPE_HUES = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
+const OTHER_HUE = "#8b949e";
+let typeHue = {};
+function assignTypeHues() {
+    const types = [...new Set(state.records.map(assetType))].sort();
+    typeHue = {};
+    types.forEach((t, i) => (typeHue[t] = TYPE_HUES[i] || OTHER_HUE));
+}
+const hueOf = (t) => typeHue[t] || OTHER_HUE;
+
 // The type chips (one per type loaded, and any the filter names, each with
 // how many entries it would show), the keyvalue chips and the count.
 function renderFilterBar() {
     const f = state.filter;
+    assignTypeHues();
     const counts = {};
     for (const t of f.types) counts[t] = 0;
     for (const r of state.records) {
@@ -598,7 +627,7 @@ function renderFilterBar() {
         .map(
             (t) =>
                 `<button type="button" class="chip" data-type="${esc(t)}" aria-pressed="${f.types.has(t)}">` +
-                `${esc(t)} <span class="n">${counts[t]}</span></button>`
+                `<span class="sw" style="background:${hueOf(t)}"></span>${esc(t)} <span class="n">${counts[t]}</span></button>`
         )
         .join("");
     $("kv-chips").innerHTML = Object.entries(f.keyvalues)
@@ -639,6 +668,7 @@ function describeFilter(f) {
 }
 
 async function fetchRecords() {
+    fitPending = true;
     setRegionMessage(null);
     $("source-note").hidden = true;
     if (state.filter.sources.size === 0) {
@@ -741,18 +771,74 @@ function graphElements(records) {
     }
     const nodes = capped.map((r) => {
         const id = entryKey(r);
-        const node = graphNodes.get(id) || { id };
+        let node = graphNodes.get(id);
+        if (!node) {
+            node = { id, born: performance.now() };
+            graphNodes.set(id, node);
+        }
         node.rec = r;
         node.label = displayName(r);
         node.deg = deg[id] || 0;
         node.r = 3 + Math.min(6, node.deg * 0.9);
-        graphNodes.set(id, node);
         return node;
     });
+    // A new star appears beside a star it links to, else at its type's anchor.
+    for (const n of nodes) {
+        if (n.x !== undefined) continue;
+        const l = links.find((l) => (l.source === n.id || l.target === n.id));
+        const peer = l && graphNodes.get(l.source === n.id ? l.target : l.source);
+        const a = peer && peer.x !== undefined ? peer : typeAnchor(assetType(n.rec));
+        n.x = a.x + (Math.random() - 0.5) * 20;
+        n.y = a.y + (Math.random() - 0.5) * 20;
+    }
     return { nodes, links, truncated: records.length > NODE_CAP };
 }
 
+// Each type's anchor sits on a ring; a weak pull gathers a type's stars.
+function typeAnchor(t) {
+    const types = Object.keys(typeHue);
+    const i = Math.max(0, types.indexOf(t));
+    const R = 40 + 14 * types.length;
+    const ang = (2 * Math.PI * i) / Math.max(1, types.length);
+    return { x: R * Math.cos(ang), y: R * Math.sin(ang) };
+}
+function anchorForce(alpha) {
+    for (const n of anchorForce.nodes) {
+        const a = typeAnchor(assetType(n.rec));
+        n.vx += (a.x - n.x) * 0.03 * alpha;
+        n.vy += (a.y - n.y) * 0.03 * alpha;
+    }
+}
+anchorForce.initialize = (nodes) => (anchorForce.nodes = nodes);
+// Keeps stars, and the room under them for a label, from overlapping.
+function collideForce() {
+    const ns = collideForce.nodes;
+    for (let i = 0; i < ns.length; i++) {
+        for (let j = i + 1; j < ns.length; j++) {
+            const a = ns[i], b = ns[j];
+            const dx = b.x + b.vx - a.x - a.vx, dy = b.y + b.vy - a.y - a.vy;
+            const min = a.r + b.r + 8;
+            const d2 = dx * dx + dy * dy;
+            if (d2 >= min * min) continue;
+            // Pushes through velocity, as d3's forceCollide does; moving
+            // positions directly loses to the other forces in a dense cluster.
+            const d = Math.sqrt(d2) || 0.01, push = ((min - d) / d) * 0.35;
+            const ux = (dx || Math.random() - 0.5) * push, uy = (dy || Math.random() - 0.5) * push;
+            a.vx -= ux; a.vy -= uy;
+            b.vx += ux; b.vy += uy;
+        }
+    }
+}
+collideForce.initialize = (nodes) => (collideForce.nodes = nodes);
+
+const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const FLY_MS = REDUCED_MOTION ? 0 : 600;
+
 let fg = null;
+// Fit the view once the first layout settles.
+let fitPending = true;
+// The type whose chip is hovered: its stars stay lit.
+let hoverType = null;
 // The hovered node, and it plus its neighbors.
 let hoverNode = null;
 let hoverSet = new Set();
@@ -804,22 +890,48 @@ function createGraph(host) {
             ctx.arc(node.x, node.y, node.r + 3, 0, 2 * Math.PI);
             ctx.fill();
         })
-        .linkColor((l) => (hoverSet.size && !isHotLink(l) ? "rgba(167,139,250,0.08)" : "rgba(167,139,250,0.35)"))
-        .linkWidth((l) => (isHotLink(l) ? 1.6 : 0.8))
-        .onNodeClick((node) => selectAsset(node.id))
+        .linkColor((l) => (isHotLink(l) ? "rgba(240,246,252,0.55)" : isDim(l.source) || isDim(l.target) ? "rgba(185,190,220,0.05)" : "rgba(185,190,220,0.2)"))
+        .linkWidth((l) => (isHotLink(l) ? 1.2 : 0.6))
+        // Particles drift from the derived asset to its source, on the
+        // hovered or selected star's links only, so an idle graph stops
+        // redrawing.
+        .linkDirectionalParticles((l) => (!REDUCED_MOTION && isHotLink(l) ? 2 : 0))
+        .linkDirectionalParticleSpeed(0.006)
+        .linkDirectionalParticleWidth(2)
+        .linkDirectionalParticleColor((l) => hueOf(assetType(l.source.rec)))
+        .warmupTicks(REDUCED_MOTION ? 300 : 0)
+        .cooldownTicks(REDUCED_MOTION ? 0 : Infinity)
+        .onEngineStop(() => {
+            if (fitPending && fg.graphData().nodes.length) { fitPending = false; fg.zoomToFit(FLY_MS, 40); }
+        })
+        .onNodeClick((node) => {
+            selectAsset(node.id);
+            fg.centerAt(node.x, node.y, FLY_MS);
+            fg.zoom(Math.max(fg.zoom(), 2.5), FLY_MS);
+        })
         .onBackgroundClick(() => {
             state.selected = null;
+            redrawGraph();
             renderDetail();
         })
         .onNodeHover(hoverOn)
         .onNodeDrag(() => { $("graph-tip").style.display = "none"; });
-    host.addEventListener("dblclick", () => fg.zoomToFit(400, 30));
+    fg.d3Force("anchor", anchorForce).d3Force("collide", collideForce);
+    fg.d3Force("charge").strength(-45);
+    fg.d3Force("link").distance((l) => (l.kind === "companion_of" ? 14 : 36));
+    host.addEventListener("dblclick", () => fg.zoomToFit(FLY_MS, 40));
     new ResizeObserver(() => {
         if (host.clientWidth) fg.width(host.clientWidth).height(host.clientHeight);
     }).observe(host);
 }
 
-const isHotLink = (l) => hoverNode && (l.source === hoverNode || l.target === hoverNode);
+const focusId = () => (hoverNode ? hoverNode.id : state.selected);
+const isHotLink = (l) => focusId() && (l.source.id === focusId() || l.target.id === focusId());
+// Dimmed while another star is hovered or another type's chip is.
+const isDim = (n) =>
+    (hoverSet.size && !hoverSet.has(n.id)) || (hoverType && assetType(n.rec) !== hoverType);
+// force-graph stops redrawing when idle; a changed accessor redraws it.
+const redrawGraph = () => fg && fg.nodeCanvasObject(paintNode);
 
 function hoverOn(node) {
     hoverNode = node || null;
@@ -837,24 +949,61 @@ function hoverOn(node) {
     $("graph-host").style.cursor = node ? "pointer" : "";
 }
 
+// A star: a soft glow and a bright core sized by degree, hued by type. The
+// user's own entries burn at full strength and public ones dimmer; shipped
+// notebooks are four-point stars with a thin ring. Labels fade in with zoom.
 function paintNode(node, ctx, scale) {
-    const selected = node.id === state.selected;
-    const dim = hoverSet.size && !hoverSet.has(node.id);
-    ctx.globalAlpha = dim ? 0.25 : 1;
+    const rec = node.rec;
+    const hue = hueOf(assetType(rec));
+    const focus = node.id === state.selected || node === hoverNode;
+    const own = rec.source === "mine" || ownedByUser(rec);
+    const grow = REDUCED_MOTION ? 1 : Math.min(1, (performance.now() - (node.born || 0)) / 450);
+    const r = node.r * (0.3 + 0.7 * grow);
+    let alpha = rec.source === "public" && !own ? 0.6 : 1;
+    if (isDim(node)) alpha *= 0.18;
+    ctx.globalAlpha = alpha * grow;
+    const glow = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, r * (focus ? 4.5 : 3.2));
+    glow.addColorStop(0, hue + "aa");
+    glow.addColorStop(1, hue + "00");
+    ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(node.x, node.y, node.r, 0, 2 * Math.PI);
-    ctx.fillStyle = selected ? "rgba(167,139,250,0.55)" : "rgba(167,139,250,0.22)";
+    ctx.arc(node.x, node.y, r * (focus ? 4.5 : 3.2), 0, 2 * Math.PI);
     ctx.fill();
-    ctx.lineWidth = (selected ? 2 : 1) / scale;
-    ctx.strokeStyle = ownedByUser(node.rec) ? "#9cd47f" : selected ? "#b9a0ec" : "rgba(167,139,250,0.6)";
-    ctx.stroke();
-    const size = 10 / scale;
-    ctx.font = size + "px IBM Plex Mono, monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.fillStyle = selected ? "#f0f6fc" : "#8b949e";
-    const label = node.label.length > 18 ? node.label.slice(0, 17) + "…" : node.label;
-    ctx.fillText(label, node.x, node.y + node.r + 2 / scale);
+    ctx.fillStyle = hue;
+    ctx.beginPath();
+    if (isNotebook(rec)) {
+        const o = r * 1.8, i = r * 0.45;
+        for (let k = 0; k < 8; k++) {
+            const rad = k % 2 ? i : o, ang = (Math.PI / 4) * k - Math.PI / 2;
+            ctx.lineTo(node.x + rad * Math.cos(ang), node.y + rad * Math.sin(ang));
+        }
+        ctx.closePath();
+    } else {
+        ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+    }
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, r * 0.4, 0, 2 * Math.PI);
+    ctx.fill();
+    if (rec.source === "stargazer" || focus) {
+        ctx.strokeStyle = focus ? "#f0f6fc" : hue;
+        ctx.lineWidth = (focus ? 1.4 : 0.8) / scale;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, r * 2.3, 0, 2 * Math.PI);
+        ctx.stroke();
+    }
+    const lit = focus || (hoverSet.size && hoverSet.has(node.id)) || (hoverType && assetType(rec) === hoverType);
+    const la = lit ? 1 : Math.max(0, Math.min(1, (scale - 1.1) / 0.9));
+    if (la > 0) {
+        ctx.globalAlpha = alpha * grow * la;
+        ctx.font = 10 / scale + "px IBM Plex Mono, monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillStyle = focus ? "#f0f6fc" : "#a8b1bc";
+        const label = node.label.length > 22 ? node.label.slice(0, 21) + "…" : node.label;
+        ctx.fillText(label, node.x, node.y + r * 2.3 + 2 / scale);
+    }
     ctx.globalAlpha = 1;
 }
 
@@ -932,6 +1081,7 @@ function selectAsset(key) {
             tr.classList.toggle("selected", tr.dataset.key === key)
         );
     }
+    redrawGraph();
     renderDetail();
 }
 
@@ -1191,6 +1341,13 @@ $("filter-text").addEventListener("input", (e) => {
     state.filter.text = e.target.value;
     applyFilter();
 });
+// The type chips are the graph's legend: hovering one lights its stars.
+$("type-chips").addEventListener("mouseover", (e) => {
+    const chip = e.target.closest("[data-type]");
+    hoverType = chip ? chip.dataset.type : null;
+    redrawGraph();
+});
+$("type-chips").addEventListener("mouseleave", () => { hoverType = null; redrawGraph(); });
 $("type-chips").addEventListener("click", (e) => {
     const chip = e.target.closest("[data-type]");
     if (!chip) return;
