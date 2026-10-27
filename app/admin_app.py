@@ -315,13 +315,22 @@ def _notebook_slug(name: str) -> str | None:
     and Flyte app names allow only `[a-z0-9-]`. The original name is preserved
     verbatim as the display title (stored as `main_name` in the notebook's
     setup block). Returns None when the result is empty or collides
-    with a reserved seed slug (`SEED_SLUGS`) or a shipped notebook's, whose
-    app it would share.
+    with a reserved seed slug (`SEED_SLUGS`).
     """
     slug = slugify(name)
-    if not slug or slug in SEED_SLUGS or by_slug(slug):
+    if not slug or slug in SEED_SLUGS:
         return None
     return slug
+
+
+def _new_notebook_slug(name: str) -> str | None:
+    """`_notebook_slug` for a name being chosen, which also refuses a shipped slug.
+
+    A workspace notebook under a shipped notebook's slug would share its app.
+    Only new names are refused, so one stored before stays manageable.
+    """
+    slug = _notebook_slug(name)
+    return None if slug is None or by_slug(slug) else slug
 
 
 def _tile_dict(slug: str, title: str, description: str, section: str) -> dict:
@@ -475,7 +484,7 @@ async def workspace_create(
         return bad
     if source not in SEED_SLUGS:
         return JSONResponse({"error": f"invalid source: {source}"}, status_code=400)
-    slug = _notebook_slug(name)
+    slug = _new_notebook_slug(name)
     if slug is None:
         error = (
             f'"{name.strip()}" is taken by a built-in notebook. Pick another name.'
@@ -560,7 +569,7 @@ async def workspace_copy(
     except LookupError as exc:
         return JSONResponse({"error": str(exc)}, status_code=404)
 
-    target_slug = _notebook_slug(title)
+    target_slug = _new_notebook_slug(title)
     if target_slug is None:
         return JSONResponse(
             {"error": f"could not derive a notebook name from {title!r}"},

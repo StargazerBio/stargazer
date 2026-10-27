@@ -26,6 +26,7 @@ from flyte._internal.imagebuild.image_builder import ImageBuildEngine
 from app import admin_app, config, notebooks
 from app import workspace_store as ws
 from app.admin_app import (
+    _new_notebook_slug,
     _notebook_slug,
     _parse_nb_name,
     app_env,
@@ -364,7 +365,16 @@ def test_create_refuses_a_shipped_notebooks_name(client):
 @pytest.mark.parametrize("nb", notebooks.NOTEBOOKS, ids=lambda nb: nb.slug)
 def test_every_shipped_slug_is_reserved(nb):
     """Every shipped notebook's slug is refused as a workspace notebook's."""
-    assert _notebook_slug(nb.slug) is None
+    assert _new_notebook_slug(nb.slug) is None
+
+
+def test_a_stored_notebook_under_a_shipped_slug_stays_manageable(client):
+    """One saved before shipped names were reserved can still be downloaded and deleted."""
+    _put(ALICE, "assets.py")
+    _as(client)
+    assert client.get("/workspace/download?slug=assets").text == NB_SRC
+    assert client.post("/workspace/delete", data={"slug": "assets"}).status_code == 200
+    assert _get(ALICE, "assets.py") is None
 
 
 def test_create_takes_the_longest_name_that_launches(client):
