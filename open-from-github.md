@@ -1,8 +1,9 @@
 ---
 title: Open a notebook from GitHub in the workspace
-status: doing
+status: review
 priority: normal
 created: 2026-10-17
+pr: 91
 ---
 
 A notebook that isn't in the SDK, such as one in someone else's repo, doesn't
