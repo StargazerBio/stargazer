@@ -1,6 +1,6 @@
 ---
 title: The scRNA notebook runs on its own pod's machine
-status: review
+status: done
 priority: normal
 created: 2026-10-26
 pr: 86
@@ -49,3 +49,7 @@ uv run python "$RUN_DIR/check_anndata.py"
 
 - A plain `marimo export` without `--sandbox` runs in the checkout's venv, which has every extra, so it passes even with the bug.
 - `marimo --sandbox` refuses uv older than 0.7.21.
+
+## Outcome
+
+Shipped in PR #86 (merge `72dd7db`). The scRNA notebook's PEP 723 header depends on `stargazer[bio]`, so its sandbox environment has `scikit-image` and `igraph`; `docs/architecture/notebook.md` and the notebook agent's context say a notebook running the scRNA tasks in its own process needs that extra. Verified by a local `marimo export html --sandbox` before (the scikit-image error) and after (every stage `ok`), and by a hosted Run-mode drive on the test account that finished on the notebook's own machine (Verification above). Nothing left. No review comments.
