@@ -3,8 +3,6 @@ title: The asset graph as a living constellation
 status: doing
 priority: normal
 created: 2026-10-26
-blocked_by:
-  - explorer-filter-defaults
 ---
 
 The explorer's graph should be the part of the dashboard people enjoy:

@@ -1,10 +1,8 @@
 ---
 title: A launch's image build survives a dashboard restart
-status: backlog
+status: next
 priority: high
 created: 2026-10-27
-blocked_by:
-  - explorer-filter-defaults
 ---
 
 A launch whose declared image isn't built yet answers 202 and builds in the background (PR #89). What it's waiting on lives only in the dashboard process: `_builds` in `app/admin_app.py`, and an asyncio task (`_serve_when_built`) that serves the pod when the build finishes. A dashboard restart drops both. The build finishes, but the pod is never served and a failure is never reported: `/launch/status` reports the notebook as neither building nor running, and `launch.js` gives up after 60 empty polls and hands the buttons back without a word (inferred from the code, not reproduced). Since PR #78 `upgrade` redeploys dashboards without waiting for anything, so a redeploy during a user's build is an ordinary event.
