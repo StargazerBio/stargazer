@@ -205,14 +205,19 @@ full downloads.
 **The explorer offers two interchangeable renderings** of the same listing,
 switched by a Graph/List toggle (Graph is the default):
 
-- **Graph** draws entries as nodes and their links (`companion_of` and the
-  `*_cid` provenance links) as edges. Hovering a node peeks its metadata;
-  clicking pins a detail card with the full metadata, its source, its linked
-  assets and a download button, and on a record the signed-in user owns,
-  **Edit metadata**, an in-place fix for a mis-tagged record. Zoom, pan and
-  drag are interactive; the mechanics are in `app_internals.md`.
+- **Graph** draws entries as a constellation: each entry is a star, hued by
+  its asset type (the type chips carry the same hues, so they're the legend)
+  and brighter when it's the user's own, and its links (`companion_of` and the
+  `*_cid` provenance links) are the lines between them. Notebooks are
+  four-point stars. The layout is a live simulation: same-type stars gather,
+  dragging a star pulls its neighbors, and a filter change keeps the stars
+  that stay where they were. Hovering a star lights it and its neighbors and
+  peeks its metadata; clicking flies to it and pins a detail card with the
+  full metadata, its source, its linked assets and a download button, and on
+  a record the signed-in user owns, **Edit metadata**, an in-place fix for a
+  mis-tagged record. The mechanics are in `app_internals.md`.
 - **List** is the same entries as a table (name, source, owner, type,
-  download). A public record the user owns reads green in both.
+  download). A public record the user owns reads green.
 
 **A notebook's card acts like a tile.** It shows the notebook's title and
 description and the tile's actions: Edit and Run for a built-in notebook, with
