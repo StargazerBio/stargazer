@@ -379,9 +379,9 @@
 
             <div class="upload-net">
                 <span>Network:</span>
-                <label><input type="radio" name="net" value="private" checked /> Private, in your own storage</label>
+                <label><input type="radio" name="net" value="private" checked /> <span>Private, in your own storage</span></label>
                 {% if public_assets %}
-                <label><input type="radio" name="net" value="public" /> Public — <strong>anyone on the internet</strong> can browse it</label>
+                <label><input type="radio" name="net" value="public" /> <span>Public — <strong>anyone on the internet</strong> can browse it</span></label>
                 {% endif %}
             </div>
 
@@ -834,7 +834,8 @@ function detailHead(rec, title, extra = "") {
         `<div class="detail-head"><h3>${esc(title)}</h3>` +
         `<span class="badge type">${esc(assetType(rec))}</span>${extra}` +
         `<span class="badge src">${esc(SOURCE_LABEL[rec.source])}</span>` +
-        `<span class="badge">${esc(owner(rec))}</span></div>`
+        (rec.source === "stargazer" ? "" : `<span class="badge">${esc(owner(rec))}</span>`) +
+        `</div>`
     );
 }
 
