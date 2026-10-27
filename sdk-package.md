@@ -49,14 +49,24 @@ a clean venv outside any checkout:
       `stargazer.notebooks.tutorials.*`. Moving the scRNA notebook to a
       top-level `notebooks/` folder and the seeds to `app/` is shelved (ticket
       `top-level-notebooks`). Snapshots go (ticket `save-whole-workspace`).
-- [x] **Versioned, published task images.** A task's code runs from its image,
-      so the image must carry the same `stargazer` version as the caller.
-      Publish the gatk and scrna images per release (for example
+- [ ] **Versioned, published task images.** These are for notebook pods
+      running a released SDK (the notebook-image piece below), not for local
+      SDK users: someone who installs the SDK runs tasks locally, in Flyte's
+      local mode, on the dependencies installed on their own machine, and no
+      image is involved. A notebook pod on a released SDK has no checkout to
+      build task images from, yet its runs are remote, so it needs them
+      prebuilt for its version. A task's code runs from its image, so the
+      image must carry the same `stargazer` version as the caller. Publish
+      the gatk and scrna images per release (for example
       `ghcr.io/stargazerbio/stargazer-gatk:<version>`) and have the
       environments use them via `from_base` outside a checkout, keeping
       checkout builds for development. Don't make users rebuild the bioconda
       image: it's slow, and two builds of one version could differ.
-      Done on `feat/sdk-task-images`: `task_image` in `stargazer.config`
+      Built in PR #92 (`feat/sdk-task-images`), on hold until the
+      notebook-image piece, which is its first user. Measured on the devbox
+      from that branch: a task pod sees no checkout, but the child tasks a
+      workflow starts still run on the submitter's images, so checkout runs
+      are unchanged. In the branch, `task_image` in `stargazer.config`
       builds the recipe when the package's root has a `pyproject.toml` (a
       checkout, editable installs included) and otherwise runs
       `ghcr.io/stargazerbio/<image>:<installed version>`. The **Task images**
