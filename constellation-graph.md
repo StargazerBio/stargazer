@@ -1,8 +1,9 @@
 ---
 title: The asset graph as a living constellation
-status: doing
+status: review
 priority: normal
 created: 2026-10-26
+pr: 97
 ---
 
 The explorer's graph should be the part of the dashboard people enjoy:
@@ -175,3 +176,9 @@ The built-in browser pane runs no animation frames while it's hidden, so the sim
   - Two flaws found there: hues went to the first eight types by name, so 44 of 84 stars were gray, `notebook`, `reference` and `variants` among them; and the reference's index companions, 14 units out, had overlapping labels at zoom 2.5.
   - At `bf60831` (hues by count, companions 28 out): `notebook` hued; 15 of 84 gray; `.fai` and `.dict` labels clear of the reference at zoom 2.5. The five aligner-index files still crowd a little at that zoom and part further in.
   - Torn down: `stopped: ['dashboard']`, `live runs: []`; all 7 apps in `u-pryce` STOPPED; no running runs in `u-pryce` or `flytesnacks`.
+- Code review fixes at `2638fe5`, local, 150 and 1,000 stars (measured; the pane was hidden, so checks read state rather than frames):
+  - Particles: force-graph works them out only when the data or their accessor is set. Before the fix, hovering or selecting the 26-link hub gave 0, and one stayed after deselecting. Now hover and select give 26, and unhover and deselect give 0.
+  - A drag's settle while a slowed listing loads doesn't zoom, and a failed fetch leaves no fit pending. A fetch landing mid-settle (60 pinned, decay 0.08) frees them all and restores decay 0.0228 over 400 ticks.
+  - A hover inside a search pulse keeps the redraw running through the pulse (still on at 500 ms, off by 1,200). A fade at 15 fps reaches full dim in 3 frames (0.42, 0.84, 1).
+  - Reduced motion at 1,000 stars, timed from the first warmup tick to the last: a keystroke blocked 3.5–4.3 s and now blocks 0.14–0.57 s. Collide went from all pairs to a grid and costs 0.83 ms a tick; d3's charge is 2.24 ms. A full layout and four filter changes leave 0 overlapping stars.
+  - No page errors. Unit tier: 560 passed. Frame rate and drag were not rerun after these fixes.
