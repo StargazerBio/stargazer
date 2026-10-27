@@ -24,7 +24,8 @@ from flyte._environment import list_loaded_environments
 from flyte._internal.imagebuild import image_builder
 from flyte._internal.imagebuild.image_builder import ImageBuildEngine
 
-from app import admin_app, config, notebooks
+from app import admin_app, config, notebooks, user_state
+from app import assets as assets_mod
 from app import workspace_store as ws
 from app.admin_app import (
     _new_notebook_slug,
@@ -36,6 +37,7 @@ from app.admin_app import (
 from app.notebook_environment import evaluate_main_env, extract_main_env
 from app.notebook_meta import notebook_description, notebook_name, setup_body
 from stargazer.notebooks import notebook_image_base
+from stargazer.utils.index import SqliteIndex
 
 ALICE = "387300641116005877"
 BOB = "111111111111111111"
@@ -73,6 +75,12 @@ def _owned_by_alice(monkeypatch):
     """Every test's dashboard is ALICE's, deployed into her project."""
     monkeypatch.setattr(config, "OWNER_SUBJECT", ALICE)
     monkeypatch.setattr(config, "FLYTE_PROJECT", PROJECT)
+
+
+@pytest.fixture(autouse=True)
+def _own_index(tmp_path, monkeypatch):
+    """The dashboard's index (and its state table) in a temp dir, not ~/.stargazer."""
+    monkeypatch.setattr(assets_mod, "_index", SqliteIndex(tmp_path / "index.db"))
 
 
 @pytest.fixture(autouse=True)
@@ -734,6 +742,7 @@ class _FakeBuildRun:
     """A remote image build run that the test finishes by hand."""
 
     def __init__(self, builder: _FakeBuilder, n: int):
+        self.name = f"build-{n}"
         self.url = f"https://console.example/runs/build-{n}"
         self._builder = builder
         self._done = asyncio.Event()
@@ -743,6 +752,10 @@ class _FakeBuildRun:
 
     async def _wait(self, quiet: bool = False):
         await self._done.wait()
+
+    def done(self) -> bool:
+        """Whether the build has finished, either way."""
+        return self._done.is_set()
 
     async def _raise_for_status(self):
         if not self._ok:
@@ -785,19 +798,33 @@ class _FakeBuilder:
         return ImageBuild(uri=None, remote_run=run)
 
 
+def _restart_flyte():
+    """Empty Flyte's per-process build caches, as a dashboard restart does."""
+    ImageBuildEngine.image_exists.cache_clear()
+    ImageBuildEngine.build.cache_clear()
+
+
 @pytest.fixture
 def builder(monkeypatch):
-    """Route Flyte's real image build engine (and its caches) to `_FakeBuilder`."""
+    """Route Flyte's real image build engine (and its caches) to `_FakeBuilder`.
+
+    `Run.get` finds the builder's runs by name, as the control plane would.
+    """
     fake = _FakeBuilder()
     monkeypatch.setattr(image_builder, "_builds_locally", lambda _builder: False)
     monkeypatch.setattr(
         ImageBuildEngine, "_get_builder", classmethod(lambda cls, _b=None: fake)
     )
-    ImageBuildEngine.image_exists.cache_clear()
-    ImageBuildEngine.build.cache_clear()
+
+    async def get_run(name):
+        return next(run for run in fake.runs if run.name == name)
+
+    monkeypatch.setattr(
+        "app.admin_app.Run", SimpleNamespace(get=SimpleNamespace(aio=get_run))
+    )
+    _restart_flyte()
     yield fake
-    ImageBuildEngine.image_exists.cache_clear()
-    ImageBuildEngine.build.cache_clear()
+    _restart_flyte()
 
 
 @pytest.fixture
@@ -827,8 +854,8 @@ def served(monkeypatch, builder):
     monkeypatch.setattr("app.admin_app.per_notebook_env", fake_env)
     monkeypatch.setattr("flyte.with_servecontext", fake_servecontext)
     yield sink
-    # A test that fails mid-build leaves its build behind; the next starts clean.
-    admin_app._builds.clear()
+    # A test that fails mid-serve leaves its serve behind; the next starts clean.
+    admin_app._serving.clear()
 
 
 def _launch(client, slug, section, mode="edit"):
@@ -1173,6 +1200,11 @@ def aclient(monkeypatch):
     """An async client on the test's own loop, so background tasks keep running."""
     monkeypatch.setattr("app.admin_app.list_project_apps", _no_apps)
     _put(ALICE, "qc-run.py", IMG_SRC)
+    return _dashboard()
+
+
+def _dashboard() -> httpx.AsyncClient:
+    """A new async client on the dashboard, signed in as its owner."""
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(app=asgi_app),
         base_url="http://dashboard.example",
@@ -1291,6 +1323,73 @@ async def test_an_unexpected_error_after_the_build_is_a_failure(
         again = await _alaunch(ac, "qc-run")
         assert again.status_code == 200
         assert again.json() == {"url": "https://nb.example"}
+
+
+def _restart_dashboard():
+    """What a dashboard restart loses: its tasks and Flyte's build caches."""
+    for task in asyncio.all_tasks():
+        if task is not asyncio.current_task():
+            task.cancel()
+    _restart_flyte()
+
+
+async def test_a_build_survives_a_dashboard_restart(aclient, served, builder, union):
+    """A restarted dashboard still reports the build, and serves the pod after it."""
+    builder.built = False
+    async with aclient as ac:
+        await _alaunch(ac, "qc-run")
+    _restart_dashboard()
+    async with _dashboard() as ac:
+        status = (await ac.get("/launch/status")).json()
+        assert status["building"] == [
+            {
+                "slug": "qc-run",
+                "mode": "edit",
+                "url": "https://console.example/runs/build-1",
+            }
+        ]
+        again = await _alaunch(ac, "qc-run")
+        assert again.json() == {"building": "https://console.example/runs/build-1"}
+
+        builder.runs[0].finish()
+        status = await _status_once_built(ac)
+        assert served["served"] == 1
+        assert len(builder.runs) == 1
+        assert await user_state.with_prefix("launch:") == {}
+
+
+async def test_a_finished_build_is_served_once(aclient, served, builder, union):
+    """Many status polls at once after the build serve the pod exactly once."""
+    builder.built = False
+    async with aclient as ac:
+        await _alaunch(ac, "qc-run")
+        builder.runs[0].finish()
+        await asyncio.gather(*(ac.get("/launch/status") for _ in range(5)))
+        await _status_once_built(ac)
+        assert served["served"] == 1
+
+
+async def test_a_failure_is_reported_after_a_restart_until_the_next_launch(
+    aclient, served, builder, union
+):
+    """A build that failed while the dashboard was down still reaches the page."""
+    builder.built = False
+    async with aclient as ac:
+        await _alaunch(ac, "qc-run")
+    builder.runs[0].finish(ok=False)
+    _restart_dashboard()
+    async with _dashboard() as ac:
+        for _ in range(2):
+            status = (await ac.get("/launch/status")).json()
+            assert status["building"] == []
+            [failed] = status["failed"]
+            assert (failed["slug"], failed["mode"]) == ("qc-run", "edit")
+            assert "https://console.example/runs/build-1 failed" in failed["error"]
+        assert served["served"] == 0
+
+        retry = await _alaunch(ac, "qc-run")
+        assert retry.json() == {"building": "https://console.example/runs/build-2"}
+        assert (await ac.get("/launch/status")).json()["failed"] == []
 
 
 # ---------------------------------------------------------------------------
