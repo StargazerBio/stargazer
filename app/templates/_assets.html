@@ -600,12 +600,15 @@ function applyFilter(redrawCard = false) {
 
 // One hue per asset type, shared by the graph's stars and the type chips: the
 // dataviz reference categorical order, stepped for a dark surface, in fixed
-// order over the loaded types sorted by name. Types past the eighth are gray.
+// order over the loaded types, most entries first (ties by name), so the gray
+// that types past the eighth get falls on the rarest.
 const TYPE_HUES = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
 const OTHER_HUE = "#8b949e";
 let typeHue = {};
 function assignTypeHues() {
-    const types = [...new Set(state.records.map(assetType))].sort();
+    const counts = {};
+    for (const r of state.records) counts[assetType(r)] = (counts[assetType(r)] || 0) + 1;
+    const types = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
     typeHue = {};
     types.forEach((t, i) => (typeHue[t] = TYPE_HUES[i] || OTHER_HUE));
 }
@@ -988,7 +991,7 @@ function createGraph(host) {
     // would shift every star whenever a filter moves the centroid.
     fg.d3Force("center", null).d3Force("anchor", anchorForce).d3Force("collide", collideForce);
     fg.d3Force("charge").strength((n) => (n.died ? 0 : -45));
-    fg.d3Force("link").distance((l) => (l.kind === "companion_of" ? 14 : 36));
+    fg.d3Force("link").distance((l) => (l.kind === "companion_of" ? 28 : 36));
     host.addEventListener("dblclick", () => fg.zoomToFit(FLY_MS, 40));
     new ResizeObserver(() => {
         if (host.clientWidth) fg.width(host.clientWidth).height(host.clientHeight);
