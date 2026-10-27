@@ -29,6 +29,8 @@ in, and whoever does sees the owner's dashboard. It has three jobs:
    dashboard's project, and returns its URL. A declared image that isn't
    built yet is built first, in the background: the launch answers at once
    with the build run, and the pod is served when the build finishes. The
+   launch waiting on the build is a row in the owner's state table
+   (`app.user_state`), so a dashboard restart mid-build doesn't lose it. The
    dashboard never calls a notebook pod: the pod hydrates and saves its own
    workspace and shows its own starting page while it warms up.
 

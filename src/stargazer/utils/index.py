@@ -10,7 +10,9 @@ index a `STARGAZER_INDEX_URL` names.
 Locally, `SqliteIndex` is the index itself. On the devbox it's a Postgres
 server that the dashboard and every pod reach through `PostgresIndex`. On
 Union it's the user's `DsqlIndex` table, which their dashboard and every pod
-in their project reach directly.
+in their project reach directly. Beside each index table is a state table
+(`state_table_name`) for the dashboard's own per-user state, which only the
+dashboard writes.
 
 spec: [docs/architecture/types.md](../architecture/types.md)
 """
