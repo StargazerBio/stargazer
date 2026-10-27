@@ -1,6 +1,6 @@
 ---
 title: Public notebooks
-status: review
+status: done
 priority: normal
 created: 2026-10-16
 pr: 90
@@ -133,3 +133,7 @@ built-in browser pane signed in to the console as the test account.
 - Pinata stores identical bytes once per account, keeping the first
   upload's keyvalues, so a probe whose bytes match an earlier public file
   is refused with 409. Give the probe a name nobody has published.
+
+## Outcome
+
+Shipped in PR #90 (merge `4f28d29`). A workspace notebook's tile publishes it to the public tier as an `asset=notebook` record with its title, description and slug, and republishes or unpublishes it; everyone's published notebooks are listed and can be copied into a workspace. Verified by the unit tier (509 passed, 16 new tests in `tests/unit/test_public_notebooks.py`) and on Union with the test account's dashboard at `b126036` (Verification above). Nothing deferred, no review comments. The Public notebooks section it added became the explorer's Public source in ticket `unified-asset-explorer`.

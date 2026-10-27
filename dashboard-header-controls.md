@@ -1,11 +1,9 @@
 ---
 title: Settings and cleanup move into the dashboard header
-status: review
+status: done
 priority: normal
 created: 2026-10-26
 pr: 94
-blocked_by:
-  - public-notebooks
 ---
 
 The dashboard's Settings section becomes a Settings button in the header
@@ -124,3 +122,7 @@ built-in browser pane signed in to the console as the test account.
 - `hc-setup`: `build-probe-1026` gear → `setupOpen=true`, target `build-probe-1026.py`; Save → blurb "Header controls probe", then reverted to "Personal workspace notebook.". Measured.
 - `hc-phone`: at the mobile preset one row (broom x 87, gear x 131, both y 51; scrollWidth = viewport). At 320 px the header wraps: brand, then broom and gear (y 101, side by side) with the runs link, then the avatar (y 153); header right edge 287. Measured.
 - Teardown: `stopped: ['dashboard']`, `live runs: []`, all six apps in `u-pryce` STOPPED. Measured.
+
+## Outcome
+
+Shipped in PR #94 (merge `632fb3f`). Settings is a header button opening a modal, and cleaning up stopped apps is a header button too; the Settings section and the footer broom are gone. Verified by the unit tier (531 passed) and on Union with the test account `u-pryce` at `76fafeb` (the recipe above). The phone-width overflow of the upload labels it noted was outside the header; #95's `974a177` rewrapped those labels (inferred from the commit, not measured at phone width). No review comments.
