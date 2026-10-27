@@ -1,6 +1,6 @@
 ---
 title: Launching a notebook whose image takes minutes to build
-status: backlog
+status: doing
 priority: low
 created: 2026-10-22
 ---
