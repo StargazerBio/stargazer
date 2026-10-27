@@ -1,5 +1,5 @@
 """
-### Asset browser API routes.
+### Asset explorer API routes.
 
 APIRouter included by the dashboard, serving the asset explorer on its home
 page (`templates/_assets.html`). Its listing (`GET /assets/list`) is one list
