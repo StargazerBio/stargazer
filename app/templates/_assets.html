@@ -121,8 +121,8 @@
 }
 .region-error { color: var(--danger); }
 
-/* Graph — Cytoscape mounts into #graph-host; node/edge appearance is set in
-   the JS style array (canvas-rendered, not CSS-selectable). */
+/* Graph — force-graph draws into a canvas in #graph-host; nodes and links are
+   painted in JS (canvas-rendered, not CSS-selectable). */
 #graph-host { width: 100%; height: 420px; }
 .graph-cap {
     position: absolute;
@@ -464,7 +464,7 @@
     </details>
 </section>
 {% endmacro %} {% macro script() %}
-<script src="/static/cytoscape.min.js"></script>
+<script src="/static/force-graph.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tus-js-client@4.3.1/dist/tus.min.js"></script>
 <script>
 const USERNAME = {{ username | tojson }};
@@ -676,7 +676,7 @@ function renderView() {
         // Clear any stale graph/list from the previous (non-empty) result —
         // the empty-state message is a transparent overlay, so leftover nodes
         // or rows would otherwise show through it.
-        if (cy) cy.elements().remove();
+        if (fg) fg.graphData({ nodes: [], links: [] });
         graphDrawn = null;
         $("list-body").innerHTML = "";
         $("graph-cap").hidden = true;
@@ -717,81 +717,45 @@ function linkTarget(rec, cid, records) {
     return matches.find((r) => r.source === rec.source) || matches[0];
 }
 
-// Build Cytoscape elements from the loaded records. Nodes are assets; edges
-// are *_cid relationships resolved to in-view targets only (dangling links are
-// listed on the detail card, not drawn). Node size scales with degree.
+// Nodes are assets and links are *_cid relationships resolved to in-view
+// targets only (dangling links are listed on the detail card, not drawn). A
+// link runs from the derived asset to its source. Node objects are kept
+// across renders (`graphNodes`), so a star that stays in view keeps its place.
+const graphNodes = new Map();
+
 function graphElements(records) {
     const capped = records.slice(0, NODE_CAP);
     const deg = {};
-    const edges = [];
+    const links = [];
     for (const r of capped) {
         const from = entryKey(r);
         for (const k of relKeys(r.keyvalues)) {
             const found = linkTarget(r, r.keyvalues[k], capped);
             const tgt = found && entryKey(found);
             if (tgt && tgt !== from) {
-                edges.push({ data: { id: from + "__" + k + "__" + tgt, source: from, target: tgt, label: relLabel(k) } });
+                links.push({ source: from, target: tgt, kind: k });
                 deg[from] = (deg[from] || 0) + 1;
                 deg[tgt] = (deg[tgt] || 0) + 1;
             }
         }
     }
-    const nodes = capped.map((r) => ({
-        data: { id: entryKey(r), label: displayName(r), size: 16 + Math.min(28, (deg[entryKey(r)] || 0) * 5) },
-        classes: ownedByUser(r) ? "mine" : "",
-    }));
-    return { elements: nodes.concat(edges), truncated: records.length > NODE_CAP };
+    const nodes = capped.map((r) => {
+        const id = entryKey(r);
+        const node = graphNodes.get(id) || { id };
+        node.rec = r;
+        node.label = displayName(r);
+        node.deg = deg[id] || 0;
+        node.r = 3 + Math.min(6, node.deg * 0.9);
+        graphNodes.set(id, node);
+        return node;
+    });
+    return { nodes, links, truncated: records.length > NODE_CAP };
 }
 
-// Constellation palette (Cytoscape renders to canvas, so hex/rgba not CSS
-// vars). Mirrors base.html: violet accent for nodes/edges, brighter on
-// select/hover; a target arrow shows provenance direction (child → parent).
-const GRAPH_STYLE = [
-    { selector: "node", style: {
-        "background-color": "rgba(167,139,250,0.18)",
-        "border-color": "rgba(167,139,250,0.5)", "border-width": 1.5,
-        "width": "data(size)", "height": "data(size)",
-        "label": "data(label)", "color": "#8b949e",
-        "font-family": "IBM Plex Mono, monospace", "font-size": 9,
-        "text-valign": "bottom", "text-margin-y": 4,
-        // Bound label width (full name still in the tooltip + detail card) so a
-        // long name can't sprawl across neighbors.
-        "text-max-width": 96, "text-wrap": "ellipsis",
-    } },
-    // Public assets owned by the signed-in user (selected/hot override below).
-    { selector: "node.mine", style: { "border-color": "#9cd47f", "border-width": 2 } },
-    { selector: "node.selected", style: {
-        "background-color": "rgba(167,139,250,0.30)",
-        "border-color": "#b9a0ec", "border-width": 3, "color": "#f0f6fc",
-    } },
-    { selector: "node.hot", style: { "border-color": "#b9a0ec" } },
-    { selector: "edge", style: {
-        "width": 1.2, "curve-style": "bezier",
-        "line-color": "rgba(167,139,250,0.42)",
-        "target-arrow-color": "rgba(167,139,250,0.42)",
-        "target-arrow-shape": "triangle", "arrow-scale": 0.7,
-    } },
-    { selector: "edge.hot", style: {
-        "line-color": "#b9a0ec", "target-arrow-color": "#b9a0ec", "width": 2,
-    } },
-];
-
-// `nodeDimensionsIncludeLabels` makes cose space nodes by their label-inclusive
-// bounding box (not just the circle), so labels stop overlapping; the wider
-// spacing reinforces it.
-const GRAPH_LAYOUT = {
-    name: "cose",
-    animate: false,
-    padding: 30,
-    nodeDimensionsIncludeLabels: true,
-    idealEdgeLength: 120,
-    nodeRepulsion: 16000,
-    nodeOverlap: 28,
-    componentSpacing: 100,
-    fit: true,
-};
-
-let cy = null;
+let fg = null;
+// The hovered node, and it plus its neighbors.
+let hoverNode = null;
+let hoverSet = new Set();
 
 function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) =>
@@ -806,76 +770,93 @@ let graphDrawn = null;
 function renderGraph() {
     const host = $("graph-host");
     const drawn = state.visible.map((r) => entryKey(r) + "\t" + displayName(r)).join("\n");
-    if (cy && drawn === graphDrawn) return;
+    if (fg && drawn === graphDrawn) return;
     graphDrawn = drawn;
-    const { elements, truncated } = graphElements(state.visible);
+    const data = graphElements(state.visible);
 
     const cap = $("graph-cap");
-    if (truncated) {
+    if (data.truncated) {
         cap.hidden = false;
         cap.textContent = "Showing " + NODE_CAP + " of " + state.visible.length + " — narrow with filters";
     } else {
         cap.hidden = true;
     }
-    $("graph-hint").hidden = elements.length === 0;
+    $("graph-hint").hidden = data.nodes.length === 0;
 
-    if (!window.cytoscape) { host.textContent = "Graph library failed to load."; return; }
-
-    if (!cy) {
-        cy = cytoscape({
-            container: host,
-            elements,
-            style: GRAPH_STYLE,
-            layout: GRAPH_LAYOUT,
-            boxSelectionEnabled: false,
-            autounselectify: true, // selection is driven via a .selected class
-            wheelSensitivity: 0.25,
-            minZoom: 0.2,
-            maxZoom: 4,
-        });
-        bindGraphEvents();
-    } else {
-        // The container may have been display:none (list view) — resize so the
-        // layout fits the now-visible box.
-        cy.elements().remove();
-        cy.add(elements);
-        cy.resize();
-        cy.layout(GRAPH_LAYOUT).run();
-    }
-    if (state.selected) {
-        const n = cy.getElementById(state.selected);
-        if (n && n.length) n.addClass("selected");
-    }
+    if (!window.ForceGraph) { host.textContent = "Graph library failed to load."; return; }
+    if (!fg) createGraph(host);
+    // The host may have been display:none (list view), so size it now.
+    fg.width(host.clientWidth).height(host.clientHeight);
+    fg.graphData({ nodes: data.nodes, links: data.links });
 }
 
-// Cytoscape gives zoom (scroll), pan (drag background), and node drag for
-// free; these bind the app behaviors on top, once, when cy is first created.
-function bindGraphEvents() {
-    cy.on("tap", "node", (evt) => selectAsset(evt.target.id()));
-    cy.on("tap", (evt) => {
-        if (evt.target === cy) { // tap on empty canvas clears the selection
+function createGraph(host) {
+    fg = new ForceGraph(host)
+        .backgroundColor("rgba(0,0,0,0)")
+        .nodeId("id")
+        .nodeLabel(null)
+        .minZoom(0.2)
+        .maxZoom(8)
+        .nodeCanvasObject(paintNode)
+        .nodePointerAreaPaint((node, color, ctx) => {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, node.r + 3, 0, 2 * Math.PI);
+            ctx.fill();
+        })
+        .linkColor((l) => (hoverSet.size && !isHotLink(l) ? "rgba(167,139,250,0.08)" : "rgba(167,139,250,0.35)"))
+        .linkWidth((l) => (isHotLink(l) ? 1.6 : 0.8))
+        .onNodeClick((node) => selectAsset(node.id))
+        .onBackgroundClick(() => {
             state.selected = null;
-            cy.nodes().removeClass("selected");
             renderDetail();
-        }
-    });
-    cy.on("mouseover", "node", (evt) => {
-        const node = evt.target;
-        const rec = state.records.find((r) => entryKey(r) === node.id());
-        if (rec) showGraphTip(rec, node);
-        node.addClass("hot");
-        node.connectedEdges().addClass("hot");
-        node.neighborhood("node").addClass("hot");
-    });
-    cy.on("mouseout", "node", () => {
-        $("graph-tip").style.display = "none";
-        cy.elements().removeClass("hot");
-    });
-    cy.on("drag", "node", () => { $("graph-tip").style.display = "none"; });
+        })
+        .onNodeHover(hoverOn)
+        .onNodeDrag(() => { $("graph-tip").style.display = "none"; });
+    host.addEventListener("dblclick", () => fg.zoomToFit(400, 30));
+    new ResizeObserver(() => {
+        if (host.clientWidth) fg.width(host.clientWidth).height(host.clientHeight);
+    }).observe(host);
 }
 
-// Double-click the canvas to reset the view (zoom-to-fit).
-$("graph-host").addEventListener("dblclick", () => { if (cy) cy.fit(undefined, 30); });
+const isHotLink = (l) => hoverNode && (l.source === hoverNode || l.target === hoverNode);
+
+function hoverOn(node) {
+    hoverNode = node || null;
+    hoverSet = new Set();
+    if (node) {
+        hoverSet.add(node.id);
+        for (const l of fg.graphData().links) {
+            if (l.source === node) hoverSet.add(l.target.id);
+            if (l.target === node) hoverSet.add(l.source.id);
+        }
+        showGraphTip(node.rec, node);
+    } else {
+        $("graph-tip").style.display = "none";
+    }
+    $("graph-host").style.cursor = node ? "pointer" : "";
+}
+
+function paintNode(node, ctx, scale) {
+    const selected = node.id === state.selected;
+    const dim = hoverSet.size && !hoverSet.has(node.id);
+    ctx.globalAlpha = dim ? 0.25 : 1;
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, node.r, 0, 2 * Math.PI);
+    ctx.fillStyle = selected ? "rgba(167,139,250,0.55)" : "rgba(167,139,250,0.22)";
+    ctx.fill();
+    ctx.lineWidth = (selected ? 2 : 1) / scale;
+    ctx.strokeStyle = ownedByUser(node.rec) ? "#9cd47f" : selected ? "#b9a0ec" : "rgba(167,139,250,0.6)";
+    ctx.stroke();
+    const size = 10 / scale;
+    ctx.font = size + "px IBM Plex Mono, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = selected ? "#f0f6fc" : "#8b949e";
+    const label = node.label.length > 18 ? node.label.slice(0, 17) + "…" : node.label;
+    ctx.fillText(label, node.x, node.y + node.r + 2 / scale);
+    ctx.globalAlpha = 1;
+}
 
 function showGraphTip(rec, node) {
     const tip = $("graph-tip");
@@ -890,9 +871,9 @@ function showGraphTip(rec, node) {
         `<div class="tip-name">${esc(displayName(rec))}</div>` +
         `<div class="tip-type">${esc(assetType(rec))} · ${esc(SOURCE_LABEL[rec.source])}</div><dl>${rows}</dl>`;
     tip.style.display = "block";
-    // node.renderedPosition() is relative to the cy container (#graph-host),
-    // which sits at the region's top-left, so it maps onto region coords.
-    const pos = node.renderedPosition();
+    // Screen coords are relative to #graph-host, which sits at the region's
+    // top-left, so they map onto region coords.
+    const pos = fg.graph2ScreenCoords(node.x, node.y);
     const region = $("graph-region");
     let left = pos.x + 16, top = pos.y + 12;
     if (left + tip.offsetWidth > region.clientWidth) left = region.clientWidth - tip.offsetWidth - 8;
@@ -950,10 +931,6 @@ function selectAsset(key) {
         $("list-body").querySelectorAll("tr").forEach((tr) =>
             tr.classList.toggle("selected", tr.dataset.key === key)
         );
-    } else if (cy) {
-        cy.nodes().removeClass("selected");
-        const n = cy.getElementById(key);
-        if (n && n.length) n.addClass("selected");
     }
     renderDetail();
 }
