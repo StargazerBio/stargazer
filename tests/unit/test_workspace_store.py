@@ -102,6 +102,16 @@ async def test_settings_of_a_new_user_are_the_defaults():
     assert await ws.get_settings(ALICE) == ws.DEFAULT_SETTINGS
 
 
+async def test_a_new_users_explorer_default_is_mine_and_stargazer():
+    """With no settings file the explorer opens on Mine and Stargazer, unfiltered."""
+    assert (await ws.get_settings(ALICE))["explorer_default"] == {
+        "sources": ["mine", "stargazer"],
+        "types": [],
+        "keyvalues": {},
+        "text": "",
+    }
+
+
 async def test_saved_settings_read_back():
     """A saved interval reads back, and only for that user."""
     await ws.put_settings(ALICE, {"save_interval_seconds": 60})

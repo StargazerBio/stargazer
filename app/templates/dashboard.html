@@ -195,6 +195,19 @@
         <button type="submit" class="btn btn-notebook">Save</button>
         <span id="user-settings-status" class="create-unit" role="status"></span>
     </form>
+    {% if mine_on %}
+    <p class="section-desc">
+        The asset explorer opens on
+        <strong id="explorer-default-summary"></strong>.
+        Save another filter from the explorer with Save as default.
+    </p>
+    <div class="create-form">
+        <button type="button" class="btn btn-muted" id="explorer-default-reset">
+            Reset to Mine, Stargazer
+        </button>
+        <span id="explorer-default-status" class="create-unit" role="status"></span>
+    </div>
+    {% endif %}
     <div class="modal-actions">
         <button type="button" class="btn btn-muted" data-close>Close</button>
     </div>

@@ -110,14 +110,39 @@ in the explorer, which lists entries from three sources together:
 | Public | Public assets and public notebooks | Pinata's public network |
 | Stargazer | Tutorials and Workflows | The built-in notebooks, baked into the image |
 
-The explorer starts on Mine and Stargazer, so the tutorials are in front of a
-new user without the whole public tier, and any mix of sources can be on at
-once. Mine is offered only to the dashboard's owner, so an admin visiting
-someone's dashboard browses Stargazer and Public. When the public tier can't
-be read, the other sources still list and the page says Public is missing. One listing route returns the union, each entry marked with its source,
-and keyvalue filters apply to every source alike. Routes live in
+Any mix of sources can be on at once. Mine is offered only to the
+dashboard's owner, so an admin visiting someone's dashboard browses
+Stargazer and Public. When the public tier can't be read, the other sources
+still list and the page says Public is missing. One listing route returns
+the union, each entry marked with its source. Routes live in
 `app/assets.py`; mechanics and the route table are in
 `.claude/reference/architecture/app_internals.md`.
+
+**The explorer's filter** is one object: the sources, the types, keyvalue
+pairs and a search text. Sources pick what's fetched, so changing them is a
+request; the rest narrows the loaded entries in the browser, at once:
+
+- **Search** matches as you type, case-insensitively, against an entry's
+  name, its keyvalue values (a notebook's title and description among them)
+  and the start of its CID.
+- **Types** are toggle chips, one per type among the loaded entries, each
+  with how many entries it would show. None pressed means every type.
+- **Keyvalues** are removable chips, all of which an entry must match. A
+  keyvalue on an entry's card has a "filter by this" control that adds it,
+  and a key and value can be typed in.
+- The count of shown entries out of those loaded sits beside **Clear**,
+  which returns to the user's default filter.
+
+**Each user picks the filter the explorer opens on.** Save as default
+stores the current filter with the user's settings, so it follows them
+across browsers. Without one, the explorer opens on Mine and Stargazer with
+nothing else set, so the tutorials are in front of a new user without the
+whole public tier. The Settings modal says what the saved default is, and
+Reset goes back to the built-in one. A default that no longer fits is
+applied as far as it can be: a source that isn't offered (Public with
+public assets off, or Mine for an admin visiting someone's dashboard) is
+dropped, and a type with no entries keeps its chip at a count of 0. Only the
+dashboard's owner saves or resets it.
 
 **Mine is the user's own index and store**, the same ones their tasks
 and notebooks write to, so it shows everything they've stored. Only the

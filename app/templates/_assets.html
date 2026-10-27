@@ -50,6 +50,49 @@
     font-family: inherit;
 }
 .asset-filters input:focus { outline: none; border-color: var(--accent); }
+.filter-search {
+    flex: 1 1 14rem;
+    min-width: 0;
+    background: #0d1117;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.82rem;
+    font-family: inherit;
+}
+.filter-search:focus { outline: none; border-color: var(--accent); }
+.filter-bar { display: flex; flex-direction: column; gap: 0.55rem; margin: -0.5rem 0 1.25rem; }
+.chip-row { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+.filter-tail { justify-content: flex-end; }
+.filter-count { font-family: var(--mono); font-size: 0.76rem; color: var(--text-dim); margin-right: auto; }
+/* Type and keyvalue chips: a type chip toggles (pressed reads violet), a
+   keyvalue chip removes itself. */
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.12rem 0.6rem;
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    cursor: pointer;
+}
+.chip:hover { color: var(--text); border-color: var(--border-strong); }
+.chip[aria-pressed="true"], .chip.kv { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+.chip .n { opacity: 0.7; }
+.filter-by {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 0.72rem;
+    padding: 0 0.3rem;
+}
+.filter-by:hover { color: var(--accent); }
 
 /* Display region — graph and list are siblings; one is [hidden] at a time. */
 .asset-region {
@@ -299,25 +342,40 @@
     </h2>
 
     <div class="assets-controls">
+        {% set pressed = explorer_default.sources %}
         <div class="seg" id="source-tabs" role="group" aria-label="Sources">
             {% if mine_on %}
-            <button data-source="mine" aria-pressed="true">Mine</button>
+            <button data-source="mine" aria-pressed="{{ 'true' if 'mine' in pressed else 'false' }}">Mine</button>
             {% endif %}
             {% if public_assets %}
-            <button data-source="public" aria-pressed="false">Public</button>
+            <button data-source="public" aria-pressed="{{ 'true' if 'public' in pressed else 'false' }}">Public</button>
             {% endif %}
-            <button data-source="stargazer" aria-pressed="true">Stargazer</button>
+            <button data-source="stargazer" aria-pressed="{{ 'true' if 'stargazer' in pressed else 'false' }}">Stargazer</button>
         </div>
         <div class="seg" id="view-toggle" role="tablist" aria-label="View">
             <button data-view="graph" role="tab" aria-selected="true">Graph</button>
             <button data-view="list" role="tab" aria-selected="false">List</button>
         </div>
-        <div class="asset-filters">
-            <input id="filter-type" list="type-options" placeholder="Asset Type" />
-            <datalist id="type-options"></datalist>
-            <input id="filter-key" placeholder="Key" size="10" />
-            <input id="filter-val" placeholder="Value" size="10" />
-            <button class="btn btn-muted" id="filter-apply" type="button">Filter</button>
+        <input id="filter-text" class="filter-search" type="search" maxlength="200"
+               placeholder="Search names, metadata, CIDs" aria-label="Search" />
+    </div>
+
+    <div class="filter-bar">
+        <div class="chip-row" id="type-chips" role="group" aria-label="Types"></div>
+        <div class="chip-row">
+            <form class="asset-filters" id="kv-add">
+                <input id="filter-key" placeholder="Key" size="10" aria-label="Key" />
+                <input id="filter-val" placeholder="Value" size="10" aria-label="Value" />
+                <button class="btn btn-muted" type="submit">Add</button>
+            </form>
+            <span id="kv-chips" class="chip-row"></span>
+        </div>
+        <div class="chip-row filter-tail">
+            <span class="filter-count" id="filter-count" role="status"></span>
+            <button class="btn btn-muted" id="filter-clear" type="button" title="Back to your default filter">Clear</button>
+            {% if mine_on and workspace_configured %}
+            <button class="btn btn-muted" id="filter-save" type="button" title="Open the explorer on this filter from now on">Save as default</button>
+            {% endif %}
         </div>
     </div>
 
@@ -415,17 +473,29 @@ const TUS_MAX_BYTES = {{ tus_max_bytes }};
 const TUS_CHUNK_BYTES = {{ tus_chunk_bytes }};
 
 const NODE_CAP = 150;
+// The filter the explorer opens on and Clear returns to: the owner's saved
+// default, or the built-in one, less any source this visitor isn't offered.
+let EXPLORER_DEFAULT = {{ explorer_default | tojson }};
+// A filter as the page holds it; `filterJSON` is its stored shape.
+const loadFilter = (f) => ({
+    sources: new Set(f.sources),
+    types: new Set(f.types),
+    keyvalues: { ...f.keyvalues },
+    text: f.text,
+});
+const filterJSON = (f) => ({
+    sources: [...f.sources],
+    types: [...f.types],
+    keyvalues: { ...f.keyvalues },
+    text: f.text,
+});
 const state = {
-    // The sources pressed in the page: Mine (for the owner) and Stargazer.
-    // The public tier is opt-in.
-    sources: new Set(
-        [...document.querySelectorAll("#source-tabs [aria-pressed=true]")].map(
-            (b) => b.dataset.source
-        )
-    ),
+    // Sources pick what's fetched; types, keyvalues and text narrow the
+    // loaded `records` in the page.
+    filter: loadFilter(EXPLORER_DEFAULT),
     view: "graph",
-    filters: {},
     records: [],
+    visible: [],
     schema: {},
     selected: null,
     editing: null,
@@ -474,19 +544,101 @@ async function fetchSchema() {
 
 function listParams() {
     const p = new URLSearchParams();
-    for (const source of state.sources) p.append("source", source);
-    if (state.filters.type) p.set("asset", state.filters.type);
-    if (state.filters.key && state.filters.val) p.set(state.filters.key, state.filters.val);
+    for (const source of state.filter.sources) p.append("source", source);
     return p;
+}
+
+// Whether `r` passes the filter's search and keyvalues (and its types,
+// unless `withTypes` is false, as the type chips' counts need).
+function matches(r, f, withTypes = true) {
+    const kv = r.keyvalues || {};
+    if (withTypes && f.types.size && !f.types.has(assetType(r))) return false;
+    for (const [k, v] of Object.entries(f.keyvalues)) {
+        if (String(kv[k] ?? "") !== v) return false;
+    }
+    const q = f.text.trim().toLowerCase();
+    if (!q) return true;
+    // Title and description are keyvalues, so the values cover them.
+    const hay = [r.name || "", ...Object.values(kv).map(String)];
+    return (
+        (r.cid || "").toLowerCase().startsWith(q) ||
+        hay.some((s) => s.toLowerCase().includes(q))
+    );
+}
+
+// Narrow the loaded records to the filter and redraw what shows them.
+function applyFilter() {
+    state.visible = state.records.filter((r) => matches(r, state.filter));
+    if (state.selected && !state.visible.some((r) => entryKey(r) === state.selected)) {
+        state.selected = null;
+        state.editing = null;
+    }
+    renderFilterBar();
+    renderView();
+    renderDetail();
+}
+
+// The type chips (one per type loaded, and any the filter names, each with
+// how many entries it would show), the keyvalue chips and the count.
+function renderFilterBar() {
+    const f = state.filter;
+    const counts = {};
+    for (const t of f.types) counts[t] = 0;
+    for (const r of state.records) {
+        const t = assetType(r);
+        counts[t] = (counts[t] || 0) + (matches(r, f, false) ? 1 : 0);
+    }
+    $("type-chips").innerHTML = Object.keys(counts)
+        .sort()
+        .map(
+            (t) =>
+                `<button type="button" class="chip" data-type="${esc(t)}" aria-pressed="${f.types.has(t)}">` +
+                `${esc(t)} <span class="n">${counts[t]}</span></button>`
+        )
+        .join("");
+    $("kv-chips").innerHTML = Object.entries(f.keyvalues)
+        .map(
+            ([k, v]) =>
+                `<button type="button" class="chip kv" data-kv="${esc(k)}" title="Remove this filter">` +
+                `${esc(k)} = ${esc(v)} ✕</button>`
+        )
+        .join("");
+    if ($("filter-text").value !== f.text) $("filter-text").value = f.text;
+    $("filter-count").textContent = state.records.length
+        ? state.visible.length + " of " + state.records.length
+        : "";
+}
+
+// Put the filter `f` in place: press its sources, refetch if they changed,
+// and narrow what's loaded.
+function setFilter(f) {
+    const before = [...state.filter.sources].sort().join();
+    state.filter = loadFilter(f);
+    $("source-tabs").querySelectorAll("[data-source]").forEach((b) =>
+        b.setAttribute("aria-pressed", String(state.filter.sources.has(b.dataset.source)))
+    );
+    if ([...state.filter.sources].sort().join() !== before) fetchRecords();
+    else applyFilter();
+}
+
+// The filter in words, as Settings shows the saved default.
+function describeFilter(f) {
+    const parts = [
+        f.sources.map((s) => SOURCE_LABEL[s]).join(", ") || "No sources",
+    ];
+    if (f.types.length) parts.push(f.types.join(", "));
+    const kvs = Object.entries(f.keyvalues).map(([k, v]) => k + " = " + v);
+    if (kvs.length) parts.push(kvs.join(", "));
+    if (f.text) parts.push("'" + f.text + "'");
+    return parts.join("; ");
 }
 
 async function fetchRecords() {
     setRegionMessage(null);
     $("source-note").hidden = true;
-    if (state.sources.size === 0) {
+    if (state.filter.sources.size === 0) {
         state.records = [];
-        renderView();
-        renderDetail();
+        applyFilter();
         return;
     }
     try {
@@ -502,15 +654,12 @@ async function fetchRecords() {
         $("source-note").hidden = !resp.headers.get("Stargazer-Unavailable");
     } catch (err) {
         state.records = [];
+        state.visible = [];
+        renderFilterBar();
         setRegionMessage("Couldn't load assets: " + err.message, true);
         return;
     }
-    // Drop a selection that's no longer in the set.
-    if (state.selected && !state.records.some((r) => entryKey(r) === state.selected)) {
-        state.selected = null;
-    }
-    renderView();
-    renderDetail();
+    applyFilter();
 }
 
 // ---- view switching ------------------------------------------------------
@@ -518,7 +667,7 @@ async function fetchRecords() {
 function renderView() {
     $("graph-region").hidden = state.view !== "graph";
     $("list-region").hidden = state.view !== "list";
-    if (state.records.length === 0) {
+    if (state.visible.length === 0) {
         // Clear any stale graph/list from the previous (non-empty) result —
         // the empty-state message is a transparent overlay, so leftover nodes
         // or rows would otherwise show through it.
@@ -526,11 +675,10 @@ function renderView() {
         $("list-body").innerHTML = "";
         $("graph-cap").hidden = true;
         $("graph-hint").hidden = true;
-        const filtered = state.filters.type || (state.filters.key && state.filters.val);
         setRegionMessage(
-            state.sources.size === 0
+            state.filter.sources.size === 0
                 ? "Pick a source to see what's in it."
-                : filtered
+                : state.records.length
                 ? "Nothing matches this filter."
                 : "Nothing here yet. Upload an asset below, or run a task that stores one."
         );
@@ -647,12 +795,12 @@ function esc(s) {
 
 function renderGraph() {
     const host = $("graph-host");
-    const { elements, truncated } = graphElements(state.records);
+    const { elements, truncated } = graphElements(state.visible);
 
     const cap = $("graph-cap");
     if (truncated) {
         cap.hidden = false;
-        cap.textContent = "Showing " + NODE_CAP + " of " + state.records.length + " — narrow with filters";
+        cap.textContent = "Showing " + NODE_CAP + " of " + state.visible.length + " — narrow with filters";
     } else {
         cap.hidden = true;
     }
@@ -745,7 +893,7 @@ function showGraphTip(rec, node) {
 function renderList() {
     const body = $("list-body");
     body.innerHTML = "";
-    for (const r of state.records) {
+    for (const r of state.visible) {
         const tr = document.createElement("tr");
         tr.dataset.key = entryKey(r);
         if (entryKey(r) === state.selected) tr.classList.add("selected");
@@ -799,7 +947,7 @@ function selectAsset(key) {
 
 function renderDetail() {
     const el = $("detail");
-    const rec = state.records.find((r) => entryKey(r) === state.selected);
+    const rec = state.visible.find((r) => entryKey(r) === state.selected);
     if (!rec) {
         state.editing = null;
         el.className = "asset-detail empty";
@@ -815,14 +963,17 @@ function renderDetail() {
     for (const k of Object.keys(kv)) {
         if (k === "asset") continue;
         const sys = k.startsWith("_") ? " sys" : "";
-        meta += `<dt class="${sys.trim()}">${esc(k)}${sys ? " (system)" : ""}</dt><dd>${esc(kv[k])}</dd>`;
+        const by =
+            `<button type="button" class="filter-by" data-filter-key="${esc(k)}" ` +
+            `data-filter-val="${esc(kv[k])}" title="Show only entries with this">filter by this</button>`;
+        meta += `<dt class="${sys.trim()}">${esc(k)}${sys ? " (system)" : ""}</dt><dd>${esc(kv[k])}${by}</dd>`;
     }
     // Linked assets — resolve in-view targets to a clickable chip; the rest
     // are dangling (cross-network / out of view) and shown read-only.
     let links = "";
     for (const k of relKeys(kv)) {
         const target = kv[k];
-        const found = linkTarget(rec, target, state.records);
+        const found = linkTarget(rec, target, state.visible);
         const label = esc(relLabel(k));
         if (found) {
             links += `<span class="link-chip" data-goto="${esc(entryKey(found))}">${label}: ${esc(displayName(found))}</span>`;
@@ -981,8 +1132,7 @@ async function saveEdit(key) {
         // Reflect the merged result locally and leave edit mode.
         rec.keyvalues = body.keyvalues || rec.keyvalues;
         state.editing = null;
-        renderView();
-        renderDetail();
+        applyFilter();
     } catch (err) {
         errEl.textContent = "Save failed: " + err.message;
         errEl.hidden = false;
@@ -993,6 +1143,8 @@ async function saveEdit(key) {
 $("detail").addEventListener("click", (e) => {
     const copy = e.target.closest("[data-copy]");
     if (copy) { navigator.clipboard?.writeText(copy.dataset.copy); flash(copy, "✓"); return; }
+    const by = e.target.closest("[data-filter-key]");
+    if (by) { addKeyvalue(by.dataset.filterKey, by.dataset.filterVal); return; }
     const goto = e.target.closest("[data-goto]");
     if (goto) { selectAsset(goto.dataset.goto); return; }
     const edit = e.target.closest("[data-edit]");
@@ -1029,8 +1181,8 @@ $("source-tabs").addEventListener("click", (e) => {
     if (!btn) return;
     const on = btn.getAttribute("aria-pressed") !== "true";
     btn.setAttribute("aria-pressed", String(on));
-    if (on) state.sources.add(btn.dataset.source);
-    else state.sources.delete(btn.dataset.source);
+    if (on) state.filter.sources.add(btn.dataset.source);
+    else state.filter.sources.delete(btn.dataset.source);
     fetchRecords();
 });
 segmented("view-toggle", "view", (view) => {
@@ -1038,20 +1190,89 @@ segmented("view-toggle", "view", (view) => {
     renderView();
 });
 
-$("filter-apply").addEventListener("click", () => {
-    state.filters = {
-        type: $("filter-type").value.trim(),
-        key: $("filter-key").value.trim(),
-        val: $("filter-val").value.trim(),
-    };
-    fetchRecords();
+function addKeyvalue(k, v) {
+    state.filter.keyvalues[k] = String(v);
+    applyFilter();
+}
+$("filter-text").addEventListener("input", (e) => {
+    state.filter.text = e.target.value;
+    applyFilter();
+});
+$("type-chips").addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-type]");
+    if (!chip) return;
+    const types = state.filter.types;
+    if (types.has(chip.dataset.type)) types.delete(chip.dataset.type);
+    else types.add(chip.dataset.type);
+    applyFilter();
+});
+$("kv-chips").addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-kv]");
+    if (!chip) return;
+    delete state.filter.keyvalues[chip.dataset.kv];
+    applyFilter();
+});
+$("kv-add").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const k = $("filter-key").value.trim();
+    if (!k) return;
+    addKeyvalue(k, $("filter-val").value.trim());
+    $("filter-key").value = "";
+    $("filter-val").value = "";
+});
+$("filter-clear").addEventListener("click", () => setFilter(EXPLORER_DEFAULT));
+
+// Settings' summary of the saved default, kept current as it's saved or reset.
+function showSavedDefault(f) {
+    const el = $("explorer-default-summary");
+    if (el) el.textContent = describeFilter(f);
+}
+$("filter-save")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+        const resp = await fetch("/settings/explorer-default", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify(filterJSON(state.filter)),
+        });
+        const body = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(body.error || "HTTP " + resp.status);
+        EXPLORER_DEFAULT = body;
+        showSavedDefault(body);
+        flash(btn, "Saved ✓");
+    } catch (err) {
+        flash(btn, "Not saved: " + err.message);
+    } finally {
+        btn.disabled = false;
+    }
+});
+$("explorer-default-reset")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const status = $("explorer-default-status");
+    btn.disabled = true;
+    status.textContent = "";
+    try {
+        const resp = await fetch("/settings/explorer-default", {
+            method: "DELETE",
+            headers: { Accept: "application/json" },
+        });
+        const body = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(body.error || "HTTP " + resp.status);
+        EXPLORER_DEFAULT = body;
+        showSavedDefault(body);
+        status.textContent = "Reset. The explorer opens on this from your next visit.";
+    } catch (err) {
+        status.textContent = "Not reset: " + err.message;
+    } finally {
+        btn.disabled = false;
+    }
 });
 
 // ---- upload --------------------------------------------------------------
 
 function populateTypeControls() {
     const keys = Object.keys(state.schema).sort();
-    $("type-options").innerHTML = keys.map((k) => `<option value="${esc(k)}">`).join("");
     $("up-type").innerHTML =
         keys.map((k) => `<option value="${esc(k)}">${esc(k)}</option>`).join("") +
         `<option value="__custom__">custom / bare asset…</option>`;
@@ -1193,9 +1414,9 @@ async function doUpload() {
     try {
         const cid = await uploadTus();
         if (network === "private") {
-            if (state.sources.has("mine")) await fetchRecords();
+            if (state.filter.sources.has("mine")) await fetchRecords();
         } else if (
-            state.sources.has("public") &&
+            state.filter.sources.has("public") &&
             !state.records.some((r) => r.source === "public" && r.cid === cid)
         ) {
             // Optimistic insert — Pinata's list can lag a fresh upload. The row
@@ -1204,7 +1425,7 @@ async function doUpload() {
                 { cid, name: file.name, source: "public", keyvalues: { ...keyvalues, _owner: USERNAME } },
                 ...state.records,
             ];
-            renderView();
+            applyFilter();
         }
         status.className = "upload-status ok";
         status.textContent = "Uploaded ✓ " + shortCid(cid);
@@ -1222,6 +1443,7 @@ $("up-submit").addEventListener("click", doUpload);
 // ---- boot ----------------------------------------------------------------
 
 (async function boot() {
+    showSavedDefault({{ settings.explorer_default | tojson }});
     await fetchSchema();
     populateTypeControls();
     await fetchRecords();

@@ -56,6 +56,7 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import asyncio
+import copy
 import json
 import os
 from contextlib import asynccontextmanager
@@ -75,7 +76,13 @@ from flyte.remote import App, Run
 
 from app import config, github_import
 from app import workspace_store as store
-from app.assets import TUS_CHUNK_BYTES, TUS_MAX_BYTES, is_owner, public_assets_on
+from app.assets import (
+    SOURCES,
+    TUS_CHUNK_BYTES,
+    TUS_MAX_BYTES,
+    is_owner,
+    public_assets_on,
+)
 from app.assets import router as assets_router
 from app.identity import CurrentUser, User, user_from_request
 from app.init import init
@@ -460,6 +467,7 @@ async def dashboard(request: Request, user: CurrentUser):
     visitor = user_from_request(request) or user
     published = await _published_slugs(user) if store_ready else set()
     workspace = await _workspace_tiles(user, published) if store_ready else []
+    settings = await _settings(user)
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -468,7 +476,8 @@ async def dashboard(request: Request, user: CurrentUser):
             "user": user,
             "workspace_configured": store_ready,
             "workspace": workspace,
-            "settings": await _settings(user),
+            "settings": settings,
+            "explorer_default": _fitted(settings["explorer_default"], visitor),
             "version": config.VERSION,
             "console_runs_url": _console_runs_url(),
             # The explorer compares `_owner` against the visitor, and offers
@@ -867,12 +876,12 @@ async def workspace_unpublish(user: CurrentUser, slug: str = Form(...)):
 async def _settings(user: User) -> dict:
     """The user's settings, or the defaults when the store can't say."""
     if not _store_ready():
-        return dict(store.DEFAULT_SETTINGS)
+        return copy.deepcopy(store.DEFAULT_SETTINGS)
     try:
         return await store.get_settings(user.subject)
     except Exception as exc:
         logger.warning(f"Settings read failed for {user.subject}: {exc}")
-        return dict(store.DEFAULT_SETTINGS)
+        return copy.deepcopy(store.DEFAULT_SETTINGS)
 
 
 @asgi_app.post("/settings")
@@ -898,6 +907,125 @@ async def save_settings(user: CurrentUser, save_interval_seconds: str = Form("")
         logger.error(f"Settings save failed for {user.subject}: {exc}")
         return _failed("settings save", exc)
     return JSONResponse(settings)
+
+
+# The longest search text a saved explorer filter keeps.
+_FILTER_TEXT_MAX = 200
+
+
+def _offered_sources(visitor: User) -> list[str]:
+    """The explorer's sources `visitor` is offered: Mine only to the owner,
+    Public only when the dashboard offers public assets."""
+    return [
+        s
+        for s in SOURCES
+        if (s != "mine" or is_owner(visitor)) and (s != "public" or public_assets_on())
+    ]
+
+
+def _fitted(filt: dict, visitor: User) -> dict:
+    """`filt` as far as it applies for `visitor`: sources they aren't offered
+    are dropped, the rest is kept."""
+    offered = _offered_sources(visitor)
+    return {**filt, "sources": [s for s in filt["sources"] if s in offered]}
+
+
+def _checked_filter(body: object) -> dict | None:
+    """`body` if it's a well-formed explorer filter, else None.
+
+    That's an object with exactly `sources` (known sources), `types` (text),
+    `keyvalues` (text to text) and `text` (up to `_FILTER_TEXT_MAX` characters).
+    """
+    if not isinstance(body, dict) or set(body) != {
+        "sources",
+        "types",
+        "keyvalues",
+        "text",
+    }:
+        return None
+    sources, types, keyvalues, text = (
+        body["sources"],
+        body["types"],
+        body["keyvalues"],
+        body["text"],
+    )
+    if not (
+        isinstance(sources, list)
+        and all(s in SOURCES for s in sources)
+        and isinstance(types, list)
+        and all(isinstance(t, str) for t in types)
+        and isinstance(keyvalues, dict)
+        and all(isinstance(v, str) for v in keyvalues.values())
+        and isinstance(text, str)
+        and len(text) <= _FILTER_TEXT_MAX
+    ):
+        return None
+    return body
+
+
+def _default_guard(request: Request) -> JSONResponse | None:
+    """The error a change to the explorer default returns early, else None.
+
+    A 503 without a store, and a 403 for a visitor who isn't the owner: the
+    default is what the owner lands on, and a visitor's explorer can't show
+    Mine.
+    """
+    if bad := _workspace_guard():
+        return bad
+    visitor = user_from_request(request)
+    if visitor is None or not is_owner(visitor):
+        return JSONResponse(
+            {"error": "Only this dashboard's owner can change its default filter."},
+            status_code=403,
+        )
+    return None
+
+
+@asgi_app.post("/settings/explorer-default")
+async def save_explorer_default(request: Request, user: CurrentUser):
+    """Save the filter the owner's explorer opens on.
+
+    The body is the filter as JSON (`_checked_filter`). Anything else is a
+    400, and nothing is stored. Returns the filter as saved.
+    """
+    if bad := _default_guard(request):
+        return bad
+    try:
+        body = await request.json()
+    except ValueError:
+        body = None
+    filt = _checked_filter(body)
+    if filt is None:
+        return JSONResponse(
+            {
+                "error": "A filter has sources (mine, public, stargazer), types, "
+                f"text keyvalues and up to {_FILTER_TEXT_MAX} characters of text."
+            },
+            status_code=400,
+        )
+    try:
+        settings = await store.get_settings(user.subject)
+        settings["explorer_default"] = filt
+        await store.put_settings(user.subject, settings)
+    except Exception as exc:
+        logger.error(f"Explorer default save failed for {user.subject}: {exc}")
+        return _failed("default filter save", exc)
+    return JSONResponse(filt)
+
+
+@asgi_app.delete("/settings/explorer-default")
+async def reset_explorer_default(request: Request, user: CurrentUser):
+    """Forget the owner's saved filter; returns the built-in one in its place."""
+    if bad := _default_guard(request):
+        return bad
+    try:
+        settings = await store.get_settings(user.subject)
+        settings.pop("explorer_default")
+        await store.put_settings(user.subject, settings)
+    except Exception as exc:
+        logger.error(f"Explorer default reset failed for {user.subject}: {exc}")
+        return _failed("default filter reset", exc)
+    return JSONResponse(store.DEFAULT_SETTINGS["explorer_default"])
 
 
 # ---------------------------------------------------------------------------

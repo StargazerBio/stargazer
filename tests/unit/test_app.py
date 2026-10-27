@@ -9,6 +9,7 @@ only control-plane calls (serve, App get/delete/list) are stubbed.
 """
 
 import asyncio
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -922,6 +923,123 @@ def test_dashboard_shows_the_saved_interval(client):
     modal = _between(page, '<dialog id="settings-modal"', "</dialog>")
     assert 'id="user-settings-form"' in modal
     assert 'value="45"' in modal
+
+
+BUILT_IN_FILTER = {
+    "sources": ["mine", "stargazer"],
+    "types": [],
+    "keyvalues": {},
+    "text": "",
+}
+SAVED_FILTER = {
+    "sources": ["public", "stargazer"],
+    "types": ["notebook", "alignment"],
+    "keyvalues": {"sample_id": "NA12829"},
+    "text": "chr22",
+}
+
+
+def _save_default(client, filt):
+    """POST /settings/explorer-default as the explorer's Save as default does."""
+    return client.post("/settings/explorer-default", json=filt)
+
+
+def _applied_default(html):
+    """The filter the explorer opens on, as the page embeds it."""
+    start = html.index("let EXPLORER_DEFAULT = ") + len("let EXPLORER_DEFAULT = ")
+    return json.loads(html[start : html.index(";\n", start)])
+
+
+def _pressed(html):
+    """The source buttons the page renders pressed."""
+    return [
+        s
+        for s in ("mine", "public", "stargazer")
+        if f'<button data-source="{s}" aria-pressed="true">' in html
+    ]
+
+
+def test_a_saved_explorer_default_opens_the_explorer(client, monkeypatch):
+    """A saved filter reads back as saved, and the page opens on it."""
+    monkeypatch.setenv("PINATA_JWT", "test-jwt")
+    _as(client)
+    resp = _save_default(client, SAVED_FILTER)
+    assert resp.status_code == 200
+    assert resp.json() == SAVED_FILTER
+    assert asyncio.run(ws.get_settings(ALICE))["explorer_default"] == SAVED_FILTER
+    html = client.get("/").text
+    assert _applied_default(html) == SAVED_FILTER
+    assert _pressed(html) == ["public", "stargazer"]
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {**SAVED_FILTER, "sources": ["everything"]},
+        {**SAVED_FILTER, "types": "notebook"},
+        {**SAVED_FILTER, "keyvalues": {"lane": 5}},
+        {**SAVED_FILTER, "text": "x" * 201},
+        {**SAVED_FILTER, "colour": "red"},
+        ["mine"],
+    ],
+    ids=[
+        "unknown-source",
+        "types-not-a-list",
+        "non-text-value",
+        "long-text",
+        "extra-key",
+        "not-an-object",
+    ],
+)
+def test_a_bad_explorer_default_is_refused_and_not_stored(client, bad):
+    """Anything but a well-formed filter is a 400, and the saved one stays."""
+    _as(client)
+    assert _save_default(client, SAVED_FILTER).status_code == 200
+    assert _save_default(client, bad).status_code == 400
+    assert asyncio.run(ws.get_settings(ALICE))["explorer_default"] == SAVED_FILTER
+
+
+def test_resetting_the_explorer_default_brings_back_the_built_in(client):
+    """Reset forgets the saved filter; the explorer opens on Mine and Stargazer."""
+    _as(client)
+    assert _save_default(client, SAVED_FILTER).status_code == 200
+    resp = client.delete("/settings/explorer-default")
+    assert resp.status_code == 200
+    assert resp.json() == BUILT_IN_FILTER
+    assert asyncio.run(ws.get_settings(ALICE))["explorer_default"] == BUILT_IN_FILTER
+    html = client.get("/").text
+    assert _applied_default(html) == BUILT_IN_FILTER
+    assert _pressed(html) == ["mine", "stargazer"]
+
+
+def test_a_visitor_who_isnt_the_owner_never_gets_mine_applied(client):
+    """An admin visitor opens on the owner's default without Mine, and can't
+    save over it."""
+    _as(client)
+    owners = {**SAVED_FILTER, "sources": ["mine", "stargazer"]}
+    assert _save_default(client, owners).status_code == 200
+    _as(client, BOB, "Bob Admin")
+    html = client.get("/").text
+    assert _applied_default(html) == {**owners, "sources": ["stargazer"]}
+    assert _pressed(html) == ["stargazer"]
+    assert _save_default(client, SAVED_FILTER).status_code == 403
+    assert client.delete("/settings/explorer-default").status_code == 403
+    assert asyncio.run(ws.get_settings(ALICE))["explorer_default"] == owners
+
+
+def test_a_saved_public_source_is_dropped_when_public_is_off(client, monkeypatch):
+    """A default naming Public opens without it where Public isn't offered."""
+    monkeypatch.delenv("PINATA_JWT", raising=False)
+    _as(client)
+    assert (
+        _save_default(
+            client, {**BUILT_IN_FILTER, "sources": ["mine", "public"]}
+        ).status_code
+        == 200
+    )
+    html = client.get("/").text
+    assert _applied_default(html)["sources"] == ["mine"]
+    assert _pressed(html) == ["mine"]
 
 
 def test_launch_tutorial_uses_the_image_path(client, served):
