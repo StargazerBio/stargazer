@@ -1,8 +1,9 @@
 ---
 title: A running pod's save can overwrite a gear edit
-status: doing
+status: review
 priority: low
 created: 2026-10-21
+pr: 88
 ---
 
 The gear on a workspace tile rewrites a notebook's stored setup block while a running pod of that notebook holds its own copy. If the pod's save later stores its copy, the gear's change is lost. That's inferred from the code, not reproduced (ticket `notebook-environment`).
