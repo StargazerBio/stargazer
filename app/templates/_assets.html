@@ -488,7 +488,7 @@ const WORKSPACE_ON = {{ 'true' if workspace_configured else 'false' }};
 const TUS_MAX_BYTES = {{ tus_max_bytes }};
 const TUS_CHUNK_BYTES = {{ tus_chunk_bytes }};
 
-const NODE_CAP = 150;
+const NODE_CAP = 1000;
 // The filter the explorer opens on and Clear returns to: the owner's saved
 // default, or the built-in one, less any source this visitor isn't offered.
 let EXPLORER_DEFAULT = {{ explorer_default | tojson }};
@@ -706,6 +706,7 @@ function renderView() {
         // Clear any stale graph/list from the previous (non-empty) result —
         // the empty-state message is a transparent overlay, so leftover nodes
         // or rows would otherwise show through it.
+        clearTimeout(exitTimer);
         if (fg) fg.graphData({ nodes: [], links: [] });
         graphDrawn = null;
         $("list-body").innerHTML = "";
@@ -776,6 +777,12 @@ function graphElements(records) {
             node = { id, born: performance.now() };
             graphNodes.set(id, node);
         }
+        if (node.died) {
+            // Back before (or after) its exit finished: it grows in again.
+            delete node.died;
+            node.fx = node.fy = undefined;
+            node.born = performance.now();
+        }
         node.rec = r;
         node.label = displayName(r);
         node.deg = deg[id] || 0;
@@ -804,6 +811,7 @@ function typeAnchor(t) {
 }
 function anchorForce(alpha) {
     for (const n of anchorForce.nodes) {
+        if (n.died) continue;
         const a = typeAnchor(assetType(n.rec));
         n.vx += (a.x - n.x) * 0.03 * alpha;
         n.vy += (a.y - n.y) * 0.03 * alpha;
@@ -812,7 +820,7 @@ function anchorForce(alpha) {
 anchorForce.initialize = (nodes) => (anchorForce.nodes = nodes);
 // Keeps stars, and the room under them for a label, from overlapping.
 function collideForce() {
-    const ns = collideForce.nodes;
+    const ns = collideForce.nodes.filter((n) => !n.died);
     for (let i = 0; i < ns.length; i++) {
         for (let j = i + 1; j < ns.length; j++) {
             const a = ns[i], b = ns[j];
@@ -833,6 +841,14 @@ collideForce.initialize = (nodes) => (collideForce.nodes = nodes);
 
 const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const FLY_MS = REDUCED_MOTION ? 0 : 600;
+const GROW_MS = 450;
+const LAYOUT_DECAY = 0.0228;
+const LAYOUT_TICKS = 400;
+const SETTLE_DECAY = 0.08;
+const SETTLE_TICKS = 120;
+const EXIT_MS = 400;
+const FADE_MS = 160;
+const PULSE_MS = 900;
 
 let fg = null;
 // Fit the view once the first layout settles.
@@ -842,6 +858,10 @@ let hoverType = null;
 // The hovered node, and it plus its neighbors.
 let hoverNode = null;
 let hoverSet = new Set();
+// When the search text last changed: the stars it leaves pulse.
+let pulseAt = 0;
+// Removes the stars still fading out, once they have.
+let exitTimer = null;
 
 function esc(s) {
     return String(s).replace(/[&<>"']/g, (c) =>
@@ -877,7 +897,37 @@ function renderGraph() {
     if (!fg) createGraph(host);
     // The host may have been display:none (list view), so size it now.
     fg.width(host.clientWidth).height(host.clientHeight);
-    fg.graphData({ nodes: data.nodes, links: data.links });
+    // Stars that drop out shrink and fade where they are, pinned and exerting
+    // no force, and leave the data once they've faded.
+    const now = performance.now();
+    const keep = new Set(data.nodes.map((n) => n.id));
+    const shown = fg.graphData().nodes.filter((n) => !n.died);
+    const leaving = REDUCED_MOTION
+        ? []
+        : fg.graphData().nodes.filter((n) => !keep.has(n.id) && (!n.died || now - n.died < EXIT_MS));
+    for (const n of leaving) {
+        if (n.died) continue;
+        n.died = now;
+        n.fx = n.x;
+        n.fy = n.y;
+    }
+    // A fetch lays the sky out. A filter change keeps it: the stars that stay
+    // are pinned while the new ones settle among them, fast, and onEngineStop
+    // frees them and restores the cooling a drag settles with.
+    if (!fitPending) {
+        for (const n of shown) {
+            if (!keep.has(n.id)) continue;
+            n.fx = n.x;
+            n.fy = n.y;
+            n.pinned = true;
+        }
+        if (!REDUCED_MOTION) fg.d3AlphaDecay(SETTLE_DECAY).cooldownTicks(SETTLE_TICKS);
+    }
+    fg.graphData({ nodes: data.nodes.concat(leaving), links: data.links });
+    clearTimeout(exitTimer);
+    if (leaving.length) {
+        exitTimer = setTimeout(() => fg.graphData({ nodes: data.nodes, links: data.links }), EXIT_MS);
+    }
 }
 
 function createGraph(host) {
@@ -885,16 +935,21 @@ function createGraph(host) {
         .backgroundColor("rgba(0,0,0,0)")
         .nodeId("id")
         .nodeLabel(null)
-        .minZoom(0.2)
+        .minZoom(0.05)
         .maxZoom(8)
         .nodeCanvasObject(paintNode)
         .nodePointerAreaPaint((node, color, ctx) => {
+            if (node.died) return;
             ctx.fillStyle = color;
             ctx.beginPath();
             ctx.arc(node.x, node.y, node.r + 3, 0, 2 * Math.PI);
             ctx.fill();
         })
-        .linkColor((l) => (isHotLink(l) ? "rgba(240,246,252,0.55)" : isDim(l.source) || isDim(l.target) ? "rgba(185,190,220,0.05)" : "rgba(185,190,220,0.2)"))
+        .linkColor((l) =>
+            isHotLink(l)
+                ? "rgba(240,246,252,0.55)"
+                : `rgba(185,190,220,${0.2 - 0.15 * Math.max(l.source.dim || 0, l.target.dim || 0)})`
+        )
         .linkWidth((l) => (isHotLink(l) ? 1.2 : 0.6))
         // Particles drift from the derived asset to its source, on the
         // hovered or selected star's links only, so an idle graph stops
@@ -905,10 +960,16 @@ function createGraph(host) {
         .linkDirectionalParticleColor((l) => hueOf(assetType(l.source.rec)))
         // Settle by tick count, not time: a background tab's throttled
         // frames would stop a timed layout half-done.
-        .warmupTicks(REDUCED_MOTION ? 400 : 0)
-        .cooldownTicks(REDUCED_MOTION ? 0 : 400)
+        .warmupTicks(REDUCED_MOTION ? LAYOUT_TICKS : 0)
+        .cooldownTicks(REDUCED_MOTION ? 0 : LAYOUT_TICKS)
         .cooldownTime(Infinity)
         .onEngineStop(() => {
+            for (const n of fg.graphData().nodes) {
+                if (!n.pinned) continue;
+                delete n.pinned;
+                n.fx = n.fy = undefined;
+            }
+            if (!REDUCED_MOTION) fg.d3AlphaDecay(LAYOUT_DECAY).cooldownTicks(LAYOUT_TICKS);
             if (fitPending && fg.graphData().nodes.length) { fitPending = false; fg.zoomToFit(FLY_MS, 40); }
         })
         .onNodeClick((node) => {
@@ -923,8 +984,10 @@ function createGraph(host) {
         })
         .onNodeHover(hoverOn)
         .onNodeDrag(() => { $("graph-tip").style.display = "none"; });
-    fg.d3Force("anchor", anchorForce).d3Force("collide", collideForce);
-    fg.d3Force("charge").strength(-45);
+    // The type anchors' ring centers the sky. force-graph's centering force
+    // would shift every star whenever a filter moves the centroid.
+    fg.d3Force("center", null).d3Force("anchor", anchorForce).d3Force("collide", collideForce);
+    fg.d3Force("charge").strength((n) => (n.died ? 0 : -45));
     fg.d3Force("link").distance((l) => (l.kind === "companion_of" ? 14 : 36));
     host.addEventListener("dblclick", () => fg.zoomToFit(FLY_MS, 40));
     new ResizeObserver(() => {
@@ -937,8 +1000,29 @@ const isHotLink = (l) => focusId() && (l.source.id === focusId() || l.target.id 
 // Dimmed while another star is hovered or another type's chip is.
 const isDim = (n) =>
     (hoverSet.size && !hoverSet.has(n.id)) || (hoverType && assetType(n.rec) !== hoverType);
-// force-graph stops redrawing when idle; a changed accessor redraws it.
-const redrawGraph = () => fg && fg.nodeCanvasObject(paintNode);
+// force-graph stops redrawing when idle. A changed accessor draws one frame;
+// turning off its pause keeps frames coming through a fade or pulse.
+let animTimer = null;
+function redrawGraph(ms = FADE_MS) {
+    if (!fg) return;
+    fg.nodeCanvasObject(paintNode);
+    if (REDUCED_MOTION) return;
+    fg.autoPauseRedraw(false);
+    clearTimeout(animTimer);
+    animTimer = setTimeout(() => fg.autoPauseRedraw(true), ms + 50);
+}
+
+// How dimmed a star is, 0 to 1, stepped toward isDim() over FADE_MS. A frame
+// after an idle pause counts as one frame, so the fade still shows.
+function dimOf(node) {
+    const now = performance.now();
+    const target = isDim(node) ? 1 : 0;
+    const step = Math.min(34, now - (node.dimAt || now)) / FADE_MS;
+    node.dimAt = now;
+    const d = node.dim ?? target;
+    node.dim = REDUCED_MOTION ? target : d + Math.max(-step, Math.min(step, target - d));
+    return node.dim;
+}
 
 function hoverOn(node) {
     hoverNode = node || null;
@@ -954,20 +1038,26 @@ function hoverOn(node) {
         $("graph-tip").style.display = "none";
     }
     $("graph-host").style.cursor = node ? "pointer" : "";
+    redrawGraph();
 }
 
 // A star: a soft glow and a bright core sized by degree, hued by type. The
-// user's own entries burn at full strength and public ones dimmer; shipped
-// notebooks are four-point stars with a thin ring. Labels fade in with zoom.
+// user's own entries burn at full strength and public ones dimmer; notebooks
+// are four-point stars, and built-in entries carry a thin ring. Labels fade in
+// with zoom. A star grows in when it appears and shrinks out when it leaves.
 function paintNode(node, ctx, scale) {
     const rec = node.rec;
     const hue = hueOf(assetType(rec));
     const focus = node.id === state.selected || node === hoverNode;
     const own = rec.source === "mine" || ownedByUser(rec);
-    const grow = REDUCED_MOTION ? 1 : Math.min(1, (performance.now() - (node.born || 0)) / 450);
+    const now = performance.now();
+    const grow = REDUCED_MOTION
+        ? 1
+        : Math.min(1, (now - (node.born || 0)) / GROW_MS) *
+          (node.died ? Math.max(0, 1 - (now - node.died) / EXIT_MS) : 1);
     const r = node.r * (0.3 + 0.7 * grow);
     let alpha = rec.source === "public" && !own ? 0.6 : 1;
-    if (isDim(node)) alpha *= 0.18;
+    alpha *= 1 - 0.82 * dimOf(node);
     ctx.globalAlpha = alpha * grow;
     const glow = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, r * (focus ? 4.5 : 3.2));
     glow.addColorStop(0, hue + "aa");
@@ -1000,8 +1090,19 @@ function paintNode(node, ctx, scale) {
         ctx.arc(node.x, node.y, r * 2.3, 0, 2 * Math.PI);
         ctx.stroke();
     }
-    const lit = focus || (hoverSet.size && hoverSet.has(node.id)) || (hoverType && assetType(rec) === hoverType);
-    const la = lit ? 1 : Math.max(0, Math.min(1, (scale - 1.1) / 0.9));
+    const pulse = (now - pulseAt) / PULSE_MS;
+    if (!REDUCED_MOTION && !node.died && pulse < 1 && state.filter.text.trim()) {
+        ctx.globalAlpha = alpha * grow * (1 - pulse) * 0.8;
+        ctx.strokeStyle = hue;
+        ctx.lineWidth = 1.2 / scale;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, r * (1.5 + 3 * pulse), 0, 2 * Math.PI);
+        ctx.stroke();
+    }
+    // The focused star is always labeled; the stars it lights, from a zoom
+    // where their labels don't pile up; the rest fade in from zoom 1.1.
+    const lit = (hoverSet.size && hoverSet.has(node.id)) || (hoverType && assetType(rec) === hoverType);
+    const la = focus || (lit && scale >= 0.8) ? 1 : Math.max(0, Math.min(1, (scale - 1.1) / 0.9));
     if (la > 0) {
         ctx.globalAlpha = alpha * grow * la;
         ctx.font = 10 / scale + "px IBM Plex Mono, monospace";
@@ -1346,7 +1447,9 @@ function addKeyvalue(k, v) {
 }
 $("filter-text").addEventListener("input", (e) => {
     state.filter.text = e.target.value;
+    pulseAt = performance.now();
     applyFilter();
+    redrawGraph(PULSE_MS);
 });
 // The type chips are the graph's legend: hovering one lights its stars.
 $("type-chips").addEventListener("mouseover", (e) => {

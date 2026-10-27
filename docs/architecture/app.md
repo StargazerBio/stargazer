@@ -211,7 +211,9 @@ switched by a Graph/List toggle (Graph is the default):
   `*_cid` provenance links) are the lines between them. Notebooks are
   four-point stars. The layout is a live simulation: same-type stars gather,
   dragging a star pulls its neighbors, and a filter change keeps the stars
-  that stay where they were. Hovering a star lights it and its neighbors and
+  that stay where they were: the ones that drop out fade away and new ones
+  grow in beside their links, and while the user types a search the matching
+  stars pulse. Hovering a star lights it and its neighbors and
   peeks its metadata; clicking flies to it and pins a detail card with the
   full metadata, its source, its linked assets and a download button, and on
   a record the signed-in user owns, **Edit metadata**, an in-place fix for a
