@@ -1,12 +1,9 @@
 ---
 title: One asset explorer for everything but the workspace
-status: review
+status: done
 priority: high
 created: 2026-10-26
 pr: 95
-blocked_by:
-  - dashboard-header-controls
-  - workspace-slug-shadows-shipped
 ---
 
 The Workspace is a blob: the user's own files, saved as they are, so it
@@ -256,3 +253,7 @@ admin visitor without Mine and Public failing (unit tests in `test_app.py`
 and `test_assets_routes.py`, measured); one build poll per notebook and mode
 (a node script calling `watchBuild` four times against a failing build:
 before 12 polls and 4 alerts, after 9 polls and 1 alert, measured).
+
+## Outcome
+
+Shipped in PR #95 (merge `749614b`), rebased onto `main` after #90, #93 and #94 merged, with `9bb0a16` carrying the built-in name through the explorer. The dashboard is Workspace plus one asset explorer whose sources are Mine (the owner only), Public and Stargazer (the built-in notebooks as `asset=notebook` entries addressed by file CID); notebook cards launch, stop, copy and download like the tiles did. Verified by the unit tier (549 passed, new `TestSources` tests) and on Union with the test account's dashboard at `1f30d42` (the recipe above). Left: the SDK's tasks and workflows as explorer entries, ticket `explorer-sdk-entries` (`maybe`); filters and default sources, ticket `explorer-filter-defaults`; the graph redraw, ticket `constellation-graph`. No review comments.

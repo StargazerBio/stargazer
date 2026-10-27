@@ -4,8 +4,6 @@ status: review
 priority: normal
 created: 2026-10-26
 pr: 96
-blocked_by:
-  - unified-asset-explorer
 ---
 
 Once everything but the workspace is in the explorer (ticket
