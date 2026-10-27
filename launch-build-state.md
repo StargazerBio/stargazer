@@ -1,6 +1,6 @@
 ---
 title: A launch's image build survives a dashboard restart
-status: next
+status: doing
 priority: high
 created: 2026-10-27
 ---
