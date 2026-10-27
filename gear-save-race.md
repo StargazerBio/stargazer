@@ -1,6 +1,6 @@
 ---
 title: A running pod's save can overwrite a gear edit
-status: review
+status: done
 priority: low
 created: 2026-10-21
 pr: 88
@@ -74,3 +74,7 @@ signed in (built-in browser), `STARGAZER_TARGET=union` and infra's
 - [x] 409 from `POST /workspace/setup` while an `nb-<slug>-*` app is active, modal note (branch `fix/gear-save-race`)
 - [x] Unit tests (both modes refused, stopped app lets the save through)
 - [x] Verified on Union 2026-10-26 (run mode): `gear-409`, `gear-after-stop`
+
+## Outcome
+
+Shipped in PR #88 (merge `ea06dba`). `POST /workspace/setup` answers 409 while the notebook's `nb-<slug>-edit` or `nb-<slug>-run` app is active, and the gear's modal says to stop the notebook or edit the setup block in the notebook itself. Verified by the unit tier (both modes refused, a stopped app lets the save through) and on Union in run mode (`gear-409`, `gear-after-stop`, Progress above). Left: nothing. No review comments.

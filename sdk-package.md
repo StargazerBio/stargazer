@@ -97,7 +97,7 @@ a clean venv outside any checkout:
       keyvalue schema, the index HTTP API (server in `app/`, client in the
       SDK), and the dashboard-to-pod env vars (`STARGAZER_INDEX_URL`,
       `STARGAZER_STORE_ROOT`, `STARGAZER_OWNER`, `STARGAZER_NOTEBOOK_IMAGE`).
-      Done on `refactor/sdk-seam`: `Asset.declared_fields()` replaces the
+      Shipped in PR #87 (merge `fdec272`): `Asset.declared_fields()` replaces the
       import, and the contract is the "Contract with the SDK" section of
       `docs/architecture/app.md`. There is no index HTTP API (every pod opens
       the index from its URL), so the doc records the URL and table instead.

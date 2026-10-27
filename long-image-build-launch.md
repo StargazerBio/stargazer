@@ -1,6 +1,6 @@
 ---
 title: Launching a notebook whose image takes minutes to build
-status: review
+status: done
 priority: low
 created: 2026-10-22
 pr: 89
@@ -114,3 +114,7 @@ Notebook `build-probe-1026`, image `notebook_base.with_apt_packages("jq").with_e
 - Teardown: `union_dashboard.py teardown` stopped `nb-build-probe-1026-edit` and `dashboard`; `get app` shows all 28 apps STOPPED, live runs `[]`.
 
 Not driven on Union: a failed build (covered by `test_a_failed_build_is_reported_through_status`).
+
+## Outcome
+
+Shipped in PR #89 (merge `21f39e8`). `/launch` serves at once when the declared image is built and otherwise answers 202 with the build run's URL, a dashboard task serves the notebook when the build finishes, and `/launch/status` reports building and failed launches to the tile. Verified by the unit tier and on Union (Evidence above). Left: a failed build wasn't driven on Union (unit-tested only), and a dashboard restart mid-build drops the background task, so the notebook is served on the next launch. No review comments.
