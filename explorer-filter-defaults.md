@@ -1,8 +1,9 @@
 ---
 title: Explorer filters, and a default filter each user picks
-status: doing
+status: review
 priority: normal
 created: 2026-10-26
+pr: 96
 blocked_by:
   - unified-asset-explorer
 ---
