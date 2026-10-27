@@ -671,11 +671,11 @@ function describeFilter(f) {
 }
 
 async function fetchRecords() {
-    fitPending = true;
     setRegionMessage(null);
     $("source-note").hidden = true;
     if (state.filter.sources.size === 0) {
         state.records = [];
+        fitPending = true;
         applyFilter(true);
         return;
     }
@@ -697,6 +697,7 @@ async function fetchRecords() {
         setRegionMessage("Couldn't load assets: " + err.message, true);
         return;
     }
+    fitPending = true;
     applyFilter(true);
 }
 
@@ -821,22 +822,39 @@ function anchorForce(alpha) {
     }
 }
 anchorForce.initialize = (nodes) => (anchorForce.nodes = nodes);
-// Keeps stars, and the room under them for a label, from overlapping.
+// Keeps stars, and the room under them for a label, from overlapping. Two
+// stars only touch within the widest star's reach, so a grid that wide checks
+// each one against its own cell and the eight around it, not every pair.
 function collideForce() {
     const ns = collideForce.nodes.filter((n) => !n.died);
-    for (let i = 0; i < ns.length; i++) {
-        for (let j = i + 1; j < ns.length; j++) {
-            const a = ns[i], b = ns[j];
-            const dx = b.x + b.vx - a.x - a.vx, dy = b.y + b.vy - a.y - a.vy;
-            const min = a.r + b.r + 8;
-            const d2 = dx * dx + dy * dy;
-            if (d2 >= min * min) continue;
-            // Pushes through velocity, as d3's forceCollide does; moving
-            // positions directly loses to the other forces in a dense cluster.
-            const d = Math.sqrt(d2) || 0.01, push = ((min - d) / d) * 0.35;
-            const ux = (dx || Math.random() - 0.5) * push, uy = (dy || Math.random() - 0.5) * push;
-            a.vx -= ux; a.vy -= uy;
-            b.vx += ux; b.vy += uy;
+    let reach = 8;
+    for (const n of ns) reach = Math.max(reach, 2 * n.r + 8);
+    const cells = new Map();
+    ns.forEach((n, i) => {
+        n.ci = i;
+        n.cx = Math.floor((n.x + n.vx) / reach);
+        n.cy = Math.floor((n.y + n.vy) / reach);
+        const k = n.cx + "," + n.cy;
+        if (!cells.has(k)) cells.set(k, []);
+        cells.get(k).push(n);
+    });
+    for (const a of ns) {
+        for (let ox = -1; ox <= 1; ox++) {
+            for (let oy = -1; oy <= 1; oy++) {
+                for (const b of cells.get(a.cx + ox + "," + (a.cy + oy)) || []) {
+                    if (b.ci <= a.ci || (a.fx != null && b.fx != null)) continue;
+                    const dx = b.x + b.vx - a.x - a.vx, dy = b.y + b.vy - a.y - a.vy;
+                    const min = a.r + b.r + 8;
+                    const d2 = dx * dx + dy * dy;
+                    if (d2 >= min * min) continue;
+                    // Pushes through velocity, as d3's forceCollide does; moving
+                    // positions directly loses to the other forces in a dense cluster.
+                    const d = Math.sqrt(d2) || 0.01, push = ((min - d) / d) * 0.35;
+                    const ux = (dx || Math.random() - 0.5) * push, uy = (dy || Math.random() - 0.5) * push;
+                    a.vx -= ux; a.vy -= uy;
+                    b.vx += ux; b.vy += uy;
+                }
+            }
         }
     }
 }
@@ -881,7 +899,9 @@ function renderGraph() {
     const drawn = state.visible.map((r) => entryKey(r) + "\t" + displayName(r)).join("\n");
     if (fg && drawn === graphDrawn) {
         // Nothing to lay out, so no settle to fit on; a later drag mustn't.
+        // A saved edit can still have recolored its types.
         fitPending = false;
+        redrawGraph();
         return;
     }
     graphDrawn = drawn;
@@ -917,20 +937,39 @@ function renderGraph() {
     // A fetch lays the sky out. A filter change keeps it: the stars that stay
     // are pinned while the new ones settle among them, fast, and onEngineStop
     // frees them and restores the cooling a drag settles with.
-    if (!fitPending) {
+    if (fitPending) {
+        unpin();
+        layoutPace(LAYOUT_DECAY, LAYOUT_TICKS);
+    } else {
         for (const n of shown) {
             if (!keep.has(n.id)) continue;
             n.fx = n.x;
             n.fy = n.y;
             n.pinned = true;
         }
-        if (!REDUCED_MOTION) fg.d3AlphaDecay(SETTLE_DECAY).cooldownTicks(SETTLE_TICKS);
+        layoutPace(SETTLE_DECAY, SETTLE_TICKS);
     }
     fg.graphData({ nodes: data.nodes.concat(leaving), links: data.links });
     clearTimeout(exitTimer);
     if (leaving.length) {
         exitTimer = setTimeout(() => fg.graphData({ nodes: data.nodes, links: data.links }), EXIT_MS);
     }
+}
+
+function unpin() {
+    for (const n of fg.graphData().nodes) {
+        if (!n.pinned) continue;
+        delete n.pinned;
+        n.fx = n.fy = undefined;
+    }
+}
+
+// How fast a layout cools and how many ticks it gets. Reduced motion runs
+// them all before the first frame, so its sky never moves.
+function layoutPace(decay, ticks) {
+    fg.d3AlphaDecay(decay);
+    if (REDUCED_MOTION) fg.warmupTicks(ticks);
+    else fg.cooldownTicks(ticks);
 }
 
 function createGraph(host) {
@@ -963,16 +1002,11 @@ function createGraph(host) {
         .linkDirectionalParticleColor((l) => hueOf(assetType(l.source.rec)))
         // Settle by tick count, not time: a background tab's throttled
         // frames would stop a timed layout half-done.
-        .warmupTicks(REDUCED_MOTION ? LAYOUT_TICKS : 0)
         .cooldownTicks(REDUCED_MOTION ? 0 : LAYOUT_TICKS)
         .cooldownTime(Infinity)
         .onEngineStop(() => {
-            for (const n of fg.graphData().nodes) {
-                if (!n.pinned) continue;
-                delete n.pinned;
-                n.fx = n.fy = undefined;
-            }
-            if (!REDUCED_MOTION) fg.d3AlphaDecay(LAYOUT_DECAY).cooldownTicks(LAYOUT_TICKS);
+            unpin();
+            layoutPace(LAYOUT_DECAY, LAYOUT_TICKS);
             if (fitPending && fg.graphData().nodes.length) { fitPending = false; fg.zoomToFit(FLY_MS, 40); }
         })
         .onNodeClick((node) => {
@@ -999,28 +1033,39 @@ function createGraph(host) {
 }
 
 const focusId = () => (hoverNode ? hoverNode.id : state.selected);
-const isHotLink = (l) => focusId() && (l.source.id === focusId() || l.target.id === focusId());
+// force-graph reads link ends as ids until its layout resolves them.
+const endId = (e) => (typeof e === "object" ? e.id : e);
+const isHotLink = (l) => focusId() && (endId(l.source) === focusId() || endId(l.target) === focusId());
 // Dimmed while another star is hovered or another type's chip is.
 const isDim = (n) =>
     (hoverSet.size && !hoverSet.has(n.id)) || (hoverType && assetType(n.rec) !== hoverType);
 // force-graph stops redrawing when idle. A changed accessor draws one frame;
-// turning off its pause keeps frames coming through a fade or pulse.
+// turning off its pause keeps frames coming through a fade or pulse, until
+// the longest one asked for has run. It works out which links carry
+// particles only when their accessor is set, so a focus change re-sets it.
 let animTimer = null;
+let animUntil = 0;
+let fadeFrom = 0;
 function redrawGraph(ms = FADE_MS) {
     if (!fg) return;
-    fg.nodeCanvasObject(paintNode);
+    fg.nodeCanvasObject(paintNode).linkDirectionalParticles(fg.linkDirectionalParticles());
     if (REDUCED_MOTION) return;
+    const now = performance.now();
+    fadeFrom = now;
+    if (now + ms + 50 <= animUntil) return;
+    animUntil = now + ms + 50;
     fg.autoPauseRedraw(false);
     clearTimeout(animTimer);
     animTimer = setTimeout(() => fg.autoPauseRedraw(true), ms + 50);
 }
 
-// How dimmed a star is, 0 to 1, stepped toward isDim() over FADE_MS. A frame
-// after an idle pause counts as one frame, so the fade still shows.
+// How dimmed a star is, 0 to 1, stepped toward isDim() over FADE_MS. Time
+// counts from the later of its last paint and the redraw that started this
+// fade, so a fade after an idle pause still shows, and slow frames finish it.
 function dimOf(node) {
     const now = performance.now();
     const target = isDim(node) ? 1 : 0;
-    const step = Math.min(34, now - (node.dimAt || now)) / FADE_MS;
+    const step = (now - Math.max(node.dimAt || now, fadeFrom)) / FADE_MS;
     node.dimAt = now;
     const d = node.dim ?? target;
     node.dim = REDUCED_MOTION ? target : d + Math.max(-step, Math.min(step, target - d));
