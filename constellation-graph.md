@@ -1,6 +1,6 @@
 ---
 title: The asset graph as a living constellation
-status: doing
+status: review
 priority: normal
 created: 2026-10-26
 blocked_by:
@@ -136,3 +136,26 @@ reacts to and whose type chips become its legend.
    user filters on get two channels that don't fight.
 4. **Positions survive filters.** A user who narrows a filter should see the
    same sky with fewer stars, not a new one.
+
+## Progress
+
+- [x] Phase 1: force-graph 1.52.0 vendored, Cytoscape removed, `{nodes, links}` with node objects kept across renders, hover, tooltip, click, double-click fit and the detail card ported.
+- [x] Phase 2: `TYPE_HUES` (dataviz reference dark categorical order, validated adjacent-pairs against `#0d1117`: all checks pass; all-pairs fails for any 4+ hues, so labels, tooltip and the chip legend are the secondary encoding), shared with the type chips as a swatch; star glow and core, ownership brightness, notebook four-point glyph, Stargazer ring, labels fading in with zoom, static CSS starfield, link particles.
+- [x] Phase 3, part: type anchors on a ring, collision, link distance by kind; hover focus and dimming (instant, no fade); fly-to on click; list↔graph selection through `state.selected`; legend hover (chip click already toggles the type); new stars placed beside a linked star or their type's anchor and grown in; reduced motion (warmup layout, no particles, growth or transitions); idle redraw stop.
+- [ ] Phase 3, left: search pulse; exit shrink-and-fade for stars that drop out; a gentler reheat on filter changes than force-graph's default; hover fade.
+- [ ] Phase 4, left: frame-rate measurement at 150/500/1,000 and raising `NODE_CAP` (still 150); a drag and filter-change recording; Performance-panel CPU check; phone-width screenshot.
+
+Choices: particles run only on the hovered or selected star's links, so an idle graph with nothing selected stops redrawing. The starfield is a static CSS background (no drift). The layout settles after 400 ticks rather than force-graph's 15 s timer, since a throttled tab otherwise freezes a half-done layout. Types past the eighth are gray.
+
+## Verification recipe
+
+1. Locally: serve the dashboard with a fake Pinata listing of N linked public records (a short script that sets `app.assets._pinata_client` to a fake whose `query` returns the records, with `SG_OWNER_SUBJECT`/`SG_STAND_IN_SUBJECT` set, then `uvicorn.run(app.admin_app.asgi_app)`), open it in the built-in browser, press Public.
+2. Check: `fg.graphData()` node and link counts; screenshot at rest; hover a star (neighbors lit, tooltip); click it (card opens, view flies to it).
+3. Idle: wrap the painter with a counter (`fg.nodeCanvasObject((...a) => (n++, paintNode(...a)))`), wait for the engine to stop, and count paints over 3 s with nothing hovered or selected: expect 0.
+4. On Union: `union_dashboard.py deploy`, open the test account's dashboard, repeat 2 on real records, then `union_dashboard.py teardown`.
+
+The built-in browser pane runs no animation frames while it's hidden, so the simulation only advances while it's shown or screenshotted.
+
+### Evidence
+
+- Local, 150 synthetic records (measured): 150 nodes and 159 links drawn; stars hued by type with labels at zoom; after settling, 0 paints in 3 s idle; no console errors. With the earlier position-based collision the minimum star spacing ended at 0.005 (stacked); with velocity-based collision it measured 5.2 after a settle.
