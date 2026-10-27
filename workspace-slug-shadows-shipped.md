@@ -1,6 +1,6 @@
 ---
 title: A workspace notebook can share a shipped notebook's app name
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-26
 ---
