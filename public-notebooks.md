@@ -7,16 +7,40 @@ created: 2026-10-16
 
 A notebook in a user's workspace is a plain file (ticket
 `save-whole-workspace`). It becomes an asset when it's published (decided
-2026-10-17). A Publish button on a workspace notebook builds a `Notebook`
-asset from the file and calls `publish(asset)` (ticket `publish-asset`). That
-puts the notebook on Pinata's public network, with its CID and keyvalues. The
-dashboard then lists public notebooks next to the user's own. Opening a public
-notebook for editing copies it into the user's workspace, where it's saved
-like any other file.
+2026-10-17). A Publish button on a workspace notebook's tile puts it on
+Pinata's public network as a `Notebook` asset, with its CID and keyvalues.
+The dashboard then lists public notebooks next to the user's own. Opening a
+public notebook for editing copies it into the user's workspace, where it's
+saved like any other file.
 
 **The `Notebook` asset type** lives in `src/stargazer/assets/notebook.py`,
-with `_asset_key = "notebook"` and the fields `title` and `description`, taken
-from the notebook's header when it's published. Nothing else creates one.
+with `_asset_key = "notebook"` and the fields `title`, `description` and
+`slug`. `title` and `description` come from the setup block's `main_name`
+and `main_description` (`app/notebook_meta.py`), and `slug` is the workspace
+filename's stem, which ties the public record to the notebook it came from.
+With `_owner` that's five keyvalues, under Pinata's nine. Nothing else
+creates one.
+
+**Publishing goes through the dashboard**, not `StorageClient.publish(cid)`:
+that publishes a stored asset by its index row, and a workspace notebook has
+no row. The dashboard uploads the file straight to the public tier, stamped
+with the user's `_owner`. A `main_description` over Pinata's 250-character
+value limit is refused with the existing message, before anything is sent.
+
+## Decisions (2026-10-26)
+
+- **Publishing again replaces.** Publishing a notebook that's already public
+  removes the user's earlier public record with the same `slug` from Pinata,
+  so the listing has one entry per notebook. People who copied the earlier
+  version keep their copy.
+- **Unpublish is in scope.** A published notebook's tile has Unpublish, which
+  deletes the user's public record with that `slug` from Pinata. Only the
+  owner's dashboard offers it, and the route refuses a record whose `_owner`
+  isn't the user.
+- **The public switch applies.** With `STARGAZER_PUBLIC_ASSETS=off` (ticket
+  `turn-off-public-assets`), the dashboard hides Publish, Unpublish and the
+  public notebooks section, and their routes answer 503 like the other public
+  routes.
 
 ## Notebooks in the repo
 
