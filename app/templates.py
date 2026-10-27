@@ -27,12 +27,14 @@ Context consumed by `dashboard.html` (built by `app.admin_app.dashboard`):
 - `user` (`app.identity.User`) — the avatar initial and "Signed in as".
 - `workspace_configured` (bool) — whether this deploy can save notebooks;
   False renders a notice in place of the Workspace grid, and no Settings.
-- `workflows`, `workspace`, `tutorials` (lists of tile dicts with `slug`,
-  `title`, `description`, `section`), included through `_tile.html`.
+- `workspace` (a list of tile dicts with `slug`, `title`, `description`,
+  `section`), included through `_tile.html`.
 - `settings` (dict) — the user's settings, filling the Settings modal.
+- `explorer_default` (dict) — the filter the asset explorer opens on: the
+  saved default, or the built-in, less any source the visitor isn't offered.
 - `console_runs_url` (str) — header link to the project's runs; empty omits it.
-- The asset panel's: `username` (the visitor's subject), `public_assets`
-  (bool), `tus_max_bytes` and `tus_chunk_bytes` (upload limits).
+- The asset panel's: `username` (the visitor's subject), `mine_on` (bool,
+  the visitor is the owner), `public_assets` (bool), `tus_max_bytes` and `tus_chunk_bytes` (upload limits).
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """

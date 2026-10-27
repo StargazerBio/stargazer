@@ -197,13 +197,13 @@
     </form>
     {% if mine_on %}
     <p class="section-desc">
-        The asset explorer opens on
-        <strong id="explorer-default-summary"></strong>.
-        Save another filter from the explorer with Save as default.
+        Your default filter, which the asset explorer opens on:
+        <strong id="explorer-default-summary"></strong>. Save another from
+        the explorer with Save as default.
     </p>
     <div class="create-form">
         <button type="button" class="btn btn-muted" id="explorer-default-reset">
-            Reset to Mine, Stargazer
+            Reset to the built-in default
         </button>
         <span id="explorer-default-status" class="create-unit" role="status"></span>
     </div>
@@ -460,6 +460,8 @@
         document.getElementById("settings-btn").addEventListener("click", () => {
             userSettingsForm.reset();
             status.textContent = "";
+            const defaultStatus = document.getElementById("explorer-default-status");
+            if (defaultStatus) defaultStatus.textContent = "";
             settingsModal.showModal();
         });
         userSettingsForm.addEventListener("submit", async (e) => {

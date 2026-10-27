@@ -374,6 +374,7 @@
             <span class="filter-count" id="filter-count" role="status"></span>
             <button class="btn btn-muted" id="filter-clear" type="button" title="Back to your default filter">Clear</button>
             {% if mine_on and workspace_configured %}
+            <span class="filter-count" id="filter-save-status" role="status"></span>
             <button class="btn btn-muted" id="filter-save" type="button" title="Open the explorer on this filter from now on">Save as default</button>
             {% endif %}
         </div>
@@ -566,16 +567,20 @@ function matches(r, f, withTypes = true) {
     );
 }
 
-// Narrow the loaded records to the filter and redraw what shows them.
-function applyFilter() {
+// Narrow the loaded records to the filter and redraw what shows them. The
+// card is redrawn only when its entry is filtered out or `redrawCard` asks
+// (new records), so typing keeps an open editor and fires no launch-status
+// request.
+function applyFilter(redrawCard = false) {
     state.visible = state.records.filter((r) => matches(r, state.filter));
     if (state.selected && !state.visible.some((r) => entryKey(r) === state.selected)) {
         state.selected = null;
         state.editing = null;
+        redrawCard = true;
     }
     renderFilterBar();
     renderView();
-    renderDetail();
+    if (redrawCard) renderDetail();
 }
 
 // The type chips (one per type loaded, and any the filter names, each with
@@ -638,7 +643,7 @@ async function fetchRecords() {
     $("source-note").hidden = true;
     if (state.filter.sources.size === 0) {
         state.records = [];
-        applyFilter();
+        applyFilter(true);
         return;
     }
     try {
@@ -659,7 +664,7 @@ async function fetchRecords() {
         setRegionMessage("Couldn't load assets: " + err.message, true);
         return;
     }
-    applyFilter();
+    applyFilter(true);
 }
 
 // ---- view switching ------------------------------------------------------
@@ -672,6 +677,7 @@ function renderView() {
         // the empty-state message is a transparent overlay, so leftover nodes
         // or rows would otherwise show through it.
         if (cy) cy.elements().remove();
+        graphDrawn = null;
         $("list-body").innerHTML = "";
         $("graph-cap").hidden = true;
         $("graph-hint").hidden = true;
@@ -793,8 +799,15 @@ function esc(s) {
     );
 }
 
+// What the graph last drew: its entries and their labels. The same again
+// (a keystroke that changes nothing) keeps the layout, zoom and pan.
+let graphDrawn = null;
+
 function renderGraph() {
     const host = $("graph-host");
+    const drawn = state.visible.map((r) => entryKey(r) + "\t" + displayName(r)).join("\n");
+    if (cy && drawn === graphDrawn) return;
+    graphDrawn = drawn;
     const { elements, truncated } = graphElements(state.visible);
 
     const cap = $("graph-cap");
@@ -1132,7 +1145,7 @@ async function saveEdit(key) {
         // Reflect the merged result locally and leave edit mode.
         rec.keyvalues = body.keyvalues || rec.keyvalues;
         state.editing = null;
-        applyFilter();
+        applyFilter(true);
     } catch (err) {
         errEl.textContent = "Save failed: " + err.message;
         errEl.hidden = false;
@@ -1215,8 +1228,9 @@ $("kv-chips").addEventListener("click", (e) => {
 $("kv-add").addEventListener("submit", (e) => {
     e.preventDefault();
     const k = $("filter-key").value.trim();
-    if (!k) return;
-    addKeyvalue(k, $("filter-val").value.trim());
+    const v = $("filter-val").value.trim();
+    if (!k || !v) return;
+    addKeyvalue(k, v);
     $("filter-key").value = "";
     $("filter-val").value = "";
 });
@@ -1229,7 +1243,9 @@ function showSavedDefault(f) {
 }
 $("filter-save")?.addEventListener("click", async (e) => {
     const btn = e.currentTarget;
+    const status = $("filter-save-status");
     btn.disabled = true;
+    status.textContent = "";
     try {
         const resp = await fetch("/settings/explorer-default", {
             method: "POST",
@@ -1240,9 +1256,9 @@ $("filter-save")?.addEventListener("click", async (e) => {
         if (!resp.ok) throw new Error(body.error || "HTTP " + resp.status);
         EXPLORER_DEFAULT = body;
         showSavedDefault(body);
-        flash(btn, "Saved ✓");
+        status.textContent = "Saved as your default.";
     } catch (err) {
-        flash(btn, "Not saved: " + err.message);
+        status.textContent = "Not saved: " + err.message;
     } finally {
         btn.disabled = false;
     }
@@ -1261,7 +1277,7 @@ $("explorer-default-reset")?.addEventListener("click", async (e) => {
         if (!resp.ok) throw new Error(body.error || "HTTP " + resp.status);
         EXPLORER_DEFAULT = body;
         showSavedDefault(body);
-        status.textContent = "Reset. The explorer opens on this from your next visit.";
+        status.textContent = "Reset. The explorer opens on it from your next visit.";
     } catch (err) {
         status.textContent = "Not reset: " + err.message;
     } finally {
