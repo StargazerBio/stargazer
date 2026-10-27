@@ -1,8 +1,9 @@
 ---
 title: Launching a notebook whose image takes minutes to build
-status: doing
+status: review
 priority: low
 created: 2026-10-22
+pr: 89
 ---
 
 A notebook that declares its own image in `main_env` is built on Union's
