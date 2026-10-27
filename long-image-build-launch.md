@@ -67,3 +67,32 @@ another build. The task has to drop that image's entries
 entry) once the build succeeds, which reaches into `flyte._internal`. A
 dashboard restart mid-build loses the background task. The build still
 finishes, so the next launch serves straight away.
+
+Decisions (2026-10-26, implementation): `/launch` answers `{"building": <build run URL>}` with 202; `/launch/status` adds `building` and `failed` lists beside `running`, and a building notebook isn't reported running. A failed build is reported until the notebook is launched again. The tile links to the build run while it builds, polls `/launch/status` every 5 s, and gives Edit/Run back after 5 minutes with no build, pod or failure reported.
+
+## Verification recipe: Launch while a notebook's image builds
+
+A workspace notebook whose declared image isn't built yet launches without waiting: `/launch` answers at once, the tile shows the image building with a link to the build run, and when the build finishes the dashboard serves the notebook and the tile turns to Open and Stop by itself. Launching again once it's built serves straight away. Runs on the Union tenant as the test account, since only Union has the remote builder.
+
+### Sub-features
+
+- `build-202` answers `/launch` for an unbuilt image at once with 202 and the build run's URL.
+- `build-tile` shows the build on the tile, and its link opens the build run.
+- `build-pickup` serves the notebook after the build and flips the tile to Open and Stop with no second click.
+- `build-again` answers a second launch during the build with the same build run and no new build.
+- `built-serve` serves a launch of the built image straight away (200 with the notebook URL).
+
+### How to get to it (user POV)
+
+On the dashboard, a workspace notebook whose `main_env` declares an image layer not built before (gear → setup block), then Edit or Run.
+
+### Driving it
+
+Preconditions: as in ticket `notebook-environment`'s Union recipe (`.flyte/union.yaml` linked, `STARGAZER_TARGET=union`, infra's `tenant.env` exported for the deploy, the built-in browser signed in to the console as the test account).
+
+- **Deploy.** `uv run --all-extras python .claude/skills/verify-stargazer/scripts/union_dashboard.py deploy` from the branch's worktree; it prints the dashboard URL.
+- **Notebook.** Create a workspace notebook from **Basic**, open its gear, and set `main_env`'s image to a layer no one has built, so the build is short and certainly new: `notebook_base.with_apt_packages("jq").with_env_vars({"SG_BUILD_PROBE": "<timestamp>"})`. Save.
+- **Launch.** Click **Edit** on its tile. Pass: the tile shows **Building image** within a second or two (`build-202`, `build-tile`); its link opens a `build-image` run in the console. From the dashboard page, `fetch("/launch", …)` for the same slug and mode answers 202 with the same URL, and `union_dashboard.py check` shows one new `build-image` run, not two (`build-again`).
+- **Pickup.** Wait without clicking. Pass: after the build succeeds the tile shows **Open: Edit Mode** and **Stop** on its own (`build-pickup`), and `check nb-<slug>-edit` shows the served image is `…:notebook-custom-<hash>`.
+- **Built.** Click **Stop**, then **Edit** again. Pass: Open and Stop with no building state, `fetch("/launch", …)` answers 200 with the notebook URL, and no new `build-image` run (`built-serve`).
+- **Teardown.** `union_dashboard.py teardown`: every app stopped, `live runs: []`.
