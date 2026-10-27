@@ -14,7 +14,8 @@ that change base only when the SDK version does (see ticket
 `notebook-declared-image`, Deferred).
 
 Came out of a 2026-10-14 brainstorm on splitting the repo. The conclusion was
-to stay one repo but ship separate distributions. The import-layer rule
+to stay one repo and package only the SDK: `app/` is deployment code that runs
+from this repo and is never a distribution of its own. The import-layer rule
 (TID251) already keeps the SDK from importing `app/`, which is most of what a
 split buys. A real repo split is worth it only if one of these comes true: a
 public SDK with a private platform, outside users pinning SDK versions,
@@ -74,18 +75,21 @@ a clean venv outside any checkout:
       tag, refusing one that doesn't match the project version, and on
       `workflow_dispatch`, via `cli/publish_task_images.py`, which builds the
       same `flyte.Image` recipes. The version is read from the `stargazer`
-      distribution's metadata, so the distribution split's rename to
-      `stargazer-bio` changes `published_image` (and the publish script) with
+      distribution's metadata, so the rename to `stargazer-bio` (the
+      SDK-only item below) changes `published_image` (and the publish script) with
       it. After the first publish, make the new `stargazer-gatk` and
       `stargazer-scrna` GHCR packages public: new org packages start internal.
-- [ ] **Split the distributions in a uv workspace.** `stargazer-bio` (the SDK) and
-      `stargazer-app` (`app/` with its own `pyproject.toml`, the
-      `stargazer-users` entry point, and the `landing`/`app` extras), the app
-      depending on the SDK through a workspace source in development and a
-      version pin in releases. Check what assumes `app` is installed: the
-      dashboard image (`with_uv_project` on the root `pyproject.toml`), the
-      notebook image (installs `/stargazer` editable), the test tiers, and
-      pre-commit.
+- [ ] **Package only the SDK.** The root project becomes `stargazer-bio` and
+      its wheel holds `src/stargazer` alone. There is no app distribution:
+      `app/` stays in this repo, runs from a checkout, and is never published.
+      Its dependencies (the `landing` and `app` extras) come off the SDK's
+      published metadata, for example into a dependency group. Check what
+      assumes `app` is installed with the package: the dashboard image
+      (`with_uv_project` on the root `pyproject.toml` with `--extra landing`
+      and `install_project`), the notebook image (installs `/stargazer`
+      editable), the infra repo (`stargazer[app]` as an editable path
+      dependency, importing `app.deploy` and `app.config`), the test tiers,
+      and pre-commit.
 - [ ] **Notebook image on a released SDK.** Install the built wheel (or a
       pinned version) instead of copying `src/` and `app/` into `/stargazer`.
       The base then changes only when the SDK version or the pod
