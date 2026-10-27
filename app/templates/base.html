@@ -322,7 +322,7 @@
         .tile-delete svg { display: block; }
         /* Gear control, sits left of the trashcan. Same muted-until-hover
            behavior, but accents (not reddens) since editing isn't destructive. */
-        .tile-settings {
+        .tile-setup {
             position: absolute;
             z-index: 2;
             top: 0.6rem;
@@ -343,15 +343,15 @@
             transition: opacity 0.15s ease, background 0.15s ease,
                         border-color 0.15s ease;
         }
-        .tile:hover .tile-settings { opacity: 0.65; }
-        .tile-settings:hover {
+        .tile:hover .tile-setup { opacity: 0.65; }
+        .tile-setup:hover {
             opacity: 1;
             background: var(--surface-2);
             border-color: var(--border-strong);
         }
-        /* Setup modal (native <dialog>): edit a workspace notebook's setup
-           block. Matches the tile/card surface language. */
-        .settings-modal {
+        /* The dashboard's modals (native <dialog>): the gear's setup editor
+           and the user's Settings. Matches the tile/card surface language. */
+        .modal {
             /* Center on the viewport. A native <dialog>:modal is centered by the
                UA via `margin: auto`, but the `* { margin: 0 }` reset above is an
                author rule that overrides it, leaving the dialog pinned top-left.
@@ -373,19 +373,21 @@
             width: calc(100% - 2rem);
             box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
         }
-        .settings-modal::backdrop {
+        .modal::backdrop {
             background: rgba(1, 4, 9, 0.6);
             backdrop-filter: blur(2px);
         }
-        .settings-modal h3 { margin: 0 0 0.25rem; color: var(--heading); }
-        .settings-target { margin: 0 0 1rem; font-size: 0.85rem; color: var(--text-dim); }
-        .settings-form {
+        .modal h3 { margin: 0 0 0.25rem; color: var(--heading); }
+        .settings-modal { max-width: 560px; }
+        .settings-modal h3 { margin-bottom: 0.75rem; }
+        .setup-target { margin: 0 0 1rem; font-size: 0.85rem; color: var(--text-dim); }
+        .setup-form {
             display: flex;
             flex-direction: column;
             gap: 0.9rem;
             margin: 0;
         }
-        .settings-editor {
+        .setup-editor {
             background: #0d1117;
             color: var(--text);
             border: 1px solid var(--border);
@@ -400,16 +402,16 @@
             overflow: auto;
             tab-size: 4;
         }
-        .settings-editor:focus { outline: none; border-color: var(--accent); }
-        .settings-note { margin: 0; font-size: 0.78rem; color: var(--text-dim); }
-        .settings-actions {
+        .setup-editor:focus { outline: none; border-color: var(--accent); }
+        .setup-note { margin: 0; font-size: 0.78rem; color: var(--text-dim); }
+        .modal-actions {
             display: flex;
             justify-content: flex-end;
             gap: 0.5rem;
             margin-top: 0.25rem;
         }
         /* Round emoji control with a hover tooltip — the shared UI language
-           for both the dashboard's cleanup button and the landing's login,
+           for both the dashboard's header controls and the landing's login,
            so the two pages read as one product. Positioning is per-instance;
            appearance + tooltip live here. */
         .icon-fab {
@@ -453,9 +455,7 @@
             transition: opacity 0.15s;
         }
         .icon-fab:hover[data-tooltip]::after { opacity: 1; }
-        /* Invisible footer: a flow row at the card's bottom that right-aligns
-           the cleanup control so it can't overlap the last section's tiles
-           (it used to be absolutely positioned and clipped them). */
+        /* Invisible footer: a flow row at the card's bottom. */
         .dash-footer {
             display: flex;
             align-items: center;
@@ -470,17 +470,12 @@
             color: var(--text-dim);
             opacity: 0.7;
         }
-        /* Takes the footer's free space, so it stays left of the cleanup
-           control whether or not a version is shown. */
+        /* Takes the footer's free space, so it sits right of the version
+           whether or not one is shown. */
         .alpha-note {
             margin: 0 auto 0 0;
             font-size: 0.78rem;
             color: var(--text-dim);
-        }
-        .cleanup-fab {
-            width: 3rem;
-            height: 3rem;
-            font-size: 1.4rem;
         }
         .actions { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
         .tile-actions {
@@ -503,8 +498,10 @@
            overlaps the first section heading. */
         .dash-header {
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
             justify-content: space-between;
+            gap: 0.75rem;
             margin: -1rem -1.5rem 0.5rem;
         }
         .dash-brand {
@@ -519,10 +516,24 @@
             transition: transform 0.15s ease;
         }
         .dash-brand:hover img { transform: translateY(-1px) scale(1.04); }
+        /* Wraps at phone width rather than overflowing; the icon buttons
+           are one item, so they wrap together and stay side by side. */
         .dash-header-end {
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
+            justify-content: flex-end;
             gap: 1rem;
+        }
+        .dash-header-icons { display: flex; gap: 0.5rem; }
+        /* Sized to the avatar beside them. Their tooltips drop below, since
+           the base one, to the left, would cover the neighbouring button. */
+        .dash-icon { width: 36px; height: 36px; font-size: 1.05rem; }
+        .dash-icon[data-tooltip]::after {
+            top: calc(100% + 0.5rem);
+            right: 50%;
+            transform: translateX(50%);
+            z-index: 2;
         }
         .dash-console {
             font-size: 0.85rem;

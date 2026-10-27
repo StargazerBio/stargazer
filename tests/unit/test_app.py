@@ -857,7 +857,7 @@ def test_launch_hands_the_pod_the_dashboards_index(client, served, monkeypatch):
 
 
 def _save_settings(client, interval):
-    """POST /settings as the dashboard's Settings form does."""
+    """POST /settings as the dashboard's Settings modal does."""
     return client.post(
         "/settings",
         data={"save_interval_seconds": interval},
@@ -885,13 +885,21 @@ def test_bad_interval_is_refused_and_not_stored(client, bad):
     assert stored["save_interval_seconds"] == 60
 
 
+def _between(text, start, end):
+    """The part of `text` from `start` up to the next `end`."""
+    head = text.index(start)
+    return text[head : text.index(end, head)]
+
+
 def test_dashboard_shows_the_saved_interval(client):
-    """The Settings section shows what the user saved."""
+    """The header's Settings button opens a modal holding what the user saved."""
     _as(client)
     _save_settings(client, "45")
-    resp = client.get("/")
-    assert 'name="save_interval_seconds"' in resp.text
-    assert 'value="45"' in resp.text
+    page = client.get("/").text
+    assert 'aria-controls="settings-modal"' in _between(page, "<header", "</header>")
+    modal = _between(page, '<dialog id="settings-modal"', "</dialog>")
+    assert 'id="user-settings-form"' in modal
+    assert 'value="45"' in modal
 
 
 def test_launch_tutorial_uses_the_image_path(client, served):
