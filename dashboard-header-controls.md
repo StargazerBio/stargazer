@@ -1,6 +1,6 @@
 ---
 title: Settings and cleanup move into the dashboard header
-status: next
+status: doing
 priority: normal
 created: 2026-10-26
 blocked_by:
