@@ -7,6 +7,15 @@ created: 2026-10-26
 
 In a hosted notebook, the scRNA notebook's **On this machine** fails at `preprocess`: `qc_filter`'s scrublet step raises `` `threshold` is None and thus scrublet requires `scikit-image` `` (measured 2026-10-26, test account, Edit mode). The notebook's PEP 723 header lists `scanpy`, `anndata`, `matplotlib`, `numpy` and `stargazer`, but not what the `bio` extra adds for scanpy's lazy imports (`scikit-image`, `igraph` for Leiden), so the sandbox venv `marimo --sandbox` builds lacks them. Locally it passes because the checkout's venv has every extra. **On the cluster** is unaffected: the tasks run on `scrna_env`'s image. Likely fix: depend on `stargazer[bio]` in the header instead of listing scanpy's packages; verify with a hosted Run-mode drive on the default setting.
 
+## Verification
+
+Measured 2026-10-26 on branch  ().
+
+- **Before, sandbox export** (header as on ): exit ,   is None and thus scrublet requires   in , the error the hosted pod gave.
+- **After, sandbox export:** exit ; the sandbox installed ;  reads  for both samples at every stage,  through  (s1d1 6,307 cells, s1d3 7,157 after QC).
+- **After, hosted Run mode** (test account, built-in browser): the deploy rebuilt the notebook image (build run ) and served . With **Run** on **On this machine**, every section rendered with no error: s1d1 6,307 cells, 16 clusters; s1d3 7,157 cells, 17 clusters. No new runs in  during the drive, so the tasks ran in the notebook's process. Teardown: .
+- Unit tier: 492 passed.
+
 ## Verification recipe: scRNA notebook on its own machine
 
 With **Run** on its default, **On this machine**, the scRNA notebook runs `preprocess` and `cluster_and_annotate` inside the notebook's own process, so every package those tasks import has to be in the sandbox environment `marimo --sandbox` builds from the notebook's PEP 723 header. A user who opens the notebook sees the pipeline run through to the side-by-side UMAPs and the summary table.
