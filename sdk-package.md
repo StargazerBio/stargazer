@@ -49,13 +49,25 @@ a clean venv outside any checkout:
       `stargazer.notebooks.tutorials.*`. Moving the scRNA notebook to a
       top-level `notebooks/` folder and the seeds to `app/` is shelved (ticket
       `top-level-notebooks`). Snapshots go (ticket `save-whole-workspace`).
-- [ ] **Versioned, published task images.** A task's code runs from its image,
+- [x] **Versioned, published task images.** A task's code runs from its image,
       so the image must carry the same `stargazer` version as the caller.
       Publish the gatk and scrna images per release (for example
       `ghcr.io/stargazerbio/stargazer-gatk:<version>`) and have the
       environments use them via `from_base` outside a checkout, keeping
       checkout builds for development. Don't make users rebuild the bioconda
       image: it's slow, and two builds of one version could differ.
+      Done on `feat/sdk-task-images`: `task_image` in `stargazer.config`
+      builds the recipe when the package's root has a `pyproject.toml` (a
+      checkout, editable installs included) and otherwise runs
+      `ghcr.io/stargazerbio/<image>:<installed version>`. The **Task images**
+      workflow (`.github/workflows/task-images.yml`) publishes both on a `v*`
+      tag, refusing one that doesn't match the project version, and on
+      `workflow_dispatch`, via `cli/publish_task_images.py`, which builds the
+      same `flyte.Image` recipes. The version is read from the `stargazer`
+      distribution's metadata, so the distribution split's rename to
+      `stargazer-bio` changes `published_image` (and the publish script) with
+      it. After the first publish, make the new `stargazer-gatk` and
+      `stargazer-scrna` GHCR packages public: new org packages start internal.
 - [ ] **Split the distributions in a uv workspace.** `stargazer-bio` (the SDK) and
       `stargazer-app` (`app/` with its own `pyproject.toml`, the
       `stargazer-users` entry point, and the `landing`/`app` extras), the app
