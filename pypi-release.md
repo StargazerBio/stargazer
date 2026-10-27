@@ -1,5 +1,5 @@
 ---
-title: Publish stargazer to PyPI
+title: Publish the SDK to PyPI as stargazer-bio
 status: maybe
 priority: normal
 created: 2026-05-20
@@ -7,7 +7,9 @@ blocked_by:
   - sdk-package
 ---
 
-Once the package is published, notebook PEP 723 headers can pin a version (`stargazer == X.Y.Z`) instead of `[tool.uv.sources] stargazer = { path = "/stargazer", editable = true }`. Unlocks fully reproducible community notebooks without baking the source path.
+Once the package is published, notebook PEP 723 headers can pin a version (`stargazer-bio == X.Y.Z`) instead of `[tool.uv.sources] stargazer = { path = "/stargazer", editable = true }`. Unlocks fully reproducible community notebooks without baking the source path.
 
-Ticket `sdk-package` is the groundwork, and leaves open whether to publish to
-PyPI, a private index or GitHub releases.
+Ticket `sdk-package` is the groundwork. Decided 2026-10-26: PyPI, as the
+distribution `stargazer-bio` (`stargazer` is taken there by an unrelated
+package), importing as `stargazer`, with `0.x` versions and no compatibility
+promise before 1.0.
