@@ -899,8 +899,11 @@ function createGraph(host) {
         .linkDirectionalParticleSpeed(0.006)
         .linkDirectionalParticleWidth(2)
         .linkDirectionalParticleColor((l) => hueOf(assetType(l.source.rec)))
-        .warmupTicks(REDUCED_MOTION ? 300 : 0)
-        .cooldownTicks(REDUCED_MOTION ? 0 : Infinity)
+        // Settle by tick count, not time: a background tab's throttled
+        // frames would stop a timed layout half-done.
+        .warmupTicks(REDUCED_MOTION ? 400 : 0)
+        .cooldownTicks(REDUCED_MOTION ? 0 : 400)
+        .cooldownTime(Infinity)
         .onEngineStop(() => {
             if (fitPending && fg.graphData().nodes.length) { fitPending = false; fg.zoomToFit(FLY_MS, 40); }
         })
