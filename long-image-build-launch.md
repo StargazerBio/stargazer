@@ -68,6 +68,11 @@ entry) once the build succeeds, which reaches into `flyte._internal`. A
 dashboard restart mid-build loses the background task. The build still
 finishes, so the next launch serves straight away.
 
+- [x] `/launch` checks the image with `flyte.build(wait=False)`, answers 202 while it builds, serves in a background task
+- [x] `/launch/status` reports building and failed launches; the tile shows the build and picks the pod up
+- [x] Unit tests (`tests/unit/test_app.py`, real `ImageBuildEngine` and its caches over a fake builder)
+- [x] Verified on Union (below)
+
 Decisions (2026-10-26, implementation): `/launch` answers `{"building": <build run URL>}` with 202; `/launch/status` adds `building` and `failed` lists beside `running`, and a building notebook isn't reported running. A failed build is reported until the notebook is launched again. The tile links to the build run while it builds, polls `/launch/status` every 5 s, and gives Edit/Run back after 5 minutes with no build, pod or failure reported.
 
 ## Verification recipe: Launch while a notebook's image builds
@@ -96,3 +101,15 @@ Preconditions: as in ticket `notebook-environment`'s Union recipe (`.flyte/union
 - **Pickup.** Wait without clicking. Pass: after the build succeeds the tile shows **Open: Edit Mode** and **Stop** on its own (`build-pickup`), and `check nb-<slug>-edit` shows the served image is `…:notebook-custom-<hash>`.
 - **Built.** Click **Stop**, then **Edit** again. Pass: Open and Stop with no building state, `fetch("/launch", …)` answers 200 with the notebook URL, and no new `build-image` run (`built-serve`).
 - **Teardown.** `union_dashboard.py teardown`: every app stopped, `live runs: []`.
+
+### Evidence (2026-10-26, u-pryce, dashboard at 4017ff3)
+
+Notebook `build-probe-1026`, image `notebook_base.with_apt_packages("jq").with_env_vars({"SG_BUILD_PROBE": "1793063198291"})`.
+
+- `build-202`, `build-tile`: Edit click → `/launch` 202 in 3.3 s, `{"building": ".../runs/uwwmxx47v5rzxlclfjm8"}`; the tile showed **Building image**.
+- `build-again`: a second `/launch` 6 s later → 202 in 0.27 s, same run URL; only one `build-image` run (`uwwmxx47v5rzxlclfjm8`).
+- `build-pickup`: build succeeded by 01:07:57Z; `/launch/status` reported the notebook running at 01:08:07Z, and the tile showed **Open: Edit Mode** and **Stop** with no click. Served image `…:notebook-custom-5a07699571cd3d296fa2c36484b90d43`.
+- `built-serve`: Stop, then Edit → `/launch` 200 in 3.0 s with the notebook URL, no building state, no new `build-image` run.
+- Teardown: `union_dashboard.py teardown` stopped `nb-build-probe-1026-edit` and `dashboard`; `get app` shows all 28 apps STOPPED, live runs `[]`.
+
+Not driven on Union: a failed build (covered by `test_a_failed_build_is_reported_through_status`).
