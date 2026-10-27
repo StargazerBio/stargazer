@@ -4,8 +4,6 @@ status: next
 priority: normal
 created: 2026-10-26
 blocked_by:
-  - gear-save-race
-  - long-image-build-launch
   - public-notebooks
   - open-from-github
 ---
@@ -17,7 +15,7 @@ explorer (tickets `unified-asset-explorer`, `explorer-filter-defaults`), and
 the controls that are about the user rather than a notebook sit together at
 the top.
 
-Blocked by the four tickets in review whose PRs edit
+Blocked by the tickets in review whose PRs edit
 `app/templates/dashboard.html`.
 
 ## Current State
