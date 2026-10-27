@@ -580,6 +580,23 @@ _STARTER_SETUP = (
 )
 
 
+async def _notebook_running(slug: str) -> bool:
+    """Whether the notebook has an active app in either mode.
+
+    An app that can't be fetched (never launched, deleted, or the control
+    plane unreachable) counts as not running, as in `/launch/status`.
+    """
+
+    async def _active(mode: str) -> bool:
+        """Whether the notebook's app in `mode` is active."""
+        try:
+            return (await _get_app(app_name(slug, mode))).is_active()
+        except Exception:
+            return False
+
+    return any(await asyncio.gather(*(_active(mode) for mode in MODES)))
+
+
 @asgi_app.get("/workspace/setup")
 async def workspace_setup(user: CurrentUser, slug: str):
     """Return a workspace notebook's setup block body, for the gear's editor.
@@ -607,9 +624,21 @@ async def workspace_setup_save(
     nothing is written. Environment changes take effect at the **next**
     `/launch`; the tile's name and description, which this returns, change
     right away.
+
+    While the notebook has an active app in either mode it's a 409: the pod
+    holds its own copy of the file and saves it whenever a cell changes, which
+    would overwrite this edit.
     """
     if bad := _workspace_guard(slug):
         return bad
+    if await _notebook_running(slug):
+        return JSONResponse(
+            {
+                "error": "Stop the notebook before changing its setup here, "
+                "or edit the setup block in the notebook itself."
+            },
+            status_code=409,
+        )
     filename = f"{slug}.py"
     try:
         source = await store.get_workspace_notebook(user.subject, filename)
