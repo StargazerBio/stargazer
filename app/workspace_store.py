@@ -8,8 +8,9 @@ settings sit beside it, outside what a pod hydrates:
     <WORKSPACE_ROOT>/users/<subject>/workspace/<path>
     <WORKSPACE_ROOT>/users/<subject>/settings.json
 
-The dashboard reads and writes only the notebooks (the top-level `.py` files)
-and the settings, so it can list a user's notebooks and read one header
+The settings are the save interval and the filter the asset explorer opens
+on. The dashboard reads and writes only the notebooks (the top-level `.py`
+files) and the settings, so it can list a user's notebooks and read one header
 without fetching the rest. Pods hydrate `/workspace` from `workspace_uri()` at
 launch and write each changed file back to its own key, so two running
 notebooks can't clobber each other.
@@ -24,6 +25,7 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import asyncio
+import copy
 import json
 import re
 
@@ -40,7 +42,16 @@ _FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*\.py$")
 
 # A user's settings before they save any. Pods save their workspace every
 # `save_interval_seconds`, and 0 saves only when the pod stops.
-DEFAULT_SETTINGS = {"save_interval_seconds": 30}
+# `explorer_default` is the filter the asset explorer opens on.
+DEFAULT_SETTINGS = {
+    "save_interval_seconds": 30,
+    "explorer_default": {
+        "sources": ["mine", "stargazer"],
+        "types": [],
+        "keyvalues": {},
+        "text": "",
+    },
+}
 
 
 class NotebookExistsError(Exception):
@@ -143,7 +154,7 @@ def _settings_uri(subject: str) -> str:
 async def get_settings(subject: str) -> dict:
     """The user's settings, with the default for any they never saved."""
     raw = await _get(_settings_uri(subject))
-    return {**DEFAULT_SETTINGS, **(json.loads(raw) if raw else {})}
+    return {**copy.deepcopy(DEFAULT_SETTINGS), **(json.loads(raw) if raw else {})}
 
 
 async def put_settings(subject: str, settings: dict) -> None:
