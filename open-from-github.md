@@ -1,6 +1,6 @@
 ---
 title: Open a notebook from GitHub in the workspace
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-17
 ---
