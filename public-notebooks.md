@@ -80,3 +80,44 @@ Choices:
 - Pinata stores identical bytes once per account and keeps the first upload's keyvalues (measured 2026-10-26: three uploads of one file, two owners, one record with the first's keyvalues). So publishing bytes that are already public under someone else's record, or under another of the owner's slugs, is refused with a 409, and nothing is deleted.
 - The record's `_owner` is the dashboard's owner (the notebook's), not an admin visitor.
 - A public tile's button is "Copy to workspace", like a workflow's; a name that's taken is a 409, as for any copy.
+
+## Verification recipe: Public notebooks
+
+A dashboard user publishes a workspace notebook from its tile, sees it in the
+Public notebooks section, republishes an edit (still one public record),
+copies a public notebook into their workspace, and unpublishes it.
+
+### Sub-features
+
+- `pn-publish`: Publish puts the notebook on Pinata's public network as an
+  `asset=notebook` record with `title`, `description`, `slug` and the owner's
+  `_owner`, and the Public notebooks section shows it.
+- `pn-republish`: after an edit, Republish leaves exactly one public record
+  for the slug, the new CID, and the old CID is gone from Pinata.
+- `pn-copy`: Copy to workspace on the public tile writes a workspace notebook
+  with the published bytes.
+- `pn-unpublish`: Unpublish removes the record from Pinata and from the section.
+
+### How to get to it (user POV)
+
+- Dashboard → Workspace → a notebook tile's **Publish** / **Republish** /
+  **Unpublish**; Dashboard → **Public notebooks** → **Copy to workspace**.
+
+### Driving it
+
+Preconditions: the `verify-stargazer` Union tenant preconditions; the
+built-in browser pane signed in to the console as the test account.
+
+- **Deploy.** With infra's `tenant.env` exported, `uv run --all-extras python .claude/skills/verify-stargazer/scripts/union_dashboard.py deploy`. Open the printed URL from the console page with `location.href`.
+- **Probe notebook.** Create a Blank notebook named `pn-probe-<date>`; in its gear, set `main_description = "Public notebooks probe"`.
+- **Publish (`pn-publish`).** Click **Publish**, accept the confirm. After the reload the tile shows Republish + Unpublish, and the section has a `pn-probe-<date>` tile. From this checkout, `PinataClient().query({"asset": "notebook", "slug": "pn-probe-<date>"})` returns one record with the test account's subject as `_owner`.
+- **Republish (`pn-republish`).** Change the description in the gear, click **Republish**. The query returns one record with the new CID; `PinataClient().get(<old cid>)` is None.
+- **Copy (`pn-copy`).** Delete the probe workspace tile (the public record stays), then **Copy to workspace** on its public tile: the workspace tile comes back, and `/workspace/download?slug=pn-probe-<date>` returns the published bytes.
+- **Unpublish (`pn-unpublish`).** Click **Unpublish**: the section no longer lists it, and the query returns `[]`.
+- **Teardown.** Delete the probe tile, `union_dashboard.py teardown`: `live runs: []`. The query returns `[]`.
+
+### Gotchas
+
+- Pinata stores identical bytes once per account, keeping the first
+  upload's keyvalues, so a probe whose bytes match an earlier public file
+  is refused with 409. Give the probe a name nobody has published.
