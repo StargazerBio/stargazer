@@ -15,11 +15,12 @@ status hydrates both tiles as running. Pick one: reserve the shipped slugs
 too, or give workspace apps a distinct name.
 
 Decided 2026-10-26: reserve the shipped slugs (from the `app.notebooks`
-catalog) in `_notebook_slug`, alongside the seed slugs. Create refuses a
+catalog) where a new name is chosen (Create, Copy) via `_new_notebook_slug`; the guard on existing slugs is unchanged. Create refuses a
 reserved name with "taken by a built-in notebook"; apps aren't renamed.
 
 - [x] Tests: a workspace notebook named after a shipped tutorial is refused and nothing is stored; every shipped slug is reserved
-- [x] `_notebook_slug` reserves every shipped slug; Create's message
+- [x] `_new_notebook_slug` reserves every shipped slug for Create and Copy; Create's message
+- [x] A notebook already stored under a shipped slug can still be downloaded and deleted (test)
 - [x] Verified on the test account's Union dashboard (2026-10-26, dashboard at 0eb3f8a): R1 and R2 pass; the probe notebook deleted; teardown stopped the dashboard, live runs `[]`
 
 ## Verification recipe: shipped names refused on Create
@@ -41,4 +42,4 @@ Dashboard → Workspace → New notebook tile → name → Create.
 4. `union_dashboard.py teardown` → live runs `[]`.
 
 ### Gotchas
-- A workspace notebook already stored under a shipped slug is now refused by every slug-guarded route (setup, delete, download, launch); it has to be removed from the store directly.
+- A workspace notebook already stored under a shipped slug stays manageable (only new names are refused), but still shares the shipped notebook's app until the user renames it.
