@@ -9,11 +9,11 @@ In a hosted notebook, the scRNA notebook's **On this machine** fails at `preproc
 
 ## Verification
 
-Measured 2026-10-26 on branch  ().
+Measured 2026-10-26 on branch `fix/scrna-notebook-hosted-deps` (`90ea16b`).
 
-- **Before, sandbox export** (header as on ): exit ,   is None and thus scrublet requires   in , the error the hosted pod gave.
-- **After, sandbox export:** exit ; the sandbox installed ;  reads  for both samples at every stage,  through  (s1d1 6,307 cells, s1d3 7,157 after QC).
-- **After, hosted Run mode** (test account, built-in browser): the deploy rebuilt the notebook image (build run ) and served . With **Run** on **On this machine**, every section rendered with no error: s1d1 6,307 cells, 16 clusters; s1d3 7,157 cells, 17 clusters. No new runs in  during the drive, so the tasks ran in the notebook's process. Teardown: .
+- **Before, sandbox export** (header as on `main`): exit `1`, `` `threshold` is None and thus scrublet requires `scikit-image` `` in `qc_filter`, the error the hosted pod gave.
+- **After, sandbox export:** exit `0`; the sandbox installed `scikit-image==0.26.0`; `check_anndata.py` reads `ok` for both samples at every stage, `raw` through `annotated` (s1d1 6,307 cells, s1d3 7,157 after QC).
+- **After, hosted Run mode** (test account, built-in browser): the deploy rebuilt the notebook image (build run `ub8fk7tcrk9bxdkbqbs6`) and served `notebook-app-2c4ddebb6479a76b584174bd8e5ab750`. With **Run** on **On this machine**, every section rendered with no error: s1d1 6,307 cells, 16 clusters; s1d3 7,157 cells, 17 clusters. No new runs in `u-pryce` during the drive, so the tasks ran in the notebook's process. Teardown: `live runs: []`.
 - Unit tier: 492 passed.
 
 ## Verification recipe: scRNA notebook on its own machine
