@@ -50,7 +50,7 @@ from fastapi.responses import RedirectResponse, StreamingResponse
 
 from app import config
 from app.identity import User, user_from_request
-from stargazer.assets import ASSET_REGISTRY, build_asset
+from stargazer.assets import ASSET_REGISTRY, Notebook, build_asset
 from stargazer.assets.asset import Asset
 from stargazer.utils.cid import CidBuilder
 from stargazer.utils.index import SqlIndex, make_index
@@ -182,15 +182,29 @@ async def _public_records() -> list[dict]:
     return _public_cache[1]
 
 
+def forget_public_records() -> None:
+    """Drop the cached public listing, so the next read sees a change just made."""
+    global _public_cache
+    _public_cache = None
+
+
+def _browsable(records: list[dict]) -> list[dict]:
+    """`records` without notebooks, which the dashboard lists in their own section."""
+    return [r for r in records if r["keyvalues"].get("asset") != Notebook._asset_key]
+
+
 @router.get("/assets/schema")
 async def assets_schema() -> dict:
     """Registry schema for the dynamic upload form.
 
     Anonymous-readable: dataclass field names are not sensitive and the
-    public tab's type filter wants them too.
+    public tab's type filter wants them too. Notebooks are left out: they're
+    published from their workspace tile, not uploaded.
     """
     schema: dict = {}
     for key, cls in sorted(ASSET_REGISTRY.items()):
+        if cls is Notebook:
+            continue
         hints = get_type_hints(cls)
         schema[key] = [
             {"name": name, "type": getattr(hints.get(name), "__name__", "str")}
@@ -204,16 +218,17 @@ async def assets_list(request: Request):
     """List assets on one network, filtered by keyvalue query params.
 
     Private: the owner's index rows, newest first. Public: anonymous, served
-    from the TTL cache with filters applied in-process.
+    from the TTL cache with filters applied in-process. Notebooks are left
+    out of both: the dashboard lists them in their own sections.
     """
     params = dict(request.query_params)
     network = params.pop("network", "public")
     _require_network(network)
     if network == "private":
         _require_owner(request)
-        return await _get_index().query(params)
+        return _browsable(await _get_index().query(params))
     _require_public()
-    records = await _public_records()
+    records = _browsable(await _public_records())
     return [
         r for r in records if all(r["keyvalues"].get(k) == v for k, v in params.items())
     ]

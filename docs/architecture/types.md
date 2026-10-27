@@ -79,6 +79,8 @@ A bare `Asset` (no `_asset_key`) carries a free-form `keyvalues` dict, serialize
 
 See the [Catalog](../reference/catalog.md#asset-types) for a complete list of registered asset types.
 
+`Notebook` is the one type no task produces: a workspace notebook becomes one when its owner publishes it from the dashboard, and nothing else creates one (see [App → Public Notebooks](app.md#public-notebooks)).
+
 ## Companion Pattern
 
 A companion is a file a tool expects beside another, such as an index or a sequence dictionary. It records that file's CID in its `companion_of` keyvalue. When `fetch()` is called on an asset:

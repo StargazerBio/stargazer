@@ -4,6 +4,7 @@
 
 ::: stargazer.assets.alignment
 ::: stargazer.assets.asset
+::: stargazer.assets.notebook
 ::: stargazer.assets.reads
 ::: stargazer.assets.reference
 ::: stargazer.assets.scrna

@@ -49,6 +49,7 @@
 | `duplicate_metrics` | `DuplicateMetrics` | `assets/alignment.py` | `alignment_cid`, `sample_id`, `tool` |
 | `known_sites` | `KnownSites` | `assets/variants.py` | `build`, `known`, `prior`, `resource_name`, `training`, `truth`, `vqsr_mode` |
 | `known_sites_index` | `KnownSitesIndex` | `assets/variants.py` | `companion_of` |
+| `notebook` | `Notebook` | `assets/notebook.py` | `description`, `slug`, `title` |
 | `r1` | `R1` | `assets/reads.py` | `mate_cid`, `sample_id`, `sequencing_platform` |
 | `r2` | `R2` | `assets/reads.py` | `mate_cid`, `sample_id`, `sequencing_platform` |
 | `reference` | `Reference` | `assets/reference.py` | `build` |
