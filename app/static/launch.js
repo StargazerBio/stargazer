@@ -54,37 +54,52 @@ function showBuilding(row, form, buildUrl) {
     watchBuild(row, form);
 }
 
+// The build polls running, by `slug:mode`, each holding the row and form
+// its outcome goes to.
+const buildWatches = new Map();
+
 // Poll /launch/status for a building notebook. Once its build is no longer
 // reported, the pod can take a moment to show as running, so keep looking
-// for a few minutes before giving the buttons back.
+// for a few minutes before giving the buttons back. One poll runs per
+// notebook and mode: a card re-rendered while it builds hands the running
+// poll its new row and form rather than starting another.
 async function watchBuild(row, form) {
     const slug = form.querySelector('input[name="slug"]').value;
     const mode = form.querySelector('input[name="mode"]').value;
+    const key = slug + ":" + mode;
+    const polling = buildWatches.has(key);
+    buildWatches.set(key, { row, form });
+    if (polling) return;
     const mine = (e) => e.slug === slug && e.mode === mode;
-    let misses = 0;
-    while (misses < 60) {
-        await new Promise((r) => setTimeout(r, 5000));
-        let data;
-        try {
-            data = await fetchJSON("/launch/status");
-        } catch (_) {
-            continue;
+    const target = () => buildWatches.get(key);
+    try {
+        let misses = 0;
+        while (misses < 60) {
+            await new Promise((r) => setTimeout(r, 5000));
+            let data;
+            try {
+                data = await fetchJSON("/launch/status");
+            } catch (_) {
+                continue;
+            }
+            if ((data.building || []).some(mine)) continue;
+            const running = (data.running || []).find(mine);
+            if (running) {
+                showLaunched(target().row, target().form, running.url, true);
+                return;
+            }
+            const failed = (data.failed || []).find(mine);
+            if (failed) {
+                releaseLaunch(target().row);
+                alert("Launch failed: " + failed.error);
+                return;
+            }
+            misses += 1;
         }
-        if ((data.building || []).some(mine)) continue;
-        const running = (data.running || []).find(mine);
-        if (running) {
-            showLaunched(row, form, running.url, true);
-            return;
-        }
-        const failed = (data.failed || []).find(mine);
-        if (failed) {
-            releaseLaunch(row);
-            alert("Launch failed: " + failed.error);
-            return;
-        }
-        misses += 1;
+        releaseLaunch(target().row);
+    } finally {
+        buildWatches.delete(key);
     }
-    releaseLaunch(row);
 }
 
 // Append an "Open" link + "Stop" button beside a launched notebook's
