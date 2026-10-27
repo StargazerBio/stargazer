@@ -68,3 +68,23 @@ built-in browser pane signed in to the console as the test account.
 - Every shipped tutorial's file stem is also its tile's slug, so an opened
   tutorial shares its app name (`nb-assets-run`) with the shipped one
   (ticket `workspace-slug-shadows-shipped`). Stop the shipped tutorial first.
+
+## Verification (2026-10-26, branch `feat/open-from-github` at `7844d1c`)
+
+Test account's dashboard deployed from the branch (`version: 7844d1c`), driven
+in the built-in browser.
+
+- `gh-open`: the pinned `tutorials/assets.py` blob link made an `assets`
+  tile before the New-notebook tile; it was still there after a reload.
+- `gh-run`: **Run** → **Open: Run Mode**; every section rendered, no error
+  cells. Section 4's `update()` stored `bafkreid6arp4n7usn3idwjibsheas7fk4slhquwi3d5pfk36umxfahvazq`
+  under the test account's bucket prefix, and section 5's `assemble()`
+  returned 1 asset.
+- `gh-errors` (fetch from the dashboard page): gitlab link 400 with the
+  "Paste a link to a .py file on GitHub" message; `nope.py` 404 "wasn't found
+  on GitHub"; `app/config.py` 400 "isn't a marimo notebook"; the same
+  tutorial again 409 "notebook already exists". The 1 MB cap is covered by
+  the unit test only.
+- Teardown: `assets` deleted from the workspace (its `nb-assets-run` app went
+  with it); `union_dashboard.py teardown` stopped the dashboard, `live runs:
+  []`; every app in `u-pryce` STOPPED.
