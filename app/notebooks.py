@@ -1,9 +1,9 @@
 """
 ### Notebook registry consumed by the dashboard app.
 
-Curated, hand-maintained tuple of every notebook that ships in the
-`notebook-app` image, plus the helpers that read shipped notebook sources
-(seeds, workflows) out of the installed `stargazer` package. Workspace
+Curated, hand-maintained tuple of the built-in notebooks, the ones baked into
+the `notebook-app` image, plus the helpers that read packaged notebook sources
+(seeds, built-in workflows) out of the installed `stargazer` package. Workspace
 notebooks are NOT here — they live in the workspace store
 (`app.workspace_store`).
 
@@ -17,7 +17,7 @@ from typing import Literal
 
 import stargazer.notebooks
 
-# Image-shipped notebooks live at /stargazer/<src/...> in the notebook pod.
+# Built-in notebooks live at /stargazer/<src/...> in the notebook pod.
 # (A user's own notebooks are hydrated elsewhere; see `app.per_notebook`.)
 IMAGE_WORKDIR = "/stargazer"
 
@@ -27,7 +27,7 @@ NOTEBOOKS_PKG_DIR = Path(stargazer.notebooks.__file__).parent
 _IMAGE_NOTEBOOKS_PREFIX = f"{IMAGE_WORKDIR}/src/stargazer/notebooks/"
 
 
-# Seed notebooks shipped at `src/stargazer/notebooks/templates/{slug}.py`.
+# Seed notebooks live at `src/stargazer/notebooks/templates/{slug}.py`.
 # `/workspace/create` copies one of these under the user's chosen name. They
 # are NOT rendered as dashboard tiles (only user-created notebooks are): the
 # basic template is linked from the Workspace description, and both slugs are
@@ -117,8 +117,8 @@ def slugify(name: str) -> str:
     return re.sub(r"-+", "-", clean).strip("-")
 
 
-def shipped_source(path_in_image: str) -> str | None:
-    """Read a shipped notebook's source by its path in the notebook image.
+def builtin_source(path_in_image: str) -> str | None:
+    """Read a built-in notebook's source by its path in the notebook image.
 
     The dashboard has no `/stargazer` checkout, but it installs the same package,
     so the image path maps onto the installed `stargazer.notebooks`. None if

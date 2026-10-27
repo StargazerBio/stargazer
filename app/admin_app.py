@@ -9,8 +9,9 @@ Union's login gates the public address; `app.identity` decides who else gets
 in, and whoever does sees the owner's dashboard. It has three jobs:
 
 1. **Dashboard.** Renders the notebook tile sections: Workflows and
-   Tutorials (shipped in the per-notebook image), Workspace (the owner's
-   notebooks) and Public notebooks (everyone's published ones). The owner's notebooks live in the workspace store
+   Tutorials (the built-in notebooks, baked into the per-notebook image),
+   Workspace (the owner's notebooks) and Public notebooks (everyone's
+   published ones). The owner's notebooks live in the workspace store
    (`app.workspace_store`), keyed by their Union subject, so saving needs no
    setup. On Union its header links to the project's runs in the Union
    console (`config.CONSOLE_URL`).
@@ -95,10 +96,10 @@ from app.notebook_meta import (
 from app.notebooks import (
     SEED_SLUGS,
     Notebook,
+    builtin_source,
     by_section,
     by_slug,
     seed_source,
-    shipped_source,
     slugify,
 )
 from app.per_notebook import (
@@ -331,6 +332,16 @@ def _notebook_slug(name: str) -> str | None:
     return slug
 
 
+def _new_notebook_slug(name: str) -> str | None:
+    """`_notebook_slug` for a name being chosen, which also refuses a built-in slug.
+
+    A workspace notebook under a built-in notebook's slug would share its app.
+    Only new names are refused, so one stored before stays manageable.
+    """
+    slug = _notebook_slug(name)
+    return None if slug is None or by_slug(slug) else slug
+
+
 def _tile_dict(slug: str, title: str, description: str, section: str) -> dict:
     """Build the context dict consumed by `_tile.html`."""
     return {
@@ -522,11 +533,14 @@ async def workspace_create(
         return bad
     if source not in SEED_SLUGS:
         return JSONResponse({"error": f"invalid source: {source}"}, status_code=400)
-    slug = _notebook_slug(name)
+    slug = _new_notebook_slug(name)
     if slug is None:
-        return JSONResponse(
-            {"error": f"invalid or reserved notebook name: {name!r}"}, status_code=400
+        error = (
+            f'"{name.strip()}" is taken by a built-in notebook. Pick another name.'
+            if slugify(name)
+            else f"invalid notebook name: {name!r}"
         )
+        return JSONResponse({"error": error}, status_code=400)
     if len(slug) > NOTEBOOK_SLUG_MAX:
         return JSONResponse(
             {"error": f"Notebook names can be at most {NOTEBOOK_SLUG_MAX} characters."},
@@ -570,7 +584,7 @@ async def _create_notebook(
 async def _copy_source(slug: str, section: str) -> tuple[str, str, str]:
     """Resolve a copy source to `(source, default_title, default_description)`.
 
-    A `workflows` source is a shipped notebook's slug; a `public` one is a
+    A `workflows` source is a built-in notebook's slug; a `public` one is a
     published notebook's CID. Raises `LookupError` when the source doesn't
     exist and `ValueError` for a section that can't be copied from.
     """
@@ -578,7 +592,7 @@ async def _copy_source(slug: str, section: str) -> tuple[str, str, str]:
         return await public_source(slug)
     if section == "workflows":
         nb = by_slug(slug)
-        source = shipped_source(nb.path_in_image) if nb else None
+        source = builtin_source(nb.path_in_image) if nb else None
         if source is None or nb.section != "workflows":
             raise LookupError(f"unknown workflow: {slug}")
         return source, nb.title, nb.description
@@ -591,7 +605,7 @@ async def workspace_copy(
 ):
     """Copy a Workflows or public notebook into the user's workspace.
 
-    The source is a shipped Workflows notebook, or a public notebook by its
+    The source is a built-in Workflows notebook, or a public notebook by its
     CID (a 503 when this dashboard has no public assets); it's written as a
     fresh, editable workspace notebook. The copy keeps the source's setup block, and
     the workflow's title and blurb are declared in it as `main_name` and
@@ -610,7 +624,7 @@ async def workspace_copy(
     except LookupError as exc:
         return JSONResponse({"error": str(exc)}, status_code=404)
 
-    target_slug = _notebook_slug(title)
+    target_slug = _new_notebook_slug(title)
     if target_slug is None:
         return JSONResponse(
             {"error": f"could not derive a notebook name from {title!r}"},
@@ -632,8 +646,8 @@ async def workspace_github(user: CurrentUser, link: str = Form(...)):
     `link` is a GitHub `.py` file link, which the dashboard downloads itself
     (`app.github_import`). Like `/workspace/copy`, the notebook keeps its own
     setup block and is named by its `main_name`, else its file name, with
-    `main_name` and `main_description` declared in the block; a taken name is
-    a 409. A bad link, a missing file, one too big or one that isn't a
+    `main_name` and `main_description` declared in the block; a taken name,
+    a built-in notebook's included, is a 409. A bad link, a missing file, one too big or one that isn't a
     marimo notebook is refused with a message for the user. Returns the
     rendered Workspace tile.
     """
@@ -651,6 +665,10 @@ async def workspace_github(user: CurrentUser, link: str = Form(...)):
         return JSONResponse(
             {"error": f"could not derive a notebook name from {title!r}"},
             status_code=400,
+        )
+    if by_slug(target_slug):
+        return JSONResponse(
+            {"error": f'"{title}" is taken by a built-in notebook.'}, status_code=409
         )
     if len(target_slug) > NOTEBOOK_SLUG_MAX:
         return JSONResponse(

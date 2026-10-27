@@ -148,7 +148,7 @@ def test_with_setup_values_declares_a_missing_value_after_the_imports():
 
 
 def test_with_setup_values_adds_a_block_when_there_is_none():
-    """A notebook without a setup block (a shipped workflow) gets one."""
+    """A notebook without a setup block (a built-in workflow) gets one."""
     src = "import marimo\n\napp = marimo.App()\n\n\n@app.cell\ndef _():\n    return\n"
     out = with_setup_values(src, main_name="scRNA-seq", main_description="UMAPs.")
     assert notebook_name(out) == "scRNA-seq"

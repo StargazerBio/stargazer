@@ -178,7 +178,7 @@ notebook_app_img_recipe = (
     )
     # Bake the stargazer source tree at `/stargazer/` so each notebook's
     # `[tool.uv.sources] stargazer = { path = "/stargazer", editable = true }`
-    # resolves inside the marimo --sandbox venv. Image-shipped notebooks live
+    # resolves inside the marimo --sandbox venv. Built-in notebooks live
     # under `/stargazer/src/stargazer/notebooks/{tutorials,workflows}/`. The
     # lock is there for the task images a kernel builds (`with_uv_project`):
     # Union's builder skips a uv project layer that comes without one.

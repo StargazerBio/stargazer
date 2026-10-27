@@ -194,7 +194,7 @@ the dashboard refuses it and deletes nothing.
 beside the user's own, from the asset browser's cached public listing.
 Copying one into the workspace reads its bytes from the gateway and writes a
 fresh workspace notebook, saved like any other file; a later Republish by its
-author doesn't change the copy. The notebooks shipped in the repository
+author doesn't change the copy. The built-in notebooks
 aren't published: GitHub already makes them public.
 
 **The public switch covers it.** A dashboard without public assets (no key,
