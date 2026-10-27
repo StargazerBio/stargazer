@@ -15,8 +15,8 @@ in, and whoever does sees the owner's dashboard. It has three jobs:
    setup. On Union its header links to the project's runs in the Union
    console (`config.CONSOLE_URL`).
 
-2. **Workspace actions.** Create, setup, delete, copy and download, all
-   against the workspace store. A notebook's tile name and description
+2. **Workspace actions.** Create, setup, delete, copy, open from GitHub
+   (`app.github_import`) and download, all against the workspace store. A notebook's tile name and description
    (`app.notebook_meta`) and its pod's environment (`main_env`,
    `app.notebook_environment`) are declared in its setup block, which the
    tile's gear edits.
@@ -67,7 +67,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from flyte.remote import App
 
-from app import config
+from app import config, github_import
 from app import workspace_store as store
 from app.assets import TUS_CHUNK_BYTES, TUS_MAX_BYTES, public_assets_on
 from app.assets import router as assets_router
@@ -561,6 +561,51 @@ async def workspace_copy(
     filename = f"{target_slug}.py"
     content = with_setup_values(source, main_name=title, main_description=desc)
     if failure := await _create_notebook(user, filename, content, "copy"):
+        return failure
+
+    tile = _workspace_tile_dict(target_slug, title, desc)
+    return JSONResponse({"slug": target_slug, "tile_html": _render_tile(tile)})
+
+
+@asgi_app.post("/workspace/github")
+async def workspace_github(user: CurrentUser, link: str = Form(...)):
+    """Open a notebook file on GitHub as a new workspace notebook.
+
+    `link` is a GitHub `.py` file link, which the dashboard downloads itself
+    (`app.github_import`). Like `/workspace/copy`, the notebook keeps its own
+    setup block and is named by its `main_name`, else its file name, with
+    `main_name` and `main_description` declared in the block; a taken name is
+    a 409. A bad link, a missing file, one too big or one that isn't a
+    marimo notebook is refused with a message for the user. Returns the
+    rendered Workspace tile.
+    """
+    if bad := _workspace_guard():
+        return bad
+    try:
+        stem, source = await github_import.fetch_notebook(link)
+    except github_import.GitHubFileError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=exc.status)
+
+    title = notebook_name(source) or stem
+    desc = notebook_description(source)
+    target_slug = _notebook_slug(title)
+    if target_slug is None:
+        return JSONResponse(
+            {"error": f"could not derive a notebook name from {title!r}"},
+            status_code=400,
+        )
+    if len(target_slug) > NOTEBOOK_SLUG_MAX:
+        return JSONResponse(
+            {"error": f"Notebook names can be at most {NOTEBOOK_SLUG_MAX} characters."},
+            status_code=400,
+        )
+    try:
+        content = with_setup_values(source, main_name=title, main_description=desc)
+    except SetupError:
+        return JSONResponse(
+            {"error": "That file isn't a marimo notebook."}, status_code=400
+        )
+    if failure := await _create_notebook(user, f"{target_slug}.py", content, "open"):
         return failure
 
     tile = _workspace_tile_dict(target_slug, title, desc)

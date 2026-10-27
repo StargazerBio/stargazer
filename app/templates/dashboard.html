@@ -57,7 +57,9 @@
                 target="_blank"
                 rel="noopener"
                 >basic template</a
-            >. Your edits are saved automatically while a notebook is open,
+            >, or open a notebook from GitHub with a link to its
+            <code>.py</code> file; a link pinned to a commit gets the same file
+            every time. Your edits are saved automatically while a notebook is open,
             and they're there the next time you open it. So is any other file
             you keep in your workspace, up to 100 MB each; store bigger files as
             assets.
@@ -79,6 +81,19 @@
                     </select>
                     <button type="submit" class="btn btn-notebook">
                         Create
+                    </button>
+                </form>
+            </div>
+            <div class="tile tile-create" id="github-tile">
+                <form id="github-form" class="create-form create-form-tile">
+                    <input
+                        name="link"
+                        class="create-name create-title"
+                        placeholder="GitHub link to a .py notebook"
+                        required
+                    />
+                    <button type="submit" class="btn btn-notebook">
+                        Open from GitHub
                     </button>
                 </form>
             </div>
@@ -589,6 +604,34 @@
                 createForm.querySelector('input[name="name"]').value = "";
             } catch (err) {
                 alert("Create failed: " + err.message);
+            } finally {
+                button.disabled = false;
+                button.textContent = originalLabel;
+            }
+        });
+    }
+
+    // Open a notebook from a GitHub link: the dashboard downloads it into the
+    // workspace and the new tile goes in before the New-notebook tile.
+    const githubForm = document.getElementById("github-form");
+    if (githubForm) {
+        githubForm.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const button = githubForm.querySelector('button[type="submit"]');
+            const originalLabel = button.textContent;
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-inline"></span>';
+            try {
+                const payload = await fetchJSON("/workspace/github", {
+                    method: "POST",
+                    body: new FormData(githubForm),
+                });
+                document
+                    .getElementById("create-tile")
+                    .insertAdjacentHTML("beforebegin", payload.tile_html);
+                githubForm.querySelector('input[name="link"]').value = "";
+            } catch (err) {
+                alert("Open from GitHub failed: " + err.message);
             } finally {
                 button.disabled = false;
                 button.textContent = originalLabel;
