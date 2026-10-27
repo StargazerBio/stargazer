@@ -110,6 +110,29 @@
         {% endif %}
     </section>
 
+    {% if public_assets %}
+    <section id="public-notebooks">
+        <h2>
+            Public notebooks
+            <span class="section-tag">Shared by Stargazer users.</span>
+        </h2>
+        {% if public_notebooks %}
+        <p class="section-desc">
+            Copy one into your workspace to open it. Your copy is yours to
+            edit, and it stays as it is when its author publishes again.
+        </p>
+        <div class="grid">
+            {% for tile in public_notebooks %}{% include "_tile.html" %}{% endfor %}
+        </div>
+        {% else %}
+        <p class="section-desc">
+            No one has published a notebook yet. Publish one of yours from its
+            tile in your workspace.
+        </p>
+        {% endif %}
+    </section>
+    {% endif %}
+
     <section>
         <h2>
             Tutorials
@@ -539,6 +562,49 @@
         if (!btn) return;
         e.preventDefault();
         copyToWorkspace(btn);
+    });
+
+    // Publish a workspace notebook to everyone, or take it back. Either
+    // changes the Public notebooks section, so the page reloads after.
+    async function setPublished(btn, route, question) {
+        const slug = btn.dataset.publishSlug || btn.dataset.unpublishSlug;
+        if (!confirm(question.replace("{slug}", slug))) return;
+        const restore = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-inline"></span>';
+        try {
+            await fetchJSON(route, {
+                method: "POST",
+                body: new URLSearchParams({ slug }),
+            });
+            location.reload();
+        } catch (err) {
+            btn.disabled = false;
+            btn.innerHTML = restore;
+            alert("Failed: " + err.message);
+        }
+    }
+
+    document.addEventListener("click", (e) => {
+        const publishBtn = e.target.closest("[data-publish-slug]");
+        if (publishBtn) {
+            e.preventDefault();
+            setPublished(
+                publishBtn,
+                "/workspace/publish",
+                'Publish "{slug}" for everyone? Anyone can see it and copy it into their own workspace.',
+            );
+            return;
+        }
+        const unpublishBtn = e.target.closest("[data-unpublish-slug]");
+        if (unpublishBtn) {
+            e.preventDefault();
+            setPublished(
+                unpublishBtn,
+                "/workspace/unpublish",
+                'Unpublish "{slug}"? Copies others already made stay theirs.',
+            );
+        }
     });
 
     // Edit a workspace notebook's setup block via the gear → modal. The block

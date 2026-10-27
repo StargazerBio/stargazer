@@ -156,8 +156,9 @@ download, anonymous or not, redirects to `PINATA_GATEWAY`, the account's
 dedicated gateway, which meters bandwidth. Free public gateways rate-limit
 full downloads.
 
-**The browser sits on the dashboard's home page**, below the Workflows,
-Workspace and Tutorials sections, and offers two interchangeable renderings of
+**The browser sits on the dashboard's home page**, below the notebook
+sections, and leaves out notebooks, which have their own sections there
+([Public Notebooks](#public-notebooks)). It offers two interchangeable renderings of
 the same listing, switched by a Graph/List toggle (Graph is the default):
 
 - **Graph** draws assets as nodes and their links (`companion_of` and the
@@ -170,6 +171,35 @@ the same listing, switched by a Graph/List toggle (Graph is the default):
   metadata, download). The upload panel below is schema-driven: pick a
   registered type or a bare/custom asset, fill metadata, choose Private or
   Public. The upload appears in the listing straight away.
+
+## Public Notebooks
+
+**A workspace notebook is a file until it's published.** Its tile's Publish
+button uploads it to Pinata's public network as a `Notebook` asset, through
+the same Pinata client and TUS upload the asset browser uses, stamped with
+the notebook's owner as `_owner`. Its `title` and `description` are the
+setup block's `main_name` and `main_description`, and its `slug` is the
+workspace filename's stem, which ties the public record to the notebook. A
+description past Pinata's value limit is refused before anything is sent.
+
+**One public record per notebook.** Publishing again uploads the current
+file and then deletes the owner's earlier records with the same `slug`, and
+Unpublish deletes them all. Both look records up by the owner's `_owner`, so
+another user's notebook with the same slug is never touched. Pinata stores
+identical bytes once per account and keeps the first upload's keyvalues, so
+a file that's already public under another record can't be published again:
+the dashboard refuses it and deletes nothing.
+
+**The dashboard lists every public notebook** in a Public notebooks section
+beside the user's own, from the asset browser's cached public listing.
+Copying one into the workspace reads its bytes from the gateway and writes a
+fresh workspace notebook, saved like any other file; a later Republish by its
+author doesn't change the copy. The notebooks shipped in the repository
+aren't published: GitHub already makes them public.
+
+**The public switch covers it.** A dashboard without public assets (no key,
+or turned off for the deploy) shows no Publish, Unpublish or Public notebooks
+section, and their routes answer 503.
 
 ## Contract with the SDK
 
