@@ -1,6 +1,6 @@
 ---
 title: Explorer filters, and a default filter each user picks
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-26
 blocked_by:
