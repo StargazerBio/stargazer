@@ -2,7 +2,7 @@
 
 The `app/` directory is **deployment glue**: FastAPI, Flyte AppEnvironment definitions, the workspace store. It lives outside `src/stargazer/` because it is not invokable by tasks or workflows; the SDK stays importable in environments without FastAPI or a Flyte control plane connection.
 
-This doc is the high-level map of the hosting tier. For what the dashboard's notebook sections *mean* (taxonomy, archetypes, promotion paths), see [Notebooks](notebook.md). For implementation-level detail (identity headers, route table, pod launch, hydrate and sync mechanics), see the agent reference `.claude/reference/architecture/app_internals.md`.
+This doc is the high-level map of the hosting tier. For what the dashboard's kinds of notebook *mean* (taxonomy, archetypes, promotion paths), see [Notebooks](notebook.md). For implementation-level detail (identity headers, route table, pod launch, hydrate and sync mechanics), see the agent reference `.claude/reference/architecture/app_internals.md`.
 
 Two kinds of Flyte `AppEnvironment` are defined here, and both sit behind the platform's login (`requires_auth=True`):
 
@@ -28,7 +28,7 @@ flowchart LR
     N -.-> PR
 ```
 
-Each user has one project holding their dashboard and their notebook pods, and nothing else. Pods are spawned lazily when a tile's Edit/Run button is clicked. The dashboard never calls a pod: each pod loads and saves its owner's notebooks itself.
+Each user has one project holding their dashboard and their notebook pods, and nothing else. Pods are spawned lazily when a notebook's Edit/Run button is clicked, on a workspace tile or an explorer card. The dashboard never calls a pod: each pod loads and saves its owner's notebooks itself.
 
 ## Request Flow
 
@@ -83,13 +83,13 @@ sequenceDiagram
 
 **The notebook declares its pod.** A workspace notebook declares the environment its pod runs in as `main_env` in its setup block, a `flyte.app.AppEnvironment` cloned from `notebook_env` ([Notebooks → Notebook Environment](notebook.md#notebook-environment)), beside its tile's `main_name` and `main_description`, which the dashboard reads without running code. At launch the dashboard evaluates just the `main_env` expression and serves a clone of it with its own fields on top: the app's name, launch command, port, login, scaling, URL and secrets, and the env vars that belong to whoever launches the notebook (owner, store root, index), which win over the notebook's. The notebook's image, resources and other env vars are the pod's. Resources are honored as-authored, with no ceiling; any a notebook leaves out, including the disk its kernel's environment and files live on, come from `notebook_env`'s defaults, and tutorials and workflows run in `notebook_env`. A declared image is built on Union's remote builder in the user's own project, unless it's already built. An image that's built is served at once; one that isn't answers the launch straight away, the tile shows the build, and the dashboard serves the notebook when the build finishes, so a long build never outlasts the request. The expression is the one piece of notebook code the dashboard runs: the owner's, in the owner's own dashboard. The dashboard's secrets are the org's Pinata key and the project's own key, which any of the owner's tasks can read anyway. The gear on a workspace tile opens the setup block in an editor; saving checks that the dashboard can read the name and description and serve the environment before writing it back. The gear won't save while the notebook is running, since its pod would save its own copy over the edit; the setup block is then edited in the notebook itself.
 
-**Tiles are stateful and authoritative.** On load the dashboard asks the control plane which `nb-{slug}-{mode}` apps are live and hydrates those tiles to Open/Stop; a notebook runs in edit *or* run mode, never both. Discovery is a single project-scoped deployment list, re-checked per app for authoritative status. This is read from Flyte rather than in-memory state, so it survives dashboard restarts.
+**Launch buttons are stateful and authoritative.** On load the dashboard asks the control plane which `nb-{slug}-{mode}` apps are live and hydrates those tiles to Open/Stop, as does each notebook card the explorer opens; a notebook runs in edit *or* run mode, never both. Discovery is a single project-scoped deployment list, re-checked per app for authoritative status. This is read from Flyte rather than in-memory state, so it survives dashboard restarts.
 
 **The tier is lightweight by construction.** Dashboard responses are gzip-compressed, and the notebook proxy streams everything except the HTML pages it decorates, so large notebook assets never sit in proxy memory. Details in `.claude/reference/architecture/app_internals.md`.
 
 ## Asset Index
 
-Each user's **asset index**, the metadata behind `assemble()` for every file their tasks and notebooks store, is their own table on the org's Aurora DSQL cluster. The dashboard's asset browser, the user's notebook pods and the task pods their runs start all reach it directly, at the address the dashboard is deployed with, so no index call goes through the dashboard: it can scale to zero or be redeployed while runs are writing. The files themselves go straight to the bucket, under the same root as the user's notebooks.
+Each user's **asset index**, the metadata behind `assemble()` for every file their tasks and notebooks store, is their own table on the org's Aurora DSQL cluster. The dashboard's asset explorer, the user's notebook pods and the task pods their runs start all reach it directly, at the address the dashboard is deployed with, so no index call goes through the dashboard: it can scale to zero or be redeployed while runs are writing. The files themselves go straight to the bucket, under the same root as the user's notebooks.
 
 **The database keeps each user to their table.** Every user has a login on the cluster that holds rights on their table and nothing else, and logging in takes a token signed by their own cloud role. Only pods in the user's project can assume that role, with the service-account token the cluster gives them, so a pod in another project is refused before it reaches the database, and nothing a user can run changes their own table's shape. Onboarding makes the role, the table, the login and the grants; offboarding deletes the role and keeps the table, as it keeps the notebooks. DSQL refuses a write that conflicts with a concurrent one instead of making it wait, so a refused write is retried; reads are strongly consistent, so a task always sees its upstream task's rows.
 
@@ -99,15 +99,34 @@ See [Configuration](configuration.md) for the storage model and `.claude/referen
 
 ## Asset Manager
 
-The dashboard's home page holds the asset browser, below the notebook
-sections: a browse-and-upload surface with two tabs. Routes live in
+The dashboard's home page is the Workspace and, below it, the asset
+explorer. **The Workspace is a blob**, the user's own files saved as they
+are, so it keeps its own section; **everything else is an asset** and lives
+in the explorer, which lists entries from three sources together:
+
+| Source | Entries | Where from |
+|---|---|---|
+| Mine | The user's stored assets | Their own index and store |
+| Public | Public assets and public notebooks | Pinata's public network |
+| Stargazer | Tutorials and Workflows | The notebooks shipped in the image |
+
+The explorer starts on Mine and Stargazer, so the tutorials are in front of a
+new user without the whole public tier, and any mix of sources can be on at
+once. One listing route returns the union, each entry marked with its source,
+and keyvalue filters apply to every source alike. Routes live in
 `app/assets.py`; mechanics and the route table are in
 `.claude/reference/architecture/app_internals.md`.
 
-**Private is the user's own index and store**, the same ones their tasks
-and notebooks write to, so the tab shows everything they've stored. Only the
+**Mine is the user's own index and store**, the same ones their tasks
+and notebooks write to, so it shows everything they've stored. Only the
 dashboard's owner reaches them. It works on every dashboard, with or without
 a Pinata key.
+
+**Stargazer's notebooks are listed, not stored.** The dashboard reads them
+from the image when the explorer lists them, so nothing is written to an
+index or to Pinata and nothing drifts when the image changes. Each is
+addressed by the CID of its file, worked out once, and carries a `category`,
+`tutorial` or `workflow`, that the explorer can filter on.
 
 **Private uploads are resumable, up to 10 GB.** The browser sends the file in
 pieces over the TUS protocol, and the dashboard passes each piece straight on
@@ -126,8 +145,8 @@ from the app's spec (see [Configuration → The public tier](configuration.md#th
 Pinata's private network is never used: the key is shared across the org, so
 it would keep nothing private. The devbox drops app secrets, so a devbox
 dashboard has no public tier. A deploy can also turn public assets off for its
-dashboards: the Public tab says shared data isn't available, and the upload
-form offers only private storage. That's the dashboard alone; the user's tasks
+dashboards: the explorer doesn't offer Public, and the upload form offers
+only private storage. That's the dashboard alone; the user's tasks
 and notebooks still read the public tier.
 
 **Public uploads are resumable, up to 10 GB, through the dashboard.** The
@@ -156,27 +175,34 @@ download, anonymous or not, redirects to `PINATA_GATEWAY`, the account's
 dedicated gateway, which meters bandwidth. Free public gateways rate-limit
 full downloads.
 
-**The browser sits on the dashboard's home page**, below the notebook
-sections, and leaves out notebooks, which have their own sections there
-([Public Notebooks](#public-notebooks)). It offers two interchangeable renderings of
-the same listing, switched by a Graph/List toggle (Graph is the default):
+**The explorer offers two interchangeable renderings** of the same listing,
+switched by a Graph/List toggle (Graph is the default):
 
-- **Graph** draws assets as nodes and their links (`companion_of` and the
+- **Graph** draws entries as nodes and their links (`companion_of` and the
   `*_cid` provenance links) as edges. Hovering a node peeks its metadata;
-  clicking pins a detail card with the full metadata, its linked assets and a
-  download button, and on a record the signed-in user owns, **Edit metadata**,
-  an in-place fix for a mis-tagged record. Zoom, pan and drag are
-  interactive; the mechanics are in `app_internals.md`.
-- **List** is the same records as a sortable table (CID, name, owner, type,
-  metadata, download). The upload panel below is schema-driven: pick a
-  registered type or a bare/custom asset, fill metadata, choose Private or
-  Public. The upload appears in the listing straight away.
+  clicking pins a detail card with the full metadata, its source, its linked
+  assets and a download button, and on a record the signed-in user owns,
+  **Edit metadata**, an in-place fix for a mis-tagged record. Zoom, pan and
+  drag are interactive; the mechanics are in `app_internals.md`.
+- **List** is the same entries as a table (name, source, owner, type,
+  download). A public record the user owns reads green in both.
+
+**A notebook's card acts like a tile.** It shows the notebook's title and
+description and the tile's actions: Edit and Run for a shipped notebook, with
+Open and Stop once its pod runs; Copy to workspace for a workflow or a public
+notebook; and Download source for any of them. A notebook's metadata comes
+from where it's published, so its card has no metadata editor.
+
+**Uploads never make a notebook.** The upload panel below is schema-driven:
+pick a registered type (any but `notebook`) or a bare/custom asset, fill
+metadata, choose Private or Public. The upload appears in the listing
+straight away. Notebooks are published from their workspace tile.
 
 ## Public Notebooks
 
 **A workspace notebook is a file until it's published.** Its tile's Publish
 button uploads it to Pinata's public network as a `Notebook` asset, through
-the same Pinata client and TUS upload the asset browser uses, stamped with
+the same Pinata client and TUS upload the explorer's uploads use, stamped with
 the notebook's owner as `_owner`. Its `title` and `description` are the
 setup block's `main_name` and `main_description`, and its `slug` is the
 workspace filename's stem, which ties the public record to the notebook. A
@@ -190,22 +216,22 @@ identical bytes once per account and keeps the first upload's keyvalues, so
 a file that's already public under another record can't be published again:
 the dashboard refuses it and deletes nothing.
 
-**The dashboard lists every public notebook** in a Public notebooks section
-beside the user's own, from the asset browser's cached public listing.
-Copying one into the workspace reads its bytes from the gateway and writes a
+**Public notebooks are entries in the explorer's Public source**, beside
+the other public records. Copying one into the workspace reads its bytes from the gateway and writes a
 fresh workspace notebook, saved like any other file; a later Republish by its
-author doesn't change the copy. The built-in notebooks
-aren't published: GitHub already makes them public.
+author doesn't change the copy. The notebooks shipped in the repository
+aren't published: GitHub already makes them public, and the explorer lists
+them under Stargazer.
 
 **The public switch covers it.** A dashboard without public assets (no key,
-or turned off for the deploy) shows no Publish, Unpublish or Public notebooks
-section, and their routes answer 503.
+or turned off for the deploy) shows no Publish or Unpublish and no Public
+source, and their routes answer 503.
 
 ## Contract with the SDK
 
 `app/` imports the SDK's public API, and the SDK never imports `app/` (the import layers enforce it). **At runtime the two also meet in three places their imports don't show**: the asset keyvalues, the asset index and the environment a deploy hands down. These are the API between the tiers, so a change to one on either side lands on the other in the same change.
 
-**Asset keyvalues.** Every stored record, an index row or a public file, carries a flat map of strings. `asset` names the type by its registry key. Each field the type declares, as `Asset.declared_fields()` lists them, holds its value as written if it's a string and as JSON otherwise. Any other key is an extra, kept as text. Keys starting with `_` are reserved for stamping, and `_owner` is the one in use. The asset browser builds its upload form from the registry and each type's declared fields, and validates uploads and edits with the SDK's `build_asset()`, so the page accepts exactly what the SDK does. The rules are in [Types → Serialization](types.md#serialization), [Extra keys](types.md#extra-keys) and [Ownership](types.md#ownership-_owner).
+**Asset keyvalues.** Every stored record, an index row or a public file, carries a flat map of strings. `asset` names the type by its registry key. Each field the type declares, as `Asset.declared_fields()` lists them, holds its value as written if it's a string and as JSON otherwise. Any other key is an extra, kept as text. Keys starting with `_` are reserved for stamping, and `_owner` is the one in use. The asset explorer builds its upload form from the registry and each type's declared fields, and validates uploads and edits with the SDK's `build_asset()`, so the page accepts exactly what the SDK does. The rules are in [Types → Serialization](types.md#serialization), [Extra keys](types.md#extra-keys) and [Ownership](types.md#ownership-_owner).
 
 **The asset index has no server.** Nothing in either tier serves the index over HTTP: the dashboard, its notebook pods and the task pods they start each open it directly from `STARGAZER_INDEX_URL`, through the SDK's `stargazer.utils.index`. The contract is that URL and the table it names.
 

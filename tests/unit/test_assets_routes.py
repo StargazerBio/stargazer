@@ -28,7 +28,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import app.assets as assets_mod
-from app import config
+from app import config, notebooks
 from app.assets import router
 from stargazer.utils.cid import CidBuilder, compute_cid
 from stargazer.utils.index import SqliteIndex
@@ -50,6 +50,9 @@ CANNED_RECORDS = [
         "network": "public",
     },
 ]
+
+# The public listing's entries: the records, each stamped with its source.
+PUBLIC_ENTRIES = [{**r, "source": "public"} for r in CANNED_RECORDS]
 
 
 class FakePinata:
@@ -126,10 +129,10 @@ def _auth(client: TestClient, subject: str = "octocat") -> None:
 class TestAuth:
     """Anonymous: browsing OK; uploading requires a session."""
 
-    def test_anonymous_list_defaults_to_public(self, fake_pinata, client):
-        resp = client.get("/assets/list")
+    def test_anonymous_public_list(self, fake_pinata, client):
+        resp = client.get("/assets/list", params={"source": "public"})
         assert resp.status_code == 200
-        assert resp.json() == CANNED_RECORDS
+        assert resp.json() == PUBLIC_ENTRIES
         assert len(fake_pinata.query_calls) == 1
 
     def test_anonymous_public_upload_401(self, fake_pinata, client):
@@ -195,7 +198,7 @@ class TestPrivate:
         cid = _expected_cid(private_store, READS)
         assert resp.headers["Stargazer-Cid"] == cid
 
-        listed = client.get("/assets/list", params={"network": "private"}).json()
+        listed = client.get("/assets/list", params={"source": "mine"}).json()
         # A typed asset stores its declared fields, empty ones included.
         assert [(r["cid"], r["name"], r["keyvalues"]) for r in listed] == [
             (
@@ -219,7 +222,7 @@ class TestPrivate:
         _upload(client)
         _upload(client, b"other", "r2.fq", {"asset": "r2", "sample_id": "S1"})
         listed = client.get(
-            "/assets/list", params={"network": "private", "asset": "r2"}
+            "/assets/list", params={"source": "mine", "asset": "r2"}
         ).json()
         assert [r["name"] for r in listed] == ["r2.fq"]
 
@@ -248,7 +251,7 @@ class TestPrivate:
             },
         )
         assert resp.status_code == 200
-        listed = client.get("/assets/list", params={"network": "private"}).json()
+        listed = client.get("/assets/list", params={"source": "mine"}).json()
         assert listed[0]["keyvalues"] == {
             "asset": "r1",
             "sample_id": "S2",
@@ -263,9 +266,7 @@ class TestPrivate:
         cid = _upload(client).headers["Stargazer-Cid"]
         _auth(client, "mallory")
         assert _upload(client, b"theirs").status_code == 403
-        assert (
-            client.get("/assets/list", params={"network": "private"}).status_code == 403
-        )
+        assert client.get("/assets/list", params={"source": "mine"}).status_code == 403
         assert (
             client.get(
                 f"/assets/download/{cid}", params={"network": "private"}
@@ -280,9 +281,7 @@ class TestPrivate:
 
     def test_anonymous_gets_401(self, fake_pinata, private_store, client):
         assert _upload(client).status_code == 401
-        assert (
-            client.get("/assets/list", params={"network": "private"}).status_code == 401
-        )
+        assert client.get("/assets/list", params={"source": "mine"}).status_code == 401
         assert (
             client.get(
                 "/assets/download/bafy1", params={"network": "private"}
@@ -296,29 +295,104 @@ class TestPrivate:
         monkeypatch.delenv("PINATA_JWT", raising=False)
         _auth(client, OWNER)
         assert _upload(client).status_code == 204
+        assert len(client.get("/assets/list", params={"source": "mine"}).json()) == 1
         assert (
-            len(client.get("/assets/list", params={"network": "private"}).json()) == 1
-        )
-        assert (
-            client.get("/assets/list", params={"network": "public"}).status_code == 503
+            client.get("/assets/list", params={"source": "public"}).status_code == 503
         )
 
 
 class TestPublicList:
     def test_serves_full_listing_from_cache(self, fake_pinata, client):
         """One unfiltered Pinata query feeds repeated public list calls."""
-        first = client.get("/assets/list", params={"network": "public"})
-        second = client.get("/assets/list", params={"network": "public"})
-        assert first.json() == CANNED_RECORDS
-        assert second.json() == CANNED_RECORDS
+        first = client.get("/assets/list", params={"source": "public"})
+        second = client.get("/assets/list", params={"source": "public"})
+        assert first.json() == PUBLIC_ENTRIES
+        assert second.json() == PUBLIC_ENTRIES
         assert len(fake_pinata.query_calls) == 1
         assert fake_pinata.query_calls[0]["keyvalues"] == {}
 
     def test_filters_apply_in_memory(self, fake_pinata, client):
-        resp = client.get("/assets/list", params={"network": "public", "asset": "r1"})
+        resp = client.get("/assets/list", params={"source": "public", "asset": "r1"})
         assert [r["cid"] for r in resp.json()] == ["bafyr1"]
         # Filtering happened app-side, not via Pinata params.
         assert fake_pinata.query_calls[0]["keyvalues"] == {}
+
+
+def _list(client, *sources: str, **filters: str):
+    """GET the listing for `sources`, filtered by keyvalue `filters`."""
+    params = [("source", s) for s in sources] + list(filters.items())
+    return client.get("/assets/list", params=params)
+
+
+class TestSources:
+    """One listing over the user's assets, the public tier and the shipped notebooks."""
+
+    def test_stargazer_lists_every_shipped_notebook(self, client):
+        entries = _list(client, "stargazer").json()
+        assert {e["keyvalues"]["slug"] for e in entries} == {
+            n.slug for n in notebooks.NOTEBOOKS
+        }
+        tasks = next(e for e in entries if e["keyvalues"]["slug"] == "tasks")
+        assert tasks == {
+            "cid": compute_cid(notebooks.NOTEBOOKS_PKG_DIR / "tutorials" / "tasks.py"),
+            "name": "tasks.py",
+            "source": "stargazer",
+            "keyvalues": {
+                "asset": "notebook",
+                "category": "tutorial",
+                "title": "2. Tasks",
+                "description": "Define a single task with typed asset I/O.",
+                "slug": "tasks",
+            },
+        }
+
+    def test_filters_apply_to_shipped_notebooks(self, client):
+        entries = _list(client, "stargazer", category="workflow").json()
+        assert [e["keyvalues"]["slug"] for e in entries] == ["scrna-pipeline"]
+
+    def test_mine_and_stargazer_together(self, fake_pinata, private_store, client):
+        _auth(client, OWNER)
+        cid = _upload(client).headers["Stargazer-Cid"]
+        entries = _list(client, "mine", "stargazer").json()
+        assert [(e["cid"], e["source"]) for e in entries if e["source"] == "mine"] == [
+            (cid, "mine")
+        ]
+        assert len(entries) == len(notebooks.NOTEBOOKS) + 1
+        assert {e["source"] for e in entries} == {"mine", "stargazer"}
+
+    def test_shipped_notebooks_arent_mine(self, fake_pinata, private_store, client):
+        _auth(client, OWNER)
+        assert _list(client, "mine", asset="notebook").json() == []
+        assert len(_list(client, "stargazer", asset="notebook").json()) == len(
+            notebooks.NOTEBOOKS
+        )
+
+    def test_anonymous_mine_is_401(self, fake_pinata, private_store, client):
+        assert _list(client, "mine").status_code == 401
+        assert _list(client, "mine", "stargazer").status_code == 401
+
+    def test_public_off_is_503(self, fake_pinata, client, monkeypatch):
+        monkeypatch.setattr(config, "PUBLIC_ASSETS", False)
+        assert _list(client, "public").status_code == 503
+        assert _list(client, "stargazer", "public").status_code == 503
+        assert _list(client, "stargazer").status_code == 200
+
+    def test_no_or_unknown_source_is_400(self, client):
+        assert _list(client).status_code == 400
+        assert _list(client, "elsewhere").status_code == 400
+
+    def test_shipped_notebook_downloads_its_source(self, client):
+        path = notebooks.NOTEBOOKS_PKG_DIR / "tutorials" / "tasks.py"
+        resp = client.get(
+            f"/assets/download/{compute_cid(path)}", params={"network": "stargazer"}
+        )
+        assert resp.status_code == 200
+        assert resp.content == path.read_bytes()
+        assert resp.headers["content-disposition"] == 'attachment; filename="tasks.py"'
+        missing = client.get(
+            "/assets/download/bafynope", params={"network": "stargazer"}
+        )
+        assert missing.status_code == 404
 
 
 class TestUpdate:
@@ -437,19 +511,17 @@ class TestNotConfigured:
         monkeypatch.setattr(config, "PUBLIC_ASSETS", False)
         _auth(client, OWNER)
         assert (
-            client.get("/assets/list", params={"network": "public"}).status_code == 503
+            client.get("/assets/list", params={"source": "public"}).status_code == 503
         )
         assert _tus_create(client, network="public").status_code == 503
         assert fake_pinata.query_calls == fake_pinata.tus_created == []
-        assert (
-            client.get("/assets/list", params={"network": "private"}).status_code == 200
-        )
+        assert client.get("/assets/list", params={"source": "mine"}).status_code == 200
 
     def test_routes_503_without_jwt(self, fake_pinata, client, monkeypatch):
         monkeypatch.delenv("PINATA_JWT", raising=False)
         _auth(client)
         assert (
-            client.get("/assets/list", params={"network": "public"}).status_code == 503
+            client.get("/assets/list", params={"source": "public"}).status_code == 503
         )
         assert _tus_create(client, network="public").status_code == 503
 
@@ -521,7 +593,7 @@ class TestTus:
         cid = _expected_cid(private_store, BIG)
         assert done.headers["Upload-Offset"] == str(len(BIG))
         assert done.headers["Stargazer-Cid"] == cid
-        listed = client.get("/assets/list", params={"network": "private"}).json()
+        listed = client.get("/assets/list", params={"source": "mine"}).json()
         assert [(r["cid"], r["name"]) for r in listed] == [(cid, "big.fq")]
         resp = client.get(f"/assets/download/{cid}", params={"network": "private"})
         assert resp.content == BIG
@@ -530,7 +602,7 @@ class TestTus:
         _auth(client, OWNER)
         _tus_upload(client)
         _tus_upload(client)
-        listed = client.get("/assets/list", params={"network": "private"}).json()
+        listed = client.get("/assets/list", params={"source": "mine"}).json()
         assert len(listed) == 1
         stored = [p for p in _uploads_dir(private_store).rglob("*") if p.is_file()]
         assert len(stored) == 1

@@ -69,7 +69,7 @@ Gateway downloads use aiohttp directly: `flyte.io.File.download()` can't read an
 
 ## The public tier
 
-Shared data — bundles, reference genomes — is public data on Pinata's public network: anyone can read it, and `_owner` records who uploaded it. Every public record needs an `_owner`: a public upload or edit without one is refused before anything is sent (so publishing needs `STARGAZER_OWNER`), and a public file without one, uploaded straight to Pinata, is left out of every read. The SDK reads Pinata's public index (which needs `PINATA_JWT` even for public files) and downloads public bytes from `PINATA_GATEWAY`. Nothing uses Pinata's private network: the asset browser's Private tab is the user's own index and store, and its Public tab calls Pinata's public network directly. On Union the key is a Flyte secret that every task environment, dashboard and notebook pod declares, so it is set wherever Stargazer runs and its value never appears in a task's or an app's spec. The devbox drops app secrets, so devbox dashboards and notebook pods have no public tier.
+Shared data — bundles, reference genomes — is public data on Pinata's public network: anyone can read it, and `_owner` records who uploaded it. Every public record needs an `_owner`: a public upload or edit without one is refused before anything is sent (so publishing needs `STARGAZER_OWNER`), and a public file without one, uploaded straight to Pinata, is left out of every read. The SDK reads Pinata's public index (which needs `PINATA_JWT` even for public files) and downloads public bytes from `PINATA_GATEWAY`. Nothing uses Pinata's private network: the asset explorer's Mine source is the user's own index and store, and its Public source calls Pinata's public network directly. On Union the key is a Flyte secret that every task environment, dashboard and notebook pod declares, so it is set wherever Stargazer runs and its value never appears in a task's or an app's spec. The devbox drops app secrets, so devbox dashboards and notebook pods have no public tier.
 
 **Publishing moves a stored asset into the public tier.** `StorageClient.publish(cid)` uploads one of the user's stored files to Pinata with its index row's keyvalues, `_owner` restamped. The CID has to come back the same: ours is computed with Pinata's parameters, so a different one raises instead of passing quietly. The user's row stays, so the asset is in both tiers, and queries keep the row over the public duplicate. Companions aren't published with their asset. The MCP server exposes it as `publish_file`.
 
@@ -105,7 +105,7 @@ returns its matching records.
 
 `tus_create(filename, keyvalues, length)` and `tus_patch(location, offset,
 chunk)` are the TUS path's two steps on their own, for a caller that has the
-file one chunk at a time: the dashboard's asset browser passes on a public
+file one chunk at a time: the dashboard's asset explorer passes on a public
 upload's pieces as the browser sends them, and `tus_patch` returns the CID
 once the last one lands — see [App → Asset Manager](app.md#asset-manager).
 

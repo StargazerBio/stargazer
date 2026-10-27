@@ -11,7 +11,8 @@
     flex-wrap: wrap;
     margin-bottom: 1.25rem;
 }
-/* Segmented control shared by the network tabs and the graph/list toggle. */
+/* Segmented control shared by the source control (several pressed at once)
+   and the graph/list toggle (one selected). */
 .seg {
     display: inline-flex;
     border: 1px solid var(--border);
@@ -30,11 +31,11 @@
     transition: background 0.15s ease, color 0.15s ease;
 }
 .seg button + button { border-left: 1px solid var(--border); }
-.seg button[aria-selected="true"] {
+.seg button[aria-selected="true"], .seg button[aria-pressed="true"] {
     background: var(--accent-soft);
     color: var(--accent);
 }
-.seg button:hover:not([aria-selected="true"]) {
+.seg button:hover:not([aria-selected="true"]):not([aria-pressed="true"]) {
     background: var(--surface-2);
     color: var(--text);
 }
@@ -151,6 +152,7 @@
     color: var(--text-dim);
 }
 .badge.type { color: var(--accent); border-color: var(--accent-line); }
+.badge.src { font-size: 0.66rem; }
 .copy-cid {
     background: transparent;
     border: none;
@@ -173,6 +175,8 @@
 .detail-head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
 .detail-head h3 { font-family: var(--mono); margin: 0; }
 .detail-cid { font-family: var(--mono); font-size: 0.78rem; color: var(--text-dim); word-break: break-all; }
+.detail-desc { font-size: 0.85rem; color: var(--text-dim); margin: 0.2rem 0 0.5rem; }
+.detail-actions .launch-group { display: inline-flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 .detail-grid { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.75rem; margin: 0.6rem 0; font-size: 0.82rem; }
 .detail-grid dt { color: var(--text-dim); font-family: var(--mono); }
 .detail-grid dt.sys { opacity: 0.7; }
@@ -239,7 +243,7 @@
 .asset-upload[open] > summary::before { content: "▾ "; }
 .upload-body { padding-bottom: 1.25rem; display: flex; flex-direction: column; gap: 0.9rem; }
 .upload-row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
-.upload-label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; color: var(--text-dim); }
+.upload-label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; color: var(--text-dim); min-width: 0; max-width: 100%; }
 .upload-body input[type="text"],
 .upload-body input[type="number"],
 .upload-body input[type="file"],
@@ -251,6 +255,8 @@
     padding: 0.4rem 0.6rem;
     font-size: 0.82rem;
     font-family: inherit;
+    max-width: 100%;
+    box-sizing: border-box;
 }
 .upload-body input:focus, .upload-body select:focus { outline: none; border-color: var(--accent); }
 .typed-fields { display: flex; flex-wrap: wrap; gap: 0.75rem; }
@@ -279,7 +285,7 @@
 .kv-row { display: flex; gap: 0.5rem; align-items: center; }
 .kv-row input { flex: 1; }
 .kv-row button { background: transparent; border: 1px solid var(--border); color: var(--text-dim); border-radius: 6px; cursor: pointer; padding: 0.3rem 0.55rem; }
-.upload-net { display: inline-flex; gap: 1rem; align-items: center; font-size: 0.82rem; }
+.upload-net { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: center; font-size: 0.82rem; }
 .upload-net label { display: inline-flex; gap: 0.3rem; align-items: center; cursor: pointer; color: var(--text-dim); }
 .upload-note { font-size: 0.78rem; color: var(--text-dim); }
 .upload-status { font-size: 0.82rem; }
@@ -289,13 +295,16 @@
 <section>
     <h2>
         Assets
-        <span class="section-tag">Browse, graph, and upload files in the asset store.</span>
+        <span class="section-tag">Find notebooks and data, and upload your own.</span>
     </h2>
 
     <div class="assets-controls">
-        <div class="seg" id="network-tabs" role="tablist" aria-label="Network">
-            <button data-network="public" role="tab" aria-selected="false">Public</button>
-            <button data-network="private" role="tab" aria-selected="true">Private</button>
+        <div class="seg" id="source-tabs" role="group" aria-label="Sources">
+            <button data-source="mine" aria-pressed="true">Mine</button>
+            {% if public_assets %}
+            <button data-source="public" aria-pressed="false">Public</button>
+            {% endif %}
+            <button data-source="stargazer" aria-pressed="true">Stargazer</button>
         </div>
         <div class="seg" id="view-toggle" role="tablist" aria-label="View">
             <button data-view="graph" role="tab" aria-selected="true">Graph</button>
@@ -321,7 +330,7 @@
         <table class="asset-table">
             <thead>
                 <tr>
-                    <th>Name</th><th>Owner</th><th>Type</th><th></th>
+                    <th>Name</th><th>Source</th><th>Owner</th><th>Type</th><th></th>
                 </tr>
             </thead>
             <tbody id="list-body"></tbody>
@@ -329,7 +338,7 @@
     </div>
 
     <div class="asset-detail empty" id="detail">
-        Select an asset node or row to see its metadata and download it.
+        Select a node or row to see it, open a notebook or download a file.
     </div>
 
     <details class="asset-upload" id="upload-panel" open>
@@ -393,14 +402,15 @@
 <script src="https://cdn.jsdelivr.net/npm/tus-js-client@4.3.1/dist/tus.min.js"></script>
 <script>
 const USERNAME = {{ username | tojson }};
-// Whether the deploy offers the Public tab and public uploads.
-const PUBLIC_ON = {{ 'true' if public_assets else 'false' }};
+// Whether the dashboard can copy a notebook into a workspace.
+const WORKSPACE_ON = {{ 'true' if workspace_configured else 'false' }};
 const TUS_MAX_BYTES = {{ tus_max_bytes }};
 const TUS_CHUNK_BYTES = {{ tus_chunk_bytes }};
 
 const NODE_CAP = 150;
 const state = {
-    network: "private",
+    // Mine and Stargazer to start: the public tier is opt-in.
+    sources: new Set(["mine", "stargazer"]),
     view: "graph",
     filters: {},
     records: [],
@@ -412,10 +422,22 @@ const state = {
 const $ = (id) => document.getElementById(id);
 const shortCid = (c) => (c && c.length > 14 ? c.slice(0, 8) + "…" + c.slice(-4) : c || "");
 const assetType = (r) => (r.keyvalues && r.keyvalues.asset) || "(bare)";
-const owner = (r) => (r.keyvalues && r.keyvalues._owner) || "shared";
-// On the public tab, flag records the signed-in user owns so they read green.
-// (Private is already all-yours, so it gets no green — that would be noise.)
-const ownedByUser = (r) => state.network === "public" && owner(r) === USERNAME;
+const owner = (r) =>
+    r.source === "stargazer" ? "Stargazer" : (r.keyvalues && r.keyvalues._owner) || "shared";
+const SOURCE_LABEL = { mine: "Mine", public: "Public", stargazer: "Stargazer" };
+// The store a record's download and edit go to.
+const NETWORK = { mine: "private", public: "public", stargazer: "stargazer" };
+// The same CID can be in more than one source, so an entry is its source + CID.
+const entryKey = (r) => r.source + ":" + r.cid;
+const isNotebook = (r) => assetType(r) === "notebook";
+// A notebook reads by its title; anything else by its file name.
+const displayName = (r) =>
+    (isNotebook(r) && r.keyvalues.title) || r.name || shortCid(r.cid);
+const downloadUrl = (r) =>
+    "/assets/download/" + encodeURIComponent(r.cid) + "?network=" + NETWORK[r.source];
+// Flag public records the signed-in user owns so they read green. (Mine is
+// already all-yours, so it gets no green — that would be noise.)
+const ownedByUser = (r) => r.source === "public" && owner(r) === USERNAME;
 // Relationship keys: companion_of, and any keyvalue ending in _cid, with a
 // non-empty value.
 function relKeys(kv) {
@@ -439,7 +461,8 @@ async function fetchSchema() {
 }
 
 function listParams() {
-    const p = new URLSearchParams({ network: state.network });
+    const p = new URLSearchParams();
+    for (const source of state.sources) p.append("source", source);
     if (state.filters.type) p.set("asset", state.filters.type);
     if (state.filters.key && state.filters.val) p.set(state.filters.key, state.filters.val);
     return p;
@@ -447,11 +470,10 @@ function listParams() {
 
 async function fetchRecords() {
     setRegionMessage(null);
-    if (state.network === "public" && !PUBLIC_ON) {
+    if (state.sources.size === 0) {
         state.records = [];
         renderView();
         renderDetail();
-        setRegionMessage("Shared data isn't available on this deployment.");
         return;
     }
     try {
@@ -469,7 +491,7 @@ async function fetchRecords() {
         return;
     }
     // Drop a selection that's no longer in the set.
-    if (state.selected && !state.records.some((r) => r.cid === state.selected)) {
+    if (state.selected && !state.records.some((r) => entryKey(r) === state.selected)) {
         state.selected = null;
     }
     renderView();
@@ -491,11 +513,11 @@ function renderView() {
         $("graph-hint").hidden = true;
         const filtered = state.filters.type || (state.filters.key && state.filters.val);
         setRegionMessage(
-            filtered
-                ? "No assets match this filter."
-                : state.network === "private"
-                ? "No private assets yet. Upload one below, or run a task that stores one."
-                : "No public assets on this network yet."
+            state.sources.size === 0
+                ? "Pick a source to see what's in it."
+                : filtered
+                ? "Nothing matches this filter."
+                : "Nothing here yet. Upload an asset below, or run a task that stores one."
         );
         return;
     }
@@ -519,26 +541,34 @@ function setRegionMessage(msg, isError) {
 
 // ---- graph ---------------------------------------------------------------
 
+// The entry a link from `rec` to `cid` lands on among `records`: the one in
+// `rec`'s own source if it's there, else any with that CID.
+function linkTarget(rec, cid, records) {
+    const matches = records.filter((r) => r.cid === cid);
+    return matches.find((r) => r.source === rec.source) || matches[0];
+}
+
 // Build Cytoscape elements from the loaded records. Nodes are assets; edges
 // are *_cid relationships resolved to in-view targets only (dangling links are
 // listed on the detail card, not drawn). Node size scales with degree.
 function graphElements(records) {
     const capped = records.slice(0, NODE_CAP);
-    const ids = new Set(capped.map((r) => r.cid));
     const deg = {};
     const edges = [];
     for (const r of capped) {
+        const from = entryKey(r);
         for (const k of relKeys(r.keyvalues)) {
-            const tgt = r.keyvalues[k];
-            if (ids.has(tgt) && tgt !== r.cid) {
-                edges.push({ data: { id: r.cid + "__" + k + "__" + tgt, source: r.cid, target: tgt, label: relLabel(k) } });
-                deg[r.cid] = (deg[r.cid] || 0) + 1;
+            const found = linkTarget(r, r.keyvalues[k], capped);
+            const tgt = found && entryKey(found);
+            if (tgt && tgt !== from) {
+                edges.push({ data: { id: from + "__" + k + "__" + tgt, source: from, target: tgt, label: relLabel(k) } });
+                deg[from] = (deg[from] || 0) + 1;
                 deg[tgt] = (deg[tgt] || 0) + 1;
             }
         }
     }
     const nodes = capped.map((r) => ({
-        data: { id: r.cid, label: r.name || shortCid(r.cid), size: 16 + Math.min(28, (deg[r.cid] || 0) * 5) },
+        data: { id: entryKey(r), label: displayName(r), size: 16 + Math.min(28, (deg[entryKey(r)] || 0) * 5) },
         classes: ownedByUser(r) ? "mine" : "",
     }));
     return { elements: nodes.concat(edges), truncated: records.length > NODE_CAP };
@@ -655,7 +685,7 @@ function bindGraphEvents() {
     });
     cy.on("mouseover", "node", (evt) => {
         const node = evt.target;
-        const rec = state.records.find((r) => r.cid === node.id());
+        const rec = state.records.find((r) => entryKey(r) === node.id());
         if (rec) showGraphTip(rec, node);
         node.addClass("hot");
         node.connectedEdges().addClass("hot");
@@ -681,8 +711,8 @@ function showGraphTip(rec, node) {
     }
     // On-canvas labels are truncated, so the tooltip carries the full name.
     tip.innerHTML =
-        `<div class="tip-name">${esc(rec.name || shortCid(rec.cid))}</div>` +
-        `<div class="tip-type">${esc(assetType(rec))}</div><dl>${rows}</dl>`;
+        `<div class="tip-name">${esc(displayName(rec))}</div>` +
+        `<div class="tip-type">${esc(assetType(rec))} · ${esc(SOURCE_LABEL[rec.source])}</div><dl>${rows}</dl>`;
     tip.style.display = "block";
     // node.renderedPosition() is relative to the cy container (#graph-host),
     // which sits at the region's top-left, so it maps onto region coords.
@@ -702,8 +732,8 @@ function renderList() {
     body.innerHTML = "";
     for (const r of state.records) {
         const tr = document.createElement("tr");
-        tr.dataset.cid = r.cid;
-        if (r.cid === state.selected) tr.classList.add("selected");
+        tr.dataset.key = entryKey(r);
+        if (entryKey(r) === state.selected) tr.classList.add("selected");
         const mineRow = ownedByUser(r);
         if (mineRow) tr.classList.add("mine");
         const ownerCell = mineRow
@@ -712,18 +742,19 @@ function renderList() {
         // CID + full metadata live on the detail card (click a row); the table
         // stays scannable with just name, owner, type, and download.
         tr.innerHTML =
-            `<td>${esc(r.name || "")}</td>` +
+            `<td>${esc(displayName(r))}</td>` +
+            `<td><span class="badge src">${esc(SOURCE_LABEL[r.source])}</span></td>` +
             `<td>${ownerCell}</td>` +
             `<td><span class="badge type">${esc(assetType(r))}</span></td>` +
-            `<td><a class="btn btn-muted" href="/assets/download/${encodeURIComponent(r.cid)}?network=${state.network}">Download</a></td>`;
+            `<td><a class="btn btn-muted" href="${esc(downloadUrl(r))}">Download</a></td>`;
         body.appendChild(tr);
     }
 }
 
 $("list-body").addEventListener("click", (e) => {
     if (e.target.closest("a")) return; // let download links work
-    const tr = e.target.closest("tr[data-cid]");
-    if (tr) selectAsset(tr.dataset.cid);
+    const tr = e.target.closest("tr[data-key]");
+    if (tr) selectAsset(tr.dataset.key);
 });
 
 function flash(el, txt) {
@@ -734,17 +765,18 @@ function flash(el, txt) {
 
 // ---- selection + detail card --------------------------------------------
 
-function selectAsset(cid) {
-    if (state.editing && state.editing !== cid) state.editing = null;
-    state.selected = cid;
+// Select the entry whose key (`entryKey`) is `key`.
+function selectAsset(key) {
+    if (state.editing && state.editing !== key) state.editing = null;
+    state.selected = key;
     // Reflect selection in whichever view is live without a full re-layout.
     if (state.view === "list") {
         $("list-body").querySelectorAll("tr").forEach((tr) =>
-            tr.classList.toggle("selected", tr.dataset.cid === cid)
+            tr.classList.toggle("selected", tr.dataset.key === key)
         );
     } else if (cy) {
         cy.nodes().removeClass("selected");
-        const n = cy.getElementById(cid);
+        const n = cy.getElementById(key);
         if (n && n.length) n.addClass("selected");
     }
     renderDetail();
@@ -752,15 +784,16 @@ function selectAsset(cid) {
 
 function renderDetail() {
     const el = $("detail");
-    const rec = state.records.find((r) => r.cid === state.selected);
+    const rec = state.records.find((r) => entryKey(r) === state.selected);
     if (!rec) {
         state.editing = null;
         el.className = "asset-detail empty";
-        el.textContent = "Select an asset node or row to see its metadata and download it.";
+        el.textContent = "Select a node or row to see it, open a notebook or download a file.";
         return;
     }
     el.className = "asset-detail";
-    if (state.editing === rec.cid) { renderDetailEditor(el, rec); return; }
+    if (isNotebook(rec)) { renderNotebookDetail(el, rec); return; }
+    if (state.editing === entryKey(rec)) { renderDetailEditor(el, rec); return; }
 
     const kv = rec.keyvalues || {};
     let meta = "";
@@ -774,10 +807,10 @@ function renderDetail() {
     let links = "";
     for (const k of relKeys(kv)) {
         const target = kv[k];
-        const found = state.records.find((r) => r.cid === target);
+        const found = linkTarget(rec, target, state.records);
         const label = esc(relLabel(k));
         if (found) {
-            links += `<span class="link-chip" data-goto="${esc(target)}">${label}: ${esc(found.name || shortCid(target))}</span>`;
+            links += `<span class="link-chip" data-goto="${esc(entryKey(found))}">${label}: ${esc(displayName(found))}</span>`;
         } else {
             links += `<span class="link-chip dangling" title="${esc(target)}">${label}: ${esc(shortCid(target))} (not in this view)</span>`;
         }
@@ -786,14 +819,74 @@ function renderDetail() {
     // the affordance when the signed-in user owns this record.
     const canEdit = owner(rec) === USERNAME;
     el.innerHTML =
-        `<div class="detail-head"><h3>${esc(rec.name || "(unnamed)")}</h3><span class="badge type">${esc(assetType(rec))}</span><span class="badge">${esc(owner(rec))}</span></div>` +
-        `<div class="detail-cid">${esc(rec.cid)} <button class="copy-cid" data-copy="${esc(rec.cid)}" title="Copy CID">⧉</button></div>` +
+        detailHead(rec, rec.name || "(unnamed)") +
+        detailCid(rec) +
         (meta ? `<dl class="detail-grid">${meta}</dl>` : "") +
         (links ? `<div class="detail-links"><strong>Linked:</strong> ${links}</div>` : "") +
         `<div class="detail-actions">` +
-        `<a class="btn btn-notebook" href="/assets/download/${encodeURIComponent(rec.cid)}?network=${state.network}">Download</a>` +
-        (canEdit ? `<button class="btn btn-muted" data-edit="${esc(rec.cid)}">Edit metadata</button>` : "") +
+        `<a class="btn btn-notebook" href="${esc(downloadUrl(rec))}">Download</a>` +
+        (canEdit ? `<button class="btn btn-muted" data-edit="${esc(entryKey(rec))}">Edit metadata</button>` : "") +
         `</div>`;
+}
+
+function detailHead(rec, title, extra = "") {
+    return (
+        `<div class="detail-head"><h3>${esc(title)}</h3>` +
+        `<span class="badge type">${esc(assetType(rec))}</span>${extra}` +
+        `<span class="badge src">${esc(SOURCE_LABEL[rec.source])}</span>` +
+        `<span class="badge">${esc(owner(rec))}</span></div>`
+    );
+}
+
+function detailCid(rec) {
+    return `<div class="detail-cid">${esc(rec.cid)} <button class="copy-cid" data-copy="${esc(rec.cid)}" title="Copy CID">⧉</button></div>`;
+}
+
+// One mode's launch button, in the markup the shared launch code
+// (/static/launch.js) drives: Edit/Run, then Open and Stop once its pod runs.
+function launchRow(slug, section, mode, label, cls) {
+    return (
+        `<div class="launch-row"><form method="post" action="/launch" class="launch-form">` +
+        `<input type="hidden" name="slug" value="${esc(slug)}">` +
+        `<input type="hidden" name="section" value="${esc(section)}">` +
+        `<input type="hidden" name="mode" value="${mode}">` +
+        `<button class="btn ${cls}" type="submit">${label}</button></form></div>`
+    );
+}
+
+// A notebook's card does what its tile did: a shipped one opens in Edit or
+// Run mode, a workflow or a public notebook copies into the workspace, and
+// any of them downloads its source. Its metadata is set where it's published,
+// so it has no editor here.
+function renderNotebookDetail(el, rec) {
+    const kv = rec.keyvalues || {};
+    const shipped = rec.source === "stargazer";
+    const category = kv.category ? `<span class="badge">${esc(kv.category)}</span>` : "";
+    let actions = "";
+    if (shipped) {
+        const section = kv.category + "s";
+        actions +=
+            `<div class="launch-group">` +
+            launchRow(kv.slug, section, "edit", "Edit", "btn-notebook") +
+            launchRow(kv.slug, section, "run", "Run", "btn-run") +
+            `</div>`;
+    }
+    const copyFrom = shipped
+        ? kv.category === "workflow" && { slug: kv.slug, section: "workflows" }
+        : rec.source === "public" && { slug: rec.cid, section: "public" };
+    if (copyFrom && WORKSPACE_ON) {
+        actions +=
+            `<button type="button" class="btn btn-muted" data-copy-slug="${esc(copyFrom.slug)}" ` +
+            `data-copy-section="${copyFrom.section}" title="Copy into your workspace as an editable notebook">Copy to workspace</button>`;
+    }
+    actions += `<a class="btn btn-muted" href="${esc(downloadUrl(rec))}" download title="Download this notebook's source">Download source</a>`;
+    el.innerHTML =
+        detailHead(rec, displayName(rec), category) +
+        (kv.description ? `<p class="detail-desc">${esc(kv.description)}</p>` : "") +
+        `<div class="detail-cid">${esc(rec.name || "")}</div>` +
+        detailCid(rec) +
+        `<div class="detail-actions">${actions}</div>`;
+    if (shipped) hydrateLaunches(el);
 }
 
 // Inline metadata editor. Values of existing keys are editable (the headline
@@ -815,7 +908,7 @@ function renderDetailEditor(el, rec) {
         `<p class="edit-note">Editing changes values and adds fields — it can't remove a key. <code>asset</code> is required; non-text values should be JSON (<code>true</code>, <code>42</code>).</p>` +
         `<p class="edit-err" id="edit-err" hidden></p>` +
         `<div class="detail-actions">` +
-        `<button type="button" class="btn btn-notebook" data-edit-save="${esc(rec.cid)}">Save</button>` +
+        `<button type="button" class="btn btn-notebook" data-edit-save="${esc(entryKey(rec))}">Save</button>` +
         `<button type="button" class="btn btn-muted" data-edit-cancel>Cancel</button>` +
         `</div>`;
 }
@@ -840,7 +933,9 @@ function kvEditRow(k, v, lockKey) {
     );
 }
 
-async function saveEdit(cid) {
+// Save the editor's keyvalues onto the entry whose key is `key`.
+async function saveEdit(key) {
+    const rec = state.records.find((r) => entryKey(r) === key);
     const errEl = $("edit-err");
     errEl.hidden = true;
     const keyvalues = {};
@@ -863,13 +958,12 @@ async function saveEdit(cid) {
         const resp = await fetch("/assets/update", {
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({ cid, network: state.network, keyvalues }),
+            body: JSON.stringify({ cid: rec.cid, network: NETWORK[rec.source], keyvalues }),
         });
         const body = await resp.json().catch(() => ({}));
         if (!resp.ok) throw new Error(body.detail || "HTTP " + resp.status);
         // Reflect the merged result locally and leave edit mode.
-        const rec = state.records.find((r) => r.cid === cid);
-        if (rec) rec.keyvalues = body.keyvalues || rec.keyvalues;
+        rec.keyvalues = body.keyvalues || rec.keyvalues;
         state.editing = null;
         renderView();
         renderDetail();
@@ -913,8 +1007,14 @@ function segmented(id, attr, onPick) {
     });
 }
 
-segmented("network-tabs", "network", (network) => {
-    state.network = network;
+// The sources toggle independently, any number at once.
+$("source-tabs").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-source]");
+    if (!btn) return;
+    const on = btn.getAttribute("aria-pressed") !== "true";
+    btn.setAttribute("aria-pressed", String(on));
+    if (on) state.sources.add(btn.dataset.source);
+    else state.sources.delete(btn.dataset.source);
     fetchRecords();
 });
 segmented("view-toggle", "view", (view) => {
@@ -1077,12 +1177,15 @@ async function doUpload() {
     try {
         const cid = await uploadTus();
         if (network === "private") {
-            if (state.network === "private") await fetchRecords();
-        } else if (state.network === "public" && !state.records.some((r) => r.cid === cid)) {
+            if (state.sources.has("mine")) await fetchRecords();
+        } else if (
+            state.sources.has("public") &&
+            !state.records.some((r) => r.source === "public" && r.cid === cid)
+        ) {
             // Optimistic insert — Pinata's list can lag a fresh upload. The row
             // persists in memory until a later fetchRecords() reflects it.
             state.records = [
-                { cid, name: file.name, keyvalues: { ...keyvalues, _owner: USERNAME } },
+                { cid, name: file.name, source: "public", keyvalues: { ...keyvalues, _owner: USERNAME } },
                 ...state.records,
             ];
             renderView();

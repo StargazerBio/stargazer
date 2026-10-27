@@ -1,5 +1,4 @@
 <div class="tile">
-    {% if tile.section == 'workspace' %}
     <button type="button" class="tile-setup" data-setup-slug="{{ tile.slug }}"
             aria-label="Edit this notebook's setup"
             title="Edit name, description, resources and image">⚙️</button>
@@ -14,24 +13,14 @@
             <path d="M10 11v6M14 11v6"/>
         </svg>
     </button>
-    {% endif %}
     <span class="tile-file">{{ tile.slug }}.py</span>
     <h3>{{ tile.title }}</h3>
     {% if tile.description %}<p>{{ tile.description }}</p>{% endif %}
-    <div class="tile-actions">
-        {% if tile.section == 'public' %}
-        <div class="launch-row">
-            <button type="button" class="btn btn-muted"
-                    data-copy-slug="{{ tile.cid }}" data-copy-section="public"
-                    title="Copy into your workspace as an editable notebook">
-                Copy to workspace
-            </button>
-        </div>
-        {% else %}
+    <div class="tile-actions launch-group">
         <div class="launch-row">
             <form method="post" action="/launch" class="launch-form">
                 <input type="hidden" name="slug" value="{{ tile.slug }}">
-                <input type="hidden" name="section" value="{{ tile.section }}">
+                <input type="hidden" name="section" value="workspace">
                 <input type="hidden" name="mode" value="edit">
                 <button class="btn btn-notebook" type="submit">Edit</button>
             </form>
@@ -39,12 +28,11 @@
         <div class="launch-row">
             <form method="post" action="/launch" class="launch-form">
                 <input type="hidden" name="slug" value="{{ tile.slug }}">
-                <input type="hidden" name="section" value="{{ tile.section }}">
+                <input type="hidden" name="section" value="workspace">
                 <input type="hidden" name="mode" value="run">
                 <button class="btn btn-run" type="submit">Run</button>
             </form>
         </div>
-        {% if tile.section == 'workspace' %}
         <div class="launch-row">
             <a class="btn btn-muted" download
                href="/workspace/download?slug={{ tile.slug | urlencode }}"
@@ -63,17 +51,6 @@
                     title="Stop sharing this notebook">Unpublish</button>
             {% endif %}
         </div>
-        {% endif %}
-        {% endif %}
-        {% if tile.section == 'workflows' %}
-        <div class="launch-row">
-            <button type="button" class="btn btn-muted"
-                    data-copy-slug="{{ tile.slug }}" data-copy-section="workflows"
-                    title="Copy into your workspace as an editable notebook">
-                Copy to workspace
-            </button>
-        </div>
-        {% endif %}
         {% endif %}
     </div>
 </div>

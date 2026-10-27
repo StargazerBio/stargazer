@@ -16,9 +16,10 @@ else's, or another of the user's notebooks) can't be published again; the
 upload comes back as that record, and publishing refuses it
 (`AlreadyPublic`).
 
-The dashboard lists every public notebook in its own section, read from the
-asset browser's cached public listing, and copies one into a workspace by
-reading its bytes from the gateway.
+Public notebooks are entries in the asset explorer's public listing
+(`app.assets`). The dashboard reads the user's own from that cached listing
+to offer Unpublish on their tiles, and copies any of them into a workspace
+by reading its bytes from the gateway.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
