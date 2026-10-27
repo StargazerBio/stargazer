@@ -315,10 +315,11 @@ def _notebook_slug(name: str) -> str | None:
     and Flyte app names allow only `[a-z0-9-]`. The original name is preserved
     verbatim as the display title (stored as `main_name` in the notebook's
     setup block). Returns None when the result is empty or collides
-    with a reserved seed slug (`SEED_SLUGS`).
+    with a reserved seed slug (`SEED_SLUGS`) or a shipped notebook's, whose
+    app it would share.
     """
     slug = slugify(name)
-    if not slug or slug in SEED_SLUGS:
+    if not slug or slug in SEED_SLUGS or by_slug(slug):
         return None
     return slug
 
@@ -476,9 +477,12 @@ async def workspace_create(
         return JSONResponse({"error": f"invalid source: {source}"}, status_code=400)
     slug = _notebook_slug(name)
     if slug is None:
-        return JSONResponse(
-            {"error": f"invalid or reserved notebook name: {name!r}"}, status_code=400
+        error = (
+            f'"{name.strip()}" is taken by a built-in notebook. Pick another name.'
+            if slugify(name)
+            else f"invalid notebook name: {name!r}"
         )
+        return JSONResponse({"error": error}, status_code=400)
     if len(slug) > NOTEBOOK_SLUG_MAX:
         return JSONResponse(
             {"error": f"Notebook names can be at most {NOTEBOOK_SLUG_MAX} characters."},

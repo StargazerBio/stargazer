@@ -350,6 +350,23 @@ def test_create_rejects_reserved_name(client):
     assert client.post("/workspace/create", data={"name": "basic"}).status_code == 400
 
 
+def test_create_refuses_a_shipped_notebooks_name(client):
+    """A workspace notebook can't take a shipped notebook's slug, and its app."""
+    _as(client)
+    resp = client.post("/workspace/create", data={"name": "Assets"})
+    assert resp.status_code == 400
+    assert resp.json()["error"] == (
+        '"Assets" is taken by a built-in notebook. Pick another name.'
+    )
+    assert _get(ALICE, "assets.py") is None
+
+
+@pytest.mark.parametrize("nb", notebooks.NOTEBOOKS, ids=lambda nb: nb.slug)
+def test_every_shipped_slug_is_reserved(nb):
+    """Every shipped notebook's slug is refused as a workspace notebook's."""
+    assert _notebook_slug(nb.slug) is None
+
+
 def test_create_takes_the_longest_name_that_launches(client):
     """A 22-character name makes `nb-<slug>-edit` exactly Flyte's 30."""
     _as(client)
