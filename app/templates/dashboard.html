@@ -199,26 +199,95 @@
         });
     });
 
+    // Clear a row's extras and hide its Edit/Run button, and the other mode's.
+    // A notebook runs in exactly one modality at a time, so a running (or
+    // building) notebook offers no path to a second pod. Stop restores both.
+    // See docs/architecture/app.md. Don't hide a sibling that's itself already
+    // launched. Returns the row's mode.
+    function holdLaunch(row, form) {
+        row.querySelectorAll(".launched-extra").forEach((el) => el.remove());
+        const mode = form.querySelector('input[name="mode"]').value;
+        row.hidden = false;
+        form.hidden = true;
+        row.closest(".tile")
+            .querySelectorAll(".launch-row")
+            .forEach((r) => {
+                if (r !== row && !r.querySelector(".launched-extra"))
+                    r.hidden = true;
+            });
+        return mode;
+    }
+
+    // Restore every mode's Edit/Run button (both the hidden sibling row and
+    // this row's own hidden form), clearing this row's extras.
+    function releaseLaunch(row) {
+        row.querySelectorAll(".launched-extra").forEach((el) => el.remove());
+        row.closest(".tile")
+            .querySelectorAll(".launch-row")
+            .forEach((r) => {
+                r.hidden = false;
+                r.querySelectorAll("form.launch-form").forEach((f) => {
+                    f.hidden = false;
+                });
+            });
+    }
+
+    // Show a notebook whose image is building: a link to the build run in
+    // place of Edit/Run, until /launch/status reports the pod running (then
+    // Open+Stop) or the build failed (then Edit/Run again, and the reason).
+    function showBuilding(row, form, buildUrl) {
+        holdLaunch(row, form);
+        const link = document.createElement("a");
+        link.href = buildUrl;
+        link.className = "btn btn-muted launched-extra";
+        link.innerHTML = '<span class="spinner-inline"></span> Building image';
+        link.title =
+            "This notebook's image is building. It opens here when it's ready.";
+        link.target = "_blank";
+        link.rel = "noopener";
+        row.appendChild(link);
+        watchBuild(row, form);
+    }
+
+    // Poll /launch/status for a building notebook. Once its build is no longer
+    // reported, the pod can take a moment to show as running, so keep looking
+    // for a few minutes before giving the buttons back.
+    async function watchBuild(row, form) {
+        const slug = form.querySelector('input[name="slug"]').value;
+        const mode = form.querySelector('input[name="mode"]').value;
+        const mine = (e) => e.slug === slug && e.mode === mode;
+        let misses = 0;
+        while (misses < 60) {
+            await new Promise((r) => setTimeout(r, 5000));
+            let data;
+            try {
+                data = await fetchJSON("/launch/status");
+            } catch (_) {
+                continue;
+            }
+            if ((data.building || []).some(mine)) continue;
+            const running = (data.running || []).find(mine);
+            if (running) {
+                showLaunched(row, form, running.url, true);
+                return;
+            }
+            const failed = (data.failed || []).find(mine);
+            if (failed) {
+                releaseLaunch(row);
+                alert("Launch failed: " + failed.error);
+                return;
+            }
+            misses += 1;
+        }
+        releaseLaunch(row);
+    }
+
     // Append an "Open" link + "Stop" button beside a launched notebook's
     // Edit/Run button. The original button stays so the notebook can be
     // re-launched; the extras are tagged `.launched-extra` so a re-launch or
     // a Stop can clear them without disturbing the form.
     function showLaunched(row, form, url, fresh) {
-        row.querySelectorAll(".launched-extra").forEach((el) => el.remove());
-
-        // A notebook runs in exactly one modality at a time. Hide this row's own
-        // Edit/Run button (Open/Stop take over) and the *other* mode's button
-        // too, so a running notebook offers no path to a second pod. Stop
-        // restores both. See docs/architecture/app.md. Don't hide a sibling
-        // that's itself already launched.
-        const mode = form.querySelector('input[name="mode"]').value;
-        const tile = row.closest(".tile");
-        row.hidden = false;
-        form.hidden = true;
-        tile.querySelectorAll(".launch-row").forEach((r) => {
-            if (r !== row && !r.querySelector(".launched-extra"))
-                r.hidden = true;
-        });
+        const mode = holdLaunch(row, form);
 
         const open = document.createElement("a");
         open.href = url;
@@ -260,9 +329,18 @@
         openBtn.style.pointerEvents = "none";
         openBtn.textContent = "Starting…";
         try {
-            const url = await requestLaunch(new FormData(form));
-            if (win) win.location = url;
-            else window.open(url, "_blank", "noopener");
+            const payload = await requestLaunch(new FormData(form));
+            if (payload.building) {
+                if (win) win.close();
+                showBuilding(
+                    openBtn.closest(".launch-row"),
+                    form,
+                    payload.building,
+                );
+                return;
+            }
+            if (win) win.location = payload.url;
+            else window.open(payload.url, "_blank", "noopener");
         } catch (err) {
             if (win) win.close();
             alert("Open failed: " + err.message);
@@ -289,19 +367,7 @@
                     "stop HTTP " + resp.status + ": " + txt.slice(0, 200),
                 );
             }
-            row.querySelectorAll(".launched-extra").forEach((el) =>
-                el.remove(),
-            );
-            // Nothing's running now — restore every mode's Edit/Run button
-            // (both the hidden sibling row and this row's own hidden form).
-            row.closest(".tile")
-                .querySelectorAll(".launch-row")
-                .forEach((r) => {
-                    r.hidden = false;
-                    r.querySelectorAll("form.launch-form").forEach((f) => {
-                        f.hidden = false;
-                    });
-                });
+            releaseLaunch(row);
         } catch (err) {
             stopBtn.disabled = false;
             stopBtn.textContent = "Stop";
@@ -322,8 +388,10 @@
         return payload;
     }
 
-    // POST /launch with the given FormData and return the per-notebook URL,
-    // throwing with a useful message on any non-JSON / error response.
+    // POST /launch with the given FormData and return its payload: `url`, the
+    // per-notebook URL, or `building`, the image build run's URL while the
+    // image builds. Throws with a useful message on any non-JSON / error
+    // response.
     // Shared by `handleLaunch` (the tile Edit/Run buttons) and `reopenHydrated`.
     async function requestLaunch(formData) {
         const resp = await fetch("/launch", {
@@ -357,7 +425,7 @@
                     (payload.error || rawBody),
             );
         }
-        return payload.url;
+        return payload;
     }
 
     // Run the launch flow for one tile: spinner → /launch → Open+Stop.
@@ -369,10 +437,11 @@
         button.disabled = true;
         button.innerHTML = '<span class="spinner-inline"></span>';
         try {
-            const url = await requestLaunch(new FormData(form));
+            const payload = await requestLaunch(new FormData(form));
             button.disabled = false;
             button.textContent = originalLabel;
-            showLaunched(row, form, url, true);
+            if (payload.building) showBuilding(row, form, payload.building);
+            else showLaunched(row, form, payload.url, true);
         } catch (err) {
             button.textContent = originalLabel;
             button.disabled = false;
@@ -565,6 +634,10 @@
             const form = findLaunchForm(slug, mode);
             if (form)
                 showLaunched(form.closest(".launch-row"), form, url, false);
+        }
+        for (const { slug, mode, url } of data.building || []) {
+            const form = findLaunchForm(slug, mode);
+            if (form) showBuilding(form.closest(".launch-row"), form, url);
         }
     }
 

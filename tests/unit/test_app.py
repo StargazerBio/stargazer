@@ -15,11 +15,15 @@ from types import SimpleNamespace
 import flyte
 import flyte.app
 import flyte.errors
+import httpx
 import pytest
 from fastapi.testclient import TestClient
+from flyte._build import ImageBuild
 from flyte._environment import list_loaded_environments
+from flyte._internal.imagebuild import image_builder
+from flyte._internal.imagebuild.image_builder import ImageBuildEngine
 
-from app import config, notebooks
+from app import admin_app, config, notebooks
 from app import workspace_store as ws
 from app.admin_app import (
     _notebook_slug,
@@ -537,17 +541,94 @@ def test_download_is_scoped_to_the_user(client):
 # ---------------------------------------------------------------------------
 
 
+class _FakeBuildRun:
+    """A remote image build run that the test finishes by hand."""
+
+    def __init__(self, builder: _FakeBuilder, n: int):
+        self.url = f"https://console.example/runs/build-{n}"
+        self._builder = builder
+        self._done = asyncio.Event()
+        self._ok = False
+        self.wait = SimpleNamespace(aio=self._wait)
+        self.raise_for_status = SimpleNamespace(aio=self._raise_for_status)
+
+    async def _wait(self, quiet: bool = False):
+        await self._done.wait()
+
+    async def _raise_for_status(self):
+        if not self._ok:
+            raise flyte.errors.RuntimeUserError("BuildFailed", f"{self.url} failed")
+
+    def finish(self, ok: bool = True):
+        """End the build; a successful one puts the image in the registry."""
+        self._ok = ok
+        self._builder.built = self._builder.built or ok
+        self._done.set()
+
+
+class _FakeBuilder:
+    """The remote image builder: a registry check and build runs, no network."""
+
+    def __init__(self):
+        self.built = True
+        self.runs: list[_FakeBuildRun] = []
+        builder = self
+
+        class _Checker:
+            @classmethod
+            async def image_exists(cls, repository, tag, arch):
+                return f"registry.example/{repository}:{tag}" if builder.built else None
+
+        self._checker = _Checker
+
+    def get_checkers(self):
+        """The registry check `ImageBuildEngine.image_exists` runs."""
+        return [self._checker]
+
+    async def build_image(self, image, dry_run=False, wait=True, force=False):
+        """Submit a build run; wait for it unless `wait` is False."""
+        run = _FakeBuildRun(self, len(self.runs) + 1)
+        self.runs.append(run)
+        if wait:
+            await run.wait.aio()
+            await run.raise_for_status.aio()
+            return ImageBuild(uri=f"registry.example/{image.name}", remote_run=run)
+        return ImageBuild(uri=None, remote_run=run)
+
+
 @pytest.fixture
-def served(monkeypatch):
+def builder(monkeypatch):
+    """Route Flyte's real image build engine (and its caches) to `_FakeBuilder`."""
+    fake = _FakeBuilder()
+    monkeypatch.setattr(image_builder, "_builds_locally", lambda _builder: False)
+    monkeypatch.setattr(
+        ImageBuildEngine, "_get_builder", classmethod(lambda cls, _b=None: fake)
+    )
+    ImageBuildEngine.image_exists.cache_clear()
+    ImageBuildEngine.build.cache_clear()
+    yield fake
+    ImageBuildEngine.image_exists.cache_clear()
+    ImageBuildEngine.build.cache_clear()
+
+
+@pytest.fixture
+def served(monkeypatch, builder):
     """Capture what /launch builds and serves, without a control plane."""
-    sink: dict = {}
+    sink: dict = {"served": 0}
 
     def fake_env(**kwargs):
         sink["kwargs"] = kwargs
-        sink["env"] = SimpleNamespace(env_vars={})
+        declared = kwargs["declared"]
+        sink["env"] = SimpleNamespace(
+            env_vars={}, image=declared.image if declared else None
+        )
         return sink["env"]
 
     async def fake_aio(env):
+        # Like `serve`, build the image (waiting) before serving.
+        if isinstance(env.image, flyte.Image):
+            await flyte.build.aio(env.image)
+        sink["served"] += 1
         return SimpleNamespace(endpoint="https://nb.example")
 
     def fake_servecontext(**kwargs):
@@ -556,7 +637,9 @@ def served(monkeypatch):
 
     monkeypatch.setattr("app.admin_app.per_notebook_env", fake_env)
     monkeypatch.setattr("flyte.with_servecontext", fake_servecontext)
-    return sink
+    yield sink
+    # A test that fails mid-build leaves its build behind; the next starts clean.
+    admin_app._builds.clear()
 
 
 def _launch(client, slug, section, mode="edit"):
@@ -746,6 +829,156 @@ def test_launch_reports_why_the_app_was_never_created(client, served, monkeypatc
     assert resp.json()["error"] == "app.metadata.id.name: too long"
 
 
+async def _alaunch(ac: httpx.AsyncClient, slug: str, mode: str = "edit"):
+    """POST /launch for a workspace notebook, from inside the app's event loop.
+
+    Bounded, since a launch that waits for an unfinished build never answers.
+    """
+    return await asyncio.wait_for(
+        ac.post(
+            "/launch",
+            data={"slug": slug, "section": "workspace", "mode": mode},
+            headers={"Accept": "application/json"},
+        ),
+        timeout=5,
+    )
+
+
+async def _status_once_built(ac: httpx.AsyncClient) -> dict:
+    """/launch/status once no build is in progress (the background serve is done)."""
+    for _ in range(200):
+        status = (await ac.get("/launch/status")).json()
+        if not status["building"]:
+            return status
+        await asyncio.sleep(0.01)
+    raise AssertionError(f"still building: {status}")
+
+
+@pytest.fixture
+def aclient(monkeypatch):
+    """An async client on the test's own loop, so background tasks keep running."""
+    monkeypatch.setattr("app.admin_app.list_project_apps", _no_apps)
+    _put(ALICE, "qc-run.py", IMG_SRC)
+    return httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=asgi_app),
+        base_url="http://dashboard.example",
+        headers={
+            "X-User-Subject": ALICE,
+            "X-User-Claim-Name": '"Alice Ng"',
+            "X-User-Claim-Email": '"alice@example.org"',
+        },
+    )
+
+
+async def _no_apps(project, domain="development", limit=500):
+    """The project has no notebook apps yet."""
+    return []
+
+
+async def test_launch_answers_at_once_while_the_image_builds(
+    aclient, served, builder, union
+):
+    """An unbuilt image answers 202 with its build run; the pod is served after."""
+    builder.built = False
+    async with aclient as ac:
+        resp = await _alaunch(ac, "qc-run")
+        assert resp.status_code == 202
+        assert resp.json() == {"building": "https://console.example/runs/build-1"}
+        assert served["served"] == 0
+        status = (await ac.get("/launch/status")).json()
+        assert status["building"] == [
+            {
+                "slug": "qc-run",
+                "mode": "edit",
+                "url": "https://console.example/runs/build-1",
+            }
+        ]
+
+        builder.runs[0].finish()
+        await _status_once_built(ac)
+        assert served["served"] == 1
+        assert len(builder.runs) == 1
+
+
+async def test_a_second_launch_during_the_build_starts_no_build(
+    aclient, served, builder, union
+):
+    """Launching again mid-build answers 202 with the same build run."""
+    builder.built = False
+    async with aclient as ac:
+        await _alaunch(ac, "qc-run")
+        again = await _alaunch(ac, "qc-run")
+        assert again.status_code == 202
+        assert again.json() == {"building": "https://console.example/runs/build-1"}
+        assert len(builder.runs) == 1
+        builder.runs[0].finish()
+        await _status_once_built(ac)
+        assert served["served"] == 1
+
+
+async def test_a_launch_after_the_build_serves_at_once(aclient, served, builder, union):
+    """Once built, the next launch serves without another build."""
+    builder.built = False
+    async with aclient as ac:
+        await _alaunch(ac, "qc-run")
+        builder.runs[0].finish()
+        await _status_once_built(ac)
+        resp = await _alaunch(ac, "qc-run")
+        assert resp.status_code == 200
+        assert resp.json() == {"url": "https://nb.example"}
+        assert len(builder.runs) == 1
+        assert served["served"] == 2
+
+
+async def test_a_failed_build_is_reported_through_status(
+    aclient, served, builder, union
+):
+    """A failed build serves nothing and says why; the next launch builds again."""
+    builder.built = False
+    async with aclient as ac:
+        await _alaunch(ac, "qc-run")
+        builder.runs[0].finish(ok=False)
+        status = await _status_once_built(ac)
+        [failed] = status["failed"]
+        assert (failed["slug"], failed["mode"]) == ("qc-run", "edit")
+        assert "https://console.example/runs/build-1 failed" in failed["error"]
+        assert served["served"] == 0
+
+        retry = await _alaunch(ac, "qc-run")
+        assert retry.json() == {"building": "https://console.example/runs/build-2"}
+        assert (await ac.get("/launch/status")).json()["failed"] == []
+        builder.runs[1].finish()
+        await _status_once_built(ac)
+
+
+async def test_an_unexpected_error_after_the_build_is_a_failure(
+    aclient, served, builder, union, monkeypatch
+):
+    """A background serve that raises is reported failed, not building forever."""
+    builder.built = False
+    real_serve = admin_app._serve
+    calls = []
+
+    async def serve_raising_once(env, slug, mode):
+        calls.append(slug)
+        if len(calls) == 1:
+            raise RuntimeError("control plane went away")
+        return await real_serve(env, slug, mode)
+
+    monkeypatch.setattr("app.admin_app._serve", serve_raising_once)
+    async with aclient as ac:
+        await _alaunch(ac, "qc-run")
+        builder.runs[0].finish()
+        status = await _status_once_built(ac)
+        [failed] = status["failed"]
+        assert (failed["slug"], failed["mode"]) == ("qc-run", "edit")
+        assert "control plane went away" in failed["error"]
+
+        again = await _alaunch(ac, "qc-run")
+        assert again.status_code == 200
+        assert again.json() == {"url": "https://nb.example"}
+
+
 # ---------------------------------------------------------------------------
 # /launch/status, /stop, /workspace/cleanup
 # ---------------------------------------------------------------------------
@@ -809,7 +1042,9 @@ def test_launch_status_returns_plain_endpoints(client, monkeypatch):
     _as(client)
     resp = client.get("/launch/status")
     assert resp.json() == {
-        "running": [{"slug": "assets", "mode": "edit", "url": "https://nb.example"}]
+        "running": [{"slug": "assets", "mode": "edit", "url": "https://nb.example"}],
+        "building": [],
+        "failed": [],
     }
 
 
