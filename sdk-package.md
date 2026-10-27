@@ -50,35 +50,13 @@ a clean venv outside any checkout:
       `stargazer.notebooks.tutorials.*`. Moving the scRNA notebook to a
       top-level `notebooks/` folder and the seeds to `app/` is shelved (ticket
       `top-level-notebooks`). Snapshots go (ticket `save-whole-workspace`).
-- [ ] **Versioned, published task images.** These are for notebook pods
-      running a released SDK (the notebook-image piece below), not for local
-      SDK users: someone who installs the SDK runs tasks locally, in Flyte's
-      local mode, on the dependencies installed on their own machine, and no
-      image is involved. A notebook pod on a released SDK has no checkout to
-      build task images from, yet its runs are remote, so it needs them
-      prebuilt for its version. A task's code runs from its image, so the
-      image must carry the same `stargazer` version as the caller. Publish
-      the gatk and scrna images per release (for example
-      `ghcr.io/stargazerbio/stargazer-gatk:<version>`) and have the
-      environments use them via `from_base` outside a checkout, keeping
-      checkout builds for development. Don't make users rebuild the bioconda
-      image: it's slow, and two builds of one version could differ.
-      Built in PR #92 (`feat/sdk-task-images`), on hold until the
-      notebook-image piece, which is its first user. Measured on the devbox
-      from that branch: a task pod sees no checkout, but the child tasks a
-      workflow starts still run on the submitter's images, so checkout runs
-      are unchanged. In the branch, `task_image` in `stargazer.config`
-      builds the recipe when the package's root has a `pyproject.toml` (a
-      checkout, editable installs included) and otherwise runs
-      `ghcr.io/stargazerbio/<image>:<installed version>`. The **Task images**
-      workflow (`.github/workflows/task-images.yml`) publishes both on a `v*`
-      tag, refusing one that doesn't match the project version, and on
-      `workflow_dispatch`, via `cli/publish_task_images.py`, which builds the
-      same `flyte.Image` recipes. The version is read from the `stargazer`
-      distribution's metadata, so the rename to `stargazer-bio` (the
-      SDK-only item below) changes `published_image` (and the publish script) with
-      it. After the first publish, make the new `stargazer-gatk` and
-      `stargazer-scrna` GHCR packages public: new org packages start internal.
+- [x] **No published task images.** Decided 2026-10-27: Stargazer never
+      publishes task images. Images build from their recipe when a run asks
+      for them, and published ones would multiply per release. PR #92
+      (`feat/sdk-task-images`), which published `stargazer-gatk` and
+      `stargazer-scrna` to GHCR per version, is closed unmerged. Its devbox
+      measurement still holds: a workflow's child tasks run on the
+      submitter's images, whatever their pod has installed.
 - [ ] **Package only the SDK.** The root project becomes `stargazer-bio` and
       its wheel holds `src/stargazer` alone. There is no app distribution:
       `app/` stays in this repo, runs from a checkout, and is never published.
@@ -124,5 +102,5 @@ a clean venv outside any checkout:
 - Install the SDK wheel into a clean venv outside a checkout, then run a
   gatk task and an scrna task remotely on Union, and on the devbox.
 - Launch a notebook on a notebook image built from a released SDK version and
-  confirm its tasks run on the matching task images.
+  confirm its tasks run remotely.
 - Confirm a dashboard-only release leaves the notebook image's URI unchanged.
