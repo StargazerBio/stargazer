@@ -1,6 +1,6 @@
 ---
 title: A running pod's save can overwrite a gear edit
-status: backlog
+status: doing
 priority: low
 created: 2026-10-21
 ---
