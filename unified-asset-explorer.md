@@ -1,6 +1,6 @@
 ---
 title: One asset explorer for everything but the workspace
-status: backlog
+status: doing
 priority: high
 created: 2026-10-26
 blocked_by:
