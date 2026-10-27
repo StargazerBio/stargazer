@@ -7,6 +7,7 @@ from conftest import FakePublicTier
 
 from stargazer.assets.alignment import Alignment
 from stargazer.assets.asset import Asset
+from stargazer.assets.reads import R1
 from stargazer.assets.reference import Reference, ReferenceIndex
 
 
@@ -141,6 +142,14 @@ class TestAssetDefaults:
     def test_base_asset_to_keyvalues_empty(self):
         """Base Asset with no _asset_key returns empty dict from to_keyvalues()."""
         assert Asset().to_keyvalues() == {}
+
+
+class TestDeclaredFields:
+    def test_typed_asset_lists_its_own_fields_in_order(self):
+        assert R1.declared_fields() == ("sample_id", "mate_cid", "sequencing_platform")
+
+    def test_bare_asset_declares_none(self):
+        assert Asset.declared_fields() == ()
 
 
 class TestFetch:
