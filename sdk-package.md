@@ -56,7 +56,7 @@ a clean venv outside any checkout:
       environments use them via `from_base` outside a checkout, keeping
       checkout builds for development. Don't make users rebuild the bioconda
       image: it's slow, and two builds of one version could differ.
-- [ ] **Split the distributions in a uv workspace.** `stargazer` (the SDK) and
+- [ ] **Split the distributions in a uv workspace.** `stargazer-bio` (the SDK) and
       `stargazer-app` (`app/` with its own `pyproject.toml`, the
       `stargazer-users` entry point, and the `landing`/`app` extras), the app
       depending on the SDK through a workspace source in development and a
@@ -76,13 +76,15 @@ a clean venv outside any checkout:
       SDK), and the dashboard-to-pod env vars (`STARGAZER_INDEX_URL`,
       `STARGAZER_STORE_ROOT`, `STARGAZER_OWNER`, `STARGAZER_NOTEBOOK_IMAGE`).
 
-## Open questions
+## Decisions (2026-10-26)
 
-- Where to publish: PyPI (as `pypi-release` assumes), a private index, or
-  GitHub releases.
-- Whether a released SDK carries a compatibility promise. Outside users
-  pinning versions is where AGENTS.md's "don't consider backwards
-  compatibility" starts to bend.
+- **Published to PyPI as `stargazer-bio`.** `stargazer` on PyPI is taken by
+  an unrelated package (StatsReporting's regression tables, checked
+  2026-10-26). The import name stays `stargazer`; only the distribution is
+  `stargazer-bio`, and notebooks pin `stargazer-bio == X.Y.Z`.
+- **No compatibility promise before 1.0.** Releases are `0.x` and any can
+  break, so AGENTS.md's "don't consider backwards compatibility" stands for
+  the SDK until a 1.0 release.
 
 ## Verification
 
