@@ -212,3 +212,35 @@ Union lock held.
 
 - A failed launch raises a browser alert, which blocks the pane: install
   the alert recorder first.
+- `union_dashboard.py deploy` sits at `Logging in...` when the Flyte CLI's
+  login has lapsed, holding the PKCE port. Source
+  `~/.flyte/stargazer-upgrade.env` (the org-admin key) before it.
+- Right after a redeploy the old revision answers for a minute or two; poll
+  `fetch('/')` for the new `dash-version` before checking.
+
+### Evidence (2026-10-27, test account `u-pryce`, dashboard `1f30d42`)
+
+- `ux-default` (measured): sources mine/true, public/false, stargazer/true;
+  sections on the page are Workspace and Assets only; List shows 78 Mine
+  rows and five Stargazer rows titled 1. Assets … 4. Execution, scRNA-seq.
+- `ux-launch` (measured): "2. Tasks" card → Edit → `/launch` 200, card
+  shows "Open: Edit Mode" + Stop; the Open URL loaded the marimo editor on
+  `tasks.py` (9 cells); reopening the card after picking another
+  re-hydrated Open/Stop; Stop → `/stop` 200, Edit/Run back, and
+  `nb-tasks-edit` reports `active: False`.
+- `ux-copy` (measured): scRNA-seq card → Copy to workspace →
+  `/workspace/copy` 200, a `scrna-seq.py` / "scRNA-seq" tile appeared
+  (deleted after).
+- `ux-public` (measured): Public added 6 public rows, the owned one green.
+  A probe notebook published from its tile appeared as a Public `notebook`
+  row with Copy to workspace and Download source (gateway link); then
+  unpublished and deleted, `source=public&asset=notebook` back to `[]`.
+- `ux-upload` (measured): a private custom upload `uae-probe-1027.txt` was
+  listed under Mine.
+- Shipped source download (measured):
+  `/assets/download/<tasks cid>?network=stargazer` → 200, `tasks.py`,
+  9138 bytes.
+- `ux-phone` (measured): at 375 px, `scrollWidth` 375; the upload panel's
+  network choices wrap as one line each.
+- Teardown (measured): `stopped: ['dashboard']`, `live runs: []`; no live
+  runs in `u-pryce` or `flytesnacks`.
