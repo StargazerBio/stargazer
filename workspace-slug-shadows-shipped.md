@@ -1,5 +1,5 @@
 ---
-title: A workspace notebook can share a shipped notebook's app name
+title: A workspace notebook can share a built-in notebook's app name
 status: review
 priority: normal
 created: 2026-10-26
@@ -9,25 +9,25 @@ pr: 93
 A notebook's pod is named `nb-<slug>-<mode>` whatever its section, and
 `_notebook_slug` in `app/admin_app.py` reserves only the seed slugs. So a
 workspace notebook named `assets`, `tasks`, `workflows`, `execution` or
-`scrna-pipeline` (by Create, or by Open from GitHub, where a shipped
+`scrna-pipeline` (by Create, or by Open from GitHub, where a built-in
 tutorial's file stem is exactly its slug) gets the same app names as the
-shipped notebook. Launching one serves over the other's app, and the launch
-status hydrates both tiles as running. Pick one: reserve the shipped slugs
+built-in notebook. Launching one serves over the other's app, and the launch
+status hydrates both tiles as running. Pick one: reserve the built-in slugs
 too, or give workspace apps a distinct name.
 
-Decided 2026-10-26: reserve the shipped slugs (from the `app.notebooks`
+Decided 2026-10-26: reserve the built-in slugs (from the `app.notebooks`
 catalog) where a new name is chosen (Create, Copy) via `_new_notebook_slug`; the guard on existing slugs is unchanged. Create refuses a
 reserved name with "taken by a built-in notebook"; apps aren't renamed.
 
-- [x] Tests: a workspace notebook named after a shipped tutorial is refused and nothing is stored; every shipped slug is reserved
-- [x] `_new_notebook_slug` reserves every shipped slug for Create and Copy; Create's message
-- [x] A notebook already stored under a shipped slug can still be downloaded and deleted (test)
+- [x] Tests: a workspace notebook named after a built-in tutorial is refused and nothing is stored; every built-in slug is reserved
+- [x] `_new_notebook_slug` reserves every built-in slug for Create and Copy; Create's message
+- [x] A notebook already stored under a built-in slug can still be downloaded and deleted (test)
 - [x] Verified on the test account's Union dashboard (2026-10-26, dashboard at 0eb3f8a): R1 and R2 pass; the probe notebook deleted; teardown stopped the dashboard, live runs `[]`
 
-## Verification recipe: shipped names refused on Create
+## Verification recipe: built-in names refused on Create
 
-Create on the Workspace section refuses a name whose slug is a shipped
-notebook's, so a workspace notebook never shares a shipped notebook's app.
+Create on the Workspace section refuses a name whose slug is a built-in
+notebook's, so a workspace notebook never shares a built-in notebook's app.
 
 ### Sub-features
 - R1: Create named "Assets" is refused with `"Assets" is taken by a built-in notebook. Pick another name.` and no tile appears
@@ -43,4 +43,4 @@ Dashboard → Workspace → New notebook tile → name → Create.
 4. `union_dashboard.py teardown` → live runs `[]`.
 
 ### Gotchas
-- A workspace notebook already stored under a shipped slug stays manageable (only new names are refused), but still shares the shipped notebook's app until the user renames it.
+- A workspace notebook already stored under a built-in slug stays manageable (only new names are refused), but still shares the built-in notebook's app until the user renames it.
