@@ -428,6 +428,36 @@ def test_setup_save_refuses_an_environment_it_cannot_serve(client):
     assert _get(ALICE, "qc-run.py") == NB_SRC
 
 
+@pytest.mark.parametrize("mode", ["edit", "run"])
+def test_setup_save_refuses_while_the_notebook_runs(client, monkeypatch, mode):
+    """A running pod would save its own copy over the gear's; the save is a 409."""
+    _stub_apps(monkeypatch, {f"nb-qc-run-{mode}": _FakeApp(True, "")})
+    _put(ALICE, "qc-run.py")
+    _as(client)
+    body = NB_BODY.replace("cpu=4", "cpu=2")
+    resp = client.post("/workspace/setup", data={"slug": "qc-run", "setup": body})
+    assert resp.status_code == 409
+    assert "Stop the notebook" in resp.json()["error"]
+    assert _get(ALICE, "qc-run.py") == NB_SRC
+
+
+def test_setup_save_goes_through_once_the_notebook_is_stopped(client, monkeypatch):
+    """A stopped notebook's deployment doesn't hold the gear back."""
+    _stub_apps(
+        monkeypatch,
+        {
+            "nb-qc-run-edit": _FakeApp(False, "", deactivated=True),
+            "nb-other-edit": _FakeApp(True, "https://other.example"),
+        },
+    )
+    _put(ALICE, "qc-run.py")
+    _as(client)
+    body = NB_BODY.replace("cpu=4", "cpu=2")
+    resp = client.post("/workspace/setup", data={"slug": "qc-run", "setup": body})
+    assert resp.status_code == 200
+    assert setup_body(_get(ALICE, "qc-run.py")) == body
+
+
 def test_setup_missing_notebook_is_404(client):
     """The setup block of a notebook the user doesn't have is a 404."""
     _put(BOB, "qc-run.py")
