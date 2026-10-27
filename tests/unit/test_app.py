@@ -637,6 +637,17 @@ def test_github_name_taken_is_409(client, github):
     assert _get(ALICE, "qc-run.py") == "untouched"
 
 
+def test_github_refuses_a_shipped_notebooks_name(client, github):
+    """A file named like a shipped notebook isn't opened under its slug."""
+    files, _ = github
+    files[f"{RAW}/someone/repo/{COMMIT}/assets.py"] = BARE_NB.encode()
+    _as(client)
+    resp = _open_github(client, f"{RAW}/someone/repo/{COMMIT}/assets.py")
+    assert resp.status_code == 409
+    assert resp.json()["error"] == '"assets" is taken by a built-in notebook.'
+    assert _get(ALICE, "assets.py") is None
+
+
 @pytest.mark.parametrize(
     "link",
     [

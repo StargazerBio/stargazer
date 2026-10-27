@@ -591,8 +591,8 @@ async def workspace_github(user: CurrentUser, link: str = Form(...)):
     `link` is a GitHub `.py` file link, which the dashboard downloads itself
     (`app.github_import`). Like `/workspace/copy`, the notebook keeps its own
     setup block and is named by its `main_name`, else its file name, with
-    `main_name` and `main_description` declared in the block; a taken name is
-    a 409. A bad link, a missing file, one too big or one that isn't a
+    `main_name` and `main_description` declared in the block; a taken name,
+    a shipped notebook's included, is a 409. A bad link, a missing file, one too big or one that isn't a
     marimo notebook is refused with a message for the user. Returns the
     rendered Workspace tile.
     """
@@ -610,6 +610,10 @@ async def workspace_github(user: CurrentUser, link: str = Form(...)):
         return JSONResponse(
             {"error": f"could not derive a notebook name from {title!r}"},
             status_code=400,
+        )
+    if by_slug(target_slug):
+        return JSONResponse(
+            {"error": f'"{title}" is taken by a built-in notebook.'}, status_code=409
         )
     if len(target_slug) > NOTEBOOK_SLUG_MAX:
         return JSONResponse(
