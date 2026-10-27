@@ -39,6 +39,10 @@ Rules:
   to `--provenance=false` on `devbox`, so a build pushes a plain image the
   devbox's node will pull whatever its architecture (see IMAGE_PLATFORM).
 
+The task images build from their recipes in a source checkout, and an
+installed package runs the images CI publishes for its version instead
+(`task_image`).
+
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
 
@@ -47,7 +51,9 @@ import inspect
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
+from importlib import metadata
 from pathlib import Path
 
 import flyte
@@ -89,6 +95,10 @@ if os.environ["STARGAZER_TARGET"] == "devbox":
 # GATK's GenomicsDB ships an x86_64-only native library, so an arm64 build
 # can't joint-call; on an Apple-silicon devbox these pods run emulated.
 IMAGE_PLATFORM = ("linux/amd64",)
+
+# Where CI publishes the task images, tagged with the SDK version
+# (.github/workflows/task-images.yml).
+PUBLISHED_REGISTRY = "ghcr.io/stargazerbio"
 
 _log_dir = Path.home() / ".stargazer" / "logs"
 _log_dir.mkdir(parents=True, exist_ok=True)
@@ -208,6 +218,27 @@ def init_flyte() -> None:
         )
 
 
+def published_image(name: str) -> str:
+    """The URI CI publishes the task image `name` under for the installed SDK version."""
+    return f"{PUBLISHED_REGISTRY}/{name}:{metadata.version('stargazer')}"
+
+
+def task_image(
+    name: str, recipe: Callable[[str], flyte.Image], root: Path = PROJECT_ROOT
+) -> flyte.Image:
+    """The image a task environment runs: `recipe(name)` in a checkout, else the published one.
+
+    A source checkout at `root` (it has a `pyproject.toml`) builds the image
+    from its recipe, so tasks run the checkout's code. An installed package
+    has no project to build from; it runs the image published for its own
+    version, which CI built from the same recipe, so a task's code matches
+    the caller's.
+    """
+    if (root / "pyproject.toml").is_file():
+        return recipe(name)
+    return flyte.Image.from_base(published_image(name))
+
+
 # Both task images install the stargazer package itself, not only its
 # dependencies. A task pod resolves the tasks it calls as installed modules
 # (`stargazer.tasks…`), so without the package a workflow's child tasks can't
@@ -215,16 +246,16 @@ def init_flyte() -> None:
 # image hash, so a source change builds a new image; .dockerignore keeps docs,
 # tests and git history out of it.
 
-# Lean image: the project's `bio` extra on top of the Flyte debian base —
-# scanpy plus what its steps import lazily (scikit-image for scrublet's
-# automatic threshold, igraph for Leiden). Memory-hungry at runtime because
-# scanpy loads full AnnData objects into RAM.
-scrna_env = flyte.TaskEnvironment(
-    name="scrna",
-    description="scanpy-based single-cell RNA analysis; memory-intensive AnnData workloads",
-    image=(
+
+def _scrna_recipe(name: str) -> flyte.Image:
+    """The scrna image: the project's `bio` extra on the Flyte debian base.
+
+    That's scanpy plus what its steps import lazily (scikit-image for
+    scrublet's automatic threshold, igraph for Leiden).
+    """
+    return (
         flyte.Image.from_debian_base(
-            name="stargazer-scrna",
+            name=name,
             registry=os.environ.get("STARGAZER_REGISTRY"),
             platform=IMAGE_PLATFORM,
         )
@@ -234,21 +265,19 @@ scrna_env = flyte.TaskEnvironment(
             extra_args="--extra bio",
             project_install_mode="install_project",
         )
-    ),
-    resources=flyte.Resources(memory=("2Gi", "6Gi")),
-    env_vars=STARGAZER_ENV_VARS,
-    secrets=STARGAZER_SECRETS,
-)
+    )
 
-# Debian base with micromamba layered on. gatk4, samtools, bwa, and bwa-mem2
-# all come from bioconda. Conda env lives at /opt/conda; binaries symlinked
-# onto PATH so tasks invoke them directly.
-gatk_env = flyte.TaskEnvironment(
-    name="gatk",
-    description="GATK, BWA, and samtools alignment and variant-calling workloads",
-    image=(
+
+def _gatk_recipe(name: str) -> flyte.Image:
+    """The gatk image: gatk4, samtools, bwa and bwa-mem2 from bioconda.
+
+    Micromamba is layered onto the debian base, the conda env lives at
+    /opt/conda, and the binaries are linked onto PATH so tasks invoke them
+    directly.
+    """
+    return (
         flyte.Image.from_debian_base(
-            name="stargazer-gatk",
+            name=name,
             registry=os.environ.get("STARGAZER_REGISTRY"),
             platform=IMAGE_PLATFORM,
         )
@@ -274,7 +303,23 @@ gatk_env = flyte.TaskEnvironment(
         .with_uv_project(
             PROJECT_ROOT / "pyproject.toml", project_install_mode="install_project"
         )
-    ),
+    )
+
+
+# Memory-hungry at runtime because scanpy loads full AnnData objects into RAM.
+scrna_env = flyte.TaskEnvironment(
+    name="scrna",
+    description="scanpy-based single-cell RNA analysis; memory-intensive AnnData workloads",
+    image=task_image("stargazer-scrna", _scrna_recipe),
+    resources=flyte.Resources(memory=("2Gi", "6Gi")),
+    env_vars=STARGAZER_ENV_VARS,
+    secrets=STARGAZER_SECRETS,
+)
+
+gatk_env = flyte.TaskEnvironment(
+    name="gatk",
+    description="GATK, BWA, and samtools alignment and variant-calling workloads",
+    image=task_image("stargazer-gatk", _gatk_recipe),
     # A 1Gi request: the germline workflow holds three gatk_env pods at once
     # (workflow, prepare_reference or preprocess_sample, the tool), and three
     # 2Gi requests don't fit the devbox node beside the dashboard.

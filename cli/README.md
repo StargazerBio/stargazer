@@ -101,6 +101,22 @@ container. It exits 0 when every image's run passes, otherwise with the
 first failing run's pytest exit code.
 
 
+## publish_task_images.py
+
+Builds the gatk and scrna task images from their recipes in
+`stargazer.config` and pushes them as
+`ghcr.io/stargazerbio/stargazer-gatk:<version>` and
+`stargazer-scrna:<version>`, the images an installed SDK's task environments
+run. The **Task images** workflow runs it on a version tag; run by hand, it
+needs `docker login ghcr.io` first.
+
+```bash
+uv run python cli/publish_task_images.py [--expect-version X.Y.Z]
+```
+
+`--expect-version` refuses to publish unless the checkout's version is
+`X.Y.Z`.
+
 ## diagrams.sh
 
 Draws import graphs with [pydeps](https://github.com/thebjorn/pydeps) into

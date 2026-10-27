@@ -1,0 +1,30 @@
+# Publishes the task images, ghcr.io/stargazerbio/stargazer-gatk:<version>
+# and stargazer-scrna:<version>, which an installed SDK's task environments
+# run. A version tag (v0.2.0) publishes that release; workflow_dispatch
+# republishes the checkout's version, overwriting its images.
+name: Task images
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: task-images-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish
+        env:
+          EXPECT: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: uv run python cli/publish_task_images.py ${EXPECT:+--expect-version "${EXPECT#v}"}

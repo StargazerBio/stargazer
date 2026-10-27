@@ -132,6 +132,12 @@ See [Configuration → Container Images](../architecture/configuration.md#contai
 
 **Flyte task images (`stargazer-scrna`, `stargazer-gatk`)** build themselves. Each is tagged by a hash of its recipe and the project's source, so a change to either builds a new one the first time something needs it: a run on the devbox or Union, or the tasks test tier, which builds into your local docker without pushing anywhere. `image.builder` in the Flyte config picks `local` (needs a working Docker daemon) or `remote` (Union only, builds on the cluster). Runs push to `STARGAZER_REGISTRY` — the devbox's own registry by default when targeting the devbox.
 
+Releases publish them too. Pushing a version tag (`v0.2.0`, matching `version` in `pyproject.toml`) runs the **Task images** workflow (`.github/workflows/task-images.yml`), which builds both images from their recipes and pushes `ghcr.io/stargazerbio/stargazer-gatk:<version>` and `stargazer-scrna:<version>`, the images an installed SDK runs. The workflow refuses a tag that doesn't match the version. To republish the current version's images, run it by hand:
+
+```bash
+gh workflow run task-images.yml
+```
+
 **The human-runnable image (`stargazer`)** builds from the `Dockerfile` when you change it or want the current source in it:
 
 ```bash
