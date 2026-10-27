@@ -67,19 +67,30 @@ listing. Carried over from ticket `assets-on-dashboard-home`.
 
 ## Plan
 
-- [ ] `Notebook` asset (`src/stargazer/assets/notebook.py`), exported from `stargazer.assets`
-- [ ] Publish (`POST /workspace/publish`): upload the workspace file to the public tier through the existing TUS methods of `PinataClient`, stamped with the dashboard owner's `_owner`; then delete the owner's earlier records with the same `slug`
-- [ ] Unpublish (`POST /workspace/unpublish`): delete the owner's records with that `slug`; another user's are never touched
-- [ ] Public notebooks section on the dashboard; Copy to workspace goes through `/workspace/copy` with `section=public`
-- [ ] Asset browser leaves out `asset=notebook` (listing and the upload form's types)
-- [ ] `STARGAZER_PUBLIC_ASSETS=off`: no Publish/Unpublish/section, routes 503
-- [ ] Docs (`app.md`, `types.md`, `catalog.md`, `app_internals.md`)
-- [ ] Verified on Union with one probe notebook, nothing left published
+- [x] `Notebook` asset (`src/stargazer/assets/notebook.py`), exported from `stargazer.assets`
+- [x] Publish (`POST /workspace/publish`): upload the workspace file to the public tier through the existing TUS methods of `PinataClient`, stamped with the dashboard owner's `_owner`; then delete the owner's earlier records with the same `slug`
+- [x] Unpublish (`POST /workspace/unpublish`): delete the owner's records with that `slug`; another user's are never touched
+- [x] Public notebooks section on the dashboard; Copy to workspace goes through `/workspace/copy` with `section=public`
+- [x] Asset browser leaves out `asset=notebook` (listing and the upload form's types)
+- [x] `STARGAZER_PUBLIC_ASSETS=off`: no Publish/Unpublish/section, routes 503
+- [x] Docs (`app.md`, `types.md`, `catalog.md`, `app_internals.md`)
+- [x] Verified on Union with one probe notebook, nothing left published
 
 Choices:
 - Pinata stores identical bytes once per account and keeps the first upload's keyvalues (measured 2026-10-26: three uploads of one file, two owners, one record with the first's keyvalues). So publishing bytes that are already public under someone else's record, or under another of the owner's slugs, is refused with a 409, and nothing is deleted.
 - The record's `_owner` is the dashboard's owner (the notebook's), not an admin visitor.
 - A public tile's button is "Copy to workspace", like a workflow's; a name that's taken is a 409, as for any copy.
+
+## Verification (2026-10-26, branch `feat/public-notebooks` at `b126036`)
+
+- Unit tier: 509 passed; `tests/unit/test_public_notebooks.py` (16 tests) failed first for the missing behavior.
+- Union, test account's dashboard deployed from `b126036`, driven in the built-in browser:
+  - `pn-publish`: Publish on `pn-probe-1026` → tile shows Republish + Unpublish; the section lists it; Pinata query returns one record `bafkreic6pz…` with `asset=notebook`, `title`, `description`, `slug` and `_owner=387300641116005877`.
+  - `pn-republish`: description edited, Republish → query returns one record `bafkreiepg7…` with the new description; `get(bafkreic6pz…)` is None.
+  - `pn-copy`: workspace tile deleted, Copy to workspace on the public tile → the tile is back and its download is byte-equal to what was published.
+  - Asset browser: `/assets/list?network=public` has no `asset=notebook` record, `/assets/schema` has no `notebook`.
+  - `pn-unpublish`: Unpublish → section empty, tile back to Publish; query `[]`, both CIDs `get` None.
+  - Teardown: probe tile deleted; `union_dashboard.py teardown` → stopped `dashboard`, `live runs: []`; Pinata `asset=notebook` query `[]`.
 
 ## Verification recipe: Public notebooks
 
