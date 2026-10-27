@@ -1,6 +1,6 @@
 ---
 title: The asset graph as a living constellation
-status: review
+status: doing
 priority: normal
 created: 2026-10-26
 blocked_by:
