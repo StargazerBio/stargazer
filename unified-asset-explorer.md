@@ -164,6 +164,11 @@ Publish and Unpublish.
   where it's published.
 - Copy to workspace on a card only shows when the dashboard has a workspace.
 - The launch, status and copy JS lives in `app/static/launch.js`.
+- Mine renders only for the dashboard's owner; an admin visitor starts on
+  Stargazer alone.
+- A public tier that fails to read drops only Public's entries; the listing
+  names it in a `Stargazer-Unavailable` header and the page shows a note.
+- A build is watched by one poll per notebook and mode.
 
 ## Verification recipe: The unified asset explorer
 
@@ -244,3 +249,9 @@ Union lock held.
   network choices wrap as one line each.
 - Teardown (measured): `stopped: ['dashboard']`, `live runs: []`; no live
   runs in `u-pryce` or `flytesnacks`.
+
+Review fixes (2026-10-27, commits `1ccf083`, `68f9843`), not driven on Union:
+admin visitor without Mine and Public failing (unit tests in `test_app.py`
+and `test_assets_routes.py`, measured); one build poll per notebook and mode
+(a node script calling `watchBuild` four times against a failing build:
+before 12 polls and 4 alerts, after 9 polls and 1 alert, measured).
