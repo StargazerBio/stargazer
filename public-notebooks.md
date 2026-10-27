@@ -1,8 +1,9 @@
 ---
 title: Public notebooks
-status: doing
+status: review
 priority: normal
 created: 2026-10-16
+pr: 90
 ---
 
 A notebook in a user's workspace is a plain file (ticket
