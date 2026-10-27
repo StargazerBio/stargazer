@@ -56,10 +56,29 @@ CREATE TABLE IF NOT EXISTS {table} (
 
 _COLUMNS = "cid, uri, name, keyvalues, created_at"
 
+# The dashboard's own per-user state, beside the index table: one value per key.
+_STATE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS {table} (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)
+"""
+
 
 def postgres_table_sql(table: str) -> str:
     """`CREATE TABLE IF NOT EXISTS` for an index table on Postgres or DSQL."""
     return _SCHEMA.format(table=table, json=PostgresIndex._JSON_TYPE)
+
+
+def state_table_name(table: str) -> str:
+    """The state table beside index table `table` (`assets.u_jane_state`)."""
+    return f"{table}_state"
+
+
+def state_table_sql(table: str) -> str:
+    """`CREATE TABLE IF NOT EXISTS` for the state table beside index table `table`."""
+    return _STATE_SCHEMA.format(table=state_table_name(table))
 
 
 def _decode(keyvalues: str | dict) -> dict:
@@ -90,13 +109,20 @@ class SqlIndex:
     Subclasses give what the engines spell differently: the JSON column type,
     one keyvalue's lookup and the merge (each with a `?` parameter), and how
     statements run, and set `table`. Statements use `?` placeholders
-    throughout. Writes are acknowledged only after they commit, so a
+    throughout. `write` and `read` are public so the dashboard can keep its
+    own rows in `state_table`, the table beside `table`. Writes are acknowledged only after they commit, so a
     downstream task always sees its upstream task's rows, and a merge is one
     statement, so concurrent merges each land.
     """
 
     table: str
     _JSON_TYPE: str
+
+    @property
+    def state_table(self) -> str:
+        """The dashboard's per-user state table, beside the index table."""
+        return state_table_name(self.table)
+
     _KEYVALUE: str
     _MERGE: str
 
@@ -104,11 +130,11 @@ class SqlIndex:
         """The `_KEYVALUE` parameter that names `key`."""
         raise NotImplementedError
 
-    def _write(self, work: Callable[[Callable], T]) -> T:
+    def write(self, work: Callable[[Callable], T]) -> T:
         """Run `work(execute)` as one committed transaction."""
         raise NotImplementedError
 
-    def _read(self, sql: str, params: list) -> list[tuple]:
+    def read(self, sql: str, params: list) -> list[tuple]:
         """Rows from one read-only statement."""
         raise NotImplementedError
 
@@ -160,11 +186,11 @@ class SqlIndex:
                 ],
             ).fetchone()
 
-        return _row(self._write(work))
+        return _row(self.write(work))
 
     def _merge_sync(self, cid: str, patch: dict[str, str]) -> dict:
         """Merge keyvalues onto a row in one statement."""
-        stored = self._write(
+        stored = self.write(
             lambda execute: execute(
                 f"UPDATE {self.table} SET keyvalues = {self._MERGE} WHERE cid = ? "
                 f"RETURNING {_COLUMNS}",
@@ -177,7 +203,7 @@ class SqlIndex:
 
     def _delete_sync(self, cid: str) -> None:
         """Remove a row."""
-        self._write(
+        self.write(
             lambda execute: execute(f"DELETE FROM {self.table} WHERE cid = ?", [cid])
         )
 
@@ -206,7 +232,7 @@ class SqlIndex:
         """
         where, params = self._where(filters)
         rows = await asyncio.to_thread(
-            self._read,
+            self.read,
             f"SELECT {_COLUMNS} FROM {self.table} WHERE {where} "
             "ORDER BY created_at DESC",
             params,
@@ -216,7 +242,7 @@ class SqlIndex:
     async def get(self, cid: str) -> dict | None:
         """One row by CID, or None."""
         rows = await asyncio.to_thread(
-            self._read, f"SELECT {_COLUMNS} FROM {self.table} WHERE cid = ?", [cid]
+            self.read, f"SELECT {_COLUMNS} FROM {self.table} WHERE cid = ?", [cid]
         )
         return _row(rows[0]) if rows else None
 
@@ -264,13 +290,14 @@ class SqliteIndex(SqlIndex):
         self._writer = sqlite3.connect(self.path, check_same_thread=False, timeout=30)
         self._writer.execute("PRAGMA journal_mode=WAL")
         self._writer.execute(_SCHEMA.format(table=self.table, json=self._JSON_TYPE))
+        self._writer.execute(state_table_sql(self.table))
         self._writer.commit()
 
     def _key(self, key: str) -> str:
         """A JSON path to `key`, quoted so any key name is one path step."""
         return '$."' + key.replace('"', '\\"') + '"'
 
-    def _write(self, work: Callable[[Callable], T]) -> T:
+    def write(self, work: Callable[[Callable], T]) -> T:
         """Run `work` on the one writer connection, under the write lock."""
         with self._lock:
             try:
@@ -281,7 +308,7 @@ class SqliteIndex(SqlIndex):
                 raise
         return result
 
-    def _read(self, sql: str, params: list) -> list[tuple]:
+    def read(self, sql: str, params: list) -> list[tuple]:
         """Run a read on its own connection (WAL readers never wait on the writer)."""
         conn = sqlite3.connect(self.path, timeout=30)
         try:
@@ -307,7 +334,7 @@ class PostgresIndex(SqlIndex):
     _MERGE = "keyvalues || CAST(? AS JSONB)"
 
     def __init__(self, url: str, table: str = "assets"):
-        """Connect to `url` and create the index table if it's missing.
+        """Connect to `url` and create the index and state tables if they're missing.
 
         Args:
             url: A `postgresql://` connection URL
@@ -317,6 +344,7 @@ class PostgresIndex(SqlIndex):
         self.table = table
         with self._connect(autocommit=True) as conn:
             conn.execute(postgres_table_sql(table))
+            conn.execute(state_table_sql(table))
 
     def _connect(self, autocommit: bool) -> psycopg.Connection:
         """A new connection to the database."""
@@ -326,7 +354,7 @@ class PostgresIndex(SqlIndex):
         """`->>` takes the key name itself."""
         return key
 
-    def _write(self, work: Callable[[Callable], T]) -> T:
+    def write(self, work: Callable[[Callable], T]) -> T:
         """Run `work` in one transaction on a new connection, rerun on conflict.
 
         DSQL refuses a write that conflicts with a concurrent one instead of
@@ -347,7 +375,7 @@ class PostgresIndex(SqlIndex):
         with self._connect(autocommit=False) as conn:
             return work(lambda sql, params: conn.execute(_pg(sql), params))
 
-    def _read(self, sql: str, params: list) -> list[tuple]:
+    def read(self, sql: str, params: list) -> list[tuple]:
         """Run a read on a new connection."""
         with self._connect(autocommit=True) as conn:
             return conn.execute(_pg(sql), params).fetchall()
@@ -359,8 +387,9 @@ class DsqlIndex(PostgresIndex):
     The URL names the cluster endpoint, the user's database role, their
     table and the IAM role mapped to that database role:
     `dsql://u_jane@<id>.dsql.us-west-2.on.aws/assets.u_jane?role_arn=<arn>`.
-    The table, the database role and the IAM role are made by onboarding;
-    the database role can't create anything, so this never runs DDL.
+    The index and state tables, the database role and the IAM role are made
+    by onboarding; the database role can't create anything, so this never
+    runs DDL.
 
     Each call connects afresh, so DSQL ending a connection after an hour
     never reaches a caller. The IAM role's credentials and the auth token

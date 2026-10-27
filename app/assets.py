@@ -93,7 +93,7 @@ _public_cache: tuple[float, list[dict]] | None = None
 _public_cache_lock = asyncio.Lock()
 
 
-def _get_index() -> SqlIndex:
+def get_index() -> SqlIndex:
     """The owner's asset index (`STARGAZER_INDEX_URL`), opened on first use.
 
     The same index their tasks and notebooks write to: their DSQL table on
@@ -214,7 +214,7 @@ async def _source_entries(source: str, filters: dict[str, str]) -> list[dict]:
     query; the others are in memory already.
     """
     if source == "mine":
-        records = await _get_index().query(filters)
+        records = await get_index().query(filters)
     else:
         if source == "public":
             held = await _public_records()
@@ -361,7 +361,7 @@ async def _download_private(request: Request, cid: str) -> StreamingResponse:
     nothing beyond the read the pod's role already has.
     """
     _require_owner(request)
-    row = await _get_index().get(cid)
+    row = await get_index().get(cid)
     if row is None:
         raise HTTPException(status_code=404, detail=f"no private asset {cid}")
 
@@ -383,7 +383,7 @@ async def _update_private(request: Request, cid: str, keyvalues: dict) -> dict:
     _require_owner(request)
     _validated(keyvalues)
     try:
-        return await _get_index().merge(cid, _stamp_owner(dict(keyvalues)))
+        return await get_index().merge(cid, _stamp_owner(dict(keyvalues)))
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
@@ -491,7 +491,7 @@ def _store_client() -> StorageClient:
     return StorageClient(
         local_dir=Path(tempfile.gettempdir()) / "stargazer-uploads",
         store_root=os.environ["STARGAZER_STORE_ROOT"],
-        index=_get_index(),
+        index=get_index(),
     )
 
 
