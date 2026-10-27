@@ -1,8 +1,9 @@
 ---
 title: One asset explorer for everything but the workspace
-status: doing
+status: review
 priority: high
 created: 2026-10-26
+pr: 95
 blocked_by:
   - dashboard-header-controls
   - workspace-slug-shadows-shipped
