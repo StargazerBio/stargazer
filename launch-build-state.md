@@ -31,7 +31,7 @@ Each user's DSQL index is always there, so the launch's state moves into it, and
 
 ## As built
 
-Three departures from the plan, each for a reason found while building:
+Four departures from the plan, each for a reason found while building:
 
 - **No `from_base` URI.** On Union the image's registry is unset and the remote builder picks it, so the URI isn't known until the build has finished. On success, the poll that takes the row runs the launch path again (`_launch`). Its build check now finds the image and serves it, with one image-service call. The row holds the run's name and URL and the notebook's section.
 - **`_forget_build` stays**, now called before every launch's build check. Flyte's `async_lru` caches would otherwise hand a launch after a failed build the same failed run, so it would never build again in that process. It still imports `flyte._internal`.
