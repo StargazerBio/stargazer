@@ -537,6 +537,134 @@ def test_download_is_scoped_to_the_user(client):
 
 
 # ---------------------------------------------------------------------------
+# /workspace/github
+# ---------------------------------------------------------------------------
+
+COMMIT = "72dd7db0a1b2c3d4e5f60718293a4b5c6d7e8f90"
+RAW = "https://raw.githubusercontent.com"
+BARE_NB = "import marimo\n\napp = marimo.App()\n\n\n@app.cell\ndef _():\n    return\n"
+
+
+@pytest.fixture
+def github(monkeypatch):
+    """GitHub faked at the HTTP boundary: `files` maps a raw URL to its body.
+
+    A URL not in `files` is a 404. Returns `(files, requested)`, where
+    `requested` lists every URL the dashboard fetched.
+    """
+    files: dict[str, bytes] = {}
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        requested.append(url)
+        if url in files:
+            return httpx.Response(200, content=files[url])
+        return httpx.Response(404, content=b"404: Not Found")
+
+    monkeypatch.setattr("app.github_import.TRANSPORT", httpx.MockTransport(handler))
+    return files, requested
+
+
+def _open_github(client, link):
+    """POST a GitHub link to the open-from-GitHub action."""
+    return client.post("/workspace/github", data={"link": link})
+
+
+def test_github_blob_link_opens_the_file_as_a_workspace_notebook(client, github):
+    """A github.com file link pinned to a commit lands as a workspace notebook."""
+    files, requested = github
+    files[f"{RAW}/someone/repo/{COMMIT}/notebooks/qc.py"] = NB_SRC.encode()
+    _as(client)
+    resp = _open_github(
+        client, f"https://github.com/someone/repo/blob/{COMMIT}/notebooks/qc.py"
+    )
+    assert resp.status_code == 200
+    assert resp.json()["slug"] == "qc-run"
+    assert "QC run" in resp.json()["tile_html"]
+    assert requested == [f"{RAW}/someone/repo/{COMMIT}/notebooks/qc.py"]
+    assert _get(ALICE, "qc-run.py") == NB_SRC
+
+
+def test_github_raw_link_names_an_unnamed_notebook_after_its_file(client, github):
+    """A raw link works too, and a notebook with no name tiles as its file name."""
+    files, _ = github
+    files[f"{RAW}/someone/repo/{COMMIT}/my_analysis.py"] = BARE_NB.encode()
+    _as(client)
+    resp = _open_github(client, f"{RAW}/someone/repo/{COMMIT}/my_analysis.py")
+    assert resp.status_code == 200
+    assert resp.json()["slug"] == "my-analysis"
+    stored = _get(ALICE, "my-analysis.py")
+    assert notebook_name(stored) == "my_analysis"
+    assert stored.endswith("@app.cell\ndef _():\n    return\n")
+
+
+def test_github_name_taken_is_409(client, github):
+    """Opening a notebook whose name is taken refuses, like copy."""
+    files, _ = github
+    files[f"{RAW}/someone/repo/{COMMIT}/qc.py"] = NB_SRC.encode()
+    _put(ALICE, "qc-run.py", "untouched")
+    _as(client)
+    resp = _open_github(client, f"{RAW}/someone/repo/{COMMIT}/qc.py")
+    assert resp.status_code == 409
+    assert _get(ALICE, "qc-run.py") == "untouched"
+
+
+@pytest.mark.parametrize(
+    "link",
+    [
+        f"https://gitlab.com/someone/repo/blob/{COMMIT}/qc.py",
+        f"https://github.com.evil.example/someone/repo/blob/{COMMIT}/qc.py",
+        f"https://github.com/someone/repo/tree/{COMMIT}/notebooks",
+        f"https://github.com/someone/repo/blob/{COMMIT}/README.md",
+        "https://github.com/someone/repo",
+        "not a link",
+    ],
+)
+def test_github_refuses_a_link_that_is_not_a_python_file_on_github(
+    client, github, link
+):
+    """Anything but a .py file link on GitHub is refused without fetching."""
+    _, requested = github
+    _as(client)
+    resp = _open_github(client, link)
+    assert resp.status_code == 400
+    assert "link to a .py file on GitHub" in resp.json()["error"]
+    assert requested == []
+
+
+def test_github_missing_file_says_so(client, github):
+    """A link to a file GitHub doesn't have is a 404 that says so."""
+    _as(client)
+    resp = _open_github(client, f"{RAW}/someone/repo/{COMMIT}/gone.py")
+    assert resp.status_code == 404
+    assert "wasn't found on GitHub" in resp.json()["error"]
+
+
+def test_github_file_too_big_is_refused(client, github, monkeypatch):
+    """A file over the size cap is refused and nothing is written."""
+    files, _ = github
+    monkeypatch.setattr("app.github_import.MAX_BYTES", 100)
+    files[f"{RAW}/someone/repo/{COMMIT}/big.py"] = BARE_NB.encode() + b"#" * 200
+    _as(client)
+    resp = _open_github(client, f"{RAW}/someone/repo/{COMMIT}/big.py")
+    assert resp.status_code == 413
+    assert "too big" in resp.json()["error"]
+    assert _get(ALICE, "big.py") is None
+
+
+def test_github_file_that_is_not_a_notebook_is_refused(client, github):
+    """A Python file that isn't a marimo notebook is refused."""
+    files, _ = github
+    files[f"{RAW}/someone/repo/{COMMIT}/script.py"] = b"print('hi')\n"
+    _as(client)
+    resp = _open_github(client, f"{RAW}/someone/repo/{COMMIT}/script.py")
+    assert resp.status_code == 400
+    assert "isn't a marimo notebook" in resp.json()["error"]
+    assert _get(ALICE, "script.py") is None
+
+
+# ---------------------------------------------------------------------------
 # /launch
 # ---------------------------------------------------------------------------
 

@@ -13,8 +13,8 @@ The dashboard reads them with `ast` and runs no notebook code, so both are
 string literals.
 
 The gear on a workspace tile edits the block's body, flush left
-(`setup_body`, `replace_setup_body`), and create and copy set the name and
-description (`with_setup_values`).
+(`setup_body`, `replace_setup_body`), and create, copy and open from GitHub
+set the name and description (`with_setup_values`).
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
