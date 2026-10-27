@@ -1,6 +1,6 @@
 ---
 title: Public notebooks
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-16
 ---
@@ -64,3 +64,19 @@ Once notebooks are stored as `asset=notebook` rows, the asset browser on the
 dashboard's home page leaves them out, since notebooks have their own
 sections there. Test it: a notebook row in the index isn't in the browser's
 listing. Carried over from ticket `assets-on-dashboard-home`.
+
+## Plan
+
+- [ ] `Notebook` asset (`src/stargazer/assets/notebook.py`), exported from `stargazer.assets`
+- [ ] Publish (`POST /workspace/publish`): upload the workspace file to the public tier through the existing TUS methods of `PinataClient`, stamped with the dashboard owner's `_owner`; then delete the owner's earlier records with the same `slug`
+- [ ] Unpublish (`POST /workspace/unpublish`): delete the owner's records with that `slug`; another user's are never touched
+- [ ] Public notebooks section on the dashboard; Copy to workspace goes through `/workspace/copy` with `section=public`
+- [ ] Asset browser leaves out `asset=notebook` (listing and the upload form's types)
+- [ ] `STARGAZER_PUBLIC_ASSETS=off`: no Publish/Unpublish/section, routes 503
+- [ ] Docs (`app.md`, `types.md`, `catalog.md`, `app_internals.md`)
+- [ ] Verified on Union with one probe notebook, nothing left published
+
+Choices:
+- Pinata stores identical bytes once per account and keeps the first upload's keyvalues (measured 2026-10-26: three uploads of one file, two owners, one record with the first's keyvalues). So publishing bytes that are already public under someone else's record, or under another of the owner's slugs, is refused with a 409, and nothing is deleted.
+- The record's `_owner` is the dashboard's owner (the notebook's), not an admin visitor.
+- A public tile's button is "Copy to workspace", like a workflow's; a name that's taken is a 409, as for any copy.
