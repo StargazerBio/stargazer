@@ -24,10 +24,11 @@ in, and whoever does sees the owner's dashboard. It has three jobs:
 3. **Launch broker.** `POST /launch` builds a per-notebook AppEnvironment via
    `app.per_notebook.per_notebook_env(...)` from the environment the
    notebook declares, owned by the same user, serves it into the
-   dashboard's project, and returns its URL. Serving builds a declared image
-   first. The dashboard never calls a notebook pod: the pod hydrates and
-   saves its own workspace and shows its own starting page while it warms
-   up.
+   dashboard's project, and returns its URL. A declared image that isn't
+   built yet is built first, in the background: the launch answers at once
+   with the build run, and the pod is served when the build finishes. The
+   dashboard never calls a notebook pod: the pod hydrates and saves its own
+   workspace and shows its own starting page while it warms up.
 
 The user's asset index isn't the dashboard's: it's their table on Aurora
 DSQL (a Postgres server on the devbox), which the dashboard's asset browser
@@ -53,8 +54,10 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import asyncio
+import json
 import os
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 
@@ -65,7 +68,8 @@ from fastapi import FastAPI, Form, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from flyte.remote import App
+from flyte._internal.imagebuild.image_builder import ImageBuildEngine
+from flyte.remote import App, Run
 
 from app import config
 from app import workspace_store as store
@@ -750,6 +754,21 @@ async def save_settings(user: CurrentUser, save_interval_seconds: str = Form("")
 _SECTIONS = ("tutorials", "workflows", "workspace")
 
 
+@dataclass
+class _Build:
+    """A launch's image build: in progress, or failed with `error`."""
+
+    url: str
+    task: asyncio.Task | None = None
+    error: str | None = None
+
+
+# By (slug, mode). Holding the task here keeps it from being garbage-collected
+# mid-build. A dashboard restart loses the entry, but the build still finishes,
+# so the next launch finds the image built and serves at once.
+_builds: dict[tuple[str, str], _Build] = {}
+
+
 async def _launch_target(
     user: User, slug: str, section: str
 ) -> tuple[str, str | None] | None:
@@ -789,10 +808,14 @@ async def launch(
     admitted.
 
     The pod runs in the environment the notebook declares (`main_env`), with
-    the dashboard's fields on top. `serve` builds a declared image first when
-    it isn't built yet, so the first launch after a change waits for the
-    build. An environment that won't evaluate, or an image that won't build,
-    is a 422 with the reason, never a pod sized or built wrong.
+    the dashboard's fields on top. A declared image that isn't built yet
+    answers 202 with the build run's URL (`{"building": url}`): the build
+    runs on, a background task serves the pod when it finishes, and
+    `/launch/status` reports it building, then running. Launching again
+    during the build answers the same 202. An environment that won't
+    evaluate, or an image that won't build, is a 422 with the reason (a build
+    that fails in the background is reported by `/launch/status`), never a
+    pod sized or built wrong.
     """
     if mode not in MODES:
         return JSONResponse({"error": f"invalid mode: {mode}"}, status_code=400)
@@ -818,6 +841,10 @@ async def _serve_notebook(
     source: str | None,
 ) -> JSONResponse:
     """Evaluate the notebook's `main_env`, serve its pod, and answer `/launch`."""
+    key = (slug, mode)
+    if (build := _builds.get(key)) and build.error is None:
+        return JSONResponse({"building": build.url}, status_code=202)
+    _builds.pop(key, None)
     declared = None
     if source and (expr := extract_main_env(source)) is not None:
         try:
@@ -848,6 +875,73 @@ async def _serve_notebook(
         (await _settings(user))["save_interval_seconds"]
     )
 
+    # Flyte's build check is one image-service call; a built image (or the
+    # prebuilt notebook image) comes back with no run and is served below.
+    if isinstance(env.image, flyte.Image):
+        try:
+            image = await flyte.build.aio(env.image, wait=False)
+        except flyte.errors.ImageBuildError as exc:
+            return _build_failed(slug, exc)
+        if image.remote_run is not None:
+            # A concurrent launch shares the same cached build run.
+            if (build := _builds.get(key)) is None:
+                build = _builds[key] = _Build(url=image.remote_run.url)
+                build.task = asyncio.create_task(
+                    _serve_when_built(key, env, image.remote_run)
+                )
+            return JSONResponse({"building": build.url}, status_code=202)
+    return await _serve(env, slug, mode)
+
+
+def _build_failed(slug: str, exc: Exception) -> JSONResponse:
+    """The 422 for a notebook whose image failed to build."""
+    logger.error(f"main_env image build failed for {slug!r}: {exc}")
+    return JSONResponse(
+        {"error": f"This notebook's image failed to build: {exc}"},
+        status_code=422,
+    )
+
+
+def _forget_build(image: flyte.Image) -> None:
+    """Drop `image` from Flyte's per-process build caches.
+
+    `ImageBuildEngine.image_exists` and `ImageBuildEngine.build` are
+    `async_lru`-cached, a "not built" answer and an unwaited build's run
+    included. Left in place, they'd have every later build of the image
+    submit another run, and every later launch answer "building" with the
+    finished one. The `build` key is the one `flyte.build` calls it with.
+    """
+    ImageBuildEngine.image_exists.cache_invalidate(image)
+    ImageBuildEngine.build.cache_invalidate(
+        ImageBuildEngine, image, dry_run=False, force=False, wait=False
+    )
+
+
+async def _serve_when_built(
+    key: tuple[str, str], env: flyte.app.AppEnvironment, run: Run
+) -> None:
+    """Wait for a launch's image build, then serve its pod or keep why it failed."""
+    slug, mode = key
+    try:
+        await run.wait.aio(quiet=True)
+        await run.raise_for_status.aio()
+    except Exception as exc:
+        resp = _build_failed(slug, exc)
+    else:
+        resp = None
+    _forget_build(env.image)
+    if resp is None:
+        with forget_new_environments():
+            resp = await _serve(env, slug, mode)
+    if resp.status_code == 422:
+        _builds[key].error = json.loads(resp.body)["error"]
+    else:
+        del _builds[key]
+
+
+async def _serve(env: flyte.app.AppEnvironment, slug: str, mode: str) -> JSONResponse:
+    """Serve a per-notebook app and answer with its URL, as `/launch` does."""
+    project = config.FLYTE_PROJECT
     # `serve.aio()` watches the deployment to readiness and raises if the pod
     # is slow to schedule/boot. That's not a real failure: the route (and
     # `App.endpoint`) exist as soon as the app is admitted, and the pod shows
@@ -863,11 +957,7 @@ async def _serve_notebook(
     except flyte.errors.ImageBuildError as exc:
         # Before the watch recovery below, which would hand back the app as it
         # was last served: on its old image.
-        logger.error(f"main_env image build failed for {slug!r}: {exc}")
-        return JSONResponse(
-            {"error": f"This notebook's image failed to build: {exc}"},
-            status_code=422,
-        )
+        return _build_failed(slug, exc)
     except Exception as exc:
         logger.warning(f"serve watch unconfirmed for {slug!r}/{mode!r}: {exc}")
         try:
@@ -899,7 +989,7 @@ async def stop(user: CurrentUser, slug: str = Form(...), mode: str = Form(...)):
 
 @asgi_app.get("/launch/status")
 async def launch_status(user: CurrentUser):
-    """Report which of the user's notebooks have an active per-notebook app.
+    """Report which of the user's notebooks are running, building, or failed to build.
 
     Discovery is one control-plane list (`list_project_apps`, the same call
     `/workspace/cleanup` uses) of every deployment in the user's project,
@@ -909,13 +999,18 @@ async def launch_status(user: CurrentUser):
     endpoints. Read live from the control plane, so it survives dashboard
     restarts. The dashboard calls this on load to render running notebooks
     straight to Open+Stop.
+
+    `building` and `failed` are this dashboard's own launches whose image is
+    building, with the build run's URL, or failed to build, with the reason.
+    A building notebook isn't reported running, even while an older pod of it
+    is up. A failure is reported until the notebook is launched again.
     """
     project = config.FLYTE_PROJECT
     try:
         apps = await list_project_apps(project, domain=config.FLYTE_DOMAIN)
     except Exception as exc:
         logger.warning(f"status listing failed for {project!r}: {exc}")
-        return JSONResponse({"running": []})
+        apps = []
     candidates = [
         (app.name, parsed) for app in apps if (parsed := _parse_nb_name(app.name))
     ]
@@ -932,7 +1027,19 @@ async def launch_status(user: CurrentUser):
 
     probes = [_probe(name, slug, mode) for name, (slug, mode) in candidates]
     running = [r for r in await asyncio.gather(*probes) if r is not None]
-    return JSONResponse({"running": running})
+    building = [
+        {"slug": slug, "mode": mode, "url": build.url}
+        for (slug, mode), build in _builds.items()
+        if build.error is None
+    ]
+    failed = [
+        {"slug": slug, "mode": mode, "error": build.error}
+        for (slug, mode), build in _builds.items()
+        if build.error is not None
+    ]
+    in_build = {(b["slug"], b["mode"]) for b in building}
+    running = [r for r in running if (r["slug"], r["mode"]) not in in_build]
+    return JSONResponse({"running": running, "building": building, "failed": failed})
 
 
 @asgi_app.post("/workspace/cleanup")
