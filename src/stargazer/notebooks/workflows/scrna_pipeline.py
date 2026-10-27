@@ -3,9 +3,7 @@
 # dependencies = [
 #   "matplotlib",
 #   "numpy",
-#   "scanpy>=1.12",
-#   "anndata",
-#   "stargazer",
+#   "stargazer[bio]",
 # ]
 #
 # [tool.uv.sources]
