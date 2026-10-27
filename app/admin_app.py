@@ -8,13 +8,13 @@ dashboard runs in (`FLYTE_PROJECT`); neither is derived from the request.
 Union's login gates the public address; `app.identity` decides who else gets
 in, and whoever does sees the owner's dashboard. It has three jobs:
 
-1. **Dashboard.** Renders the notebook tile sections: Workflows and
-   Tutorials (the built-in notebooks, baked into the per-notebook image),
-   Workspace (the owner's notebooks) and Public notebooks (everyone's
-   published ones). The owner's notebooks live in the workspace store
-   (`app.workspace_store`), keyed by their Union subject, so saving needs no
-   setup. On Union its header links to the project's runs in the Union
-   console (`config.CONSOLE_URL`).
+1. **Dashboard.** Renders the Workspace (the owner's notebooks, as tiles)
+   and the asset explorer (`app.assets`), where the built-in notebooks in the
+   per-notebook image and everyone's published ones are entries beside the
+   owner's assets and the public ones. The owner's notebooks live in the
+   workspace store (`app.workspace_store`), keyed by their Union subject, so
+   saving needs no setup. On Union its header links to the project's runs
+   in the Union console (`config.CONSOLE_URL`).
 
 2. **Workspace actions.** Create, setup, delete, copy, open from GitHub
    (`app.github_import`) and download, all against the workspace store. A notebook's tile name and description
@@ -75,7 +75,7 @@ from flyte.remote import App, Run
 
 from app import config, github_import
 from app import workspace_store as store
-from app.assets import TUS_CHUNK_BYTES, TUS_MAX_BYTES, public_assets_on
+from app.assets import TUS_CHUNK_BYTES, TUS_MAX_BYTES, is_owner, public_assets_on
 from app.assets import router as assets_router
 from app.identity import CurrentUser, User, user_from_request
 from app.init import init
@@ -97,7 +97,6 @@ from app.notebooks import (
     SEED_SLUGS,
     Notebook,
     builtin_source,
-    by_section,
     by_slug,
     seed_source,
     slugify,
@@ -342,16 +341,6 @@ def _new_notebook_slug(name: str) -> str | None:
     return None if slug is None or by_slug(slug) else slug
 
 
-def _tile_dict(slug: str, title: str, description: str, section: str) -> dict:
-    """Build the context dict consumed by `_tile.html`."""
-    return {
-        "slug": slug,
-        "title": title,
-        "description": description,
-        "section": section,
-    }
-
-
 def _display_name(slug: str) -> str:
     """Human-friendly tile title for a notebook slug.
 
@@ -378,41 +367,37 @@ def _workspace_tile_dict(
 ) -> dict:
     """A workspace tile titled by the notebook's `main_name` and `main_description`.
 
-    It offers Publish when this dashboard has public assets, and Unpublish
-    when the notebook is `published`.
+    The context `_tile.html` renders. It offers Publish when this dashboard
+    has public assets, and Unpublish when the notebook is `published`.
     """
+    title, description = _tile_text(slug, name, description)
     return {
-        **_tile_dict(slug, *_tile_text(slug, name, description), "workspace"),
+        "slug": slug,
+        "title": title,
+        "description": description,
         "publishable": public_assets_on(),
         "published": published,
     }
 
 
-async def _public_tiles(user: User) -> tuple[list[dict], set[str]]:
-    """The public notebooks' tiles, and the slugs of the user's published ones.
+async def _published_slugs(user: User) -> set[str]:
+    """The slugs of the workspace notebooks the user has published.
 
-    Best-effort: a listing that fails shows no public notebooks rather than
-    failing the dashboard.
+    Best-effort: a listing that fails offers Publish on every tile rather
+    than failing the dashboard.
     """
     if not public_assets_on():
-        return [], set()
+        return set()
     try:
         records = await public_notebooks()
     except Exception as exc:
         logger.warning(f"Public notebook listing failed: {exc}")
-        return [], set()
-    tiles = []
-    published = set()
-    for record in records:
-        kv = record["keyvalues"]
-        slug = kv.get("slug", "")
-        tile = _tile_dict(
-            slug, kv.get("title") or slug, kv.get("description", ""), "public"
-        )
-        tiles.append({**tile, "cid": record["cid"]})
-        if kv.get("_owner") == user.subject:
-            published.add(slug)
-    return tiles, published
+        return set()
+    return {
+        r["keyvalues"].get("slug", "")
+        for r in records
+        if r["keyvalues"].get("_owner") == user.subject
+    }
 
 
 async def _workspace_tiles(user: User, published: set[str]) -> list[dict]:
@@ -470,9 +455,10 @@ async def _teardown_notebook_pods(user: User, slug: str) -> None:
 
 @asgi_app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, user: CurrentUser):
-    """Render the owner's dashboard: their notebooks, then the asset browser."""
+    """Render the owner's dashboard: their workspace, then the asset explorer."""
     store_ready = _store_ready()
-    public, published = await _public_tiles(user)
+    visitor = user_from_request(request) or user
+    published = await _published_slugs(user) if store_ready else set()
     workspace = await _workspace_tiles(user, published) if store_ready else []
     return templates.TemplateResponse(
         request,
@@ -481,21 +467,14 @@ async def dashboard(request: Request, user: CurrentUser):
             "title": "Dashboard",
             "user": user,
             "workspace_configured": store_ready,
-            "tutorials": [
-                _tile_dict(n.slug, n.title, n.description, "tutorials")
-                for n in by_section("tutorials")
-            ],
-            "workflows": [
-                _tile_dict(n.slug, n.title, n.description, "workflows")
-                for n in by_section("workflows")
-            ],
             "workspace": workspace,
-            "public_notebooks": public,
             "settings": await _settings(user),
             "version": config.VERSION,
             "console_runs_url": _console_runs_url(),
-            # The asset browser compares `_owner` against the visitor.
-            "username": (user_from_request(request) or user).subject,
+            # The explorer compares `_owner` against the visitor, and offers
+            # the owner's own assets only to the owner.
+            "username": visitor.subject,
+            "mine_on": is_owner(visitor),
             "public_assets": public_assets_on(),
             "tus_max_bytes": TUS_MAX_BYTES,
             "tus_chunk_bytes": TUS_CHUNK_BYTES,

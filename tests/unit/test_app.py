@@ -177,18 +177,39 @@ def test_dashboard_shows_its_release_version(client, monkeypatch):
 
 
 def test_home_page_carries_the_asset_browser(client, monkeypatch):
-    """The asset browser is on the dashboard's home page, below the notebook
-    sections: graph and list, both networks, and the upload panel."""
+    """The asset browser is on the dashboard's home page, below the workspace:
+    graph and list, every source, and the upload panel. It starts on the
+    user's assets and the built-in notebooks."""
     monkeypatch.setenv("PINATA_JWT", "test-jwt")
     _as(client)
     html = client.get("/").text
-    assert html.index("Tutorials") < html.index('id="graph-host"')
-    assert 'data-network="private"' in html
+    assert html.index('id="workspace-grid"') < html.index('id="graph-host"')
+    assert '<button data-source="mine" aria-pressed="true">' in html
+    assert '<button data-source="public" aria-pressed="false">' in html
+    assert '<button data-source="stargazer" aria-pressed="true">' in html
     assert 'data-view="list"' in html
     assert 'id="upload-panel"' in html
     assert 'value="public"' in html
     # The page knows who's looking: it drives which public records they can edit.
     assert f'USERNAME = "{ALICE}"' in html
+
+
+def test_a_visitor_who_isnt_the_owner_isnt_offered_mine(client):
+    """An admin visiting someone's dashboard browses Stargazer's notebooks,
+    not the owner's assets, which the listing refuses them."""
+    _as(client, BOB, "Bob Admin")
+    html = client.get("/").text
+    assert 'data-source="mine"' not in html
+    assert '<button data-source="stargazer" aria-pressed="true">' in html
+
+
+def test_builtin_notebooks_have_no_section_of_their_own(client):
+    """Tutorials and Workflows are explorer entries, not tiles on the page."""
+    _as(client)
+    html = client.get("/").text
+    assert 'name="section" value="tutorials"' not in html
+    assert 'name="section" value="workflows"' not in html
+    assert 'data-copy-section="workflows"' not in html
 
 
 @pytest.mark.parametrize(
@@ -197,9 +218,10 @@ def test_home_page_carries_the_asset_browser(client, monkeypatch):
 def test_home_page_without_public_assets_offers_only_private_data(
     client, monkeypatch, jwt, public_assets
 ):
-    """With no shared key, or public assets off, the Public tab says so.
+    """With no shared key, or public assets off, Public isn't offered.
 
-    It does so without naming the service.
+    Neither as a source nor as an upload's network, and the page doesn't
+    name the service.
     """
     if jwt is None:
         monkeypatch.delenv("PINATA_JWT", raising=False)
@@ -208,9 +230,9 @@ def test_home_page_without_public_assets_offers_only_private_data(
     monkeypatch.setattr(config, "PUBLIC_ASSETS", public_assets)
     _as(client)
     html = client.get("/").text
-    assert 'data-network="private"' in html
+    assert 'data-source="mine"' in html
+    assert 'data-source="public"' not in html
     assert 'value="public"' not in html
-    assert "Shared data isn't available on this deployment." in html
     assert "PINATA" not in html
 
 

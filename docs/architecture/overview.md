@@ -45,7 +45,7 @@ See [MCP Server](mcp-server.md) for the full server specification.
 
 ## Interface
 
-The marimo notebook is the primary user surface. The hosted app serves a per-user dashboard of three notebook types — Tutorials, Workflows, Workspace — and notebooks are also where new tasks are prototyped before being promoted into the SDK. See [Notebooks](notebook.md) for the taxonomy, user archetypes, and promotion paths, and [App](app.md) for the hosting machinery.
+The marimo notebook is the primary user surface. The hosted app serves a per-user dashboard: the user's Workspace of notebooks, and an asset explorer where Stargazer's Tutorials and Workflows sit beside the user's data and the public tier. Notebooks are also where new tasks are prototyped before being promoted into the SDK. See [Notebooks](notebook.md) for the taxonomy, user archetypes, and promotion paths, and [App](app.md) for the hosting machinery.
 
 For local use, the repository's Dockerfile builds one end-user Docker image, **`stargazer`**: a Marimo notebook in edit mode for running pipelines and exploring data locally, with Claude Code in its dropdown terminal. It is the hosted notebook image run locally — see [App → Images](app.md#images).
 

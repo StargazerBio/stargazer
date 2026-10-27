@@ -1,21 +1,26 @@
 """
-### Asset browser API routes.
+### Asset explorer API routes.
 
-APIRouter included by the dashboard, serving the asset browser on its home
-page (`templates/_assets.html`) over two networks:
+APIRouter included by the dashboard, serving the asset explorer on its home
+page (`templates/_assets.html`). Its listing (`GET /assets/list`) is one list
+over the sources the explorer asks for, each entry stamped with its `source`:
 
-- **Private** is the dashboard owner's own asset index and store, the same
-  ones their tasks write to. Downloads stream back out, and metadata edits
-  merge onto the index row. Only the owner reaches them: another signed-in
-  user gets a 403.
-- **Public** is Pinata's public network, through the org's shared key (a
-  Flyte secret, `app.admin_app`). Downloads redirect to the gateway, so
-  those bytes never transit the dashboard. Pinata's private network is
-  never used: with a shared key it would keep nothing private. Without a
-  key (the devbox, which drops app secrets, or a local run with none), or
-  with public assets turned off for the deploy (`config.PUBLIC_ASSETS`), the
-  public listing, edits and uploads 503 and the browser's Public tab says
-  shared data isn't available.
+- **`mine`** is the dashboard owner's own asset index and store, the same
+  ones their tasks write to; the routes that act on one record call it the
+  `private` network. Downloads stream back out, and metadata edits merge
+  onto the index row. Only the owner reaches them: another signed-in user
+  gets a 403.
+- **`public`** is Pinata's public network, through the org's shared key (a
+  Flyte secret, `app.admin_app`), public notebooks included. Downloads
+  redirect to the gateway, so those bytes never transit the dashboard.
+  Pinata's private network is never used: with a shared key it would keep
+  nothing private. Without a key (the devbox, which drops app secrets, or a
+  local run with none), or with public assets turned off for the deploy
+  (`config.PUBLIC_ASSETS`), the public listing, edits and uploads 503 and
+  the explorer doesn't offer Public.
+- **`stargazer`** is the built-in notebooks, baked into the image
+  (`app.notebooks.builtin_entries`), listed but never stored. Anyone may
+  list them, and their source downloads from the `stargazer` network.
 
 Auth model: on the hosted deploy a request's identity is its signed Union
 token (`app.identity`). The routes still degrade for an anonymous request (a
@@ -46,12 +51,18 @@ from typing import Any, get_type_hints
 
 import flyte.storage
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    JSONResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 
-from app import config
+from app import config, notebooks
 from app.identity import User, user_from_request
 from stargazer.assets import ASSET_REGISTRY, Notebook, build_asset
 from stargazer.assets.asset import Asset
+from stargazer.config import logger
 from stargazer.utils.cid import CidBuilder
 from stargazer.utils.index import SqlIndex, make_index
 from stargazer.utils.pinata import TUS_CHUNK_BYTES, PinataClient, _stamp_owner
@@ -115,13 +126,18 @@ def _require_owner(request: Request) -> User:
     return _check_owner(_require_user(request))
 
 
-def _check_owner(user: User) -> User:
-    """`user` if they own this dashboard, else a 403.
+def is_owner(user: User) -> bool:
+    """Whether `user` owns this dashboard, and so reaches its private assets.
 
     Locally, with no owner baked in (`SG_OWNER_SUBJECT`), any signed-in
     user is the owner.
     """
-    if config.OWNER_SUBJECT and user.subject != config.OWNER_SUBJECT:
+    return not config.OWNER_SUBJECT or user.subject == config.OWNER_SUBJECT
+
+
+def _check_owner(user: User) -> User:
+    """`user` if they own this dashboard (`is_owner`), else a 403."""
+    if not is_owner(user):
         raise HTTPException(
             status_code=403,
             detail="Only this dashboard's owner can reach its private assets.",
@@ -188,9 +204,28 @@ def forget_public_records() -> None:
     _public_cache = None
 
 
-def _browsable(records: list[dict]) -> list[dict]:
-    """`records` without notebooks, which the dashboard lists in their own section."""
-    return [r for r in records if r["keyvalues"].get("asset") != Notebook._asset_key]
+SOURCES = ("mine", "public", "stargazer")
+
+
+async def _source_entries(source: str, filters: dict[str, str]) -> list[dict]:
+    """The records `source` holds that carry every keyvalue in `filters`.
+
+    Each comes back stamped with `source`. The owner's index filters in its
+    query; the others are in memory already.
+    """
+    if source == "mine":
+        records = await _get_index().query(filters)
+    else:
+        if source == "public":
+            held = await _public_records()
+        else:
+            held = notebooks.builtin_entries()
+        records = [
+            r
+            for r in held
+            if all(r["keyvalues"].get(k) == v for k, v in filters.items())
+        ]
+    return [{**r, "source": source} for r in records]
 
 
 @router.get("/assets/schema")
@@ -215,23 +250,38 @@ async def assets_schema() -> dict:
 
 @router.get("/assets/list")
 async def assets_list(request: Request):
-    """List assets on one network, filtered by keyvalue query params.
+    """List the entries of every `source` asked for, filtered by keyvalue params.
 
-    Private: the owner's index rows, newest first. Public: anonymous, served
-    from the TTL cache with filters applied in-process. Notebooks are left
-    out of both: the dashboard lists them in their own sections.
+    `source` repeats: `mine` (the owner's index rows, newest first; a 401 or
+    403 for anyone else), `public` (anonymous, from the TTL cache; a 503
+    when the dashboard has no public assets) and `stargazer` (the built-in
+    notebooks, anonymous). Every other query param is a keyvalue the entries
+    must carry, applied to each source alike. Sources come back in that
+    order, each entry carrying its `source`. A public tier that can't be
+    read leaves the other sources' entries, and the response names it in
+    `Stargazer-Unavailable`.
     """
-    params = dict(request.query_params)
-    network = params.pop("network", "public")
-    _require_network(network)
-    if network == "private":
+    sources = request.query_params.getlist("source")
+    if not sources or any(s not in SOURCES for s in sources):
+        raise HTTPException(
+            status_code=400, detail="source must be 'mine', 'public' or 'stargazer'"
+        )
+    if "mine" in sources:
         _require_owner(request)
-        return _browsable(await _get_index().query(params))
-    _require_public()
-    records = _browsable(await _public_records())
-    return [
-        r for r in records if all(r["keyvalues"].get(k) == v for k, v in params.items())
-    ]
+    if "public" in sources:
+        _require_public()
+    filters = {k: v for k, v in request.query_params.items() if k != "source"}
+    entries = []
+    headers = {}
+    for source in (s for s in SOURCES if s in sources):
+        try:
+            entries += await _source_entries(source, filters)
+        except Exception as exc:
+            if source != "public":
+                raise
+            logger.warning(f"Public listing failed: {exc}")
+            headers["Stargazer-Unavailable"] = source
+    return JSONResponse(entries, headers=headers)
 
 
 @router.post("/assets/update")
@@ -281,14 +331,26 @@ async def assets_download(request: Request, cid: str):
 
     Public files live on world-readable IPFS, so anyone gets a redirect to
     PINATA_GATEWAY, signed in or not, and the bytes never transit the pod.
-    Private files stream from the owner's store (`_download_private`).
+    Private files stream from the owner's store (`_download_private`). A
+    built-in notebook (`network=stargazer`) is its file in the image, to
+    anyone.
     """
     network = request.query_params.get("network", "public")
+    if network == "stargazer":
+        return _download_builtin(cid)
     _require_network(network)
     if network == "private":
         return await _download_private(request, cid)
     gateway = os.environ["PINATA_GATEWAY"]
     return RedirectResponse(f"{gateway}/ipfs/{cid}", status_code=302)
+
+
+def _download_builtin(cid: str) -> FileResponse:
+    """A built-in notebook's file as an attachment, or a 404."""
+    path = notebooks.builtin_path(cid)
+    if path is None:
+        raise HTTPException(status_code=404, detail=f"no built-in notebook {cid}")
+    return FileResponse(path, filename=path.name)
 
 
 async def _download_private(request: Request, cid: str) -> StreamingResponse:

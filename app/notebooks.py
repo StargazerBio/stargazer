@@ -3,19 +3,23 @@
 
 Curated, hand-maintained tuple of the built-in notebooks, the ones baked into
 the `notebook-app` image, plus the helpers that read packaged notebook sources
-(seeds, built-in workflows) out of the installed `stargazer` package. Workspace
-notebooks are NOT here — they live in the workspace store
-(`app.workspace_store`).
+(seeds, built-in workflows) out of the installed `stargazer` package. The asset
+explorer lists the built-in notebooks as entries (`builtin_entries`), each
+addressed by the CID of its file. Workspace notebooks are NOT here — they
+live in the workspace store (`app.workspace_store`).
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
+import functools
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 import stargazer.notebooks
+from stargazer.assets import Notebook as NotebookAsset
+from stargazer.utils.cid import compute_cid
 
 # Built-in notebooks live at /stargazer/<src/...> in the notebook pod.
 # (A user's own notebooks are hydrated elsewhere; see `app.per_notebook`.)
@@ -39,11 +43,11 @@ SEED_SLUGS = frozenset({BASIC_SLUG, BLANK_SLUG})
 
 @dataclass(frozen=True)
 class Notebook:
-    """A single tile on the dashboard.
+    """A built-in notebook, baked into the `notebook-app` image.
 
-    `path_in_image` is the notebook's absolute `.py` path in the `notebook-app`
-    image. `section` picks the dashboard column; `slug` names its app
-    (`nb-<slug>-<mode>`).
+    `path_in_image` is the notebook's absolute `.py` path in the image.
+    `section` is its kind, which the explorer shows as its `category` and a
+    launch names; `slug` names its app (`nb-<slug>-<mode>`).
     """
 
     slug: str
@@ -54,7 +58,7 @@ class Notebook:
 
 
 # Tutorials are ordered as a reading sequence: assets → tasks → workflows →
-# execution. Workflows (full pipelines) render in their own dashboard section.
+# execution, the order the explorer lists them in. Workflows are full pipelines.
 NOTEBOOKS: tuple[Notebook, ...] = (
     Notebook(
         slug="assets",
@@ -102,9 +106,45 @@ def by_slug(slug: str) -> Notebook | None:
     return None
 
 
-def by_section(section: str) -> tuple[Notebook, ...]:
-    """Return all notebooks belonging to one dashboard section."""
-    return tuple(n for n in NOTEBOOKS if n.section == section)
+def _package_path(path_in_image: str) -> Path | None:
+    """A built-in notebook's file in the installed package, or None if outside it."""
+    if not path_in_image.startswith(_IMAGE_NOTEBOOKS_PREFIX):
+        return None
+    return NOTEBOOKS_PKG_DIR / path_in_image.removeprefix(_IMAGE_NOTEBOOKS_PREFIX)
+
+
+@functools.cache
+def builtin_entries() -> tuple[dict, ...]:
+    """The built-in notebooks as asset explorer entries, worked out once.
+
+    Each is shaped like a listed record, with `source` `stargazer`: its CID
+    is its file's, and its keyvalues a `Notebook` asset's plus `category`,
+    `tutorial` or `workflow` after its section. Nothing stores them; they're
+    read from the installed package.
+    """
+    entries = []
+    for nb in NOTEBOOKS:
+        path = _package_path(nb.path_in_image)
+        keyvalues = NotebookAsset(
+            title=nb.title, description=nb.description, slug=nb.slug
+        ).to_keyvalues()
+        entries.append(
+            {
+                "cid": compute_cid(path),
+                "name": path.name,
+                "source": "stargazer",
+                "keyvalues": {**keyvalues, "category": nb.section.removesuffix("s")},
+            }
+        )
+    return tuple(entries)
+
+
+def builtin_path(cid: str) -> Path | None:
+    """The file of the built-in notebook whose CID is `cid`, or None."""
+    for nb, entry in zip(NOTEBOOKS, builtin_entries(), strict=True):
+        if entry["cid"] == cid:
+            return _package_path(nb.path_in_image)
+    return None
 
 
 def slugify(name: str) -> str:
@@ -124,10 +164,8 @@ def builtin_source(path_in_image: str) -> str | None:
     so the image path maps onto the installed `stargazer.notebooks`. None if
     the path is outside it or the file is missing.
     """
-    if not path_in_image.startswith(_IMAGE_NOTEBOOKS_PREFIX):
-        return None
-    path = NOTEBOOKS_PKG_DIR / path_in_image.removeprefix(_IMAGE_NOTEBOOKS_PREFIX)
-    return path.read_text() if path.is_file() else None
+    path = _package_path(path_in_image)
+    return path.read_text() if path and path.is_file() else None
 
 
 def seed_source(seed: str) -> str | None:

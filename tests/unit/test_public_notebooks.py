@@ -1,4 +1,4 @@
-"""Tests for public notebooks: Publish, Unpublish, the public section and its copy.
+"""Tests for public notebooks: Publish, Unpublish, their listing and their copy.
 
 The dashboard belongs to ALICE, and her workspace runs through the real
 `app.workspace_store` against a temp directory. Pinata's public network is
@@ -253,20 +253,6 @@ class TestUnpublish:
 
 
 class TestDashboard:
-    def test_public_section_lists_public_notebooks(self, public, client):
-        bobs = public.add(
-            BOBS,
-            asset="notebook",
-            title="Bob's pipeline",
-            description="Bob's take.",
-            slug="bobs-pipeline",
-            _owner=BOB,
-        )
-        html = client.get("/").text
-        section = html[html.index('id="public-notebooks"') :]
-        assert "Bob&#39;s pipeline" in section
-        assert f'data-copy-slug="{bobs}" data-copy-section="public"' in section
-
     def test_workspace_tiles_offer_publish_and_unpublish(self, public, client):
         _put("qc-run.py", QC)
         _put("draft.py", _notebook("Draft", ""))
@@ -309,17 +295,15 @@ class TestPublicAssetsOff:
         assert unpublish.status_code == 503
         assert _copy(client, cid).status_code == 503
         html = client.get("/").text
-        assert 'id="public-notebooks"' not in html
+        assert 'data-source="public"' not in html
         assert 'data-publish-slug="qc-run"' not in html
         assert public.uploads == {}
 
 
 class TestAssetBrowser:
-    """Notebooks have their own sections, so the asset browser leaves them out."""
+    """Notebooks are entries in the asset browser, but uploads never make one."""
 
-    def test_private_listing_leaves_out_notebook_rows(
-        self, public, client, tmp_path, monkeypatch
-    ):
+    def test_mine_lists_notebook_rows(self, public, client, tmp_path, monkeypatch):
         index = SqliteIndex(tmp_path / "index.db")
         monkeypatch.setattr(assets_mod, "_index", index)
         for cid, kind in (("bafynb", "notebook"), ("bafyr1", "r1")):
@@ -330,14 +314,18 @@ class TestAssetBrowser:
                 "keyvalues": {"asset": kind, "_owner": ALICE},
             }
             asyncio.run(index.upsert(record))
-        listed = client.get("/assets/list", params={"network": "private"}).json()
-        assert [r["cid"] for r in listed] == ["bafyr1"]
+        listed = client.get("/assets/list", params={"source": "mine"}).json()
+        assert sorted(r["cid"] for r in listed) == ["bafynb", "bafyr1"]
 
-    def test_public_listing_leaves_out_notebooks(self, public, client):
-        public.add(QC, asset="notebook", slug="qc-run", _owner=ALICE)
+    def test_public_lists_public_notebooks(self, public, client):
+        qc = public.add(QC, asset="notebook", slug="qc-run", _owner=ALICE)
         r1 = public.add("reads", asset="r1", _owner=ALICE)
-        listed = client.get("/assets/list", params={"network": "public"}).json()
-        assert [r["cid"] for r in listed] == [r1]
+        listed = client.get(
+            "/assets/list", params={"source": "public", "asset": "notebook"}
+        ).json()
+        assert [(r["cid"], r["source"]) for r in listed] == [(qc, "public")]
+        everything = client.get("/assets/list", params={"source": "public"}).json()
+        assert sorted(r["cid"] for r in everything) == sorted([qc, r1])
 
     def test_upload_form_doesnt_offer_notebooks(self, public, client):
         schema = client.get("/assets/schema").json()

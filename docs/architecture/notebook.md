@@ -19,7 +19,7 @@ A cluster can only run tasks its pods can import: the SDK's, and those a noteboo
 
 ## Notebook Types
 
-The dashboard renders three sections. The first two match directories under `src/stargazer/notebooks/`:
+Notebooks come in three types. The first two match directories under `src/stargazer/notebooks/`:
 
 | Type | Directory | Source of truth | Mode | Purpose |
 |------|-----------|-----------------|------|---------|
@@ -27,7 +27,7 @@ The dashboard renders three sections. The first two match directories under `src
 | **Workflows** | `workflows/` | Image-baked (upstream repo) | Edit or Run | Production pipelines, parameterized — bring your own data (e.g. the scRNA-seq pipeline) |
 | **Workspace** | — | User's workspace store | Edit or Run | The user's own notebooks — authored from scratch or a template, persisted across sessions |
 
-Tutorials and Workflows are the built-in notebooks: they're baked into the image and work for everyone. A user's Workspace is one folder, saved whole in the [workspace store](app.md#core-concepts), keyed by their account, with no setup: the notebooks side by side at the top, so they can import each other, plus whatever data or helper files the user keeps beside them. The tile registry for built-in notebooks is `app/notebooks.py`; the user's own tiles are listed from the store at render time.
+Tutorials and Workflows are the built-in notebooks: they're baked into the image and work for everyone. They're entries in the dashboard's asset explorer under its Stargazer source, with `category` `tutorial` or `workflow` ([App → Asset Manager](app.md#asset-manager)). A user's Workspace, the dashboard's own section, is one folder, saved whole in the [workspace store](app.md#core-concepts), keyed by their account, with no setup: the notebooks side by side at the top, so they can import each other, plus whatever data or helper files the user keeps beside them. The registry of built-in notebooks is `app/notebooks.py`; the user's own tiles are listed from the store at render time.
 
 Tutorials and Workflows are both image-baked but differ in intent: a tutorial teaches a concept and is read once; a workflow notebook is an off-the-shelf pipeline meant to be run repeatedly against new data.
 
@@ -64,13 +64,13 @@ Researchers define tasks directly in notebook cells using proper Flyte conventio
 
 Researchers write a working task; promotion does the mechanical extraction; PR review adds the polish. Once a promoted task needs refinement beyond what review suggests, work continues natively against the repo like any other SDK change — see [Contributing](../guides/contributing.md).
 
-### Workflow graduation — workspace notebook → Workflows section
+### Workflow graduation — workspace notebook → built-in workflow
 
-A workspace notebook that proves out a *reusable* pipeline — one others should run against new data — graduates into `notebooks/workflows/`. Graduation is the composite path: first its cell-defined tasks go through task promotion (above), so the heavy lifting lives in the tested SDK; then the notebook itself — now a thin, parameterized UI over SDK calls — is PR'd into `notebooks/workflows/` and registered as a dashboard tile in `app/notebooks.py`. It ships to everyone in the next image release. The scRNA-seq pipeline notebook is the template for what a graduated workflow looks like.
+A workspace notebook that proves out a *reusable* pipeline — one others should run against new data — graduates into `notebooks/workflows/`. Graduation is the composite path: first its cell-defined tasks go through task promotion (above), so the heavy lifting lives in the tested SDK; then the notebook itself — now a thin, parameterized UI over SDK calls — is PR'd into `notebooks/workflows/` and registered in `app/notebooks.py`, which lists it in the explorer. It ships to everyone in the next image release. The scRNA-seq pipeline notebook is the template for what a graduated workflow looks like.
 
 ### Copy to workspace — read-only source → editable notebook
 
-The reverse of graduation: a **Copy to workspace** button on every Workflows tile drops an editable copy into the Workspace, so a built-in pipeline becomes a starting point to iterate on rather than just run. The original is untouched — the copy is a fresh notebook in the user's workspace store, free to edit or graduate. It takes the source's name, so if a notebook by that name already exists the copy is refused; rename the existing one and copy again. Mechanics in `.claude/reference/architecture/app_internals.md`.
+The reverse of graduation: a **Copy to workspace** button on every workflow's explorer card drops an editable copy into the Workspace, so a built-in pipeline becomes a starting point to iterate on rather than just run. The original is untouched — the copy is a fresh notebook in the user's workspace store, free to edit or graduate. It takes the source's name, so if a notebook by that name already exists the copy is refused; rename the existing one and copy again. Mechanics in `.claude/reference/architecture/app_internals.md`.
 
 ## The SDK Loop
 
