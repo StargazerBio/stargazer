@@ -51,12 +51,18 @@ from typing import Any, get_type_hints
 
 import flyte.storage
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    JSONResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 
 from app import config, notebooks
 from app.identity import User, user_from_request
 from stargazer.assets import ASSET_REGISTRY, Notebook, build_asset
 from stargazer.assets.asset import Asset
+from stargazer.config import logger
 from stargazer.utils.cid import CidBuilder
 from stargazer.utils.index import SqlIndex, make_index
 from stargazer.utils.pinata import TUS_CHUNK_BYTES, PinataClient, _stamp_owner
@@ -120,13 +126,18 @@ def _require_owner(request: Request) -> User:
     return _check_owner(_require_user(request))
 
 
-def _check_owner(user: User) -> User:
-    """`user` if they own this dashboard, else a 403.
+def is_owner(user: User) -> bool:
+    """Whether `user` owns this dashboard, and so reaches its private assets.
 
     Locally, with no owner baked in (`SG_OWNER_SUBJECT`), any signed-in
     user is the owner.
     """
-    if config.OWNER_SUBJECT and user.subject != config.OWNER_SUBJECT:
+    return not config.OWNER_SUBJECT or user.subject == config.OWNER_SUBJECT
+
+
+def _check_owner(user: User) -> User:
+    """`user` if they own this dashboard (`is_owner`), else a 403."""
+    if not is_owner(user):
         raise HTTPException(
             status_code=403,
             detail="Only this dashboard's owner can reach its private assets.",
@@ -246,7 +257,9 @@ async def assets_list(request: Request):
     when the dashboard has no public assets) and `stargazer` (the shipped
     notebooks, anonymous). Every other query param is a keyvalue the entries
     must carry, applied to each source alike. Sources come back in that
-    order, each entry carrying its `source`.
+    order, each entry carrying its `source`. A public tier that can't be
+    read leaves the other sources' entries, and the response names it in
+    `Stargazer-Unavailable`.
     """
     sources = request.query_params.getlist("source")
     if not sources or any(s not in SOURCES for s in sources):
@@ -259,9 +272,16 @@ async def assets_list(request: Request):
         _require_public()
     filters = {k: v for k, v in request.query_params.items() if k != "source"}
     entries = []
+    headers = {}
     for source in (s for s in SOURCES if s in sources):
-        entries += await _source_entries(source, filters)
-    return entries
+        try:
+            entries += await _source_entries(source, filters)
+        except Exception as exc:
+            if source != "public":
+                raise
+            logger.warning(f"Public listing failed: {exc}")
+            headers["Stargazer-Unavailable"] = source
+    return JSONResponse(entries, headers=headers)
 
 
 @router.post("/assets/update")

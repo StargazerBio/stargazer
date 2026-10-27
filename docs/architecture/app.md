@@ -112,7 +112,9 @@ in the explorer, which lists entries from three sources together:
 
 The explorer starts on Mine and Stargazer, so the tutorials are in front of a
 new user without the whole public tier, and any mix of sources can be on at
-once. One listing route returns the union, each entry marked with its source,
+once. Mine is offered only to the dashboard's owner, so an admin visiting
+someone's dashboard browses Stargazer and Public. When the public tier can't
+be read, the other sources still list and the page says Public is missing. One listing route returns the union, each entry marked with its source,
 and keyvalue filters apply to every source alike. Routes live in
 `app/assets.py`; mechanics and the route table are in
 `.claude/reference/architecture/app_internals.md`.

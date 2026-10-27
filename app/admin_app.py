@@ -75,7 +75,7 @@ from flyte.remote import App, Run
 
 from app import config, github_import
 from app import workspace_store as store
-from app.assets import TUS_CHUNK_BYTES, TUS_MAX_BYTES, public_assets_on
+from app.assets import TUS_CHUNK_BYTES, TUS_MAX_BYTES, is_owner, public_assets_on
 from app.assets import router as assets_router
 from app.identity import CurrentUser, User, user_from_request
 from app.init import init
@@ -457,6 +457,7 @@ async def _teardown_notebook_pods(user: User, slug: str) -> None:
 async def dashboard(request: Request, user: CurrentUser):
     """Render the owner's dashboard: their workspace, then the asset explorer."""
     store_ready = _store_ready()
+    visitor = user_from_request(request) or user
     published = await _published_slugs(user) if store_ready else set()
     workspace = await _workspace_tiles(user, published) if store_ready else []
     return templates.TemplateResponse(
@@ -470,8 +471,10 @@ async def dashboard(request: Request, user: CurrentUser):
             "settings": await _settings(user),
             "version": config.VERSION,
             "console_runs_url": _console_runs_url(),
-            # The asset browser compares `_owner` against the visitor.
-            "username": (user_from_request(request) or user).subject,
+            # The explorer compares `_owner` against the visitor, and offers
+            # the owner's own assets only to the owner.
+            "username": visitor.subject,
+            "mine_on": is_owner(visitor),
             "public_assets": public_assets_on(),
             "tus_max_bytes": TUS_MAX_BYTES,
             "tus_chunk_bytes": TUS_CHUNK_BYTES,

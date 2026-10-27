@@ -377,6 +377,22 @@ class TestSources:
         assert _list(client, "stargazer", "public").status_code == 503
         assert _list(client, "stargazer").status_code == 200
 
+    def test_a_failing_public_tier_leaves_the_other_sources(
+        self, fake_pinata, private_store, client, monkeypatch
+    ):
+        async def down(_keyvalues):
+            raise RuntimeError("upstream down")
+
+        monkeypatch.setattr(fake_pinata, "query", down)
+        _auth(client, OWNER)
+        cid = _upload(client).headers["Stargazer-Cid"]
+        resp = _list(client, "mine", "public", "stargazer")
+        assert resp.status_code == 200
+        assert resp.headers["Stargazer-Unavailable"] == "public"
+        assert {e["source"] for e in resp.json()} == {"mine", "stargazer"}
+        assert [e["cid"] for e in resp.json() if e["source"] == "mine"] == [cid]
+        assert "Stargazer-Unavailable" not in _list(client, "stargazer").headers
+
     def test_no_or_unknown_source_is_400(self, client):
         assert _list(client).status_code == 400
         assert _list(client, "elsewhere").status_code == 400

@@ -194,6 +194,15 @@ def test_home_page_carries_the_asset_browser(client, monkeypatch):
     assert f'USERNAME = "{ALICE}"' in html
 
 
+def test_a_visitor_who_isnt_the_owner_isnt_offered_mine(client):
+    """An admin visiting someone's dashboard browses Stargazer's notebooks,
+    not the owner's assets, which the listing refuses them."""
+    _as(client, BOB, "Bob Admin")
+    html = client.get("/").text
+    assert 'data-source="mine"' not in html
+    assert '<button data-source="stargazer" aria-pressed="true">' in html
+
+
 def test_shipped_notebooks_have_no_section_of_their_own(client):
     """Tutorials and Workflows are explorer entries, not tiles on the page."""
     _as(client)

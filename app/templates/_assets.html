@@ -300,7 +300,9 @@
 
     <div class="assets-controls">
         <div class="seg" id="source-tabs" role="group" aria-label="Sources">
+            {% if mine_on %}
             <button data-source="mine" aria-pressed="true">Mine</button>
+            {% endif %}
             {% if public_assets %}
             <button data-source="public" aria-pressed="false">Public</button>
             {% endif %}
@@ -318,6 +320,11 @@
             <button class="btn btn-muted" id="filter-apply" type="button">Filter</button>
         </div>
     </div>
+
+    <p class="upload-note" id="source-note" hidden>
+        Public data couldn't be loaded just now, so it isn't shown. Try again
+        in a minute.
+    </p>
 
     <div class="asset-region" id="graph-region">
         <div class="graph-cap" id="graph-cap" hidden></div>
@@ -409,8 +416,13 @@ const TUS_CHUNK_BYTES = {{ tus_chunk_bytes }};
 
 const NODE_CAP = 150;
 const state = {
-    // Mine and Stargazer to start: the public tier is opt-in.
-    sources: new Set(["mine", "stargazer"]),
+    // The sources pressed in the page: Mine (for the owner) and Stargazer.
+    // The public tier is opt-in.
+    sources: new Set(
+        [...document.querySelectorAll("#source-tabs [aria-pressed=true]")].map(
+            (b) => b.dataset.source
+        )
+    ),
     view: "graph",
     filters: {},
     records: [],
@@ -470,6 +482,7 @@ function listParams() {
 
 async function fetchRecords() {
     setRegionMessage(null);
+    $("source-note").hidden = true;
     if (state.sources.size === 0) {
         state.records = [];
         renderView();
@@ -485,6 +498,8 @@ async function fetchRecords() {
             throw new Error(body.detail || "HTTP " + resp.status);
         }
         state.records = await resp.json();
+        // A source the dashboard couldn't read just now; the rest still show.
+        $("source-note").hidden = !resp.headers.get("Stargazer-Unavailable");
     } catch (err) {
         state.records = [];
         setRegionMessage("Couldn't load assets: " + err.message, true);
