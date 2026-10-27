@@ -11,20 +11,66 @@ Each user's DSQL index is always there, so the launch's state moves into it, and
 
 ## Plan
 
-- [ ] **A per-user state table.** One table per user beside their index table, `key TEXT PRIMARY KEY, value TEXT, updated_at`, for the dashboard's own per-user state (this ticket's launches, then ticket `settings-in-state-table`). Its name comes from the index table's (e.g. `assets.u_jane_state` for `assets.u_jane`), so a deploy passes nothing new.
+- [x] **A per-user state table.** One table per user beside their index table, `key TEXT PRIMARY KEY, value TEXT, updated_at`, for the dashboard's own per-user state (this ticket's launches, then ticket `settings-in-state-table`). Its name comes from the index table's (e.g. `assets.u_jane_state` for `assets.u_jane`), so a deploy passes nothing new.
   - SDK: its DDL beside `postgres_table_sql` in `stargazer.utils.index`. `PostgresIndex` makes it itself, as it makes the index table, so the devbox needs nothing; `DsqlIndex` still never runs DDL.
   - Infra: `ensure_table_and_login` makes it and grants the login row privileges on it.
   - Infra: `upgrade` calls `ensure_user_index` before each deploy, so table changes roll out with the code. `upgrade` then needs the admin's AWS credentials, which `tenant.env` already names.
   - App: a small module (e.g. `app/user_state.py`) with get, set, delete and list-by-prefix, on the index's connection and its rerun on serialization failure (SQLSTATE 40001). Make public what it needs from the index rather than reaching into `_connect` and `_write`.
-- [ ] **`/launch`** writes the pending launch as one row, key `launch:<slug>:<mode>`, value the build run's name and the image URI, and answers 202 as today. A launch while that row is pending answers the same 202.
-- [ ] **`/launch/status`** reads the pending rows. For each, the build run's phase decides:
+- [x] **`/launch`** writes the pending launch as one row, key `launch:<slug>:<mode>`, value the build run's name and the image URI, and answers 202 as today. A launch while that row is pending answers the same 202.
+- [x] **`/launch/status`** reads the pending rows. For each, the build run's phase decides:
   - running: reported as `building`, as today.
   - succeeded: rebuild the notebook's environment from its stored source (as `/launch` does), serve it on `flyte.Image.from_base(<uri>)`, which skips Flyte's build check, and delete the row. Delete first, conditionally, so only the poll that deleted it serves.
   - failed: keep the reason in the row and report it as `failed` until the notebook is launched again.
-- [ ] **Removed:** `_Build`, `_builds`, `_serve_when_built`, and `_forget_build` with its import of Flyte's private `ImageBuildEngine` caches.
-- [ ] **Docs:** the launch section of `docs/architecture/app.md` and `app_internals.md`, the index and state tables in the Asset Index section, and the module docstrings touched.
+- [x] **Removed:** `_Build`, `_builds`, `_serve_when_built`, and `_forget_build` with its import of Flyte's private `ImageBuildEngine` caches.
+- [x] **Docs:** the launch section of `docs/architecture/app.md` and `app_internals.md`, the index and state tables in the Asset Index section, and the module docstrings touched.
 
 ## Verification
 
 - Tests first: a pending launch is reported as building by a fresh process (module state cleared); a succeeded run is served once and its row deleted; a failed run reports its reason until the next launch. Postgres tier: the state table on a login with only row privileges on it.
 - Tenant, test account: launch a workspace notebook whose `main_env` layers a new package, run `./stargazer-users upgrade` while it builds, and the pod comes up once the build finishes. Then a `main_env` with a package that doesn't exist: the failure reaches the page after a redeploy mid-build too.
+
+## As built
+
+Three departures from the plan, each for a reason found while building:
+
+- **No `from_base` URI.** On Union the image's registry is unset and the remote builder picks it, so the URI isn't known until the build has finished. On success, the poll that takes the row runs the launch path again (`_launch`). Its build check now finds the image and serves it, with one image-service call. The row holds the run's name and URL and the notebook's section.
+- **`_forget_build` stays**, now called before every launch's build check. Flyte's `async_lru` caches would otherwise hand a launch after a failed build the same failed run, so it would never build again in that process. It still imports `flyte._internal`.
+- **The serve after the build runs in the background** (`_serving`), reported as building until it settles. `serve.aio` watches the app until it's ready, which can take minutes, too long to hold a status poll. That serve window is the only state kept in memory, and the serve has already been submitted by the time a restart could lose it.
+- **Infra `resume` ensures the index too.** `upgrade` skips paused users, so a user paused across this rollout would resume onto a dashboard with no state table.
+
+The infra change (`ensure_table_and_login` makes and grants the state table; `upgrade` and `resume` call `ensure_user_index` before deploying; `AGENTS.md`) is stashed in the infra repo as `launch-build-state: state table + upgrade/resume ensure index`. It imports `state_table_sql` from stargazer, so it's applied and committed to infra's `main` only after this PR merges. Until then infra's `main` keeps working against stargazer's `main`.
+
+## Verification recipe: a launch's build across a dashboard restart
+
+A workspace notebook whose `main_env` needs an image that isn't built yet shows as building. Redeploying the dashboard while the image builds doesn't lose the launch: the pod comes up when the build finishes. A build that fails is reported on the page even after a redeploy.
+
+### Sub-features
+
+- **R1** A pending launch is reported building by a freshly deployed dashboard.
+- **R2** Once the build succeeds, the pod is served once, and the tile shows Open and Stop.
+- **R3** A failed build's reason reaches the page after a mid-build redeploy, until the next launch.
+
+### How to get to it (user POV)
+
+Workspace tile, then Edit, on a notebook whose setup block layers a new package onto `notebook_base`.
+
+### Driving it
+
+Preconditions: `aws sso login --profile pryce`, then apply infra's stash and point infra at this worktree. The test account's index has to get its state table before its dashboard is served.
+
+```bash
+cd ../infra && git stash apply <sha>
+STARGAZER_CHECKOUT=<worktree> ./stargazer-users onboard --email <test account> --first-name … --last-name …   # ensures u-pryce's index, redeploys only its dashboard
+```
+
+1. Create a workspace notebook whose `main_env` is `notebook_env.clone_with(name="lbs", image=notebook_base.with_pip_packages("<a package no image has yet>"))`. Click Edit. Pass: the tile shows the build link.
+2. Mid-build, `union_dashboard.py deploy` from the worktree, then reload the dashboard. Pass: the tile still shows the build link (R1).
+3. Wait for the build. Pass: within one poll of the run succeeding, the tile shows Open and Stop, and `union_dashboard.py check nb-<slug>-edit` serves the new image (R2).
+4. Repeat with a package that doesn't exist, redeploying mid-build. Pass: the page alerts "Launch failed: This notebook's image failed to build: …" (R3).
+5. `union_dashboard.py teardown`. Pass: live runs `[]`.
+
+### Gotchas
+
+- The AWS SSO session expires; `aws sso login --profile pryce` before onboarding.
+- Never `stargazer-users upgrade` from the branch: it redeploys every user's dashboard.
+
