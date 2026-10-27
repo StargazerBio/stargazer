@@ -951,6 +951,34 @@ async def test_a_failed_build_is_reported_through_status(
         await _status_once_built(ac)
 
 
+async def test_an_unexpected_error_after_the_build_is_a_failure(
+    aclient, served, builder, union, monkeypatch
+):
+    """A background serve that raises is reported failed, not building forever."""
+    builder.built = False
+    real_serve = admin_app._serve
+    calls = []
+
+    async def serve_raising_once(env, slug, mode):
+        calls.append(slug)
+        if len(calls) == 1:
+            raise RuntimeError("control plane went away")
+        return await real_serve(env, slug, mode)
+
+    monkeypatch.setattr("app.admin_app._serve", serve_raising_once)
+    async with aclient as ac:
+        await _alaunch(ac, "qc-run")
+        builder.runs[0].finish()
+        status = await _status_once_built(ac)
+        [failed] = status["failed"]
+        assert (failed["slug"], failed["mode"]) == ("qc-run", "edit")
+        assert "control plane went away" in failed["error"]
+
+        again = await _alaunch(ac, "qc-run")
+        assert again.status_code == 200
+        assert again.json() == {"url": "https://nb.example"}
+
+
 # ---------------------------------------------------------------------------
 # /launch/status, /stop, /workspace/cleanup
 # ---------------------------------------------------------------------------

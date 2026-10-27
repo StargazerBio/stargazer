@@ -920,7 +920,11 @@ def _forget_build(image: flyte.Image) -> None:
 async def _serve_when_built(
     key: tuple[str, str], env: flyte.app.AppEnvironment, run: Run
 ) -> None:
-    """Wait for a launch's image build, then serve its pod or keep why it failed."""
+    """Wait for a launch's image build, then serve its pod or keep why it failed.
+
+    Every exit settles the launch's entry: anything unexpected is kept as its
+    failure, or the notebook would show as building until a restart.
+    """
     slug, mode = key
     try:
         await run.wait.aio(quiet=True)
@@ -929,11 +933,15 @@ async def _serve_when_built(
         resp = _build_failed(slug, exc)
     else:
         resp = None
-    _forget_build(env.image)
-    if resp is None:
-        with forget_new_environments():
-            resp = await _serve(env, slug, mode)
-    if resp.status_code == 422:
+    try:
+        _forget_build(env.image)
+        if resp is None:
+            with forget_new_environments():
+                resp = await _serve(env, slug, mode)
+    except Exception as exc:
+        logger.exception(f"launch after the image build failed for {slug!r}")
+        resp = _failed("launch", exc)
+    if resp.status_code in (422, 500):
         _builds[key].error = json.loads(resp.body)["error"]
     else:
         del _builds[key]
