@@ -159,3 +159,5 @@ The built-in browser pane runs no animation frames while it's hidden, so the sim
 ### Evidence
 
 - Local, 150 synthetic records (measured): 150 nodes and 159 links drawn; stars hued by type with labels at zoom; after settling, 0 paints in 3 s idle; no console errors. With the earlier position-based collision the minimum star spacing ended at 0.005 (stacked); with velocity-based collision it measured 5.2 after a settle.
+- Union, test account dashboard at `49c6d3c` (measured): force-graph loaded, 84 entries (Mine + Stargazer) drawn as 84 stars with 39 links across 20 types; the first eight types hued, the other twelve gray; screenshot at rest shows type clusters and links. Hover and click could not be driven: the built-in browser pane was hidden, so it ran no animation frames, and force-graph detects the pointer in its frame loop. Torn down: `stopped: ['dashboard']`, live runs `[]`, all 7 apps in `u-pryce` STOPPED.
+- Not yet verified on a shown pane: hover focus and tooltip, click fly-to and card, drag, filter-change animation, reduced motion, phone width.
