@@ -976,7 +976,10 @@ function renderDetail() {
     for (const k of Object.keys(kv)) {
         if (k === "asset") continue;
         const sys = k.startsWith("_") ? " sys" : "";
+        // An empty value can't be filtered on: it would match entries
+        // without the key too.
         const by =
+            kv[k] === "" ? "" :
             `<button type="button" class="filter-by" data-filter-key="${esc(k)}" ` +
             `data-filter-val="${esc(kv[k])}" title="Show only entries with this">filter by this</button>`;
         meta += `<dt class="${sys.trim()}">${esc(k)}${sys ? " (system)" : ""}</dt><dd>${esc(kv[k])}${by}</dd>`;
