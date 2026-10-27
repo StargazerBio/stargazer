@@ -5,7 +5,6 @@ priority: normal
 created: 2026-10-26
 blocked_by:
   - public-notebooks
-  - open-from-github
 ---
 
 The dashboard's Settings section becomes a Settings button in the header

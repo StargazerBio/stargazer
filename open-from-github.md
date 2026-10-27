@@ -1,6 +1,6 @@
 ---
 title: Open a notebook from GitHub in the workspace
-status: review
+status: done
 priority: normal
 created: 2026-10-17
 pr: 91
@@ -89,3 +89,7 @@ in the built-in browser.
 - Teardown: `assets` deleted from the workspace (its `nb-assets-run` app went
   with it); `union_dashboard.py teardown` stopped the dashboard, `live runs:
   []`; every app in `u-pryce` STOPPED.
+
+## Outcome
+
+Shipped in PR #91 (merge `c1029b5`). The Workspace grid's Open from GitHub tile downloads one `.py` file from a GitHub page or raw link (`app/github_import.py`, `raw.githubusercontent.com` only, 1 MB cap, no redirects) into the user's workspace as a new notebook (`POST /workspace/github`). Verified by the unit tier and on Union (Verification above). Left: a whole folder, ticket `open-github-folder`; an opened notebook can still take a shipped notebook's name until ticket `workspace-slug-shadows-shipped` merges. No review comments.
