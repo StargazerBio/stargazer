@@ -13,3 +13,7 @@ Ticket `sdk-package` is the groundwork. Decided 2026-10-26: PyPI, as the
 distribution `stargazer-bio` (`stargazer` is taken there by an unrelated
 package), importing as `stargazer`, with `0.x` versions and no compatibility
 promise before 1.0.
+
+Shelved with ticket `sdk-package` on 2026-10-27: the SDK runs from source
+everywhere, so there is nothing to publish until an outside user needs to
+pin versions. See its Shelved section.
