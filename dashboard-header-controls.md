@@ -1,8 +1,9 @@
 ---
 title: Settings and cleanup move into the dashboard header
-status: doing
+status: review
 priority: normal
 created: 2026-10-26
+pr: 94
 blocked_by:
   - public-notebooks
 ---
