@@ -9,8 +9,8 @@ Union's login gates the public address; `app.identity` decides who else gets
 in, and whoever does sees the owner's dashboard. It has three jobs:
 
 1. **Dashboard.** Renders the notebook tile sections: Workflows and
-   Tutorials (shipped in the per-notebook image), and Workspace (the owner's
-   notebooks). The owner's notebooks live in the workspace store
+   Tutorials (shipped in the per-notebook image), Workspace (the owner's
+   notebooks) and Public notebooks (everyone's published ones). The owner's notebooks live in the workspace store
    (`app.workspace_store`), keyed by their Union subject, so saving needs no
    setup. On Union its header links to the project's runs in the Union
    console (`config.CONSOLE_URL`).
@@ -19,7 +19,8 @@ in, and whoever does sees the owner's dashboard. It has three jobs:
    (`app.github_import`) and download, all against the workspace store. A notebook's tile name and description
    (`app.notebook_meta`) and its pod's environment (`main_env`,
    `app.notebook_environment`) are declared in its setup block, which the
-   tile's gear edits.
+   tile's gear edits. Publish and Unpublish put a workspace notebook on the
+   public tier and take it off again (`app.public_notebooks`).
 
 3. **Launch broker.** `POST /launch` builds a per-notebook AppEnvironment via
    `app.per_notebook.per_notebook_env(...)` from the environment the
@@ -107,6 +108,13 @@ from app.per_notebook import (
     app_name,
     list_project_apps,
     per_notebook_env,
+)
+from app.public_notebooks import (
+    AlreadyPublic,
+    public_notebooks,
+    public_source,
+    publish,
+    unpublish,
 )
 from app.templates import templates
 from stargazer.config import (
@@ -364,17 +372,55 @@ def _tile_text(slug: str, name: str, description: str) -> tuple[str, str]:
     return name or _display_name(slug), description or _GENERIC_WS_DESC
 
 
-def _workspace_tile_dict(slug: str, name: str, description: str) -> dict:
-    """A workspace tile titled by the notebook's `main_name` and `main_description`."""
-    return _tile_dict(slug, *_tile_text(slug, name, description), "workspace")
+def _workspace_tile_dict(
+    slug: str, name: str, description: str, published: bool = False
+) -> dict:
+    """A workspace tile titled by the notebook's `main_name` and `main_description`.
+
+    It offers Publish when this dashboard has public assets, and Unpublish
+    when the notebook is `published`.
+    """
+    return {
+        **_tile_dict(slug, *_tile_text(slug, name, description), "workspace"),
+        "publishable": public_assets_on(),
+        "published": published,
+    }
 
 
-async def _workspace_tiles(user: User) -> list[dict]:
+async def _public_tiles(user: User) -> tuple[list[dict], set[str]]:
+    """The public notebooks' tiles, and the slugs of the user's published ones.
+
+    Best-effort: a listing that fails shows no public notebooks rather than
+    failing the dashboard.
+    """
+    if not public_assets_on():
+        return [], set()
+    try:
+        records = await public_notebooks()
+    except Exception as exc:
+        logger.warning(f"Public notebook listing failed: {exc}")
+        return [], set()
+    tiles = []
+    published = set()
+    for record in records:
+        kv = record["keyvalues"]
+        slug = kv.get("slug", "")
+        tile = _tile_dict(
+            slug, kv.get("title") or slug, kv.get("description", ""), "public"
+        )
+        tiles.append({**tile, "cid": record["cid"]})
+        if kv.get("_owner") == user.subject:
+            published.add(slug)
+    return tiles, published
+
+
+async def _workspace_tiles(user: User, published: set[str]) -> list[dict]:
     """Build Workspace tiles from the user's own notebooks in the store.
 
     Each notebook's setup block is read (in parallel, best-effort) for its
     tile's name and description. A failed read falls back to the
     filename-derived title and the generic blurb rather than dropping the tile.
+    A slug in `published` is one the user has published.
     """
     try:
         files = await store.list_workspace(user.subject)
@@ -392,7 +438,7 @@ async def _workspace_tiles(user: User) -> list[dict]:
                 name, desc = notebook_name(src), notebook_description(src)
         except Exception as exc:
             logger.warning(f"Workspace metadata read failed for {slug!r}: {exc}")
-        return _workspace_tile_dict(slug, name, desc)
+        return _workspace_tile_dict(slug, name, desc, slug in published)
 
     return list(await asyncio.gather(*[_tile(s) for s in slugs]))
 
@@ -425,7 +471,8 @@ async def _teardown_notebook_pods(user: User, slug: str) -> None:
 async def dashboard(request: Request, user: CurrentUser):
     """Render the owner's dashboard: their notebooks, then the asset browser."""
     store_ready = _store_ready()
-    workspace = await _workspace_tiles(user) if store_ready else []
+    public, published = await _public_tiles(user)
+    workspace = await _workspace_tiles(user, published) if store_ready else []
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -442,6 +489,7 @@ async def dashboard(request: Request, user: CurrentUser):
                 for n in by_section("workflows")
             ],
             "workspace": workspace,
+            "public_notebooks": public,
             "settings": await _settings(user),
             "version": config.VERSION,
             "console_runs_url": _console_runs_url(),
@@ -532,12 +580,15 @@ async def _create_notebook(
     return None
 
 
-def _copy_source(slug: str, section: str) -> tuple[str, str, str]:
+async def _copy_source(slug: str, section: str) -> tuple[str, str, str]:
     """Resolve a copy source to `(source, default_title, default_description)`.
 
-    Raises `LookupError` when the source doesn't exist and `ValueError` for a
-    section that can't be copied from.
+    A `workflows` source is a shipped notebook's slug; a `public` one is a
+    published notebook's CID. Raises `LookupError` when the source doesn't
+    exist and `ValueError` for a section that can't be copied from.
     """
+    if section == "public":
+        return await public_source(slug)
     if section == "workflows":
         nb = by_slug(slug)
         source = shipped_source(nb.path_in_image) if nb else None
@@ -551,10 +602,11 @@ def _copy_source(slug: str, section: str) -> tuple[str, str, str]:
 async def workspace_copy(
     user: CurrentUser, slug: str = Form(...), section: str = Form(...)
 ):
-    """Copy a Workflows notebook into the user's workspace.
+    """Copy a Workflows or public notebook into the user's workspace.
 
-    The source is a shipped Workflows notebook; it's written as a fresh,
-    editable workspace notebook. The copy keeps the source's setup block, and
+    The source is a shipped Workflows notebook, or a public notebook by its
+    CID (a 503 when this dashboard has no public assets); it's written as a
+    fresh, editable workspace notebook. The copy keeps the source's setup block, and
     the workflow's title and blurb are declared in it as `main_name` and
     `main_description`, so it tiles like any other workspace notebook. The
     target slug is derived from the source title; like `/workspace/create` it
@@ -562,8 +614,10 @@ async def workspace_copy(
     """
     if bad := _workspace_guard():
         return bad
+    if section == "public" and (bad := _public_guard()):
+        return bad
     try:
-        source, title, desc = _copy_source(slug, section)
+        source, title, desc = await _copy_source(slug, section)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     except LookupError as exc:
@@ -766,6 +820,63 @@ async def workspace_download(user: CurrentUser, slug: str):
         media_type="text/x-python; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+def _public_guard() -> JSONResponse | None:
+    """The 503 a public-notebook route returns without public assets, else None."""
+    if public_assets_on():
+        return None
+    return JSONResponse(
+        {"error": "Shared data isn't available on this deployment."}, status_code=503
+    )
+
+
+@asgi_app.post("/workspace/publish")
+async def workspace_publish(user: CurrentUser, slug: str = Form(...)):
+    """Publish a workspace notebook to the public tier, as the owner's.
+
+    Uploads the notebook's file as a `Notebook` asset titled by its setup
+    block, replacing the owner's earlier public copy (`app.public_notebooks`).
+    A 400 for keyvalues past Pinata's limits, raised before anything is sent,
+    and a 409 when the same bytes are already public under another record.
+    """
+    if bad := _workspace_guard(slug) or _public_guard():
+        return bad
+    source = await store.get_workspace_notebook(user.subject, f"{slug}.py")
+    if source is None:
+        return JSONResponse({"error": "notebook not found"}, status_code=404)
+    title, _ = _tile_text(slug, notebook_name(source), "")
+    try:
+        cid = await publish(
+            user.subject, slug, title, notebook_description(source), source
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except AlreadyPublic as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+    except Exception as exc:
+        logger.error(f"Notebook publish failed for {slug!r}: {exc}")
+        return _failed("publish", exc)
+    return JSONResponse({"slug": slug, "cid": cid})
+
+
+@asgi_app.post("/workspace/unpublish")
+async def workspace_unpublish(user: CurrentUser, slug: str = Form(...)):
+    """Delete the owner's public copy of a workspace notebook.
+
+    Only the owner's records go: another user's notebook with the same slug
+    stays. A 404 when the owner has none.
+    """
+    if bad := _workspace_guard(slug) or _public_guard():
+        return bad
+    try:
+        removed = await unpublish(user.subject, slug)
+    except Exception as exc:
+        logger.error(f"Notebook unpublish failed for {slug!r}: {exc}")
+        return _failed("unpublish", exc)
+    if not removed:
+        return JSONResponse({"error": "This notebook isn't public."}, status_code=404)
+    return JSONResponse({"status": "unpublished", "slug": slug})
 
 
 # ---------------------------------------------------------------------------

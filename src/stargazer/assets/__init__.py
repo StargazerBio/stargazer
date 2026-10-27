@@ -13,6 +13,7 @@ from stargazer.assets.alignment import (
     DuplicateMetrics,
 )
 from stargazer.assets.asset import Asset, assemble
+from stargazer.assets.notebook import Notebook
 from stargazer.assets.reads import R1, R2
 from stargazer.assets.reference import (
     AlignerIndex,
@@ -119,6 +120,7 @@ __all__ = [
     "DuplicateMetrics",
     "KnownSites",
     "KnownSitesIndex",
+    "Notebook",
     "Reference",
     "ReferenceIndex",
     "SequenceDict",

@@ -19,6 +19,15 @@
     <h3>{{ tile.title }}</h3>
     {% if tile.description %}<p>{{ tile.description }}</p>{% endif %}
     <div class="tile-actions">
+        {% if tile.section == 'public' %}
+        <div class="launch-row">
+            <button type="button" class="btn btn-muted"
+                    data-copy-slug="{{ tile.cid }}" data-copy-section="public"
+                    title="Copy into your workspace as an editable notebook">
+                Copy to workspace
+            </button>
+        </div>
+        {% else %}
         <div class="launch-row">
             <form method="post" action="/launch" class="launch-form">
                 <input type="hidden" name="slug" value="{{ tile.slug }}">
@@ -41,6 +50,20 @@
                href="/workspace/download?slug={{ tile.slug | urlencode }}"
                title="Download this notebook's source">Download</a>
         </div>
+        {% if tile.publishable %}
+        <div class="launch-row">
+            <button type="button" class="btn btn-muted"
+                    data-publish-slug="{{ tile.slug }}"
+                    title="Share this notebook with everyone">
+                {{ 'Republish' if tile.published else 'Publish' }}
+            </button>
+            {% if tile.published %}
+            <button type="button" class="btn btn-muted"
+                    data-unpublish-slug="{{ tile.slug }}"
+                    title="Stop sharing this notebook">Unpublish</button>
+            {% endif %}
+        </div>
+        {% endif %}
         {% endif %}
         {% if tile.section == 'workflows' %}
         <div class="launch-row">
@@ -50,6 +73,7 @@
                 Copy to workspace
             </button>
         </div>
+        {% endif %}
         {% endif %}
     </div>
 </div>
