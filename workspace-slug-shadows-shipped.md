@@ -1,8 +1,9 @@
 ---
 title: A workspace notebook can share a shipped notebook's app name
-status: doing
+status: review
 priority: normal
 created: 2026-10-26
+pr: 93
 ---
 
 A notebook's pod is named `nb-<slug>-<mode>` whatever its section, and
