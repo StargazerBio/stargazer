@@ -152,3 +152,63 @@ Publish and Unpublish.
 - [ ] **The SDK's tasks and workflows as entries.** The MCP server's
       registry lists them; they could be `stargazer` entries too, with their
       signatures on the detail card. Left out until someone wants them.
+
+## Choices made in implementation
+
+- No `source` on the listing, or an unknown one, is a 400.
+- A shipped notebook's source downloads from the `stargazer` network on the
+  download route (`/assets/download/{cid}?network=stargazer`).
+- An entry's identity in the page is `source:cid`, since one CID can sit in
+  two sources.
+- Notebook cards have no metadata editor; a notebook's metadata comes from
+  where it's published.
+- Copy to workspace on a card only shows when the dashboard has a workspace.
+- The launch, status and copy JS lives in `app/static/launch.js`.
+
+## Verification recipe: The unified asset explorer
+
+The dashboard's home page is the Workspace and the explorer. The explorer
+lists the user's assets, the public tier and Stargazer's shipped notebooks
+together, picked with a Mine · Public · Stargazer control; a notebook's card
+launches, copies and downloads it the way its tile did.
+
+### Sub-features
+
+- `ux-default`: on load, Mine and Stargazer are pressed, Public isn't; the
+  shipped notebooks (4 tutorials, the scRNA workflow) and the user's assets
+  are listed, each with its source. No Workflows, Tutorials or Public
+  notebooks section is on the page.
+- `ux-launch`: a tutorial's card → Edit launches it; the card shows "Open:
+  Edit Mode" and Stop; Open loads the notebook; Stop stops the app.
+- `ux-copy`: Copy to workspace on the scRNA workflow's card adds a workspace
+  tile.
+- `ux-public`: pressing Public adds public records and public notebooks
+  (`source=public`).
+- `ux-upload`: a private upload lands in Mine.
+- `ux-phone`: at 375 px the page has no horizontal scroll
+  (`document.documentElement.scrollWidth <= innerWidth`).
+
+### How to get to it (user POV)
+
+Dashboard → Assets (below the Workspace) → the source buttons, the Graph /
+List toggle, a node or row → its card.
+
+### Driving it
+
+Preconditions: the `verify-stargazer` Union tenant preconditions; the
+built-in browser pane signed in to the console as the test account; the
+Union lock held.
+
+- **Deploy.** With infra's `tenant.env` exported, `uv run --all-extras python .claude/skills/verify-stargazer/scripts/union_dashboard.py deploy`. Open the printed URL from the console page with `location.href`. Replace `window.alert` with a recorder (`window.alerts=[]; window.alert=m=>alerts.push(m)`) before clicking anything that can fail.
+- **Default (`ux-default`).** `[...document.querySelectorAll('#source-tabs button')].map(b=>[b.dataset.source,b.getAttribute('aria-pressed')])` is mine/true, public/false, stargazer/true. Switch to List: five Stargazer rows titled as their tiles were, plus the account's own assets. `document.querySelector('input[name=section][value=tutorials]')` is null until a card is open.
+- **Launch (`ux-launch`).** Click the "2. Tasks" row, then Edit on its card: "Open: Edit Mode" and Stop appear; the Open link loads the marimo editor; Stop restores Edit and Run, and `flyte --config .flyte/union.yaml get app nb-tasks-edit -p <project> -d development` shows it stopped.
+- **Copy (`ux-copy`).** Click the scRNA-seq row, then Copy to workspace: a "scRNA-seq" tile appears in the Workspace. Delete it after.
+- **Public (`ux-public`).** Press Public: rows with source Public appear, including any `notebook` record; `fetch('/assets/list?source=public&asset=notebook')` returns them.
+- **Upload (`ux-upload`).** Upload a small file as Private: it's listed under Mine. Note its CID for teardown.
+- **Phone (`ux-phone`).** `resize_window` mobile, reload, check `scrollWidth <= innerWidth` and screenshot; then preset desktop.
+- **Teardown.** Delete the copied tile; `union_dashboard.py teardown`: `live runs: []`.
+
+### Gotchas
+
+- A failed launch raises a browser alert, which blocks the pane: install
+  the alert recorder first.
