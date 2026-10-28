@@ -185,7 +185,7 @@ async def task_name(input: InputType) -> OutputType:
 ### 4. Resource & Environment Violations
 
 - [ ] Task on the wrong environment for its tool, or a tool missing from its environment's image
-- [ ] Resources set per task instead of on the environment, or too large to fit beside its workflow on the devbox (the header of `devbox/setup.sh`)
+- [ ] Resources set per task instead of on the environment, or too large to fit beside its workflow on the devbox (the header of infra's `devbox/setup.sh`)
 
 ### 5. Documentation Violations
 

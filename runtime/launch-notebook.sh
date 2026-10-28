@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Launch script for notebook pods: baked at /usr/local/bin/launch-notebook.sh
-# in both the hosted notebook-app image and the local `stargazer` image.
+# in the Stargazer image (runtime/Dockerfile).
 # Invoked as the per-notebook AppEnvironment's args:
 #
 #     /usr/local/bin/launch-notebook.sh <mode> <notebook_path>
 #
-# The `stargazer` image (Dockerfile) passes the Assets tutorial, with the rest
-# of its notebooks beside it in /workspace.
+# Run locally, the image's entrypoint (start-local.sh) passes the Assets
+# tutorial, with the rest of its notebooks beside it in /workspace.
 #
 # Three things happen on startup:
 #
@@ -25,7 +25,7 @@
 # `fserve` is PID 1; it runs this script via `Popen(cmd, shell=True)` and on
 # SIGTERM forwards the signal to that ONE direct child only (it does not signal
 # the whole tree). So uvicorn must end up as `fserve`'s direct child:
-#   - The AppEnvironment args prepend `exec` (see app/per_notebook.py), so the
+#   - The AppEnvironment args prepend `exec` (the dashboard's launch), so the
 #     `sh -c` wrapper `fserve` spawns replaces itself with this script instead
 #     of lingering as an intermediate shell. (Debian's /bin/sh does not always
 #     exec-collapse a bare `sh -c "script"`; the explicit `exec` guarantees it.)

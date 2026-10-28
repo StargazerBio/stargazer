@@ -1,11 +1,11 @@
 # /// script
 # requires-python = ">=3.14"
 # dependencies = [
-#   "stargazer",
+#   "stargazer-bio",
 # ]
 #
 # [tool.uv.sources]
-# stargazer = { path = "/stargazer", editable = true }
+# stargazer-bio = { path = "/stargazer", editable = true }
 # ///
 """
 ### Stargazer tasks tutorial.
@@ -30,7 +30,6 @@ app = marimo.App(width="medium")
 with app.setup:
     import csv
     import json
-    import os
     from dataclasses import dataclass
     from typing import ClassVar
 
@@ -55,7 +54,6 @@ with app.setup:
         image=(
             flyte.Image.from_debian_base(
                 name="stargazer-tutorial",
-                registry=os.environ.get("STARGAZER_REGISTRY"),
                 platform=IMAGE_PLATFORM,
             )
             .with_uv_project(

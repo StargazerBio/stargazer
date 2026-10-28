@@ -33,7 +33,7 @@ repos:
         entry: bash -c 'uv run zensical build --clean; status=$?; rm -rf site .cache; exit $status'
         language: system
         pass_filenames: false
-        files: ^(docs/.*\.md|src/.*\.py|app/.*\.py|zensical\.toml|pyproject\.toml)$
+        files: ^(docs/.*\.md|src/.*\.py|zensical\.toml|pyproject\.toml)$
       - id: mcp-server-import
         name: mcp server import check
         entry: uv run --extra mcp python -c "from stargazer.server import mcp"
@@ -41,11 +41,11 @@ repos:
         pass_filenames: false
         files: ^(src/stargazer/(server|registry|marshal)\.py|src/stargazer/assets/.*\.py|pyproject\.toml)$
       # The unit tier: a bare pytest run selects it (`addopts` in
-      # pyproject.toml). The notebook smoke tests need the `notebook` extra
-      # and the app tests `landing`, so all extras.
+      # pyproject.toml). The notebook smoke tests need the `notebook` extra,
+      # so all extras.
       - id: unit-tests
         name: unit tests (pytest)
         entry: uv run --all-extras pytest -q
         language: system
         pass_filenames: false
-        files: ^(src/|app/|cli/|devbox/|tests/|pyproject\.toml$|uv\.lock$)
+        files: ^(src/|runtime/|cli/|tests/|pyproject\.toml$|uv\.lock$)

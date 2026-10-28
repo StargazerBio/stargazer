@@ -16,10 +16,10 @@ Reproduce on the same surface the bug was reported on. A bug reported against a 
 | Surface | Reproduce with |
 |---|---|
 | SDK task or workflow, local | `flyte.with_runcontext(mode="local").run(task, ...)` in a script under `scratch/` or a pytest case |
-| SDK task or workflow, remote | `flyte.run(...)` against the devbox. Check `devbox/setup.sh` first, a known quirk may already explain it |
+| SDK task or workflow, remote | `flyte.run(...)` against the devbox. Check infra's `devbox/setup.sh` first, a known quirk may already explain it |
 | Notebook | `marimo run` or `marimo export` on the notebook, or the smoke test in `tests/notebooks/` |
 | MCP server | the `mcp__stargazer__*` tools directly |
-| App tier (`app/`) | curl against the served app, or Claude in Chrome for pages and flows |
+| Notebook runtime (`runtime/`) | `docker run` the image built from the checkout, then curl or the built-in browser against it |
 
 Do not ask the user to reproduce. Ask only with a specific reason the surface is out of reach (credentials you lack, a cluster that is down), and only after driving it as far as it goes. If it won't fire, tighten conditions or add logging until it does.
 
@@ -45,7 +45,7 @@ The step-1 repro now passes, on the same surface. An inconclusive result or a di
 
 When there is a cheap local test path, add a regression test that fails before the fix and passes after, per the test rules in `AGENTS.md`. When the only real test needs the devbox, Pinata, or a long tool run, keep the repro script instead and say so.
 
-If the bug came from a devbox quirk, add the fix to `devbox/setup.sh` as a step with its reason in the comments, or, when the fix is in app code, explain the quirk in a comment there.
+If the bug came from a devbox quirk, its fix is a step in infra's `devbox/setup.sh`, with its reason in the comments, or, when the fix is in Stargazer's code, a comment there explaining the quirk.
 
 ## Reply
 

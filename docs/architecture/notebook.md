@@ -7,7 +7,7 @@ The SDK (`src/stargazer/` — assets, tasks, workflows) is a first-class surface
 - **The SDK exists so notebooks are trustworthy.** A notebook cell that calls `bwa_mem` or the scRNA pipeline is calling tested, resource-specified, container-pinned code — not a copy-pasted shell command.
 - **Notebooks exist so the SDK gets used and grown.** They are where new analyses are prototyped, where new tasks are first written, and where finished work is published. Every promotion path below starts in a notebook and ends in the SDK or the repo.
 
-This doc covers what notebooks *are* — the taxonomy, who uses them, and how work moves between notebooks and the SDK. The hosting machinery (dashboard, workspace store, pods, sign-in) is covered in [App](app.md).
+This doc covers what notebooks *are* — the taxonomy, who uses them, and how work moves between notebooks and the SDK. What runs in a notebook's pod, and what launches it, is covered in [Notebook Runtime](runtime.md).
 
 ## Execution Context
 
@@ -27,7 +27,7 @@ Notebooks come in three types. The first two match directories under `src/starga
 | **Workflows** | `workflows/` | Image-baked (upstream repo) | Edit or Run | Production pipelines, parameterized — bring your own data (e.g. the scRNA-seq pipeline) |
 | **Workspace** | — | User's workspace store | Edit or Run | The user's own notebooks — authored from scratch or a template, persisted across sessions |
 
-Tutorials and Workflows are the built-in notebooks: they're baked into the image and work for everyone. They're entries in the dashboard's asset explorer under its Stargazer source, with `category` `tutorial` or `workflow` ([App → Asset Manager](app.md#asset-manager)). A user's Workspace, the dashboard's own section, is one folder, saved whole in the [workspace store](app.md#core-concepts), keyed by their account, with no setup: the notebooks side by side at the top, so they can import each other, plus whatever data or helper files the user keeps beside them. The registry of built-in notebooks is `app/notebooks.py`; the user's own tiles are listed from the store at render time.
+Tutorials and Workflows are the built-in notebooks: they're baked into the image and work for everyone. They're entries in the dashboard's asset explorer under its Stargazer source, with `category` `tutorial` or `workflow`. A user's Workspace, the dashboard's own section, is one folder, saved whole in the [workspace store](runtime.md#the-pod-contract), keyed by their account, with no setup: the notebooks side by side at the top, so they can import each other, plus whatever data or helper files the user keeps beside them. The user's own tiles are listed from the store at render time.
 
 Tutorials and Workflows are both image-baked but differ in intent: a tutorial teaches a concept and is read once; a workflow notebook is an off-the-shelf pipeline meant to be run repeatedly against new data.
 
@@ -66,7 +66,7 @@ Researchers write a working task; promotion does the mechanical extraction; PR r
 
 ### Workflow graduation — workspace notebook → built-in workflow
 
-A workspace notebook that proves out a *reusable* pipeline — one others should run against new data — graduates into `notebooks/workflows/`. Graduation is the composite path: first its cell-defined tasks go through task promotion (above), so the heavy lifting lives in the tested SDK; then the notebook itself — now a thin, parameterized UI over SDK calls — is PR'd into `notebooks/workflows/` and registered in `app/notebooks.py`, which lists it in the explorer. It ships to everyone in the next image release. The scRNA-seq pipeline notebook is the template for what a graduated workflow looks like.
+A workspace notebook that proves out a *reusable* pipeline — one others should run against new data — graduates into `notebooks/workflows/`. Graduation is the composite path: first its cell-defined tasks go through task promotion (above), so the heavy lifting lives in the tested SDK; then the notebook itself — now a thin, parameterized UI over SDK calls — is PR'd into `notebooks/workflows/`. It ships to everyone in the next release's image, and the dashboard lists it in the explorer once it's registered there. The scRNA-seq pipeline notebook is the template for what a graduated workflow looks like.
 
 ### Copy to workspace — read-only source → editable notebook
 
@@ -130,15 +130,15 @@ How the *notebook UI* is served — orthogonal to execution context. A notebook 
 | **Edit** | Full marimo editing UI | Tutorials, Workflows, Workspace authoring |
 | **Run** | Read-only app view of the notebook | Shareable views of any notebook |
 
-A notebook runs in one mode at a time — see [App → Core Concepts](app.md#core-concepts).
+A notebook runs in one mode at a time.
 
 ## Adding Notebooks
 
 - **Workspace notebooks** are created from the dashboard (the blank or basic template in `notebooks/templates/`) and live in the user's workspace store — no repo change involved.
-- **Built-in notebooks** (Tutorials and Workflows) are baked into the image: add the `.py` file (standard marimo format, importing only `stargazer` public APIs) under `src/stargazer/notebooks/tutorials/` or `notebooks/workflows/`, register a tile in the `NOTEBOOKS` tuple in `app/notebooks.py`, and it lands when onboarding next builds the `notebook-app` image (`stargazer-users upgrade`).
+- **Built-in notebooks** (Tutorials and Workflows) are baked into the image: add the `.py` file (standard marimo format, importing only `stargazer` public APIs) under `src/stargazer/notebooks/tutorials/` or `notebooks/workflows/`. It ships in the next release's image, and the dashboard lists it once its tile is registered there and its pin moves to that release.
 
 ## In-Notebook AI
 
-**Claude Code rides along in the hosted notebook** — the proxy injects a dropdown terminal overlay (Ctrl+`) into every notebook page with the Claude Code CLI on PATH, for agentic work against the notebook's files and environment. The terminal starts in `/workspace`, and the image bakes one condensed context file, `app/notebook_agent.md`, there as `AGENTS.md`, so every session starts knowing what the pod is (what `/workspace` saves, what's lost when the pod stops), marimo's notebook conventions, Stargazer's task, asset and workflow patterns, and how a run goes local or to the cluster. Until a user edits it, it isn't saved with their workspace, so each launch gets the image's current copy. Once they edit it, their copy is saved and loaded like any of their files. The `stargazer` image seeds the same file into `/workspace` with its notebooks.
+**Claude Code rides along in the hosted notebook** — the proxy injects a dropdown terminal overlay (Ctrl+`) into every notebook page with the Claude Code CLI on PATH, for agentic work against the notebook's files and environment. The terminal starts in `/workspace`, and the image bakes one condensed context file, `runtime/notebook_agent.md`, there as `AGENTS.md`, so every session starts knowing what the pod is (what `/workspace` saves, what's lost when the pod stops), marimo's notebook conventions, Stargazer's task, asset and workflow patterns, and how a run goes local or to the cluster. Until a user edits it, it isn't saved with their workspace, so each launch gets the image's current copy. Once they edit it, their copy is saved and loaded like any of their files. Run locally, the image seeds the same file into `/workspace` with its notebooks.
 
 The stargazer MCP server serves agent users through external coding tools (Claude Code, Cursor, etc.), exposing `list_tasks`, `run_task`, `query_files`, and the rest of the catalog.

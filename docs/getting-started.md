@@ -1,6 +1,6 @@
 # Getting Started
 
-Stargazer installs as a Python package, and the repository's `Dockerfile` builds one end-user Docker image, **`stargazer`**, for running pipelines and exploring data in a notebook with an AI agent alongside.
+Stargazer installs as a Python package (`stargazer-bio`), and each release publishes one end-user Docker image, **`stargazer`**, for running pipelines and exploring data in a notebook with an AI agent alongside.
 
 If you want to add tasks or workflows to Stargazer itself, see [Contributing](guides/contributing.md) for the native setup. The image below is for using Stargazer, not editing it.
 
@@ -10,7 +10,7 @@ If you want to add tasks or workflows to Stargazer itself, see [Contributing](gu
 docker run -p 8080:8080 ghcr.io/stargazerbio/stargazer
 ```
 
-Serves [Marimo](https://marimo.io/) notebooks at `http://localhost:8080` in edit mode, opening on the Assets tutorial. The rest are in the file explorer, in a `notebooks/` folder: `tutorials/`, in reading order Assets, Tasks, Workflows and Execution, `workflows/`, and `templates/` with `blank.py` and `basic.py` to start your own from. Each runs with the packages its own header declares. Start a notebook of your own by copying a template rather than with marimo's *Create a new notebook*, whose notebooks don't have Stargazer installed. From there you can import stargazer tasks, run workflows, and visualize results interactively. The published tag can lag the source; [Contributing → Building Images](guides/contributing.md#building-images) builds it from a checkout under the same name. It is the image hosted notebooks run on (see [Notebooks](architecture/notebook.md) for the notebook types and [App](architecture/app.md) for hosting).
+Serves [Marimo](https://marimo.io/) notebooks at `http://localhost:8080` in edit mode, opening on the Assets tutorial. The rest are in the file explorer, in a `notebooks/` folder: `tutorials/`, in reading order Assets, Tasks, Workflows and Execution, `workflows/`, and `templates/` with `blank.py` and `basic.py` to start your own from. Each runs with the packages its own header declares. Start a notebook of your own by copying a template rather than with marimo's *Create a new notebook*, whose notebooks don't have Stargazer installed. From there you can import stargazer tasks, run workflows, and visualize results interactively. The published image is the latest release; [Contributing → Building Images](guides/contributing.md#building-images) builds it from a checkout under the same name. It is the image hosted notebooks run on (see [Notebooks](architecture/notebook.md) for the notebook types and [Notebook Runtime](architecture/runtime.md) for what's in it).
 
 ## Use Your Own Files
 

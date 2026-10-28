@@ -1,12 +1,11 @@
 <!--
   Notice for files too big to save with the workspace, spliced into every
-  marimo HTML page before the closing body tag by app/proxy.py (read into
+  marimo HTML page before the closing body tag by runtime/proxy.py (read into
   `_SAVE_BANNER_INJECTION` at import), right after the terminal overlay. An
   injected fragment, not a document. It polls the proxy's /__sg__/save-status
   and, for each file over the limit, says it won't be kept and shows the cell
   that stores it as an asset instead. Filenames go in as text nodes, never
-  markup. Baked next to the proxy in the notebook image via per_notebook.py's
-  with_source_file.
+  markup. Baked next to the proxy in the image (runtime/Dockerfile).
 -->
 <style>
   #sg-save-banner { position: fixed; right: 16px; bottom: 16px; z-index: 2147483500;

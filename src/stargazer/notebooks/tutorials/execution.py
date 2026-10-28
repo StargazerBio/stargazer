@@ -2,11 +2,11 @@
 # requires-python = ">=3.14"
 # dependencies = [
 #   "matplotlib",
-#   "stargazer",
+#   "stargazer-bio",
 # ]
 #
 # [tool.uv.sources]
-# stargazer = { path = "/stargazer", editable = true }
+# stargazer-bio = { path = "/stargazer", editable = true }
 # ///
 """
 ### Stargazer execution tutorial.

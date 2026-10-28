@@ -16,8 +16,6 @@ import certifi
 import psycopg
 import pytest
 
-from app import assets as assets_mod
-from app.deploy import dsql_cluster
 from stargazer.utils.index import DsqlIndex, postgres_table_sql, state_table_sql
 
 
@@ -51,7 +49,9 @@ def dsql_table():
             "The dsql tier needs STARGAZER_DSQL_CLUSTER_ARN and an AWS session: "
             "run it with --env-file <infra>/tenant.env"
         )
-    region, _, endpoint = dsql_cluster(cluster_arn)
+    # arn:aws:dsql:<region>:<account>:cluster/<id>
+    _, _, _, region, _, resource = cluster_arn.split(":", 5)
+    endpoint = f"{resource.removeprefix('cluster/')}.dsql.{region}.on.aws"
     schema = f"stargazer_test_{uuid.uuid4().hex[:8]}"
     table = f"{schema}.assets"
     with _admin(endpoint, region) as conn:
@@ -74,11 +74,4 @@ def index(dsql_table):
     index = DsqlIndex(f"dsql://admin@{endpoint}/{table}")
     index.write(lambda execute: execute(f"DELETE FROM {table}", []))
     index.write(lambda execute: execute(f"DELETE FROM {index.state_table}", []))
-    return index
-
-
-@pytest.fixture
-def state_index(index, monkeypatch):
-    """The dashboard's index, for `app.user_state`, on the test schema."""
-    monkeypatch.setattr(assets_mod, "_index", index)
     return index

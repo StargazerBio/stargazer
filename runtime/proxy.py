@@ -1,11 +1,10 @@
 """
 ### Reverse proxy in front of marimo, with workspace hydrate + sync.
 
-Standalone ASGI app baked into the `notebook-app` image as the top-level
-module `/usr/local/lib/sg_proxy.py`, beside its two HTML fragments. It needs
-no stargazer or `app` package: `fastapi`, `uvicorn`, `httpx`, `websockets` and
-`pyjwt` are installed at system level next to the `flyte` SDK the base image
-already carries (used here for storage). Listens on the per-notebook pod's
+Standalone ASGI app baked into the Stargazer image as the top-level module
+`/usr/local/lib/sg_proxy.py`, beside its two HTML fragments. It imports no
+stargazer code: it runs in the image's runtime venv (the project's `runtime`
+group), with the `flyte` SDK for storage. Listens on the per-notebook pod's
 public port (8080) and forwards HTTP + websocket traffic to marimo on
 `127.0.0.1:8081`.
 
@@ -15,7 +14,7 @@ in any project can send whatever headers it likes (measured 2026-10-18). So on
 Union (`SG_AUTH_ISSUER` set) `_TokenGate` checks every HTTP and websocket
 request for a token the issuer signed, `X-User-Token`, whose subject is the
 owner (`SG_OWNER_SUBJECT`) or one of `SG_ADMIN_SUBJECTS`: 401 without one, 403
-for anyone else. It mirrors `app.identity`, which this module can't import.
+for anyone else. The dashboard checks its own requests the same way.
 `SG_OWNER_SUBJECT` also keys where the pod hydrates from and saves to.
 Platform cookies and `X-User-*` headers are stripped before anything reaches
 marimo, so notebook code never sees the visitor's platform token through a
@@ -23,9 +22,8 @@ request.
 
 **Workspace.** Every file in the user's workspace lives in the workspace store,
 one object per file at its path, under
-`<STARGAZER_WORKSPACE_ROOT>/users/<subject>/workspace/` — the layout
-`app.workspace_store` owns (mirrored here because this module can't import the
-`app` package). At launch, `hydrate()` copies the owner's whole workspace into
+`<STARGAZER_WORKSPACE_ROOT>/users/<subject>/workspace/`, a layout the dashboard
+reads and writes too (the pod contract in the runtime doc). At launch, `hydrate()` copies the owner's whole workspace into
 `/workspace`. While the pod runs, a background loop saves every file whose size
 or modification time changed, every `SG_SAVE_INTERVAL_SECONDS` (30 by default,
 0 for none), and deletes from the store the files deleted from `/workspace`.
@@ -56,11 +54,11 @@ Reserved paths the proxy handles itself instead of forwarding:
 While marimo is still starting, a browser request gets a small self-refreshing
 "Starting your notebook…" page instead of an error.
 
-It is a top-level module, not `app/proxy.py`, because Flyte's loaded_modules
-code bundle ships an `app/` package into the pod's `/home/flyte` cwd at deploy
-time, which would shadow it.
+It is a top-level module, not under `app/`, because a hosted pod's code
+bundle unpacks the dashboard's `app/` package into the pod's `/home/flyte`
+cwd, which would shadow it.
 
-spec: [docs/architecture/app.md](../docs/architecture/app.md)
+spec: [docs/architecture/runtime.md](../docs/architecture/runtime.md)
 """
 
 import asyncio
@@ -86,8 +84,8 @@ from starlette.background import BackgroundTask
 
 MARIMO_HOST = "127.0.0.1"
 MARIMO_HTTP_PORT = 8081
-# The pod-local dir the launch hydrates into. Mirrors
-# `app.per_notebook.WORKSPACE_NOTEBOOK_DIR`.
+# The pod-local dir the launch hydrates into, where the dashboard points
+# notebook paths.
 WORKSPACE_DIR = Path("/workspace")
 # Never saved: Python's bytecode caches and marimo's per-notebook session caches.
 _SKIPPED_DIRS = {"__pycache__", "__marimo__"}
@@ -111,7 +109,7 @@ _STRIPPED_HEADERS = {"host", "cookie"}
 # Quake-style dropdown terminal markup, spliced into every marimo HTML page
 # before </body>. Kept as a static asset (terminal_overlay.html) so it gets real
 # HTML/CSS/JS tooling instead of living as a Python string. Read once at import.
-# In the notebook image it's baked next to this module (see per_notebook.py), so
+# In the image it's baked next to this module (runtime/Dockerfile), so
 # resolving it relative to __file__ works both in-repo and in-pod.
 _TERM_INJECTION = (Path(__file__).parent / "terminal_overlay.html").read_bytes()
 # The notice naming files too big to save, spliced in the same way and baked
@@ -367,7 +365,7 @@ async def lifespan(_: FastAPI):
     save. Flyte's `fserve` wrapper is PID 1 and forwards the Knative SIGTERM to
     its one direct child; the launch script's `exec` chain (args prepend `exec`,
     then the script `exec`s uvicorn) makes uvicorn that direct child, so it
-    receives SIGTERM and runs this hook. See app/launch-notebook.sh — an
+    receives SIGTERM and runs this hook. See runtime/launch-notebook.sh — an
     intermediate shell anywhere in that chain would swallow the signal and skip
     this flush.
     """

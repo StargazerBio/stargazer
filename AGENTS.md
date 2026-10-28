@@ -22,7 +22,7 @@
 
 **Positioning**
 - The marimo notebook is Stargazer's primary user surface for both experimentation (`marimo edit`) and reproducible production (`marimo run`) — it's the most approachable entry point, so default new feature designs to the notebook surface (marimo, `mo.ui`) over CLI or other entry points. The SDK (`src/stargazer/tasks/`, `src/stargazer/workflows/`) is a first-class user surface too: authoring workflows in an IDE by importing SDK tasks directly is a fully supported use case, not a maintainer-only path.
-- Two top-level packages: `src/stargazer/` is the bioinformatics SDK (tasks, workflows, assets, TaskEnvironment configs). `app/` at repo root is the deployment / web tier (FastAPI apps, `flyte.app.AppEnvironment` definitions, identity helpers, HTML templates, deploy entrypoints). When asked to add a deploy entrypoint, FastAPI route, AppEnvironment for a hosted service, an auth integration, or any other non-SDK runtime code, it goes under `app/`.
+- This repo is the pod side: `src/stargazer/` is the bioinformatics SDK (tasks, workflows, assets, TaskEnvironment configs, notebooks), published as `stargazer-bio`, and `runtime/` is what runs in a notebook pod around it (the proxy, the launch script, the image recipe). A release publishes both, the package and the image, under one calendar tag. The pod manager side is the `StargazerBio/infra` repo: the dashboard, its deploy, onboarding, the AWS stacks and the devbox, pinned to a release. A dashboard route, an AppEnvironment for a hosted service, a deploy entrypoint or an auth integration for the dashboard goes there. What a release promises it is the pod contract in `docs/architecture/runtime.md`.
 
 **Dev Process**
 - You will implement features piece by piece in a sequential fashion
@@ -42,7 +42,7 @@
 - **kubectl is strictly read-only on the tenant's EKS cluster.** Never create, modify or delete anything there with kubectl, under any circumstances: no `apply`, `create`, `edit`, `patch`, `delete`, `scale`, `rollout`, `label`, `annotate`, `cordon`, `drain`, `exec` or `cp`. Use only `get`, `describe`, `logs`, `top`, `events` and `auth can-i`. Changes to what runs on the tenant go through Flyte (`flyte deploy`, `update app`, `abort run`) or to the user. The local devbox is exempt: anything goes there
 - The bioinformatics CLI tools (gatk, bwa, bwa-mem2, samtools) are not on the dev machine's PATH. They live in `gatk_env`'s image. Every task test runs in its task's image (the `tasks` tier, `uv run --all-extras python cli/docker_task_tests.py`), and test assets that need the tools are generated in that image too (`docker run --platform linux/amd64 <image> ...`). Don't install them locally or ask the user to. Run the tasks tier whenever you add or change a task.
 - When adding a task that wraps a new CLI tool, check the `TaskEnvironment` it is decorated against in `src/stargazer/config.py` and confirm the tool is layered onto that env's `flyte.Image` (via `with_apt_packages`, `with_commands`, or the bioconda block in `_BIOCONDA_INSTALL`). If it is missing, add it and notify the user.
-- When defining a new `TaskEnvironment` in `src/stargazer/config.py`, always call `.with_uv_project(PROJECT_ROOT / "pyproject.toml")` on its image so the stargazer package and its pip deps end up installed, and set explicit `resources=` (e.g. `flyte.Resources(memory=("2Gi", "6Gi"))`). The devbox node has ~7.75 GiB allocatable and a workflow's pods must fit together in ~6 GiB — see the header of `devbox/setup.sh`.
+- When defining a new `TaskEnvironment` in `src/stargazer/config.py`, always call `.with_uv_project(PROJECT_ROOT / "pyproject.toml")` on its image so the stargazer package and its pip deps end up installed, and set explicit `resources=` (e.g. `flyte.Resources(memory=("2Gi", "6Gi"))`). The devbox node has ~7.75 GiB allocatable and a workflow's pods must fit together in ~6 GiB — see the header of infra's `devbox/setup.sh`.
 - **CRITICAL** Do not consider backwards compatibility unless explicitly requested!
 - **Keep development minutiae out of user-facing surfaces.** App UI strings/pages, user guides, and the README describe behavior in product terms — a limit, what a control does, what an error means. Do **not** leak implementation detail into them: internal vendor/service names, env vars, workaround mechanisms, ticket/plan references, or "X limit, not ours" rationalizations. (E.g. an upload cap reads "100 MB", not "100 MB — a Pinata limit; larger needs TUS".) That rationale lives in code comments, `.claude/reference/`, and tickets — and architecture docs under `docs/architecture/` may name internals since they're the technical spec, not a product surface.
 - Run `uv run ruff check --fix . && uv run ruff format .` after every set of changes to satisfy the pre-commit. This only holds because the ruff version is pinned in **two** places that must match: `rev:` in `.pre-commit-config.yaml` (pre-commit builds its own isolated env) and the `ruff` pin in `pyproject.toml`'s dev group. Bump them together — when they drifted across 0.14→0.16, ruff's *default* rule set went from 59 rules to 413 and the two gates silently enforced different things. Deliberate rule exceptions live in `[tool.ruff.lint]` in `pyproject.toml`, each with a comment saying why.
@@ -78,7 +78,7 @@ Every module in `src/` has two conventions in its module-level docstring:
 spec: [docs/architecture/types.md](../architecture/types.md)
 ```
 
-The link is relative to `docs/reference/api.md`, where mkdocstrings renders every `src/` module, so it is `../architecture/<doc>.md` however deep the module sits. Modules under `app/` aren't rendered there and link relative to their own file (`../docs/architecture/app.md`).
+The link is relative to `docs/reference/api.md`, where mkdocstrings renders every `src/` module, so it is `../architecture/<doc>.md` however deep the module sits. `runtime/proxy.py` isn't rendered there and links relative to its own file (`../docs/architecture/runtime.md`).
 
 **Rationale:** This serves two purposes:
 1. **Diff scanning** — when reviewing recent PRs or commits, an LLM can immediately see which spec doc is affected by any changed module and check whether the docs need updating.
@@ -90,12 +90,12 @@ The `spec:` line is **module-level only** — class and function docstrings do n
 
 ## Specs, Tickets and Reference Materials
 
-- **`devbox/`** - The local devbox's own infrastructure. [`devbox/setup.sh`](./devbox/setup.sh) readies a fresh devbox, and each of its steps carries the quirk it works around, and its header lists the steps and what it can't fix. Kubernetes objects live beside it as YAML files it applies. Check it first when deploying to or debugging the devbox, and run it after recreating the container. A new devbox quirk becomes a step with its reason in the comments, or, when the fix is in app code, a comment at that code. When one is fixed upstream or no longer applies, delete its step; a retired workaround is noise.
+- **The devbox** - Its setup lives in infra (`devbox/setup.sh` there), and each of its steps carries the quirk it works around. Check it first when running on or debugging the devbox, and run it after recreating the container. A devbox quirk that Stargazer's own code works around gets a comment at that code. The devbox tier here assumes the devbox is set up and `FLYTE_IMAGE_REGISTRY=localhost:30000` is exported (never `image.registry` in `.flyte/config.yaml`: Flyte reads that file's when an image is defined, so it would leak into a Union run from the same checkout).
 - **`.claude/reference/`** - Agent-facing reference material, read on demand:
   - **`flyte_v2_docs.md`** and **`sdk_examples_concise.md`** - The Flyte v2 documentation and SDK examples
   - **`tool_refs/`** - Bioinformatics tool documentation, the source of truth for tool parameters and behavior
   - **`marimo/`** - marimo documentation Stargazer leans on
-  - **`architecture/`** - Deep, agent-facing internals for Stargazer's *own* subsystems. Verbose by design — the cross-cutting, multi-module implementation detail that's too granular for the human-facing `docs/architecture/` doc but valuable context when working on that subsystem. Each file is the companion to a `docs/architecture/*.md` doc, which links to it. Keep them in sync when you change the subsystem. (e.g. `app_internals.md` ↔ `docs/architecture/app.md`.)
+  - **`architecture/`** - Deep, agent-facing internals for Stargazer's *own* subsystems. Verbose by design — the cross-cutting, multi-module implementation detail that's too granular for the human-facing `docs/architecture/` doc but valuable context when working on that subsystem. Each file is the companion to a `docs/architecture/*.md` doc, which links to it. Keep them in sync when you change the subsystem. (e.g. `runtime_internals.md` ↔ `docs/architecture/runtime.md`.)
 - **`docs/`** - Project documentation (architecture, guides, reference)
   - **Critical**: Docs must be updated as the project evolves to stay in sync with the current state
   - No code in architecture docs - these are high-level references supported by docstrings in the actual functions
@@ -123,8 +123,7 @@ The `spec:` line is **module-level only** — class and function docstrings do n
 ### Directory Organization
 
 The project follows this structure:
-- `app/` - Deployment / web tier (FastAPI apps, `flyte.app.AppEnvironment` definitions, Union-identity helpers, HTML templates, deploy entrypoints). Installed alongside the main package via `[tool.setuptools.packages.find] where = ["src", "."]`. The dashboard's uvicorn import path is `app.admin_app:asgi_app`; dashboards deploy through `app.deploy`, called by onboarding (`stargazer-users`) in the `StargazerBio/infra` repo, which holds every AWS operation too, and by `devbox/dashboard.py` on the devbox.
-- `devbox/` - The local devbox's setup script, its dashboard deploy and the Kubernetes YAML they apply (see Specs, Tickets and Reference Materials).
+- `runtime/` - The notebook pod's runtime, never part of the package: `Dockerfile` (the one Stargazer image, built from the repo root), `proxy.py` (baked as the top-level module `sg_proxy`), `launch-notebook.sh`, `start-local.sh` (the image's local entrypoint), the HTML fragments the proxy injects, and `notebook_agent.md` (the terminal agent's `AGENTS.md`)
 - `src/stargazer/` - Main package
   - `__init__.py` - Package root, re-exports key symbols
   - `config.py` - Centralized configuration, env var defaults, TaskEnvironment definitions (`gatk_env`, `scrna_env`), logger setup
@@ -146,14 +145,14 @@ The project follows this structure:
   - `tasks/` - Task-level tests mirroring `src/stargazer/tasks/` structure
   - `utils/` - Tests for `src/stargazer/utils/` (storage, index, CID, Pinata, query, subprocess)
   - `notebooks/` - Smoke tests that every notebook in `src/stargazer/notebooks/` imports and parses
-  - `unit/` - Unit tests for the rest: the app tier (`app/`), registry, MCP marshalling, bundles, `Asset` itself
-  - `devbox/` - The devbox tier: dashboard deploy, asset storage across pods, the germline workflow. `pod_tasks.py` holds what runs in their pods
+  - `unit/` - Unit tests for the rest: the notebook proxy (`runtime/`), registry, MCP marshalling, bundles, `Asset` itself
+  - `devbox/` - The devbox tier: asset storage across pods, the germline workflow. `pod_tasks.py` holds what runs in their pods
   - `pinata/` - The pinata tier: the Pinata client against the real API
   - `postgres/` - The postgres tier: the index tests against a throwaway Postgres container
   - `dsql/` - The dsql tier: the index tests against the real Aurora DSQL cluster, as its admin
   - Each top-level directory here belongs to exactly one tier (`TIERS` in `conftest.py`); the `write-tests` skill's Test Tiers says how each runs. A bare `uv run --all-extras pytest` is the `unit` tier and runs in pre-commit
 - `cli/` - Developer scripts: `docker_task_tests.py` (the tasks tier), `upload_to_pinata.py`, `diagrams.sh` (see `cli/README.md`)
-- `.github/workflows/` - CI: `stargazer-image.yml` (publishes the `stargazer` container image) and `docs.yml` (the docs site)
+- `.github/workflows/` - CI: `release.yml` (a calendar tag publishes the package to PyPI and the image to GHCR) and `docs.yml` (the docs site)
 - `docs/` - Project documentation
   - `architecture/` - System design and contracts
   - `guides/` - Step-by-step walkthroughs with code examples

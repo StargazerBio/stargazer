@@ -5,7 +5,7 @@ description: "Drive Stargazer the way a user does and capture evidence that a ch
 
 # Verify Stargazer
 
-Proves user-visible behavior on the real surface: the notebook a user opens, the pods a workflow runs in, the dashboard a user clicks. A passing pytest run is not this proof. Adapted from [pstack](https://github.com/cursor/plugins/tree/main/pstack)'s verification skills (MIT).
+Proves user-visible behavior on the real surface: the notebook a user opens, the pods a workflow runs in, the notebook pod a user opens. A passing pytest run is not this proof. Adapted from [pstack](https://github.com/cursor/plugins/tree/main/pstack)'s verification skills (MIT).
 
 Pick the surface the change reaches, write or reuse its recipe, drive it, check what it stored, and record the evidence in the PR.
 
@@ -74,31 +74,27 @@ rm -rf "$RUN_DIR/local" "$RUN_DIR/store" "$RUN_DIR"/index.db*
 
 ## Devbox
 
-For anything that runs across pods: workflows, task images, the devbox's object store and Postgres index, the dashboard. The devbox test tier is the driver: `uv run --all-extras pytest -m devbox -rP <tests>` deploys the dashboard when its tests need it, passes the devbox storage settings to every run, and reads the index through a port-forward. `-rP` prints each run's URL; keep the output as evidence. When no test covers the change, write one in `tests/devbox/` (the `write-tests` skill).
+For anything that runs across pods: workflows, task images, the devbox's object store and Postgres index. The devbox test tier is the driver: `uv run --all-extras pytest -m devbox -rP <tests>` passes the devbox storage settings to every run and reads the index through a port-forward. `-rP` prints each run's URL; keep the output as evidence. When no test covers the change, write one in `tests/devbox/` (the `write-tests` skill).
 
-Preconditions: the devbox is up, `devbox/setup.sh` has run since it was last created (its verify step ends with `✓ Postgres ready`), the hosts it prints resolve on this machine, and `kubectl config current-context` is `flyte-devbox`.
+Preconditions: the devbox is up, infra's `devbox/setup.sh` has run since it was last created (its verify step ends with `✓ Postgres ready`), `FLYTE_IMAGE_REGISTRY=localhost:30000` is exported, and `kubectl config current-context` is `flyte-devbox`.
 
-- `devbox/setup.sh` clears Flyte's local cache, so run it after a recreate and before the first deploy, or the deploy skips images and bundles the wipe deleted.
+- The setup clears Flyte's local cache, so run it after a recreate and before the first run, or the run skips images and bundles the wipe deleted.
 - A source change rebuilds the images that carry the project before the first run. Pods run emulated on Apple silicon, slower than on Union.
 - Submitting from your own shell (not the tests) needs the three devbox storage settings exported and `kubectl port-forward -n flyte svc/rustfs-svc 9000:9000` open (`docs/guides/contributing.md` → Running on the Devbox). Without the port-forward, uploads fail with `All connection attempts failed`.
 - Right after a redeploy, Knative can route a request to the previous revision for a few seconds. A test that depends on the new revision can fail on that one request; the pod's log names its revision.
 
 ## Union tenant
 
-For what only Union has: its login and RBAC, the remote image builder, notebook launch. Driven through the test account's dashboard in Chrome (Claude in Chrome), with `scripts/union_dashboard.py` for the rest.
+For what only Union has: its login and RBAC, the remote image builder, notebook launch. Tasks and workflows run there from a checkout with `.flyte/union.yaml` and `STARGAZER_API_KEY_SECRET=UNION_API_KEY` exported.
 
-Preconditions: `.flyte/union.yaml` is linked into the checkout and the Flyte CLI is signed in as an org admin; `STARGAZER_TARGET=union` is exported, with infra's `tenant.env` for a deploy; Chrome is signed in to GitHub as the test account.
+A notebook or runtime change reaches Union in the image a dashboard launches, which is a release's. To drive it before a release:
 
-- `union_dashboard.py deploy` redeploys only the test account's dashboard from the checkout and prints its URL. Never `stargazer-users upgrade`, which redeploys every user's.
-- Sign in to the console (`https://stargazerbio.us-west-2.unionai.cloud/v2`) with its **Continue with Github (Stargazer Bio)** button, then open app URLs from that page with `location.href`; a direct navigate through the login redirect lands in the wrong tab.
-- Click tile buttons by coordinates from a screenshot; clicking by element reference can fail to submit. A failed launch raises a browser alert, which blocks Claude in Chrome: call the endpoint with `fetch` from the dashboard page and read the JSON instead.
-- `union_dashboard.py check <app>` prints an app's served image, its resources, its pod's notebook base and the newest runs.
-- A workspace notebook is a copy of its template at creation, so a template change needs a newly created notebook.
-- **Teardown** is part of the drive: `union_dashboard.py teardown` stops every app in the test account's project and prints the live runs, which must be `[]`.
+1. Build the image from the checkout for amd64 and push it to GHCR under a test tag, never a release tag or `latest`: `docker buildx build --platform linux/amd64 -f runtime/Dockerfile -t ghcr.io/stargazerbio/stargazer:test-<slug> --push .` (`docker login ghcr.io` with `gh auth token` first).
+2. Deploy the test account's dashboard from an infra checkout with `STARGAZER_NOTEBOOK_IMAGE` set to that tag, and drive it there: infra's `verify-dashboard` skill.
+3. Tear down what you started, and delete the test tag's package version afterwards.
 
 ## Helpers
 
 | Script | Does |
 |---|---|
 | `scripts/doctor.sh` | Read-only check of a local run's environment. Exit 1 on a blocking failure |
-| `scripts/union_dashboard.py deploy\|check <app>\|teardown` | Redeploys, inspects or stops the Union test account's dashboard and its apps |

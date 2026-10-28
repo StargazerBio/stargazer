@@ -2,7 +2,6 @@
 extend = "../../../pyproject.toml"
 
 [lint.flake8-tidy-imports.banned-api]
-"app".msg = "The SDK never imports the app tier (layers: src/stargazer/ruff.toml)"
 "stargazer.tasks".msg = "Tasks are above storage (layers: src/stargazer/ruff.toml)"
 "stargazer.workflows".msg = "Workflows are above storage (layers: src/stargazer/ruff.toml)"
 "stargazer.registry".msg = "The registry is above storage (layers: src/stargazer/ruff.toml)"

@@ -1,0 +1,63 @@
+# Cuts a Stargazer release from a calendar tag (`v2026.10.28`, a second release
+# that day `v2026.10.28.1`): the package to PyPI as `stargazer-bio`, and the
+# image (runtime/Dockerfile) to GHCR under the same tag and `latest`. The tag
+# has to name pyproject.toml's version. Infra pins one release and takes both
+# halves from it.
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: The tag names the package's version
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::$GITHUB_REF_NAME doesn't name the version in pyproject.toml ($version)"
+            exit 1
+          fi
+  package:
+    needs: check
+    runs-on: ubuntu-latest
+    # PyPI's trusted publishing: no token, PyPI trusts this workflow and
+    # environment for `stargazer-bio`.
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+  image:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: runtime/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/stargazerbio/stargazer:${{ github.ref_name }}
+            ghcr.io/stargazerbio/stargazer:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

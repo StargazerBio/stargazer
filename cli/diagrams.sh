@@ -4,15 +4,15 @@
 # instead: the module and everything it imports, directly or not. Settings
 # shared by every diagram are [tool.pydeps] in pyproject.toml.
 #
-#   cli/diagrams.sh                            # sdk.svg, sdk-modules.svg, app.svg
+#   cli/diagrams.sh                            # sdk.svg, sdk-modules.svg
 #   cli/diagrams.sh src/stargazer/server.py    # stargazer.server.svg
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 # The editable install finds stargazer through an import hook that pydeps'
-# module finder can't follow. Without src on the path, a diagram of app/ would
-# silently leave out every SDK module it imports.
+# module finder can't follow. Without src on the path, a diagram would silently
+# leave out every SDK module it imports.
 export PYTHONPATH=src
 
 mkdir -p diagrams
@@ -42,10 +42,9 @@ if [ $# -gt 0 ]; then
         name="${name%.py}"
         # pydeps names the module's own node after its file, which the
         # [tool.pydeps] `only` would filter out.
-        draw "$path" "${name//\//.}" --only stargazer app "$(basename "$path")"
+        draw "$path" "${name//\//.}" --only stargazer "$(basename "$path")"
     done
 else
     draw src/stargazer sdk --max-module-depth 2
     draw src/stargazer sdk-modules
-    draw app app
 fi
