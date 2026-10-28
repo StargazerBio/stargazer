@@ -1,8 +1,9 @@
 ---
 title: A launch's image build survives a dashboard restart
-status: doing
+status: review
 priority: high
 created: 2026-10-27
+pr: 99
 ---
 
 A launch whose declared image isn't built yet answers 202 and builds in the background (PR #89). What it's waiting on lives only in the dashboard process: `_builds` in `app/admin_app.py`, and an asyncio task (`_serve_when_built`) that serves the pod when the build finishes. A dashboard restart drops both. The build finishes, but the pod is never served and a failure is never reported: `/launch/status` reports the notebook as neither building nor running, and `launch.js` gives up after 60 empty polls and hands the buttons back without a word (inferred from the code, not reproduced). Since PR #78 `upgrade` redeploys dashboards without waiting for anything, so a redeploy during a user's build is an ordinary event.
@@ -31,11 +32,12 @@ Each user's DSQL index is always there, so the launch's state moves into it, and
 
 ## As built
 
-Four departures from the plan, each for a reason found while building:
+Five departures from the plan, each for a reason found while building or in review:
 
-- **No `from_base` URI.** On Union the image's registry is unset and the remote builder picks it, so the URI isn't known until the build has finished. On success, the poll that takes the row runs the launch path again (`_launch`). Its build check now finds the image and serves it, with one image-service call. The row holds the run's name and URL and the notebook's section.
-- **`_forget_build` stays**, now called before every launch's build check. Flyte's `async_lru` caches would otherwise hand a launch after a failed build the same failed run, so it would never build again in that process. It still imports `flyte._internal`.
-- **The serve after the build runs in the background** (`_serving`), reported as building until it settles. `serve.aio` watches the app until it's ready, which can take minutes, too long to hold a status poll. That serve window is the only state kept in memory, and the serve has already been submitted by the time a restart could lose it.
+- **No `from_base` URI.** On Union the image's registry is unset and the remote builder picks it, so the URI isn't known until the build has finished. On success, the poll that claims the row runs the launch path again (`_launch`). Its build check now finds the image and serves it, with one image-service call. The row holds the run's name and URL and the notebook's section.
+- **`_forget_build` stays**, called when Flyte's cache hands a launch a build run that has since finished (`Run.get`). The cache would otherwise hand a launch after a failed build the same failed run, so it would never build again in that process. While the run is still going, the cache is what lets the other mode or a second tab share it, so it isn't dropped on every launch. It still imports `flyte._internal`.
+- **The serve after the build runs in the background** (`_serving`). `serve.aio` watches the app until it's ready, which can take minutes, too long to hold a status poll. So success doesn't delete the row: the poll claims it as `serving` (a conditional update), and it goes once the serve settles. A `serving` row with no task in the current process was claimed by a dashboard that restarted, and is claimed again.
+- **Only an open page serves.** Nothing polls without one, so a build that finishes with no dashboard page open is served when the next page loads (`hydrateLaunches` polls once).
 - **Infra `resume` ensures the index too.** `upgrade` skips paused users, so a user paused across this rollout would resume onto a dashboard with no state table.
 
 The infra change (`ensure_table_and_login` makes and grants the state table; `upgrade` and `resume` call `ensure_user_index` before deploying; `AGENTS.md`) is stashed in the infra repo as `launch-build-state: state table + upgrade/resume ensure index`. It imports `state_table_sql` from stargazer, so it's applied and committed to infra's `main` only after this PR merges. Until then infra's `main` keeps working against stargazer's `main`.
@@ -56,21 +58,24 @@ Workspace tile, then Edit, on a notebook whose setup block layers a new package 
 
 ### Driving it
 
-Preconditions: `aws sso login --profile pryce`, then apply infra's stash and point infra at this worktree. The test account's index has to get its state table before its dashboard is served.
+Preconditions: `aws sso login --profile pryce`, then apply infra's stash and point infra at this worktree. The test account's index has to get its state table before its dashboard is served. `ensure_user_index` alone does that without re-onboarding; restore infra's checkout afterwards (`git checkout -- .`, the stash stays).
 
 ```bash
 cd ../infra && git stash apply <sha>
-STARGAZER_CHECKOUT=<worktree> ./stargazer-users onboard --email <test account> --first-name … --last-name …   # ensures u-pryce's index, redeploys only its dashboard
+PYTHONPATH="$W:$W/src" uv run -q --project . --env-file tenant.env python -c "from stargazer_users.user_index import ensure_user_index; ensure_user_index('u-pryce')"
 ```
 
 1. Create a workspace notebook whose `main_env` is `notebook_env.clone_with(name="lbs", image=notebook_base.with_pip_packages("<a package no image has yet>"))`. Click Edit. Pass: the tile shows the build link.
-2. Mid-build, `union_dashboard.py deploy` from the worktree, then reload the dashboard. Pass: the tile still shows the build link (R1).
+2. Mid-build, restart the dashboard: `flyte --config .flyte/union.yaml update app dashboard --deactivate -p u-pryce -d development`, wait until it's inactive, then `--activate`. Pass: once it's up, `/launch/status` from the page reports the build, and the tile still shows the build link (R1).
 3. Wait for the build. Pass: within one poll of the run succeeding, the tile shows Open and Stop, and `union_dashboard.py check nb-<slug>-edit` serves the new image (R2).
-4. Repeat with a package that doesn't exist, redeploying mid-build. Pass: the page alerts "Launch failed: This notebook's image failed to build: …" (R3).
+4. Repeat with a second notebook whose `main_env` is `notebook_base.with_commands(["sleep 120 && false"])`, restarting mid-build. Pass: the watching tab alerts "Launch failed: This notebook's image failed to build: …" with the build's output, and `/launch/status` keeps reporting it failed (R3).
 5. `union_dashboard.py teardown`. Pass: live runs `[]`.
 
 ### Gotchas
 
 - The AWS SSO session expires; `aws sso login --profile pryce` before onboarding.
 - Never `stargazer-users upgrade` from the branch: it redeploys every user's dashboard.
+- `union_dashboard.py deploy` of an unchanged commit may not restart the pod, so it isn't a restart; deactivate and activate the app instead.
+- A pip package that doesn't exist fails the build in under a second, too fast to restart in between; a `sleep` in `with_commands` gives a slow failure.
+- `Run.get` from a local shell needs `flyte.init_from_config(..., project='u-pryce')`: the default project is `flytesnacks`.
 
