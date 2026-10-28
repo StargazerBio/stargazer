@@ -1,10 +1,8 @@
 ---
 title: A dashboard deploy needs a workspace root
-status: backlog
+status: next
 priority: normal
 created: 2026-10-27
-blocked_by:
-  - settings-in-state-table
 ---
 
 Every real deploy already has a workspace root: infra's `stargazer-users` refuses on Union without `STARGAZER_WORKSPACE_ROOT`, and `devbox/dashboard.py` sets it. The app still handles a dashboard without one at every store-backed route: `_store_ready()` and the 503 in `_workspace_guard` in `app/admin_app.py` (24 references across `app/`), the template's not-configured state, and the conditionals around `STARGAZER_WORKSPACE_ROOT` and `STARGAZER_STORE_ROOT` in `app_env` and `deploy_dashboard`. PR #78 did the same for the index: `deploy_dashboard` refuses without one, and the fallback went.

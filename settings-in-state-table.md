@@ -1,6 +1,6 @@
 ---
 title: Dashboard settings move to the per-user state table
-status: review
+status: done
 priority: normal
 created: 2026-10-27
 pr: 101
@@ -63,4 +63,8 @@ Preconditions: the `verify-stargazer` Union tenant preconditions; the built-in b
 - `st-reset`: Reset showed "Reset. The explorer opens on it from your next visit."; a fresh `/` read back Mine and Stargazer, with the interval still 45. Measured.
 - `st-launch`: Run on `key-1022` answered 202 with build run `ud24q9z8nr8ljps22ngx` (SUCCEEDED). `nb-key-1022-run` served, and its container env has `SG_SAVE_INTERVAL_SECONDS = 45`. Measured.
 - Restored the interval to 5, the account's value before the test. Teardown stopped `nb-key-1022-run` and `dashboard`; `live runs: []`; all 10 apps in `u-pryce` inactive. Measured.
+
+## Outcome
+
+Shipped in PR #101 (merge `336601c`). Each dashboard setting is its own `settings:<name>` row in the owner's state table: a save writes its row alone, Reset deletes the filter's row, and a missing row reads as its default. The settings code is gone from the workspace store. Verified by the unit tier (575 passed). The new concurrent-save test failed before the change. On Union, the test account `u-pryce` at `755aaba` passed the recipe above. Saved settings weren't carried over, so every user starts on the defaults after the next `upgrade`, and the old `settings.json` objects stay in the bucket, unread. No review comments. Ticket `workspace-root-required` is unblocked.
 
