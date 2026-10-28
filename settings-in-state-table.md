@@ -1,8 +1,9 @@
 ---
 title: Dashboard settings move to the per-user state table
-status: doing
+status: review
 priority: normal
 created: 2026-10-27
+pr: 101
 ---
 
 A user's dashboard settings, the save interval and the filter the asset explorer opens on, are one JSON object in the workspace store (`users/<subject>/settings.json`). Each route that changes one setting reads the whole object, changes its field and writes it all back (`save_settings`, `save_explorer_default`, `reset_explorer_default` in `app/admin_app.py`), so two saves at once from two tabs can undo each other.
@@ -11,11 +12,11 @@ Once ticket `launch-build-state` gives each user a state table on their index, e
 
 ## Plan
 
-- [ ] One row per setting: `settings:save_interval_seconds` and `settings:explorer_default` (JSON text). Reading fills in `DEFAULT_SETTINGS` for any row that isn't there.
-- [ ] Saving a setting writes its row alone; resetting the default filter deletes its row.
-- [ ] Removed: `get_settings`, `put_settings` and `_settings_uri` in `app/workspace_store.py`, and the read-change-write in the three routes. `DEFAULT_SETTINGS` moves to wherever settings are read.
-- [ ] The test account's saved settings aren't carried over; it starts on the defaults.
-- [ ] Docs: the workspace store and settings parts of `docs/architecture/app.md` and `app_internals.md`, and `app/workspace_store.py`'s docstring.
+- [x] One row per setting: `settings:save_interval_seconds` and `settings:explorer_default` (JSON text). Reading fills in `DEFAULT_SETTINGS` for any row that isn't there.
+- [x] Saving a setting writes its row alone; resetting the default filter deletes its row.
+- [x] Removed: `get_settings`, `put_settings` and `_settings_uri` in `app/workspace_store.py`, and the read-change-write in the three routes. `DEFAULT_SETTINGS` moves to wherever settings are read.
+- [x] The test account's saved settings aren't carried over; it starts on the defaults.
+- [x] Docs: the workspace store and settings parts of `docs/architecture/app.md` and `app_internals.md`, and `app/workspace_store.py`'s docstring.
 
 ## Verification
 
@@ -48,3 +49,18 @@ Preconditions: the `verify-stargazer` Union tenant preconditions; the built-in b
 - **`st-launch`.** Launch a workspace notebook's Run; `App.get(name="nb-<slug>-run", project="u-pryce", domain="development")`'s container env has `SG_SAVE_INTERVAL_SECONDS=45`.
 - **Restore** the interval to its pre-test value through the modal.
 - **Teardown.** `union_dashboard.py teardown`: `live runs: []`.
+
+### Gotchas
+
+- Right after the deploy, Knative served the previous revision for about 20 s (footer `356e514`, interval 5 from the old `settings.json`). Check the footer reads the branch's commit before taking any reading.
+- A page loaded before a `fetch`-driven save still shows the old values in the modal; reload before driving the modal.
+- A launch on a new release builds the notebook's image first (a 202 and a build run), which takes several minutes. The pod is served on the first `/launch/status` poll after the build succeeds.
+
+### Evidence (2026-10-27, commit 755aaba, `u-pryce`)
+
+- `st-fresh`: footer `755aaba`; the modal input reads `30` and `EXPLORER_DEFAULT` is Mine and Stargazer with nothing else, although the old `settings.json` held 5. Measured.
+- `st-both`: the two parallel POSTs answered `[200, 200]`; a fresh `/` read back interval `60` and the filter `{sources: [stargazer], types: [notebook], text: "st-probe"}`. Then 45 saved in the modal showed "Saved. Notebooks you start from now on use it."; a fresh `/` read back 45 with the same filter. Measured.
+- `st-reset`: Reset showed "Reset. The explorer opens on it from your next visit."; a fresh `/` read back Mine and Stargazer, with the interval still 45. Measured.
+- `st-launch`: Run on `key-1022` answered 202 with build run `ud24q9z8nr8ljps22ngx` (SUCCEEDED). `nb-key-1022-run` served, and its container env has `SG_SAVE_INTERVAL_SECONDS = 45`. Measured.
+- Restored the interval to 5, the account's value before the test. Teardown stopped `nb-key-1022-run` and `dashboard`; `live runs: []`; all 10 apps in `u-pryce` inactive. Measured.
+
