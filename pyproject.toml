@@ -95,9 +95,9 @@ dev = [
     "ruff>=0.16.10,<0.17",
     "zensical>=0.0.24",
 ]
-# cli/diagrams.sh installs this group when it runs. It isn't in `dev` because
-# image builds sync the default groups. pygraphviz's wheels bundle Graphviz,
-# so drawing needs nothing installed outside uv.
+# cli/diagrams.sh installs this group when it runs, so a plain `uv sync`
+# doesn't. pygraphviz's wheels bundle Graphviz, so drawing needs nothing
+# installed outside uv.
 diagrams = [
     "pydeps>=3,<4",
     "pygraphviz>=2,<3",

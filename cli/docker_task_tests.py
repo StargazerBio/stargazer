@@ -7,10 +7,12 @@ A task test runs where the task does, in its TaskEnvironment's image
 and alignment tasks wrap (gatk, bwa, bwa-mem2, samtools) never have to be on
 a developer's machine. This builds each image into the local docker store (no
 registry) as a task pod gets it, x86_64 like Union, and runs pytest in it
-against the stargazer the image installs. Only the tests and the pytest
-configuration are mounted, read only, so a source change builds the images
-again first; the layers before the project's own come from cache. On Apple
-silicon the containers run under emulation. Needs docker; not the devbox.
+against the stargazer the image installs. The images leave out the dev
+group, so pytest and pytest-asyncio are installed in each container at the
+versions uv.lock pins. Only the tests and the pytest configuration are
+mounted, read only, so a source change builds the images again first; the
+layers before the project's own come from cache. On Apple silicon the
+containers run under emulation. Needs docker; not the devbox.
 
 Usage:
     uv run --all-extras python cli/docker_task_tests.py [paths or -k EXPR]
@@ -21,8 +23,10 @@ the first failing run's pytest exit code.
 """
 
 import asyncio
+import shlex
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import flyte
@@ -41,6 +45,9 @@ IMAGES = {
 # (markers, asyncio mode) in pyproject.toml.
 MOUNTS = ("tests", "pyproject.toml")
 
+# The dev-group packages the tests need in an image that leaves the group out.
+TEST_PACKAGES = ("pytest", "pytest-asyncio")
+
 
 def build_image(image: flyte.Image) -> str:
     """Build `image` into the local docker store; return its name.
@@ -56,6 +63,13 @@ def build_image(image: flyte.Image) -> str:
         # API, so an SDK upgrade can move it.
         asyncio.run(DockerImageBuilder()._build_image(image, push=False))
     return image.uri
+
+
+def test_requirements() -> list[str]:
+    """`TEST_PACKAGES` pinned to the versions in uv.lock."""
+    lock = tomllib.loads((PROJECT_ROOT / "uv.lock").read_text())
+    versions = {pkg["name"]: pkg["version"] for pkg in lock["package"]}
+    return [f"{name}=={versions[name]}" for name in TEST_PACKAGES]
 
 
 def task_tests(args: list[str]) -> dict[str, list[str]]:
@@ -88,6 +102,10 @@ def run_in(image: flyte.Image, tests: list[str]) -> int:
     """Build `image`, run `tests` in it, return pytest's exit code."""
     uri = build_image(image)
     print(f"image: {uri}", flush=True)
+    pytest = shlex.join(
+        # `-m tasks` replaces the default `-m unit` in pyproject.toml.
+        ["python", "-m", "pytest", "-p", "no:cacheprovider", "-m", "tasks", *tests]
+    )
     mounts = [
         arg
         for name in MOUNTS
@@ -106,15 +124,9 @@ def run_in(image: flyte.Image, tests: list[str]) -> int:
             "-e",
             "PYTHONDONTWRITEBYTECODE=1",
             uri,
-            "python",
-            "-m",
-            "pytest",
-            "-p",
-            "no:cacheprovider",
-            # Replaces the default `-m unit` in pyproject.toml.
-            "-m",
-            "tasks",
-            *tests,
+            "sh",
+            "-c",
+            f"uv pip install --quiet {shlex.join(test_requirements())} && exec {pytest}",
         ],
         check=False,  # pytest's exit code is the result
     ).returncode

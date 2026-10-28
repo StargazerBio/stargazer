@@ -213,7 +213,8 @@ def init_flyte() -> None:
 # (`stargazer.tasks…`), so without the package a workflow's child tasks can't
 # import, wherever the run was submitted from. The project's files feed the
 # image hash, so a source change builds a new image; .dockerignore keeps docs,
-# tests and git history out of it.
+# tests and git history out of it. `--no-dev` because Flyte's `uv sync` would
+# otherwise install the default `dev` group (pytest, ruff, the docs tools).
 
 # Lean image: the project's `bio` extra on top of the Flyte debian base —
 # scanpy plus what its steps import lazily (scikit-image for scrublet's
@@ -231,7 +232,7 @@ scrna_env = flyte.TaskEnvironment(
         .with_apt_packages("ca-certificates")
         .with_uv_project(
             PROJECT_ROOT / "pyproject.toml",
-            extra_args="--extra bio",
+            extra_args="--extra bio --no-dev",
             project_install_mode="install_project",
         )
     ),
@@ -272,7 +273,9 @@ gatk_env = flyte.TaskEnvironment(
             ]
         )
         .with_uv_project(
-            PROJECT_ROOT / "pyproject.toml", project_install_mode="install_project"
+            PROJECT_ROOT / "pyproject.toml",
+            extra_args="--no-dev",
+            project_install_mode="install_project",
         )
     ),
     # A 1Gi request: the germline workflow holds three gatk_env pods at once
