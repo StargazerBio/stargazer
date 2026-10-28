@@ -390,7 +390,8 @@ class DsqlIndex(PostgresIndex):
     `dsql://u_jane@<id>.dsql.us-west-2.on.aws/assets.u_jane?role_arn=<arn>`.
     The index and state tables, the database role and the IAM role are made
     by onboarding; the database role can't create anything, so this never
-    runs DDL.
+    runs DDL. The cluster's `admin` needs no `role_arn`: it signs with the
+    caller's own AWS credentials (the dsql test tier connects that way).
 
     Each call connects afresh, so DSQL ending a connection after an hour
     never reaches a caller. The IAM role's credentials and the auth token
@@ -415,8 +416,9 @@ class DsqlIndex(PostgresIndex):
             url: A `dsql://` index URL (see the class docstring)
 
         Raises:
-            ValueError: when `url` has no login, table or `role_arn`, or its
-                host isn't a DSQL endpoint
+            ValueError: when `url` has no login or table, a login other
+                than `admin` has no `role_arn`, or its host isn't a DSQL
+                endpoint
         """
         parts = urlsplit(url)
         host = parts.hostname or ""
@@ -425,10 +427,13 @@ class DsqlIndex(PostgresIndex):
         table = parts.path.lstrip("/")
         if len(labels) < 3 or labels[1] != "dsql":
             raise ValueError(f"Not a DSQL endpoint (<id>.dsql.<region>...): {host}")
-        if not (parts.username and table and role_arn):
+        if not (parts.username and table) or (
+            parts.username != "admin" and not role_arn
+        ):
             raise ValueError(
                 "A DSQL index URL names its login, table and IAM role: "
-                "dsql://<login>@<endpoint>/<schema>.<table>?role_arn=<arn>"
+                "dsql://<login>@<endpoint>/<schema>.<table>?role_arn=<arn> "
+                "(the admin signs with the caller's own credentials instead)"
             )
         self.endpoint = host
         self.region = labels[2]
@@ -449,7 +454,12 @@ class DsqlIndex(PostgresIndex):
         """
         with self._lock:
             now = time.time()
-            if now >= self._credentials_expire:
+            if not self.role_arn:
+                self._dsql = self._dsql or boto3.Session().client(
+                    "dsql", region_name=self.region
+                )
+                self._credentials_expire = float("inf")
+            elif now >= self._credentials_expire:
                 web_token = Path(os.environ["AWS_WEB_IDENTITY_TOKEN_FILE"]).read_text()
                 creds = boto3.client(
                     "sts", region_name=self.region
@@ -468,9 +478,12 @@ class DsqlIndex(PostgresIndex):
                 )
                 self._token_expires = 0.0
             if now >= self._token_expires:
-                self._token = self._dsql.generate_db_connect_auth_token(
-                    self.endpoint, self.region
+                sign = (
+                    self._dsql.generate_db_connect_admin_auth_token
+                    if self.user == "admin"
+                    else self._dsql.generate_db_connect_auth_token
                 )
+                self._token = sign(self.endpoint, self.region)
                 self._token_expires = min(
                     now + self._TOKEN_LIFETIME, self._credentials_expire
                 )
