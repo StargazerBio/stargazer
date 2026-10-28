@@ -1,6 +1,6 @@
 ---
 title: A test tier on the real DSQL cluster
-status: review
+status: done
 priority: normal
 created: 2026-10-28
 pr: 100
@@ -19,3 +19,7 @@ Swapping in AWS's connector was weighed and set aside: without its pool it makes
 
 - The `dsql` tier passes against the cluster (measured: 17 passed; 20 concurrent merges met 47 conflicts, all `40001`, and every merge landed).
 - Tenant, test account: the dashboard from the branch still reads the user's index and state table, as a user's login through their role.
+
+## Outcome
+
+Shipped in PR #100 (merge `356e514`): a `dsql` test tier (`tests/dsql/`) that runs the index and `app.user_state` tests through `DsqlIndex` against the real cluster, as its `admin`, in a schema each session makes and drops; an `admin` URL needs no `role_arn` and signs with the caller's own AWS credentials. Verified by the tier itself (17 passed on the cluster; a probe saw 20 concurrent merges of one row meet 47 `40001` conflicts, all retried), the unit (578), postgres (36) and infra (37) tests, and on Union with the test account's dashboard at `58e23ed` reading the user's index and state table through their role. Left: pooling the connection through AWS's connector, ticket `dsql-connection-pool` (`maybe`). No review comments.
