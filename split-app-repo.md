@@ -25,6 +25,42 @@ each time from a different pain, and each time the answer was no:
 Each time, the pain that raised it was fixed in place or by a narrower split.
 This ticket holds the comparison so the next round starts from it.
 
+## What the app uses the SDK for
+
+`app/` is three things, and only one of them is the dashboard:
+
+- **The notebook runtime:** the proxy, the launch script, the terminal
+  overlay, the agent's `AGENTS.md`. None of it imports the SDK: the proxy
+  needs only `flyte`, FastAPI and friends. It ships in two images that carry
+  the SDK source at `/stargazer` for the notebooks' sandbox venvs: the hosted
+  `notebook-app` image (`notebook_app_img_recipe`) and the `docker run`
+  `stargazer` image (`Dockerfile`), which is the same pod without the Flyte
+  runtime. Neither image has the dashboard in it. This is SDK-side runtime
+  that happens to live in `app/`.
+- **The deployer** (`app/deploy.py`, `notebook_app_img_recipe`): builds the
+  notebook image from the SDK's source through `PROJECT_ROOT`, and deploys
+  the dashboard from Flyte's code bundle of this repo.
+- **The dashboard**, in its own `dashboard` image (the whole project with
+  `--extra landing`). It uses the SDK for real:
+  - the asset browser and uploads (`app/assets.py`): the index
+    (`make_index`), `StorageClient`, `PinataClient`, `CidBuilder`, and
+    `build_asset`/`ASSET_REGISTRY` to validate keyvalues;
+  - the shipped notebooks (`app/notebooks.py`), read from the installed
+    `stargazer.notebooks` package and CID'd;
+  - publishing notebooks (`Notebook`, the TUS chunk size);
+  - a notebook's `main_env`, evaluated against the SDK's
+    `notebook_image_base`/`notebook_environment`;
+  - constants from `stargazer.config`.
+
+So the dashboard is the SDK's asset manager as much as a launcher. Dropping
+its SDK dependency means a second implementation of the storage, index and
+asset schema, or an API in front of them that doesn't exist.
+
+Moving the runtime to the SDK side doesn't shrink the seam: with the runtime
+files and `Dockerfile` counted as SDK, 17 of the last 40 merged PRs still
+touched both sides (8 SDK only, 11 dashboard only), against 18 with the
+runtime counted as app. The crossings are the dashboard's.
+
 ## Pros and cons
 
 Measured 2026-10-27 unless marked.
