@@ -68,6 +68,7 @@ markers = [
     "devbox: tests/devbox; the local devbox, with -m devbox",
     "pinata: tests/pinata; the real Pinata API (uploads up to ~100 MB), with -m pinata",
     "postgres: tests/postgres; a throwaway Postgres container via Docker, with -m postgres",
+    "dsql: tests/dsql; the real Aurora DSQL cluster as its admin, with -m dsql and infra's tenant.env",
 ]
 filterwarnings = [
     # Ignore Pydantic deprecation warnings from flyte package (third-party)
