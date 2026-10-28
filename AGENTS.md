@@ -150,6 +150,7 @@ The project follows this structure:
   - `devbox/` - The devbox tier: dashboard deploy, asset storage across pods, the germline workflow. `pod_tasks.py` holds what runs in their pods
   - `pinata/` - The pinata tier: the Pinata client against the real API
   - `postgres/` - The postgres tier: the index tests against a throwaway Postgres container
+  - `dsql/` - The dsql tier: the index tests against the real Aurora DSQL cluster, as its admin
   - Each top-level directory here belongs to exactly one tier (`TIERS` in `conftest.py`); the `write-tests` skill's Test Tiers says how each runs. A bare `uv run --all-extras pytest` is the `unit` tier and runs in pre-commit
 - `cli/` - Developer scripts: `docker_task_tests.py` (the tasks tier), `upload_to_pinata.py`, `diagrams.sh` (see `cli/README.md`)
 - `.github/workflows/` - CI: `stargazer-image.yml` (publishes the `stargazer` container image) and `docs.yml` (the docs site)
