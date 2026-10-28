@@ -1,6 +1,6 @@
 ---
 title: Move the dashboard and its deploy to infra
-status: next
+status: doing
 priority: low
 created: 2026-10-27
 ---
