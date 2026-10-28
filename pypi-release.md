@@ -1,8 +1,9 @@
 ---
 title: Publish the SDK to PyPI as stargazer-bio
-status: doing
+status: review
 priority: normal
 created: 2026-05-20
+pr: 5
 ---
 
 Cut Stargazer's first release. The split (ticket `split-app-repo`) made the
@@ -12,15 +13,17 @@ package `stargazer-bio`, calendar-versioned, and added
 environment `pypi`) and the image to `ghcr.io/stargazerbio/stargazer:<tag>`
 and `latest`. Infra pins a Stargazer commit's archive until then.
 
-- [ ] PyPI: a pending trusted publisher for `stargazer-bio` (owner
-      `StargazerBio`, repo `stargazer`, workflow `release.yml`, environment
-      `pypi`). The user's PyPI account exists (2026-10-28).
+- [x] PyPI: a trusted publisher for `stargazer-bio` (owner `StargazerBio`,
+      repo `stargazer`, workflow `release.yml`, environment `pypi`).
 - [x] GitHub: the `pypi` environment exists on the repo (measured 2026-10-28).
-- [ ] Set `version` to the release day if it isn't `2026.10.28`, then tag
-      `main` and push the tag; the workflow's run publishes both halves.
-- [ ] Infra: pin `stargazer-bio==<version>` in place of the archive URL,
-      `uv lock`, and redeploy the test account's dashboard on the release
-      image (infra's `verify-dashboard` skill) before upgrading users.
+- [x] Tag `v2026.10.28` on `main` (`e458f01`). Its Release run
+      (actions run 40764559460) published `stargazer-bio 2026.10.28` to PyPI
+      (wheel and sdist) and `ghcr.io/stargazerbio/stargazer:v2026.10.28` and
+      `latest`, one index for amd64 and arm64 (measured).
+- [x] Infra: `stargazer-bio==2026.10.28` pinned in StargazerBio/infra#5
+      (`pr: 5` is infra's). The test account's dashboard, deployed from it,
+      launched the Assets tutorial on the release image and ran its cells
+      with no import errors; torn down after.
 
 Later: notebook headers could pin a release (`stargazer-bio == <version>`)
 instead of `/stargazer`'s source, for reproducible community notebooks.
