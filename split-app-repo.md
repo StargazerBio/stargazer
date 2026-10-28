@@ -3,6 +3,7 @@ title: Move the dashboard and its deploy to infra
 status: review
 priority: low
 created: 2026-10-27
+pr: 102
 ---
 
 Split this repo into the pod side and the pod manager side:
