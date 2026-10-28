@@ -5,8 +5,9 @@ One text value per key, in the owner's index's state table
 (`SqlIndex.state_table`): their DSQL table's on Union, the devbox's
 Postgres, a SQLite file locally. It outlives the dashboard process, so state
 a restart must not lose lives here. Keys are namespaced by what owns them
-(`launch:<slug>:<mode>`). Every call is its own transaction, on the index's
-connection and its rerun on a serialization failure.
+(`launch:<slug>:<mode>`, `settings:<name>`). Every call is its own
+transaction, on the index's connection and its rerun on a serialization
+failure.
 
 spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """

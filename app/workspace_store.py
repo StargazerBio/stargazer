@@ -2,16 +2,13 @@
 ### Workspace store — users' workspaces on object storage.
 
 The durable home of every user's workspace: every file in it, one object per
-file at its path, keyed by the user's Union subject. Their dashboard
-settings sit beside it, outside what a pod hydrates:
+file at its path, keyed by the user's Union subject:
 
     <WORKSPACE_ROOT>/users/<subject>/workspace/<path>
-    <WORKSPACE_ROOT>/users/<subject>/settings.json
 
-The settings are the save interval and the filter the asset explorer opens
-on. The dashboard reads and writes only the notebooks (the top-level `.py`
-files) and the settings, so it can list a user's notebooks and read one header
-without fetching the rest. Pods hydrate `/workspace` from `workspace_uri()` at
+The dashboard reads and writes only the notebooks (the top-level `.py` files),
+so it can list a user's notebooks and read one header without fetching the
+rest. Pods hydrate `/workspace` from `workspace_uri()` at
 launch and write each changed file back to its own key, so two running
 notebooks can't clobber each other.
 
@@ -25,8 +22,6 @@ spec: [docs/architecture/app.md](../docs/architecture/app.md)
 """
 
 import asyncio
-import copy
-import json
 import re
 
 import flyte.storage
@@ -39,19 +34,6 @@ _SUBJECT_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 # A notebook filename: one plain segment ending in `.py`, starting with a letter
 # or digit, so a dotfile or `_`-prefixed file is never a notebook.
 _FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*\.py$")
-
-# A user's settings before they save any. Pods save their workspace every
-# `save_interval_seconds`, and 0 saves only when the pod stops.
-# `explorer_default` is the filter the asset explorer opens on.
-DEFAULT_SETTINGS = {
-    "save_interval_seconds": 30,
-    "explorer_default": {
-        "sources": ["mine", "stargazer"],
-        "types": [],
-        "keyvalues": {},
-        "text": "",
-    },
-}
 
 
 class NotebookExistsError(Exception):
@@ -144,19 +126,3 @@ async def update_workspace_notebook(subject: str, filename: str, content: str) -
 async def delete_workspace_notebook(subject: str, filename: str) -> None:
     """Delete a Workspace notebook. Idempotent."""
     await asyncio.to_thread(_delete_sync, _key(workspace_uri(subject), filename))
-
-
-def _settings_uri(subject: str) -> str:
-    """URI of the user's settings, beside their workspace rather than in it."""
-    return f"{_subject_prefix(subject)}/settings.json"
-
-
-async def get_settings(subject: str) -> dict:
-    """The user's settings, with the default for any they never saved."""
-    raw = await _get(_settings_uri(subject))
-    return {**copy.deepcopy(DEFAULT_SETTINGS), **(json.loads(raw) if raw else {})}
-
-
-async def put_settings(subject: str, settings: dict) -> None:
-    """Save the user's settings, replacing what was stored."""
-    await _put(_settings_uri(subject), json.dumps(settings))

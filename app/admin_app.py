@@ -31,8 +31,10 @@ in, and whoever does sees the owner's dashboard. It has three jobs:
    with the build run, and the pod is served when the build finishes. The
    launch waiting on the build is a row in the owner's state table
    (`app.user_state`), so a dashboard restart mid-build doesn't lose it. The
-   dashboard never calls a notebook pod: the pod hydrates and saves its own
-   workspace and shows its own starting page while it warms up.
+   owner's settings (the save interval, the explorer's default filter) are
+   rows there too, one per setting. The dashboard never calls a notebook pod:
+   the pod hydrates and saves its own workspace and shows its own starting
+   page while it warms up.
 
 The user's asset index isn't the dashboard's: it's their table on Aurora
 DSQL (a Postgres server on the devbox), which the dashboard's asset browser
@@ -468,7 +470,7 @@ async def dashboard(request: Request, user: CurrentUser):
     visitor = user_from_request(request) or user
     published = await _published_slugs(user) if store_ready else set()
     workspace = await _workspace_tiles(user, published) if store_ready else []
-    settings = await _settings(user)
+    settings = await _settings()
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -874,15 +876,42 @@ async def workspace_unpublish(user: CurrentUser, slug: str = Form(...)):
 # ---------------------------------------------------------------------------
 
 
-async def _settings(user: User) -> dict:
-    """The user's settings, or the defaults when the store can't say."""
+# The owner's settings before they save any. Pods save their workspace every
+# `save_interval_seconds`, and 0 saves only when the pod stops.
+# `explorer_default` is the filter the asset explorer opens on.
+DEFAULT_SETTINGS = {
+    "save_interval_seconds": 30,
+    "explorer_default": {
+        "sources": ["mine", "stargazer"],
+        "types": [],
+        "keyvalues": {},
+        "text": "",
+    },
+}
+# Each saved setting is its own state row, `settings:<name>`, holding its value
+# as JSON, so saving one setting never rewrites another.
+_SETTINGS_PREFIX = "settings:"
+
+
+async def _settings() -> dict:
+    """The owner's settings: the default for any never saved, and the defaults
+    alone when the state can't say."""
+    settings = copy.deepcopy(DEFAULT_SETTINGS)
     if not _store_ready():
-        return copy.deepcopy(store.DEFAULT_SETTINGS)
+        return settings
     try:
-        return await store.get_settings(user.subject)
+        rows = await user_state.with_prefix(_SETTINGS_PREFIX)
     except Exception as exc:
-        logger.warning(f"Settings read failed for {user.subject}: {exc}")
-        return copy.deepcopy(store.DEFAULT_SETTINGS)
+        logger.warning(f"Settings read failed: {exc}")
+        return settings
+    for key, value in rows.items():
+        settings[key.removeprefix(_SETTINGS_PREFIX)] = json.loads(value)
+    return settings
+
+
+async def _put_setting(name: str, value) -> None:
+    """Save one setting, leaving the others as they are."""
+    await user_state.put(_SETTINGS_PREFIX + name, json.dumps(value))
 
 
 @asgi_app.post("/settings")
@@ -890,7 +919,7 @@ async def save_settings(user: CurrentUser, save_interval_seconds: str = Form("")
     """Save the user's settings; notebooks started afterwards use them.
 
     The save interval is a whole number of seconds, 0 or more. Anything else
-    is a 400, and nothing is stored. Returns the settings as saved.
+    is a 400, and nothing is stored. Returns the settings as they now stand.
     """
     if bad := _workspace_guard():
         return bad
@@ -901,13 +930,11 @@ async def save_settings(user: CurrentUser, save_interval_seconds: str = Form("")
             status_code=400,
         )
     try:
-        settings = await store.get_settings(user.subject)
-        settings["save_interval_seconds"] = int(text)
-        await store.put_settings(user.subject, settings)
+        await _put_setting("save_interval_seconds", int(text))
     except Exception as exc:
         logger.error(f"Settings save failed for {user.subject}: {exc}")
         return _failed("settings save", exc)
-    return JSONResponse(settings)
+    return JSONResponse(await _settings())
 
 
 # The longest search text a saved explorer filter keeps.
@@ -1005,9 +1032,7 @@ async def save_explorer_default(request: Request, user: CurrentUser):
             status_code=400,
         )
     try:
-        settings = await store.get_settings(user.subject)
-        settings["explorer_default"] = filt
-        await store.put_settings(user.subject, settings)
+        await _put_setting("explorer_default", filt)
     except Exception as exc:
         logger.error(f"Explorer default save failed for {user.subject}: {exc}")
         return _failed("default filter save", exc)
@@ -1020,13 +1045,11 @@ async def reset_explorer_default(request: Request, user: CurrentUser):
     if bad := _default_guard(request):
         return bad
     try:
-        settings = await store.get_settings(user.subject)
-        settings.pop("explorer_default")
-        await store.put_settings(user.subject, settings)
+        await user_state.delete(_SETTINGS_PREFIX + "explorer_default")
     except Exception as exc:
         logger.error(f"Explorer default reset failed for {user.subject}: {exc}")
         return _failed("default filter reset", exc)
-    return JSONResponse(store.DEFAULT_SETTINGS["explorer_default"])
+    return JSONResponse(DEFAULT_SETTINGS["explorer_default"])
 
 
 # ---------------------------------------------------------------------------
@@ -1174,7 +1197,7 @@ async def _serve_notebook(
     env.env_vars["STARGAZER_OWNER"] = user.subject
     # Read at launch: a running pod keeps the interval it started with.
     env.env_vars["SG_SAVE_INTERVAL_SECONDS"] = str(
-        (await _settings(user))["save_interval_seconds"]
+        (await _settings())["save_interval_seconds"]
     )
 
     # Flyte's build check is one image-service call; a built image (or the

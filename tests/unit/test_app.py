@@ -889,7 +889,9 @@ def test_launch_workspace_serves_the_owners_pod(client, served):
     assert served["env"].env_vars == {
         "FLYTE_PROJECT": PROJECT,
         "STARGAZER_OWNER": ALICE,
-        "SG_SAVE_INTERVAL_SECONDS": str(ws.DEFAULT_SETTINGS["save_interval_seconds"]),
+        "SG_SAVE_INTERVAL_SECONDS": str(
+            admin_app.DEFAULT_SETTINGS["save_interval_seconds"]
+        ),
     }
     assert served["servecontext"] == {"project": PROJECT, "domain": "development"}
 
@@ -931,7 +933,7 @@ def test_bad_interval_is_refused_and_not_stored(client, bad):
     assert _save_settings(client, "60").status_code == 200
     resp = _save_settings(client, bad)
     assert resp.status_code == 400
-    stored = asyncio.run(ws.get_settings(ALICE))
+    stored = asyncio.run(admin_app._settings())
     assert stored["save_interval_seconds"] == 60
 
 
@@ -993,7 +995,7 @@ def test_a_saved_explorer_default_opens_the_explorer(client, monkeypatch):
     resp = _save_default(client, SAVED_FILTER)
     assert resp.status_code == 200
     assert resp.json() == SAVED_FILTER
-    assert asyncio.run(ws.get_settings(ALICE))["explorer_default"] == SAVED_FILTER
+    assert asyncio.run(admin_app._settings())["explorer_default"] == SAVED_FILTER
     html = client.get("/").text
     assert _applied_default(html) == SAVED_FILTER
     assert _pressed(html) == ["public", "stargazer"]
@@ -1023,19 +1025,36 @@ def test_a_bad_explorer_default_is_refused_and_not_stored(client, bad):
     _as(client)
     assert _save_default(client, SAVED_FILTER).status_code == 200
     assert _save_default(client, bad).status_code == 400
-    assert asyncio.run(ws.get_settings(ALICE))["explorer_default"] == SAVED_FILTER
+    assert asyncio.run(admin_app._settings())["explorer_default"] == SAVED_FILTER
+
+
+async def test_settings_saved_at_once_are_both_kept(monkeypatch):
+    """Saving the interval and the default filter together keeps both."""
+    monkeypatch.setenv("PINATA_JWT", "test-jwt")
+    async with _dashboard() as ac:
+        interval, default = await asyncio.gather(
+            ac.post("/settings", data={"save_interval_seconds": "60"}),
+            ac.post("/settings/explorer-default", json=SAVED_FILTER),
+        )
+        assert (interval.status_code, default.status_code) == (200, 200)
+        page = (await ac.get("/")).text
+    assert 'value="60"' in _between(page, '<dialog id="settings-modal"', "</dialog>")
+    assert _applied_default(page) == SAVED_FILTER
 
 
 def test_resetting_the_explorer_default_brings_back_the_built_in(client):
-    """Reset forgets the saved filter; the explorer opens on Mine and Stargazer."""
+    """Reset forgets the saved filter; the explorer opens on Mine and Stargazer,
+    and the save interval stays as saved."""
     _as(client)
+    assert _save_settings(client, "60").status_code == 200
     assert _save_default(client, SAVED_FILTER).status_code == 200
     resp = client.delete("/settings/explorer-default")
     assert resp.status_code == 200
     assert resp.json() == BUILT_IN_FILTER
-    assert asyncio.run(ws.get_settings(ALICE))["explorer_default"] == BUILT_IN_FILTER
+    assert asyncio.run(admin_app._settings())["explorer_default"] == BUILT_IN_FILTER
     html = client.get("/").text
     assert _applied_default(html) == BUILT_IN_FILTER
+    assert 'value="60"' in _between(html, '<dialog id="settings-modal"', "</dialog>")
     assert _pressed(html) == ["mine", "stargazer"]
 
 
@@ -1051,7 +1070,7 @@ def test_a_visitor_who_isnt_the_owner_never_gets_mine_applied(client):
     assert _pressed(html) == ["stargazer"]
     assert _save_default(client, SAVED_FILTER).status_code == 403
     assert client.delete("/settings/explorer-default").status_code == 403
-    assert asyncio.run(ws.get_settings(ALICE))["explorer_default"] == owners
+    assert asyncio.run(admin_app._settings())["explorer_default"] == owners
 
 
 def test_a_saved_public_source_is_dropped_when_public_is_off(client, monkeypatch):
