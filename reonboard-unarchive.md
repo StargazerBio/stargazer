@@ -1,6 +1,6 @@
 ---
 title: Onboarding a returning user brings back their project and index
-status: backlog
+status: next
 priority: high
 created: 2026-10-27
 ---
