@@ -1,6 +1,6 @@
 ---
 title: Move the dashboard and its deploy to infra
-status: maybe
+status: next
 priority: low
 created: 2026-10-27
 ---
@@ -67,8 +67,7 @@ out goes.
 Stargazer still runs tasks on it. Of `setup.sh`'s steps, the storage signed
 URLs, the `PINATA_JWT` task secret and the index's Postgres serve task runs;
 the serving domain and the CoreDNS wildcard serve apps (dashboards and
-notebook pods). `STARGAZER_TARGET` keeps defaulting to `devbox`, with the
-registry at `localhost:30000`. So the devbox test tier splits:
+notebook pods). So the devbox test tier splits:
 
 - **Stays in Stargazer**, assuming a devbox infra set up:
   `test_germline.py`, and `test_asset_storage.py` except the dashboard test.
@@ -78,6 +77,33 @@ registry at `localhost:30000`. So the devbox test tier splits:
 
 Setting up a devbox then needs an infra checkout, including for someone
 working only on Stargazer.
+
+### Stargazer stops naming its clusters
+
+`stargazer.config` knows two targets, `devbox` and `union`, and defaults to
+`devbox` (measured 2026-10-28). So a package installed from PyPI starts with
+the devbox's registry (`localhost:30000`) and its `--provenance=false` build
+flag. The target does three things in the SDK, and each moves to whoever
+sets up the cluster:
+
+- **The push registry.** Flyte already reads one from the config file's
+  `image.registry` (or `FLYTE_IMAGE_REGISTRY`) when an image is defined
+  (`flyte._image._get_push_registry`), so infra's devbox setup writes it into
+  the devbox's `.flyte/config.yaml`. Whether it reaches images that
+  `config.py` defines at import, with `registry=None` passed explicitly, is
+  unmeasured.
+- **The build flag**, which only an arm64 devbox needs. `FLYTE_DOCKER_BUILD_EXTRA_ARGS`
+  is Flyte's own variable, so infra sets it for the devbox.
+- **The project key secret** declared on Union. That's a property of the
+  backend, not a devbox detail, but it doesn't need the target's name: one
+  variable naming the secret, set by infra on Union and forwarded into pods
+  as `STARGAZER_TARGET` is today (inferred).
+
+`STARGAZER_TARGET` then leaves the SDK, along with `tests/unit/test_deploy_target.py`'s
+SDK half. The dashboard's own uses (which Flyte config to deploy with, the
+sign-in issuer, the console link, the stand-in subject) go to infra with
+`app/`, where naming clusters belongs. `gatk_env`'s 1Gi request, sized so
+three pods fit the devbox node, is the one devbox tuning left in the SDK.
 
 ## The interface between them
 
@@ -121,7 +147,7 @@ Measured 2026-10-28 unless marked.
 | Versioning | One pin in infra fixes both the dashboard's SDK and its pods' image. Every deploy names the release it ran. | A dashboard reports an infra commit plus a Stargazer release, not one commit. Releases are a step that doesn't exist yet. |
 | Images | One image instead of two recipes kept in step by hand. Pods rebuild only when the pin moves, which fixes the per-release notebook image rebuilds raised 2026-10-14. | Published images reverse "images build from their recipe" for the pod image. |
 | Infra | `app.deploy`, `app.init` and `app.config`, which infra imports from a sibling checkout today, become its own code. DSQL work spanning SDK, dashboard and infra touches two repos instead of three. | Testing infra against an unreleased Stargazer branch needs a path or branch source in place of the pin. |
-| Stargazer | Self-contained: the SDK and the image a user runs. `pyproject.toml` loses `app*` and the `landing`/`app` extras. | — |
+| Stargazer | Self-contained: the SDK and the image a user runs. `pyproject.toml` loses `app*` and the `landing`/`app` extras. The package stops defaulting to the devbox. | — |
 | Compatibility | — | Releases are public, so outside users can pin them. Before 1.0-style stability there's no compatibility promise, and AGENTS.md's "don't consider backwards compatibility" stands. |
 | Devbox | The cluster, its setup and its dashboard live together in infra, beside the dashboard code they deploy. | Stargazer's devbox tests and anyone running tasks on a devbox need infra to set it up. `verify-stargazer` drives notebooks through the dashboard and would span both repos. |
 | Tooling | Smaller context per repo (inferred). Infra already has its own AGENTS.md, skills and PR flow. | The docs split: `docs/architecture/app.md` and its companion move to infra or link across. |
@@ -135,6 +161,8 @@ Measured 2026-10-28 unless marked.
       image to GHCR. Reopens tickets `pypi-release` and `sdk-package`'s
       SDK-only package piece.
 - [ ] The interface above written down in Stargazer's docs.
+- [ ] `STARGAZER_TARGET` leaves the SDK as above. It needs nothing else
+      from the split, so it can ship first as its own PR.
 - [ ] `app/` and `devbox/` move to infra, pinned to a release; the devbox
       test tier splits as above, and infra's devbox rule goes.
 
