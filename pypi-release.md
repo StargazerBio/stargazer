@@ -1,6 +1,6 @@
 ---
 title: Publish the SDK to PyPI as stargazer-bio
-status: next
+status: doing
 priority: normal
 created: 2026-05-20
 ---
