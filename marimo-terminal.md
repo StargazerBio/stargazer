@@ -1,6 +1,6 @@
 ---
 title: marimo's terminal replaces the terminal overlay
-status: backlog
+status: maybe
 priority: normal
 created: 2026-10-28
 ---

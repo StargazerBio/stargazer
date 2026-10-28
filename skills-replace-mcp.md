@@ -1,6 +1,6 @@
 ---
 title: Skills replace the MCP server for user agents
-status: backlog
+status: maybe
 priority: normal
 created: 2026-10-28
 ---
