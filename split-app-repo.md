@@ -173,8 +173,6 @@ Measured 2026-10-28 unless marked.
       infra's devbox rule goes.
 - [ ] After both merge: set up PyPI's trusted publisher, bump `version`,
       tag the first release, and move infra's pin to `stargazer-bio==<it>`.
-- [ ] Before any dashboard runs a renamed release: saved notebooks' headers
-      name `stargazer-bio` (ticket `notebook-header-rename`).
 
 ## Verification recipe
 
@@ -210,9 +208,10 @@ Stargazer's image from the branch, on every surface it runs on:
   `ghcr.io/stargazerbio/stargazer:test-split-app-repo` and ran its cells; a
   Basic-template notebook's image built in ~100 s as
   `notebook-custom-7776a861…` on top of it and served (measured). Torn down.
-- Saved notebooks: all 7 of the test account's name `"stargazer"`, which
-  the renamed package refuses (`Package metadata name stargazer-bio does not
-  match given name stargazer`, measured in the image).
+- Saved notebooks naming the old package (`"stargazer"`) won't open: uv
+  refuses the renamed one (`Package metadata name stargazer-bio does not
+  match given name stargazer`, measured in the image). The test account was
+  the only user, and its stale notebooks were deleted.
 
 ## Revisit when
 
