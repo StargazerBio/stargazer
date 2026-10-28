@@ -29,6 +29,8 @@ in, and whoever does sees the owner's dashboard. It has three jobs:
    dashboard's project, and returns its URL. A declared image that isn't
    built yet is built first, in the background: the launch answers at once
    with the build run, and the pod is served when the build finishes. The
+   launch waiting on the build is a row in the owner's state table
+   (`app.user_state`), so a dashboard restart mid-build doesn't lose it. The
    dashboard never calls a notebook pod: the pod hydrates and saves its own
    workspace and shows its own starting page while it warms up.
 
@@ -60,8 +62,7 @@ import copy
 import json
 import os
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import flyte
@@ -74,7 +75,7 @@ from fastapi.staticfiles import StaticFiles
 from flyte._internal.imagebuild.image_builder import ImageBuildEngine
 from flyte.remote import App, Run
 
-from app import config, github_import
+from app import config, github_import, user_state
 from app import workspace_store as store
 from app.assets import (
     SOURCES,
@@ -1034,20 +1035,22 @@ async def reset_explorer_default(request: Request, user: CurrentUser):
 
 _SECTIONS = ("tutorials", "workflows", "workspace")
 
+# A launch whose image is building is a row in the owner's state table, so a
+# dashboard restart doesn't lose it: `launch:<slug>:<mode>`, holding the build
+# run's name and URL and the notebook's section, then `serving` (when it was
+# claimed) while its pod is served after the build, or `error` once it failed.
+# The row goes once the pod is served.
+_LAUNCH_PREFIX = "launch:"
 
-@dataclass
-class _Build:
-    """A launch's image build: in progress, or failed with `error`."""
-
-    url: str
-    task: asyncio.Task | None = None
-    error: str | None = None
+# This process's serves after a build, by (slug, mode). A `serving` row with no
+# task here was claimed by a dashboard that has since restarted, and is
+# claimed again. Holding the task keeps it from being collected.
+_serving: dict[tuple[str, str], asyncio.Task] = {}
 
 
-# By (slug, mode). Holding the task here keeps it from being garbage-collected
-# mid-build. A dashboard restart loses the entry, but the build still finishes,
-# so the next launch finds the image built and serves at once.
-_builds: dict[tuple[str, str], _Build] = {}
+def _launch_key(slug: str, mode: str) -> str:
+    """A launch's key in the state table."""
+    return f"{_LAUNCH_PREFIX}{slug}:{mode}"
 
 
 async def _launch_target(
@@ -1090,13 +1093,13 @@ async def launch(
 
     The pod runs in the environment the notebook declares (`main_env`), with
     the dashboard's fields on top. A declared image that isn't built yet
-    answers 202 with the build run's URL (`{"building": url}`): the build
-    runs on, a background task serves the pod when it finishes, and
-    `/launch/status` reports it building, then running. Launching again
-    during the build answers the same 202. An environment that won't
-    evaluate, or an image that won't build, is a 422 with the reason (a build
-    that fails in the background is reported by `/launch/status`), never a
-    pod sized or built wrong.
+    answers 202 with the build run's URL (`{"building": url}`) and is kept as
+    a pending launch in the state table; `/launch/status` reports it
+    building, and serves the pod once the build finishes. Launching again
+    during the build answers the same 202, and launching after a failed build
+    builds again. An environment that won't evaluate, or an image that won't
+    build, is a 422 with the reason (a build that fails later is reported by
+    `/launch/status`), never a pod sized or built wrong.
     """
     if mode not in MODES:
         return JSONResponse({"error": f"invalid mode: {mode}"}, status_code=400)
@@ -1105,12 +1108,33 @@ async def launch(
     if section == "workspace" and (bad := _workspace_guard(slug)):
         return bad
 
+    # Unreadable state doesn't stop a launch: at worst it builds the image again.
+    key = _launch_key(slug, mode)
+    try:
+        raw = await user_state.get(key)
+        if raw and "error" in json.loads(raw):
+            await user_state.delete(key, value=raw)
+            raw = None
+    except Exception as exc:
+        logger.warning(f"Launch state read failed for {slug!r}: {exc}")
+        raw = None
+    if raw:
+        return JSONResponse({"building": json.loads(raw)["url"]}, status_code=202)
+    return await _launch(request, user, slug, mode, section)
+
+
+async def _launch(
+    request: Request, user: User, slug: str, mode: str, section: str
+) -> JSONResponse:
+    """Resolve the notebook, then serve its pod or start its image's build."""
     target = await _launch_target(user, slug, section)
     if target is None:
         return JSONResponse({"error": f"unknown notebook: {slug}"}, status_code=404)
     notebook_path, source = target
     with forget_new_environments():
-        return await _serve_notebook(request, user, slug, mode, notebook_path, source)
+        return await _serve_notebook(
+            request, user, slug, mode, section, notebook_path, source
+        )
 
 
 async def _serve_notebook(
@@ -1118,14 +1142,11 @@ async def _serve_notebook(
     user: User,
     slug: str,
     mode: str,
+    section: str,
     notebook_path: str,
     source: str | None,
 ) -> JSONResponse:
     """Evaluate the notebook's `main_env`, serve its pod, and answer `/launch`."""
-    key = (slug, mode)
-    if (build := _builds.get(key)) and build.error is None:
-        return JSONResponse({"building": build.url}, status_code=202)
-    _builds.pop(key, None)
     declared = None
     if source and (expr := extract_main_env(source)) is not None:
         try:
@@ -1158,20 +1179,34 @@ async def _serve_notebook(
 
     # Flyte's build check is one image-service call; a built image (or the
     # prebuilt notebook image) comes back with no run and is served below.
+    # A launch during another's build of the same image (the other mode, a
+    # second tab) gets the same run back from Flyte's cache.
     if isinstance(env.image, flyte.Image):
         try:
             image = await flyte.build.aio(env.image, wait=False)
+            if (run := image.remote_run) is not None and await _finished(run):
+                _forget_build(env.image)
+                image = await flyte.build.aio(env.image, wait=False)
         except flyte.errors.ImageBuildError as exc:
             return _build_failed(slug, exc)
-        if image.remote_run is not None:
-            # A concurrent launch shares the same cached build run.
-            if (build := _builds.get(key)) is None:
-                build = _builds[key] = _Build(url=image.remote_run.url)
-                build.task = asyncio.create_task(
-                    _serve_when_built(key, env, image.remote_run)
-                )
-            return JSONResponse({"building": build.url}, status_code=202)
+        if (run := image.remote_run) is not None:
+            pending = {"run": run.name, "url": run.url, "section": section}
+            try:
+                await user_state.put(_launch_key(slug, mode), json.dumps(pending))
+            except Exception as exc:
+                logger.error(f"Launch state write failed for {slug!r}: {exc}")
+                return _failed("launch", exc)
+            return JSONResponse({"building": run.url}, status_code=202)
     return await _serve(env, slug, mode)
+
+
+async def _finished(run: Run) -> bool:
+    """Whether a build run has finished; one that can't be looked up hasn't."""
+    try:
+        return (await Run.get.aio(run.name)).done()
+    except Exception as exc:
+        logger.warning(f"build run lookup failed for {run.name!r}: {exc}")
+        return False
 
 
 def _build_failed(slug: str, exc: Exception) -> JSONResponse:
@@ -1188,44 +1223,15 @@ def _forget_build(image: flyte.Image) -> None:
 
     `ImageBuildEngine.image_exists` and `ImageBuildEngine.build` are
     `async_lru`-cached, a "not built" answer and an unwaited build's run
-    included. Left in place, they'd have every later build of the image
-    submit another run, and every later launch answer "building" with the
-    finished one. The `build` key is the one `flyte.build` calls it with.
+    included. Left in place once that build has finished, a launch would get
+    the finished run back as if it were still building, and after a failed
+    build would never build again. The `build` key is the one `flyte.build`
+    calls it with.
     """
     ImageBuildEngine.image_exists.cache_invalidate(image)
     ImageBuildEngine.build.cache_invalidate(
         ImageBuildEngine, image, dry_run=False, force=False, wait=False
     )
-
-
-async def _serve_when_built(
-    key: tuple[str, str], env: flyte.app.AppEnvironment, run: Run
-) -> None:
-    """Wait for a launch's image build, then serve its pod or keep why it failed.
-
-    Every exit settles the launch's entry: anything unexpected is kept as its
-    failure, or the notebook would show as building until a restart.
-    """
-    slug, mode = key
-    try:
-        await run.wait.aio(quiet=True)
-        await run.raise_for_status.aio()
-    except Exception as exc:
-        resp = _build_failed(slug, exc)
-    else:
-        resp = None
-    try:
-        _forget_build(env.image)
-        if resp is None:
-            with forget_new_environments():
-                resp = await _serve(env, slug, mode)
-    except Exception as exc:
-        logger.exception(f"launch after the image build failed for {slug!r}")
-        resp = _failed("launch", exc)
-    if resp.status_code in (422, 500):
-        _builds[key].error = json.loads(resp.body)["error"]
-    else:
-        del _builds[key]
 
 
 async def _serve(env: flyte.app.AppEnvironment, slug: str, mode: str) -> JSONResponse:
@@ -1276,8 +1282,80 @@ async def stop(user: CurrentUser, slug: str = Form(...), mode: str = Form(...)):
     return JSONResponse({"stopped": True})
 
 
+async def _settle_launch(
+    request: Request, user: User, key: str, raw: str
+) -> dict | None:
+    """Settle one pending launch by its build run; return its status entry.
+
+    Running, unreachable, or being served: building. Failed: the reason is
+    kept in the row and reported until the notebook is launched again.
+    Succeeded: the poll that claims the row (conditionally, so exactly one
+    does) serves the pod in the background, reported building until the
+    serve settles. A row whose claim outlived its dashboard is claimed again.
+    None when another poll changed the row first.
+    """
+    slug, mode = key.removeprefix(_LAUNCH_PREFIX).rsplit(":", 1)
+    pending = json.loads(raw)
+    if "error" in pending:
+        return {"slug": slug, "mode": mode, "error": pending["error"]}
+    building = {"slug": slug, "mode": mode, "url": pending["url"]}
+    if (slug, mode) in _serving:
+        return building
+    if "serving" not in pending:
+        try:
+            run = await Run.get.aio(pending["run"])
+            if not run.done():
+                return building
+            await run.raise_for_status.aio()
+        except flyte.errors.BaseRuntimeError as exc:
+            error = json.loads(_build_failed(slug, exc).body)["error"]
+            failed = json.dumps({**pending, "error": error})
+            if await user_state.replace(key, raw, failed):
+                return {"slug": slug, "mode": mode, "error": error}
+            return None
+        except Exception as exc:
+            logger.warning(f"build run lookup failed for {slug!r}/{mode!r}: {exc}")
+            return building
+    claimed = json.dumps({**pending, "serving": datetime.now(UTC).isoformat()})
+    if await user_state.replace(key, raw, claimed):
+        _serving[(slug, mode)] = asyncio.create_task(
+            _serve_built(request, user, key, slug, mode, claimed)
+        )
+    return building
+
+
+async def _serve_built(
+    request: Request, user: User, key: str, slug: str, mode: str, claimed: str
+) -> None:
+    """Serve a notebook whose image just built, then settle its claimed row.
+
+    Served: the row goes. Anything else that fails it, unexpected errors
+    included, is kept as its failure, or the notebook would show as building
+    until a restart. A row changed meanwhile (a new launch) is left alone.
+    """
+    pending = json.loads(claimed)
+    try:
+        resp = await _launch(request, user, slug, mode, pending["section"])
+    except Exception as exc:
+        logger.exception(f"launch after the image build failed for {slug!r}")
+        resp = _failed("launch", exc)
+    try:
+        if resp.status_code in (404, 422, 500):
+            error = json.loads(resp.body)["error"]
+            await user_state.replace(
+                key, claimed, json.dumps({**pending, "error": error})
+            )
+        else:
+            await user_state.delete(key, value=claimed)
+    except Exception as exc:
+        # The claim stays, so the next poll serves it again.
+        logger.warning(f"launch state write failed for {slug!r}/{mode!r}: {exc}")
+    finally:
+        _serving.pop((slug, mode), None)
+
+
 @asgi_app.get("/launch/status")
-async def launch_status(user: CurrentUser):
+async def launch_status(request: Request, user: CurrentUser):
     """Report which of the user's notebooks are running, building, or failed to build.
 
     Discovery is one control-plane list (`list_project_apps`, the same call
@@ -1289,10 +1367,15 @@ async def launch_status(user: CurrentUser):
     restarts. The dashboard calls this on load to render running notebooks
     straight to Open+Stop.
 
-    `building` and `failed` are this dashboard's own launches whose image is
-    building, with the build run's URL, or failed to build, with the reason.
-    A building notebook isn't reported running, even while an older pod of it
-    is up. A failure is reported until the notebook is launched again.
+    `building` and `failed` are the pending launches in the state table, each
+    settled by its build run (`_settle_launch`): building, with the build
+    run's URL, or failed to build, with the reason. Polling this is what
+    serves a pod once its build finishes, so a build outlives a dashboard
+    restart; the page polls while a build is shown, and once on load. A
+    building notebook isn't reported running, even while an older pod of it
+    is up. A failure is reported until the notebook is launched again. State
+    that can't be read or written leaves a launch out of one answer rather
+    than failing it.
     """
     project = config.FLYTE_PROJECT
     try:
@@ -1314,18 +1397,27 @@ async def launch_status(user: CurrentUser):
             return {"slug": slug, "mode": mode, "url": app.endpoint}
         return None
 
+    try:
+        launches = await user_state.with_prefix(_LAUNCH_PREFIX)
+    except Exception as exc:
+        logger.warning(f"launch state read failed: {exc}")
+        launches = {}
+
+    async def _settle(key: str, raw: str) -> dict | None:
+        """Settle a pending launch, or leave it out of this answer if that fails."""
+        try:
+            return await _settle_launch(request, user, key, raw)
+        except Exception as exc:
+            logger.warning(f"launch state settle failed for {key!r}: {exc}")
+            return None
+
     probes = [_probe(name, slug, mode) for name, (slug, mode) in candidates]
-    running = [r for r in await asyncio.gather(*probes) if r is not None]
-    building = [
-        {"slug": slug, "mode": mode, "url": build.url}
-        for (slug, mode), build in _builds.items()
-        if build.error is None
-    ]
-    failed = [
-        {"slug": slug, "mode": mode, "error": build.error}
-        for (slug, mode), build in _builds.items()
-        if build.error is not None
-    ]
+    settles = [_settle(k, v) for k, v in launches.items()]
+    found = await asyncio.gather(*probes, *settles)
+    running = [r for r in found[: len(probes)] if r is not None]
+    settled = [s for s in found[len(probes) :] if s is not None]
+    failed = [s for s in settled if "error" in s]
+    building = [s for s in settled if "error" not in s]
     in_build = {(b["slug"], b["mode"]) for b in building}
     running = [r for r in running if (r["slug"], r["mode"]) not in in_build]
     return JSONResponse({"running": running, "building": building, "failed": failed})
