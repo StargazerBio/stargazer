@@ -1,6 +1,6 @@
 ---
 title: A dashboard deploy needs a workspace root
-status: next
+status: backlog
 priority: normal
 created: 2026-10-27
 ---

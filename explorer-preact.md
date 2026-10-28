@@ -1,6 +1,6 @@
 ---
 title: Asset explorer on Preact and htm
-status: next
+status: backlog
 priority: normal
 created: 2026-10-27
 ---
