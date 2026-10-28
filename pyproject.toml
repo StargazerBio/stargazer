@@ -3,8 +3,11 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "stargazer"
-version = "0.1.0"
+# `stargazer` is taken on PyPI; the import name is still `stargazer`.
+name = "stargazer-bio"
+# The release's date (`v2026.10.28` is version 2026.10.28; a second release
+# that day is 2026.10.28.1). The release workflow refuses a tag that differs.
+version = "2026.10.28"
 description = "Bioinformatics workflow orchestration on Flyte v2, with assets identified by their IPFS CID"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -27,25 +30,13 @@ bio = [
     "igraph>=1.0.0",
     "pooch>=1.9.0",
 ]
-notebook = ["marimo>=0.10.0", "stargazer[bio]"]
+notebook = ["marimo>=0.10.0", "stargazer-bio[bio]"]
 # Bounded to the 2.x major: SDK 2.0 renamed the high-level server class
 # (`FastMCP` → `MCPServer`, `mcp.server.fastmcp` → `mcp.server`), so an
 # unbounded range silently resolves across a breaking rename.
 mcp = ["mcp[cli]>=2.0,<3"]
-landing = [
-    "fastapi>=0.115",
-    "uvicorn>=0.34",
-    "httpx>=0.27,<1",
-    "websockets>=12",
-    "python-multipart>=0.0.9",
-    "jinja2>=3.1",
-    # Checks Union's signed login tokens (`app.identity`).
-    "pyjwt[crypto]>=2.8,<3",
-    "cryptography>=43",
-]
 docs = ["mkdocstrings[python]>=1.0.3"]
-app = ["stargazer[notebook,landing]"]
-all = ["stargazer[notebook,mcp,landing,docs]"]
+all = ["stargazer-bio[notebook,mcp,docs]"]
 
 [project.scripts]
 stargazer = "stargazer.server:main"
@@ -76,12 +67,11 @@ filterwarnings = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["src", "."]
-include = ["stargazer*", "app*"]
+where = ["src"]
+include = ["stargazer*"]
 
 [tool.setuptools.package-data]
 stargazer = ["bundles/*.yaml", "notebooks/*.py"]
-app = ["templates/*.html"]
 
 [dependency-groups]
 dev = [
@@ -95,6 +85,19 @@ dev = [
     # differed from the pinned hook's. Bump both together.
     "ruff>=0.16.10,<0.17",
     "zensical>=0.0.24",
+    { include-group = "runtime" },
+]
+# The notebook proxy's packages (`runtime/proxy.py`), which the image installs
+# in the runtime venv beside its pinned marimo; the proxy never imports the
+# package. In `dev` too, so the unit tier can test it.
+runtime = [
+    "flyte>=2.0.3",
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+    "httpx>=0.27,<1",
+    "websockets>=12",
+    # Checks Union's signed login tokens (`_TokenGate`).
+    "pyjwt[crypto]>=2.8,<3",
 ]
 # cli/diagrams.sh installs this group when it runs, so a plain `uv sync`
 # doesn't. pygraphviz's wheels bundle Graphviz, so drawing needs nothing
@@ -145,7 +148,7 @@ ignore = [
 # The PTY/fork path deliberately uses blocking primitives: the pseudo-terminal
 # master fd is long-lived (no context manager), and reaping the child needs a
 # blocking wait.
-"app/proxy.py" = ["ASYNC222", "SIM115"]
+"runtime/proxy.py" = ["ASYNC222", "SIM115"]
 # Streaming uploads hand a live file object to the HTTP client, so it outlives
 # any `with` block and is closed by the client.
 "src/stargazer/utils/pinata.py" = ["ASYNC230", "SIM115"]
@@ -158,7 +161,7 @@ ignore = [
 no_show = true
 # Arrows point from importer to imported, as in the docs/architecture diagrams.
 reverse = true
-only = ["stargazer", "app"]
+only = ["stargazer"]
 # Drawing one module, pydeps stops at modules 2 imports away. 0 lifts the limit,
 # so the diagram shows everything the module reaches.
 max_bacon = 0

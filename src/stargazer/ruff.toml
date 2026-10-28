@@ -1,15 +1,12 @@
 # Import layers. A module imports from its own layer or the ones below it, never
-# above. Bottom up: storage (assets/, utils/), tasks/, workflows/, the surfaces
-# (registry, server, notebooks/), then the app tier in app/. TID251 only sees
-# direct imports, so each directory bans every layer above its own, not just
-# the next one: a forbidden import can't go through a module in between either.
+# above. Bottom up: storage (assets/, utils/), tasks/, workflows/, then the
+# surfaces (registry, server, notebooks/). TID251 only sees direct imports, so
+# each directory bans every layer above its own, not just the next one: a
+# forbidden import can't go through a module in between either.
 #
 # Ruff uses the nearest config file, and a nested file's banned-api replaces its
 # parent's instead of adding to it. So every layer file extends pyproject.toml
 # directly and lists each ban for its directory. This one covers the rest of the
-# SDK (the package root, bundles/ and notebooks/), which only has to stay out of
-# app/.
+# SDK (the package root, bundles/ and notebooks/), the top layer, which bans
+# nothing.
 extend = "../../pyproject.toml"
-
-[lint.flake8-tidy-imports.banned-api]
-"app".msg = "The SDK never imports the app tier (layers: src/stargazer/ruff.toml)"

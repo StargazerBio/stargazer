@@ -18,7 +18,7 @@ nav = [
     { "Configuration" = "architecture/configuration.md" },
     { "CLI" = "architecture/cli.md" },
     { "Notebooks" = "architecture/notebook.md" },
-    { "App" = "architecture/app.md" },
+    { "Notebook Runtime" = "architecture/runtime.md" },
   ]},
   { "Guides" = [
     { "Writing a Task" = "guides/writing-a-task.md" },

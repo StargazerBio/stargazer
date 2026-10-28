@@ -28,7 +28,7 @@ At launch the dashboard serves the notebook on `main_env`'s image, resources
 and env vars, under its own name, launch command and access control.
 
 Navigation between notebooks lives on the dashboard; notebooks themselves
-carry no nav chrome. The dashboard tile registry is `app/notebooks.py`.
+carry no nav chrome.
 
 spec: [docs/architecture/notebook.md](../architecture/notebook.md)
 """

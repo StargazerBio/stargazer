@@ -109,13 +109,12 @@ them. It installs the `diagrams` dependency group as it runs: pydeps, and
 pygraphviz, whose wheels bundle Graphviz, so nothing is installed outside uv.
 
 ```bash
-cli/diagrams.sh                                         # the standard set
-cli/diagrams.sh src/stargazer/server.py app/deploy.py  # one diagram per module
+cli/diagrams.sh                                                     # the standard set
+cli/diagrams.sh src/stargazer/server.py src/stargazer/registry.py  # one diagram per module
 ```
 
-The standard set is `sdk.svg` (the SDK by package, the layers at a glance),
-`sdk-modules.svg` (every SDK module) and `app.svg` (the app tier and the SDK
-modules it reaches). Given module files, it draws each one with everything it
+The standard set is `sdk.svg` (the SDK by package, the layers at a glance) and
+`sdk-modules.svg` (every SDK module). Given module files, it draws each one with everything it
 imports, directly or not, as `diagrams/<module>.svg`
 (`diagrams/stargazer.server.svg`). It takes files rather than directories,
 because pydeps given a subpackage draws the whole package around it. Arrows

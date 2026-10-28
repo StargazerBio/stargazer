@@ -2,8 +2,7 @@
 
 Files stored from one pod are found and read back from another, indexed in
 the devbox's Postgres server under the stand-in user's folder of the devbox
-bucket, listed by the dashboard's asset browser, and still indexed after the
-Postgres pod restarts. A typed asset's extra keys travel with it between pods.
+bucket, and still indexed after the Postgres pod restarts. A typed asset's extra keys travel with it between pods.
 """
 
 import json
@@ -11,7 +10,6 @@ import subprocess
 import time
 import uuid
 
-import httpx
 import psycopg
 import pytest
 
@@ -51,19 +49,6 @@ def test_indexed_in_postgres(tag, index_query):
             f"/assets/{row['cid']}/{row['name']}"
         )
         assert row["keyvalues"]["_owner"] == STORAGE["STARGAZER_OWNER"]
-
-
-def test_dashboard_lists_the_rows(tag, dashboard):
-    """The dashboard's asset browser shows the files: it reads the same index."""
-    response = httpx.get(
-        f"{dashboard}/assets/list",
-        params={"network": "private", "asset": "devbox_probe", "tag": tag},
-        timeout=60,
-    )
-    response.raise_for_status()
-    assert sorted(row["name"] for row in response.json()) == [
-        f"probe_{tag}_{i}.txt" for i in range(N)
-    ]
 
 
 def test_extra_keyvalue_travels_between_pods(devbox_run):

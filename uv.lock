@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 5
 requires-python = ">=3.14"
 resolution-markers = [
     "sys_platform == 'win32'",
@@ -1037,8 +1037,8 @@ name = "httpcore2"
 version = "2.13.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11", marker = "sys_platform != 'emscripten'" },
-    { name = "truststore", marker = "sys_platform != 'emscripten'" },
+    { name = "h11" },
+    { name = "truststore" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/cb/f3/1db7aa2bc2524062192bb0e0323969492d1883152a232fe36eea65f4e35c/httpcore2-2.13.1.tar.gz", hash = "sha256:e0aa977abe17e69a3b820a24542a6fa88702676d83880b8d194dcd18408e5103", size = 68071, upload-time = "2026-09-23T07:47:22.372Z" }
 wheels = [
@@ -3025,7 +3025,7 @@ name = "pyzmq"
 version = "27.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "implementation_name == 'pypy' and sys_platform != 'emscripten'" },
+    { name = "cffi", marker = "implementation_name == 'pypy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e7/8d/5b3d5631c2f4b4b8862f64cd0c9eb777b5710eeb5125b4be8dd0a200a4c0/pyzmq-27.2.0.tar.gz", hash = "sha256:54d4259d1bfae24ecdb5ca79f7acc2eac6c286a02d6a0ae617797cb45f0726d3", size = 292316, upload-time = "2026-08-20T19:08:21.19Z" }
 wheels = [
@@ -3419,8 +3419,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
-    { name = "jeepney", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
@@ -3481,8 +3481,8 @@ wheels = [
 ]
 
 [[package]]
-name = "stargazer"
-version = "0.1.0"
+name = "stargazer-bio"
+version = "2026.10.28"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
@@ -3498,37 +3498,13 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "anndata" },
-    { name = "cryptography" },
-    { name = "fastapi" },
-    { name = "httpx" },
     { name = "igraph" },
-    { name = "jinja2" },
     { name = "marimo" },
     { name = "mcp", extra = ["cli"] },
     { name = "mkdocstrings", extra = ["python"] },
     { name = "pooch" },
-    { name = "pyjwt", extra = ["crypto"] },
-    { name = "python-multipart" },
     { name = "scanpy" },
     { name = "scikit-image" },
-    { name = "uvicorn" },
-    { name = "websockets" },
-]
-app = [
-    { name = "anndata" },
-    { name = "cryptography" },
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "igraph" },
-    { name = "jinja2" },
-    { name = "marimo" },
-    { name = "pooch" },
-    { name = "pyjwt", extra = ["crypto"] },
-    { name = "python-multipart" },
-    { name = "scanpy" },
-    { name = "scikit-image" },
-    { name = "uvicorn" },
-    { name = "websockets" },
 ]
 bio = [
     { name = "anndata" },
@@ -3539,16 +3515,6 @@ bio = [
 ]
 docs = [
     { name = "mkdocstrings", extra = ["python"] },
-]
-landing = [
-    { name = "cryptography" },
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "jinja2" },
-    { name = "pyjwt", extra = ["crypto"] },
-    { name = "python-multipart" },
-    { name = "uvicorn" },
-    { name = "websockets" },
 ]
 mcp = [
     { name = "mcp", extra = ["cli"] },
@@ -3564,17 +3530,31 @@ notebook = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "fastapi" },
+    { name = "flyte" },
+    { name = "httpx" },
     { name = "mkdocstrings", extra = ["python"] },
     { name = "pre-commit" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "uvicorn" },
+    { name = "websockets" },
     { name = "zensical" },
 ]
 diagrams = [
     { name = "pydeps" },
     { name = "pygraphviz" },
+]
+runtime = [
+    { name = "fastapi" },
+    { name = "flyte" },
+    { name = "httpx" },
+    { name = "pyjwt", extra = ["crypto"] },
+    { name = "uvicorn" },
+    { name = "websockets" },
 ]
 
 [package.metadata]
@@ -3584,44 +3564,49 @@ requires-dist = [
     { name = "anndata", marker = "extra == 'bio'", specifier = ">=0.12.10" },
     { name = "boto3", specifier = ">=1.40,<2" },
     { name = "certifi", specifier = ">=2024.2.2" },
-    { name = "cryptography", marker = "extra == 'landing'", specifier = ">=43" },
-    { name = "fastapi", marker = "extra == 'landing'", specifier = ">=0.115" },
     { name = "flyte", extras = ["tui"], specifier = ">=2.0.3" },
-    { name = "httpx", marker = "extra == 'landing'", specifier = ">=0.27,<1" },
     { name = "igraph", marker = "extra == 'bio'", specifier = ">=1.0.0" },
-    { name = "jinja2", marker = "extra == 'landing'", specifier = ">=3.1" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "marimo", marker = "extra == 'notebook'", specifier = ">=0.10.0" },
     { name = "mcp", extras = ["cli"], marker = "extra == 'mcp'", specifier = ">=2.0,<3" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=1.0.3" },
     { name = "pooch", marker = "extra == 'bio'", specifier = ">=1.9.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
-    { name = "pyjwt", extras = ["crypto"], marker = "extra == 'landing'", specifier = ">=2.8,<3" },
-    { name = "python-multipart", marker = "extra == 'landing'", specifier = ">=0.0.9" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "scanpy", marker = "extra == 'bio'", specifier = ">=1.12" },
     { name = "scikit-image", marker = "extra == 'bio'", specifier = ">=0.26.0" },
-    { name = "stargazer", extras = ["bio"], marker = "extra == 'notebook'" },
-    { name = "stargazer", extras = ["notebook", "landing"], marker = "extra == 'app'" },
-    { name = "stargazer", extras = ["notebook", "mcp", "landing", "docs"], marker = "extra == 'all'" },
-    { name = "uvicorn", marker = "extra == 'landing'", specifier = ">=0.34" },
-    { name = "websockets", marker = "extra == 'landing'", specifier = ">=12" },
+    { name = "stargazer-bio", extras = ["bio"], marker = "extra == 'notebook'" },
+    { name = "stargazer-bio", extras = ["notebook", "mcp", "docs"], marker = "extra == 'all'" },
 ]
-provides-extras = ["bio", "notebook", "mcp", "landing", "docs", "app", "all"]
+provides-extras = ["bio", "notebook", "mcp", "docs", "all"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "flyte", specifier = ">=2.0.3" },
+    { name = "httpx", specifier = ">=0.27,<1" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0.3" },
     { name = "pre-commit", specifier = ">=4.5.0" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8,<3" },
     { name = "pytest", specifier = ">=9.0.1" },
     { name = "pytest-asyncio", specifier = ">=1.3.0" },
     { name = "pytest-cov", specifier = ">=4.1.0" },
     { name = "ruff", specifier = ">=0.16.10,<0.17" },
+    { name = "uvicorn", specifier = ">=0.34" },
+    { name = "websockets", specifier = ">=12" },
     { name = "zensical", specifier = ">=0.0.24" },
 ]
 diagrams = [
     { name = "pydeps", specifier = ">=3,<4" },
     { name = "pygraphviz", specifier = ">=2,<3" },
+]
+runtime = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "flyte", specifier = ">=2.0.3" },
+    { name = "httpx", specifier = ">=0.27,<1" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8,<3" },
+    { name = "uvicorn", specifier = ">=0.34" },
+    { name = "websockets", specifier = ">=12" },
 ]
 
 [[package]]
@@ -4209,7 +4194,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/7e/7b/aa9f69525a430c146cd42bcaa60e29ea3c9e963fd3f30cf6480155546c81/zensical-0.0.69-cp311-abi3-macosx_10_12_x86_64.whl", hash = "sha256:2a1858b34e8b97e95d30409d602c8e4b67abd042317afaddadbaf594ee201f12", size = 18108147, upload-time = "2026-10-08T15:36:33.044Z" },
     { url = "https://files.pythonhosted.org/packages/51/db/005b2c05d6be4f478dee031d50cf4cf9f98948e2e12136904836a360a0c4/zensical-0.0.69-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:72e5956b565b6cc81b766e3a2efefbe730ce8d115186dd0531a927ba3ff8dffc", size = 17636936, upload-time = "2026-10-08T15:36:37.08Z" },
     { url = "https://files.pythonhosted.org/packages/86/32/c0fe3e0128873021f58ac2613966cba7278f17ed7ac929b202e4a3474f76/zensical-0.0.69-cp311-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:40c8aa708c5d39c8cea9fec38d2fe4c6e08acf80585c00309f298c33c6da8a01", size = 18146896, upload-time = "2026-10-08T15:36:40.082Z" },
-    { url = "https://files.pythonhosted.org/packages/b8/99/e0e6447da8e0c55549f399dfdbb38e18eb64e367e779ae97e08f6d4e5cdc/zensical-0.0.69-cp311-abi3-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:d930b2ca0ef611446a566040c72469e59c87907029fbfb3dc5eed88738ea63b0", size = 18084079, upload-time = "2026-10-08T15:36:42.728Z" },
     { url = "https://files.pythonhosted.org/packages/5d/c6/5b56c8ae4d9ff5dd84dbf0fa7356441dc02a87e8d45d6a69b8c98fd97fec/zensical-0.0.69-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a335af5e74e0b6f488ab57e137f86e48cef44df98ac200342e8235e45cda34bd", size = 18623988, upload-time = "2026-10-08T15:36:45.711Z" },
     { url = "https://files.pythonhosted.org/packages/fc/67/02e9904f0b0c1b0ec7fe76e5a71594b972a5907c61e4723f9a19e39cff7c/zensical-0.0.69-cp311-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:68f0e5a4d2228c213a9bd208b89fb52c39c766235a99a7a773c052521fa2053c", size = 18311730, upload-time = "2026-10-08T15:36:48.491Z" },
     { url = "https://files.pythonhosted.org/packages/c4/7e/b33ec1fa3d19bffc222c932a1d3b8c5d943aab945fe6d8a1c45d40af2f7d/zensical-0.0.69-cp311-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:3c516e050f645849dc5c9e09574ebfa295ad42f5baad1f8419210c51b83e3bc4", size = 18881453, upload-time = "2026-10-08T15:36:51.062Z" },

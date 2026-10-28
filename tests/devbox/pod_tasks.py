@@ -1,8 +1,8 @@
 """Tasks the devbox tests run in pods.
 
 Imported in those pods from the code bundle, so it imports only what
-`gatk_env`'s image carries (stargazer and its dependencies): nothing from
-`app/`, and nothing from the tests' conftest.
+`gatk_env`'s image carries (stargazer and its dependencies), and nothing
+from the tests' conftest.
 """
 
 import json

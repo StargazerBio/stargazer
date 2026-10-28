@@ -3,11 +3,11 @@
 # dependencies = [
 #   "matplotlib",
 #   "numpy",
-#   "stargazer[bio]",
+#   "stargazer-bio[bio]",
 # ]
 #
 # [tool.uv.sources]
-# stargazer = { path = "/stargazer", editable = true }
+# stargazer-bio = { path = "/stargazer", editable = true }
 # ///
 """
 ### Stargazer scRNA-seq.

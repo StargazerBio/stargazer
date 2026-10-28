@@ -5,9 +5,7 @@ Sets environment variable defaults at import time. Consumers read
 os.environ directly rather than importing named values from this module.
 
 Also the source of truth for the lean per-task Flyte environments
-(`scrna_env`, `gatk_env`). The app tier's AppEnvironments live in `app/`
-(`app.admin_app.app_env`, `app.per_notebook`), next to the FastAPI code they
-deploy.
+(`scrna_env`, `gatk_env`).
 
 `init_flyte()` is the one Flyte init for notebooks, the MCP server and the
 tests: an in-cluster client in a hosted notebook pod, the config file anywhere
@@ -27,17 +25,14 @@ Rules:
   table on Aurora DSQL (Union's). Defaults to ~/.stargazer/index.db.
 - STARGAZER_OWNER: The Union subject that owns new assets (their folder in
   the store, and `_owner`). Unset locally.
-- STARGAZER_TARGET: Which Flyte backend images and deploys aim at — `devbox`
-  (default, the local cluster) or `union` (the hosted tenant). Anything else
-  is an error. Forwarded into every pod so in-pod builds resolve the same way.
-  On `union` every environment also declares the project's API key
-  (`PROJECT_KEY_SECRET`), which its pods call Union with.
-- STARGAZER_REGISTRY: Image push registry. Defaults to the devbox's in-cluster
-  registry on `devbox`; left unset on `union`, where the remote builder pushes
-  to Union's own registry. An explicit value wins on either target.
-- FLYTE_DOCKER_BUILD_EXTRA_ARGS: Extra flags for local image builds. Defaults
-  to `--provenance=false` on `devbox`, so a build pushes a plain image the
-  devbox's node will pull whatever its architecture (see IMAGE_PLATFORM).
+- STARGAZER_API_KEY_SECRET: The Flyte secret holding the project's API key.
+  When it's set, every environment declares that secret, as the variable
+  Flyte's in-cluster client reads its key from, so a pod can call the cluster
+  as its project. Union needs one; a cluster without a login (the devbox), or
+  a local run, leaves it unset. Forwarded into every pod.
+
+Where images are pushed is Flyte's own setting: `image.registry` in
+`.flyte/config.yaml`, or `FLYTE_IMAGE_REGISTRY`.
 
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
@@ -72,19 +67,6 @@ os.environ.setdefault(
     "STARGAZER_INDEX_URL", str(Path.home() / ".stargazer" / "index.db")
 )
 
-TARGETS = ("devbox", "union")
-os.environ.setdefault("STARGAZER_TARGET", "devbox")
-if os.environ["STARGAZER_TARGET"] not in TARGETS:
-    raise ValueError(
-        f"STARGAZER_TARGET={os.environ['STARGAZER_TARGET']!r}; expected one of {TARGETS}"
-    )
-if os.environ["STARGAZER_TARGET"] == "devbox":
-    os.environ.setdefault("STARGAZER_REGISTRY", "localhost:30000")
-    # Buildx attaches a provenance attestation by default, which turns even a
-    # one-platform push into an index; an arm64 node finds no arm64 entry in
-    # it and refuses the pull. A plain image pulls and runs under emulation.
-    os.environ.setdefault("FLYTE_DOCKER_BUILD_EXTRA_ARGS", "--provenance=false")
-
 # Every Stargazer image is built for x86_64 only, the architecture Union runs.
 # GATK's GenomicsDB ships an x86_64-only native library, so an arm64 build
 # can't joint-call; on an Apple-silicon devbox these pods run emulated.
@@ -103,19 +85,18 @@ def _stargazer_env_vars() -> dict[str, str]:
     The spec serializes from the submitting process. STARGAZER_OWNER rides
     along when set (hosted workspaces), so a pod stores outputs in the
     owner's folder and stamps their ``_owner``; without it a pod writes as
-    ``local``. PINATA_GATEWAY, STARGAZER_TARGET and an explicit
-    STARGAZER_REGISTRY ride along so a pod resolves them like the submitter.
+    ``local``. PINATA_GATEWAY and STARGAZER_API_KEY_SECRET ride along so a
+    pod resolves them like the submitter.
     STARGAZER_STORE_ROOT and STARGAZER_INDEX_URL ride along only when set
     explicitly: a pod can't use the local store or index.
     """
     env = {
         "PINATA_GATEWAY": os.environ["PINATA_GATEWAY"],
-        "STARGAZER_TARGET": os.environ["STARGAZER_TARGET"],
         **_EXPLICIT_STORAGE,
     }
-    registry = os.environ.get("STARGAZER_REGISTRY")
-    if registry:
-        env["STARGAZER_REGISTRY"] = registry
+    key_secret = os.environ.get("STARGAZER_API_KEY_SECRET")
+    if key_secret:
+        env["STARGAZER_API_KEY_SECRET"] = key_secret
     owner = os.environ.get("STARGAZER_OWNER")
     if owner:
         env["STARGAZER_OWNER"] = owner
@@ -126,15 +107,16 @@ STARGAZER_ENV_VARS = _stargazer_env_vars()
 
 STARGAZER_SECRETS = [flyte.Secret(key="PINATA_JWT", as_env_var="PINATA_JWT")]
 
-# The project's own Union API key, which onboarding stores as this secret in
-# the user's project. Union gives pods no key of its own, and without one a
-# pod's client can't call Union: a workflow can't start its child tasks, and
-# a dashboard can't launch notebooks. Flyte's in-cluster client reads the key
-# from this variable. The devbox has no login, so its pods declare none.
-PROJECT_KEY_SECRET = "UNION_API_KEY"
-if os.environ["STARGAZER_TARGET"] == "union":
+# The project's own API key, stored as a secret in the project. Union gives
+# pods no key of its own, and without one a pod's client can't call Union: a
+# workflow can't start its child tasks, and a notebook can't run them. Flyte's
+# in-cluster client reads the key from this variable.
+if os.environ.get("STARGAZER_API_KEY_SECRET"):
     STARGAZER_SECRETS.append(
-        flyte.Secret(key=PROJECT_KEY_SECRET, as_env_var="_UNION_EAGER_API_KEY")
+        flyte.Secret(
+            key=os.environ["STARGAZER_API_KEY_SECRET"],
+            as_env_var="_UNION_EAGER_API_KEY",
+        )
     )
 
 
@@ -179,7 +161,7 @@ def log_execution() -> str:
         f"| index={os.environ['STARGAZER_INDEX_URL']} "
         f"| public tier={public} "
         f"| gateway={os.environ['PINATA_GATEWAY']} "
-        f"| local_dir={os.environ['STARGAZER_LOCAL']} | target={os.environ['STARGAZER_TARGET']}"
+        f"| local_dir={os.environ['STARGAZER_LOCAL']}"
     )
     return execution_id
 
@@ -226,7 +208,6 @@ scrna_env = flyte.TaskEnvironment(
     image=(
         flyte.Image.from_debian_base(
             name="stargazer-scrna",
-            registry=os.environ.get("STARGAZER_REGISTRY"),
             platform=IMAGE_PLATFORM,
         )
         .with_apt_packages("ca-certificates")
@@ -250,7 +231,6 @@ gatk_env = flyte.TaskEnvironment(
     image=(
         flyte.Image.from_debian_base(
             name="stargazer-gatk",
-            registry=os.environ.get("STARGAZER_REGISTRY"),
             platform=IMAGE_PLATFORM,
         )
         .with_apt_packages("ca-certificates", "curl", "bzip2")
@@ -280,7 +260,7 @@ gatk_env = flyte.TaskEnvironment(
     ),
     # A 1Gi request: the germline workflow holds three gatk_env pods at once
     # (workflow, prepare_reference or preprocess_sample, the tool), and three
-    # 2Gi requests don't fit the devbox node beside the dashboard.
+    # 2Gi requests don't fit the devbox node beside a dashboard.
     resources=flyte.Resources(memory=("1Gi", "6Gi")),
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,

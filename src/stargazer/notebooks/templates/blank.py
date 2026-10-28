@@ -1,11 +1,11 @@
 # /// script
 # requires-python = ">=3.14"
 # dependencies = [
-#   "stargazer",
+#   "stargazer-bio",
 # ]
 #
 # [tool.uv.sources]
-# stargazer = { path = "/stargazer", editable = true }
+# stargazer-bio = { path = "/stargazer", editable = true }
 # ///
 """
 ### Blank workspace notebook.

@@ -181,11 +181,15 @@ def fixtures_db(seeded_client, tmp_path, monkeypatch):
     return checkout
 
 
-def load_devbox_dashboard():
-    """Load `devbox/dashboard.py`, which lives outside the shipped packages."""
+def load_proxy():
+    """Load the notebook proxy (`runtime/proxy.py`), which isn't in the package.
+
+    Loaded as `sg_proxy`, the name it has in the image.
+    """
     spec = importlib.util.spec_from_file_location(
-        "devbox_dashboard", TESTS_DIR.parent / "devbox" / "dashboard.py"
+        "sg_proxy", TESTS_DIR.parent / "runtime" / "proxy.py"
     )
     module = importlib.util.module_from_spec(spec)
+    sys.modules["sg_proxy"] = module
     spec.loader.exec_module(module)
     return module

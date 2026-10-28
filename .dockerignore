@@ -23,7 +23,6 @@ docs
 site
 tests
 cli
-devbox
 AGENTS.md
 zensical.toml
 .pre-commit-config.yaml

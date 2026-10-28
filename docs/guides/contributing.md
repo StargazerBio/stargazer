@@ -1,6 +1,6 @@
 # Contributing
 
-Stargazer has multiple contributor shapes — researchers writing notebooks, agent users driving the MCP server, code authors adding tasks, image maintainers publishing releases. Notebook authoring and the first step of task promotion both happen in the hosted notebook (see [Notebooks → User Archetypes](../architecture/notebook.md#user-archetypes)); this guide covers working on the source itself — the SDK, the app tier, and the images — natively against the repo.
+Stargazer has multiple contributor shapes — researchers writing notebooks, agent users driving the MCP server, code authors adding tasks, image maintainers publishing releases. Notebook authoring and the first step of task promotion both happen in the hosted notebook (see [Notebooks → User Archetypes](../architecture/notebook.md#user-archetypes)); this guide covers working on the source itself — the SDK, the notebook runtime, and the images — natively against the repo.
 
 ## Setup
 
@@ -14,7 +14,7 @@ uv run pre-commit install
 You now have:
 
 - The stargazer package installed in editable mode in a project venv
-- All Python deps from the lockfile, including every optional extra (scRNA, notebook, MCP, app tier, docs), plus the `dev` group (pytest, ruff, pre-commit)
+- All Python deps from the lockfile, including every optional extra (scRNA, notebook, MCP, docs), plus the `dev` group (pytest, ruff, pre-commit)
 - A pre-commit hook that lints, checks docstrings, builds the docs and runs the unit tests on every commit
 
 The bioinformatics tools (gatk, bwa, bwa-mem2, samtools) aren't needed: their tests run in the task image (see [Running Tests](#running-tests)). Running those tasks locally, outside the tests, needs them on your PATH, from bioconda for instance.
@@ -25,14 +25,17 @@ Use `flyte start devbox` to spin up a local Flyte cluster for development. See t
 
 Stargazer's images are built for x86_64 only, like the machines they run on in production. On Apple silicon the devbox itself runs natively and Stargazer's pods run under emulation, so they're slower than on Union. Docker Desktop runs them through Rosetta, so keep its Rosetta setting enabled.
 
-This environment is much closer to production and lets you actually test your task and app environments. After every fresh devbox, apply the cluster-side fixes, which also start the Postgres server that holds the devbox's asset index. Then deploy a dashboard if you want one:
+This environment is much closer to production and lets you actually test your task environments. After every fresh devbox, apply the cluster-side fixes in the infrastructure repository's `devbox/setup.sh`, which also start the Postgres server that holds the devbox's asset index; a dashboard for the devbox deploys from there too. Then point your Flyte config at the devbox's registry, so the images your runs build go where the devbox pulls from. In `.flyte/config.yaml`:
 
-```bash
-devbox/setup.sh                          # prints the one-time DNS steps for your machine too
-uv run --all-extras python devbox/dashboard.py
+```yaml
+image:
+  builder: local
+  registry: localhost:30000
 ```
 
-The dashboard opens at `http://dashboard-flytesnacks-development.devbox.stargazer.bio:30081` as a stand-in user, `devbox-user`, and its asset explorer lists what that user has stored. To have runs you submit store their assets on the devbox, export these first and keep the storage port-forward open while submitting:
+On Apple silicon also export `FLYTE_DOCKER_BUILD_EXTRA_ARGS=--provenance=false` before a run builds an image ([Configuration → Container Images](../architecture/configuration.md#container-images) says why).
+
+To have runs you submit store their assets on the devbox, export these first and keep the storage port-forward open while submitting:
 
 ```bash
 export STARGAZER_STORE_ROOT=s3://flyte-data/stargazer
@@ -41,7 +44,7 @@ export STARGAZER_OWNER=devbox-user
 kubectl port-forward -n flyte svc/rustfs-svc 9000:9000
 ```
 
-The devbox tests (`uv run --all-extras pytest -m devbox`, see [Running Tests](#running-tests)) check that whole path: they deploy the dashboard, store and find assets across pods, check the index survives a restart of its Postgres server, and run the germline workflow.
+The devbox tests (`uv run --all-extras pytest -m devbox`, see [Running Tests](#running-tests)) check that whole path: they store and find assets across pods, check the index survives a restart of its Postgres server, and run the germline workflow.
 
 ## Running Tests
 
@@ -58,7 +61,7 @@ uv run --all-extras pytest -m dsql                    # the index on the real DS
 
 - **Unit** (`tests/assets`, `notebooks`, `unit`, `utils`) is the cheap tests that run on Python alone. Every test gets its own empty store, index and cache under its temp directory, so nothing touches `~/.stargazer`, and runs with no `PINATA_JWT`. Tests that query the fixture files use a store seeded once per session (`tests/fixtures/seed.py`).
 - **Tasks** (`tests/tasks`) runs each task's tests in the image the task runs in, so the GATK and alignment tools never need to be on your machine. Run it when you add or change a task. The runner builds those images as a pod gets them, x86_64 like Union (emulated on Apple silicon), and runs the tests in them. A source change rebuilds the images first. Pass paths or `-k` to run a subset, such as `tests/tasks/gatk/test_sort_sam.py`.
-- **Devbox** (`tests/devbox`) is anything that needs a cluster: deploying the dashboard, workflows across pods, the devbox's store and index. It deploys the dashboard itself; the devbox has to be up with `devbox/setup.sh` applied. Add `-rP` to see each run's URL.
+- **Devbox** (`tests/devbox`) is anything that needs a cluster: workflows across pods, the devbox's store and index. The devbox has to be up with its setup applied, and `.flyte/config.yaml` pointing at its registry. Add `-rP` to see each run's URL.
 - **Pinata** (`tests/pinata`) calls the real Pinata API with the key in `tests/.secrets/pinata_jwt`, and fails without it.
 - **Postgres** (`tests/postgres`) runs the index tests against a Postgres 16 container it starts and removes itself, so it needs Docker running. Run it when you change the index.
 - **DSQL** (`tests/dsql`) runs the same index tests against the hosted index's Aurora DSQL cluster, as its admin, in a schema it makes and drops. It needs an admin's AWS session and the cluster's ARN in `STARGAZER_DSQL_CLUSTER_ARN`. Run it when you change the index's SQL or how it connects to DSQL.
@@ -90,7 +93,7 @@ A nested `ruff.toml`'s ban list replaces its parent's rather than adding to it, 
 To see how the modules depend on each other, draw the import graph. The script installs what it needs, Graphviz included, through uv:
 
 ```bash
-cli/diagrams.sh                            # the SDK by package and by module, and the app tier
+cli/diagrams.sh                            # the SDK by package and by module
 cli/diagrams.sh src/stargazer/server.py    # one module and everything it imports
 ```
 
@@ -130,22 +133,25 @@ Every change goes through a pull request — nothing is committed directly to `m
 
 ## Building Images
 
-See [Configuration → Container Images](../architecture/configuration.md#container-images) for the split between Flyte task images and human-runnable images. `uv add` covers Python deps via the lockfile, and contributors pulling your branch pick the change up on their next `uv sync`.
+See [Configuration → Container Images](../architecture/configuration.md#container-images) for what each image is. `uv add` covers Python deps via the lockfile, and contributors pulling your branch pick the change up on their next `uv sync`.
 
-**Flyte task images (`stargazer-scrna`, `stargazer-gatk`)** build themselves. Each is tagged by a hash of its recipe and the project's source, so a change to either builds a new one the first time something needs it: a run on the devbox or Union, or the tasks test tier, which builds into your local docker without pushing anywhere. `image.builder` in the Flyte config picks `local` (needs a working Docker daemon) or `remote` (Union only, builds on the cluster). Runs push to `STARGAZER_REGISTRY` — the devbox's own registry by default when targeting the devbox.
+**Flyte task images (`stargazer-scrna`, `stargazer-gatk`)** build themselves. Each is tagged by a hash of its recipe and the project's source, so a change to either builds a new one the first time something needs it: a run on the devbox or Union, or the tasks test tier, which builds into your local docker without pushing anywhere. `image.builder` in the Flyte config picks `local` (needs a working Docker daemon) or `remote` (Union only, builds on the cluster), and a local build pushes to the config's `image.registry`.
 
-**The human-runnable image (`stargazer`)** builds from the `Dockerfile` when you change it or want the current source in it:
-
-```bash
-docker build -t ghcr.io/stargazerbio/stargazer:latest .
-```
-
-Tag it with the published `ghcr.io/stargazerbio/...` URL even though you're not pushing — `docker run` resolves it from the local cache by that name.
-
-CI publishes it. When a merge to `main` changes the image's own files (the `Dockerfile` and the files it bakes from `app/`: the proxy, its overlay and banner, the launch script and the terminal agent's context), the **Stargazer image** workflow (`.github/workflows/stargazer-image.yml`) builds both platforms and pushes `:latest`. A change to the SDK or the notebooks doesn't trigger it, so to ship one, run the workflow by hand from the repo's Actions tab, or with:
+**The notebook image (`stargazer`)** builds from `runtime/Dockerfile`, from the repository root, when you change it or want the current source in it:
 
 ```bash
-gh workflow run stargazer-image.yml
+docker build -f runtime/Dockerfile -t ghcr.io/stargazerbio/stargazer:latest .
 ```
 
-The hosted notebook pods run `notebook-app`, built by the dashboard deploy (`app.deploy.build_notebook_image`) — see [App → Images](../architecture/app.md#images). The `Dockerfile` mirrors that recipe but shares no code with it. A unit test fails when the `Dockerfile` is missing a pip package of the recipe's or a file the proxy reads at startup; tool versions can still drift, so bring them up to date when you bump one in `notebook_app_img_recipe` (`app/per_notebook.py`).
+Tag it with the published `ghcr.io/stargazerbio/...` URL even though you're not pushing — `docker run` resolves it from the local cache by that name. Releases publish it.
+
+## Releasing
+
+A release is named by its date. Set `version` in `pyproject.toml` to today's date (`2026.11.27`, or `2026.11.27.1` for a second release that day) in a PR. Once it's merged, tag `main` with the same version and push the tag:
+
+```bash
+git tag v2026.11.27 origin/main
+git push origin v2026.11.27
+```
+
+The **Release** workflow (`.github/workflows/release.yml`) checks the tag names the version, then publishes the package to PyPI as `stargazer-bio` and the image to `ghcr.io/stargazerbio/stargazer` under the tag and `latest`. The hosted dashboard picks a release up when its pin moves to it.

@@ -1,34 +1,38 @@
 """Fixtures for the devbox tier (`uv run --all-extras pytest -m devbox`).
 
-These tests run on the local devbox, so they need it up, `devbox/setup.sh`
-applied since it was created (with its steps for this machine's DNS; it also
-starts the Postgres server that holds the asset index), and kubectl pointed
-at it. The session points Flyte at the devbox, bundling code from the repo
-root as SDK code does by default, and holds the store port-forward open
-while runs upload their code and inputs. Runs carry the devbox storage
-settings in their run context, so nothing needs exporting first.
+These tests run on the local devbox, so they need it up, infra's devbox setup
+applied since it was created (it also starts the Postgres server that holds
+the asset index), and kubectl pointed at it. The session points Flyte at the
+devbox with `.flyte/config.yaml`, whose `image.registry` is the devbox's
+registry, bundling code from the repo root as SDK code does by default, and
+holds the store port-forward open while runs upload their code and inputs.
+Runs carry the devbox storage settings in their run context, so nothing needs
+exporting first.
 """
 
 import asyncio
+import os
+import socket
+import subprocess
+import time
+from contextlib import contextmanager
 from urllib.parse import urlsplit
 
 import flyte
 import pytest
-from conftest import load_devbox_dashboard
 
-from app import config
-from app.init import init
 from stargazer.config import PROJECT_ROOT
 from stargazer.utils.index import PostgresIndex
 
-devbox_dashboard = load_devbox_dashboard()
-
-# Where a pod on the devbox stores assets: the bucket, the Postgres index,
-# and the stand-in user who owns them.
+# Where a pod on the devbox stores assets: the devbox's bucket, its Postgres
+# index (infra's devbox setup runs the server), and a stand-in owner.
 STORAGE = {
-    "STARGAZER_STORE_ROOT": devbox_dashboard.STORE_ROOT,
-    "STARGAZER_INDEX_URL": devbox_dashboard.INDEX_URL,
-    "STARGAZER_OWNER": devbox_dashboard.SUBJECT,
+    "STARGAZER_STORE_ROOT": "s3://flyte-data/stargazer",
+    "STARGAZER_INDEX_URL": (
+        "postgresql://stargazer:stargazer@"
+        "postgres.stargazer.svc.cluster.local:5432/stargazer"
+    ),
+    "STARGAZER_OWNER": "devbox-user",
 }
 
 # The local end of the port-forward to the devbox's Postgres, clear of a
@@ -36,13 +40,53 @@ STORAGE = {
 _INDEX_PORT = 15432
 
 
+def _port_open(port: int) -> bool:
+    """Whether something already listens on localhost:`port`."""
+    with socket.socket() as sock:
+        sock.settimeout(0.2)
+        return sock.connect_ex(("127.0.0.1", port)) == 0
+
+
+@contextmanager
+def port_forward(namespace: str, service: str, local: int, remote: int):
+    """Hold `localhost:<local> → <service>:<remote>` open; reuse one already open."""
+    if _port_open(local):
+        yield
+        return
+    proc = subprocess.Popen(
+        ["kubectl", "port-forward", "-n", namespace, service, f"{local}:{remote}"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        for _ in range(40):
+            if _port_open(local):
+                break
+            time.sleep(0.25)
+        else:
+            raise RuntimeError(
+                f"kubectl port-forward to {namespace}/{service} didn't open"
+            )
+        yield
+    finally:
+        proc.terminate()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def init_flyte_context():
-    """Point Flyte at the devbox and hold the store port-forward open."""
-    if config.TARGET != "devbox":
-        pytest.fail("The devbox tier needs STARGAZER_TARGET=devbox")
-    init(config.FLYTE_CONFIG, root_dir=PROJECT_ROOT)
-    with devbox_dashboard.storage_port_forward():
+    """Point Flyte at the devbox and hold the store port-forward open.
+
+    Uploads go to the in-cluster signed-URL host, which the forward of the
+    object store (rustfs) answers on this machine.
+    """
+    # Buildx attaches a provenance attestation by default, which turns even a
+    # one-platform push into an index; an arm64 node finds no arm64 entry in
+    # it and refuses the pull. A plain image pulls and runs under emulation.
+    os.environ.setdefault("FLYTE_DOCKER_BUILD_EXTRA_ARGS", "--provenance=false")
+    flyte.init_from_config(
+        PROJECT_ROOT / ".flyte" / "config.yaml", root_dir=PROJECT_ROOT
+    )
+    with port_forward("flyte", "svc/rustfs-svc", 9000, 9000):
         yield
 
 
@@ -52,31 +96,20 @@ def isolated_storage():
 
 
 @pytest.fixture(scope="session")
-def dashboard() -> str:
-    """Deploy the dashboard for the stand-in user, as `devbox/dashboard.py` does.
-
-    Returns its URL. Deployed once per session, so it runs the current source.
-    """
-    return devbox_dashboard.deploy()
-
-
-@pytest.fixture(scope="session")
 def index_query():
     """Query the devbox's Postgres index from this machine.
 
     Returns `query(filters)`, giving the matching rows. Each call opens its
     own port-forward, since a forward dies with the pod it reached.
     """
-    url = urlsplit(devbox_dashboard.INDEX_URL)
+    url = urlsplit(STORAGE["STARGAZER_INDEX_URL"])
     local = url._replace(
         netloc=f"{url.username}:{url.password}@127.0.0.1:{_INDEX_PORT}"
     ).geturl()
 
     def query(filters: dict) -> list[dict]:
         """Rows matching every filter, through a fresh port-forward."""
-        with devbox_dashboard.port_forward(
-            "stargazer", "svc/postgres", _INDEX_PORT, 5432
-        ):
+        with port_forward("stargazer", "svc/postgres", _INDEX_PORT, 5432):
             return asyncio.run(PostgresIndex(local).query(filters))
 
     return query

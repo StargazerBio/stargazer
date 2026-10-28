@@ -1,12 +1,12 @@
 <!--
   Quake-style dropdown terminal overlay, spliced into every marimo HTML page
-  before the closing body tag by app/proxy.py (read into `_TERM_INJECTION` at
+  before the closing body tag by runtime/proxy.py (read into `_TERM_INJECTION` at
   import). It is NOT a standalone document — an injected fragment of link/style/
   <script>. xterm.js + the fit addon load from CDN (browser-side, no pod dep);
   the panel is fixed + semi-transparent, toggled with Ctrl+`, and talks to the
   proxy's /__sg__/term PTY websocket. Kept as a static asset (not a Python
   string) so it gets real HTML/CSS/JS tooling; baked next to the proxy in the
-  notebook image via per_notebook.py's with_source_file.
+  image (runtime/Dockerfile).
 -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
 <style>

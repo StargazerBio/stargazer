@@ -9,7 +9,7 @@ Asset storage has three parts: an **object store** for the bytes, an **index** f
 | Local cache | `~/.stargazer/local` | The pod's disk | `STARGAZER_LOCAL` |
 | Public tier | Off without a key | Pinata's public network | `PINATA_JWT` |
 
-On Union the dashboard and every pod in the user's project reach their table directly, logged in as the user ([App → Asset Index](app.md#asset-index)). On the devbox, the local cluster for development, the index is a Postgres server that every pod and the dashboard reach the same way ([Contributing → Running on the Devbox](../guides/contributing.md#running-on-the-devbox)).
+On Union the dashboard and every pod in the user's project reach their table directly, logged in as the user. On the devbox, the local cluster for development, the index is a Postgres server that every pod and the dashboard reach the same way ([Contributing → Running on the Devbox](../guides/contributing.md#running-on-the-devbox)).
 
 ## Identity and layout
 
@@ -31,9 +31,9 @@ All env var defaults are set in `config.py`. If set (even to empty string), the 
 | `STARGAZER_OWNER` | Owner of new assets: their folder in the store, and `_owner` | None (unset → `local`) | No |
 | `PINATA_JWT` | Turns on the public tier | None (unset) | Only for public data |
 | `PINATA_GATEWAY` | IPFS gateway for public downloads | `https://maroon-written-fowl-769.mypinata.cloud`, the project's dedicated Pinata gateway | No |
-| `STARGAZER_TARGET` | Flyte backend for images and deploys: `devbox` or `union` | `devbox` | No |
-| `STARGAZER_REGISTRY` | Image push registry | `localhost:30000` on `devbox`; unset on `union` (the builder's own registry) | No |
-| `FLYTE_DOCKER_BUILD_EXTRA_ARGS` | Extra flags for local image builds | `--provenance=false` on `devbox` | No |
+| `STARGAZER_API_KEY_SECRET` | The Flyte secret holding the project's API key, which every task environment then declares | None (unset → no key declared) | On a cluster with a login, such as Union |
+
+Where images are pushed is Flyte's own setting, `image.registry` in `.flyte/config.yaml` (or `FLYTE_IMAGE_REGISTRY`): Stargazer sets no registry of its own.
 
 `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` are forwarded into task pods only when set explicitly. A pod can't use the local default store or index, so a remote run submitted locally with the defaults has nowhere shared to write.
 
@@ -41,7 +41,7 @@ On Union, `PINATA_JWT` is a Flyte secret ([The public tier](#the-public-tier)).
 
 ## Connecting to Flyte
 
-Notebooks, the MCP server and the tests connect with `init_flyte()` from `config.py`. Locally it reads `.flyte/config.yaml`, and with no config file runs stay in the caller's own process. A hosted notebook pod has no config file, so there it connects to the owner's project on the cluster the pod runs on, with the project's own API key. On Union every task environment, dashboard and notebook pod declares that key as a secret (`PROJECT_KEY_SECRET`), as it does the Pinata key, since the platform gives pods none of its own ([App Tier → Core Concepts](app.md#core-concepts)). The app tier has its own init (`app.init`), which also accepts an API key, since the SDK never imports the app tier.
+Notebooks, the MCP server and the tests connect with `init_flyte()` from `config.py`. Locally it reads `.flyte/config.yaml`, and with no config file runs stay in the caller's own process. A hosted notebook pod has no config file, so there it connects to the owner's project on the cluster the pod runs on, with the project's own API key. Union gives pods no key of their own: without one a workflow can't start its child tasks. So on Union every task environment declares the key's secret, the one `STARGAZER_API_KEY_SECRET` names, as it does the Pinata key, and the variable rides into every pod so the tasks a pod starts declare it too. A cluster without a login, such as the devbox, has no key, and its environments declare none.
 
 ## Writing and reading
 
@@ -107,37 +107,31 @@ returns its matching records.
 chunk)` are the TUS path's two steps on their own, for a caller that has the
 file one chunk at a time: the dashboard's asset explorer passes on a public
 upload's pieces as the browser sends them, and `tus_patch` returns the CID
-once the last one lands — see [App → Asset Manager](app.md#asset-manager).
+once the last one lands.
 
 ## Container Images
 
-Stargazer has five container images. They split along a sharp line: **Flyte-built images** (run only by Flyte) are declared as `flyte.Image`s, the task images on the `TaskEnvironment`s in `src/stargazer/config.py` and the two hosted-app images in `app/`; the **human-runnable image** (used via `docker run`) is built from the project's multi-stage `Dockerfile`.
+Stargazer has three container images. The task images are declared as `flyte.Image`s on the `TaskEnvironment`s in `src/stargazer/config.py` and built by Flyte; the notebook image is built from `runtime/Dockerfile` and published with each release.
 
-| Image | Source | Type | Where it runs |
-|-------|--------|------|---------------|
-| `stargazer-scrna` | `config.py` (`scrna_env`) | `flyte.TaskEnvironment` | scRNA-seq tasks (`tasks/scrna/`) |
-| `stargazer-gatk` | `config.py` (`gatk_env`) | `flyte.TaskEnvironment` | GATK + alignment tasks (`tasks/gatk/`, `tasks/general/`) |
-| `notebook-app` | `app/per_notebook.py` (`notebook_app_img_recipe`) | `flyte.Image` | Hosted notebook pods |
-| the dashboard image | `app/admin_app.py` (`app_env`) | `flyte.Image` via `with_uv_project` | Each user's dashboard |
-| `stargazer` | `Dockerfile` | Marimo behind the terminal proxy, Claude Code, the bioconda tools | Local `docker run` only |
-
-Why the split: Flyte-built images need nothing but Flyte's contract (an entrypoint Flyte injects, a content-hash tag Flyte pins by) — perfectly served by the SDK. A human-runnable image needs a real `ENTRYPOINT`, baked-in source, and a stable `:latest` tag — none of which the Flyte Image SDK exposes. Rather than reinvent the Dockerfile via post-build wrapping, we just use a Dockerfile.
+| Image | Source | Where it runs |
+|-------|--------|---------------|
+| `stargazer-scrna` | `config.py` (`scrna_env`) | scRNA-seq tasks (`tasks/scrna/`) |
+| `stargazer-gatk` | `config.py` (`gatk_env`) | GATK + alignment tasks (`tasks/gatk/`, `tasks/general/`) |
+| `stargazer` | `runtime/Dockerfile` | Every notebook: `docker run` locally, and hosted notebook pods ([Notebook Runtime](runtime.md)) |
 
 Both task images install the stargazer package itself, not only its dependencies. A task pod finds the tasks a workflow calls by their installed module names, so without the package a workflow's child tasks can't load, wherever the run was submitted from. Your own tasks and workflows still travel in each run's code bundle. Since the package is in the image, a change to the project's source builds new task images; `.dockerignore` keeps docs, tests and local caches out of the build context, so they don't.
 
-Every image Flyte builds — the task images, the dashboard, the notebook image — is built for `linux/amd64` only, the architecture Union runs. GATK's GenomicsDB, which joint calling uses, has no arm64 build. On an Apple-silicon devbox the cluster itself runs natively and these pods run under emulation. A devbox build pushes a plain image rather than a multi-platform index (`FLYTE_DOCKER_BUILD_EXTRA_ARGS` defaults to `--provenance=false` there), since an arm64 node won't pull an index with no arm64 entry.
+Every image Flyte builds is built for `linux/amd64` only, the architecture Union runs. GATK's GenomicsDB, which joint calling uses, has no arm64 build. On an Apple-silicon devbox the cluster itself runs natively and these pods run under emulation, which needs a plain image rather than a multi-platform index: an arm64 node won't pull an index with no arm64 entry, so a devbox build sets `FLYTE_DOCKER_BUILD_EXTRA_ARGS=--provenance=false`.
 
-The `Dockerfile` image is published for both `linux/amd64` and `linux/arm64`, so it runs natively on Apple silicon. It carries the bioconda tools and a Flyte config that runs workflows in the container; a notebook's own dependencies come from its PEP 723 header, as in a hosted pod. Because GenomicsDB has no arm64 build, joint calling works only in the amd64 variant.
-
-Hosted notebook pods run **`notebook-app`**, defined programmatically in `app/per_notebook.py` and built by the deploy (`app.deploy.build_notebook_image`). `stargazer` mirrors that recipe in the `Dockerfile` without sharing code with it (a unit test keeps its pip packages in step; tool versions can lag), because a published, multi-arch image needs a real `ENTRYPOINT` and a stable tag the Flyte Image SDK doesn't expose. See [App → Images](app.md#images).
+The `stargazer` image is published for both `linux/amd64` and `linux/arm64`, so it runs natively on Apple silicon. Because GenomicsDB has no arm64 build, joint calling works only in the amd64 variant.
 
 ### Building locally
 
-The Flyte task images build the first time a run needs them, tagged by content hash, with the builder selected in the Flyte config: `local` needs a working Docker daemon, `remote` (Union only) builds on the cluster. They are pushed to `STARGAZER_REGISTRY`, which on `devbox` defaults to the devbox's own registry (`localhost:30000`) and on `union` is left to the remote builder, which pushes to Union's registry. The human-runnable image builds from the Dockerfile and is tagged with its published `ghcr.io/stargazerbio` URL even when local-only, so docker resolves it from the local cache by name. CI publishes it when a merge changes the image's own files, and on demand. Commands in [Contributing → Building Images](../guides/contributing.md#building-images).
+The Flyte task images build the first time a run needs them, tagged by content hash, with the builder selected in the Flyte config: `local` needs a working Docker daemon, `remote` (Union only) builds on the cluster and pushes to Union's registry. A local build pushes to the config's `image.registry`. The `stargazer` image builds with `docker build -f runtime/Dockerfile .`; releases publish it. Commands in [Contributing → Building Images](../guides/contributing.md#building-images).
 
 ### Adding a tool
 
-When a new Flyte task wraps a new CLI tool, layer it onto the image of the `TaskEnvironment` it is decorated against in `config.py` — via `with_apt_packages`, `with_commands`, or the bioconda install block. A tool notebooks should reach directly goes in the bioconda block of the hosted notebook image (`notebook_app_img_recipe` in `app/per_notebook.py`), and in the Dockerfile's matching bioconda line. See [Writing a Task](../guides/writing-a-task.md).
+When a new Flyte task wraps a new CLI tool, layer it onto the image of the `TaskEnvironment` it is decorated against in `config.py` — via `with_apt_packages`, `with_commands`, or the bioconda install block. A tool notebooks should reach directly goes in the bioconda line of `runtime/Dockerfile`. See [Writing a Task](../guides/writing-a-task.md).
 
 ## Resource Bundles
 

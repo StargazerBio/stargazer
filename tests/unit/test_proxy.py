@@ -1,4 +1,4 @@
-"""Tests for the per-notebook proxy (`app.proxy`).
+"""Tests for the notebook proxy (`runtime/proxy.py`).
 
 The proxy is baked into the notebook image as a standalone module; here we
 import it directly. Covered: what the proxy forwards from the platform-forwarded
@@ -16,10 +16,11 @@ import time
 
 import httpx
 import pytest
+from conftest import load_proxy
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app import admin_app, proxy
+proxy = load_proxy()
 
 OWNER = "387300641116005877"
 OTHER = "111111111111111111"
@@ -476,12 +477,6 @@ def test_interval_from_env_saves_while_serving(pod_dirs, monkeypatch):
         while not (stored / "live.py").exists() and time.monotonic() < deadline:
             time.sleep(0.05)
         assert (stored / "live.py").read_text() == "# live\n"
-
-
-def test_unset_interval_is_the_dashboards_default(monkeypatch):
-    """A pod launched without an interval saves as often as a new user's would."""
-    monkeypatch.delenv("SG_SAVE_INTERVAL_SECONDS", raising=False)
-    assert proxy._save_interval() == admin_app.DEFAULT_SETTINGS["save_interval_seconds"]
 
 
 def test_interval_zero_saves_only_at_shutdown(pod_dirs, monkeypatch):
