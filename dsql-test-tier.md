@@ -1,8 +1,9 @@
 ---
 title: A test tier on the real DSQL cluster
-status: doing
+status: review
 priority: normal
 created: 2026-10-28
+pr: 100
 ---
 
 `DsqlIndex` (`src/stargazer/utils/index.py`) signs its own DSQL auth tokens, caches them and the user's assumed-role credentials, and sets up TLS and IPv4 itself. No test ran any of it: the postgres tier swaps `_connect` for a password login, so the only check was driving the tenant by hand. Everything else `DsqlIndex` does is `PostgresIndex`'s SQL and its 40001 retry, which the postgres tier covers, the retry under serializable isolation.
@@ -12,7 +13,7 @@ Swapping in AWS's connector was weighed and set aside: without its pool it makes
 ## Plan
 
 - [x] A `dsql` test tier: the index and state tests against the real cluster, as its admin, in a schema it makes and drops. On demand, with the admin's AWS session and infra's `tenant.env`, like the pinata tier with its key. A `dsql://` URL for `admin` needs no `role_arn` and signs with the caller's credentials; a user's login still needs its role.
-- [ ] Docs: the test tiers in the `write-tests` skill and `AGENTS.md`, the index client in `app_internals.md`.
+- [x] Docs: the test tiers in the `write-tests` skill and `AGENTS.md`, the index client in `app_internals.md`.
 
 ## Verification
 
