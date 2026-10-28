@@ -1,6 +1,6 @@
 ---
 title: Move the dashboard and its deploy to infra
-status: doing
+status: review
 priority: low
 created: 2026-10-27
 ---
@@ -86,12 +86,13 @@ the devbox's registry (`localhost:30000`) and its `--provenance=false` build
 flag. The target does three things in the SDK, and each moves to whoever
 sets up the cluster:
 
-- **The push registry.** Flyte already reads one from the config file's
-  `image.registry` (or `FLYTE_IMAGE_REGISTRY`) when an image is defined
-  (`flyte._image._get_push_registry`), so infra's devbox setup writes it into
-  the devbox's `.flyte/config.yaml`. Whether it reaches images that
-  `config.py` defines at import, with `registry=None` passed explicitly, is
-  unmeasured.
+- **The push registry.** Flyte fixes an image's registry when the image is
+  defined, from `FLYTE_IMAGE_REGISTRY` or `./.flyte/config.yaml`'s
+  `image.registry`; a later `init_from_config` doesn't change it (measured
+  2026-10-28). A registry in the config file leaked into a Union deploy run
+  from the same directory (`localhost:30000/dashboard` on Union's builder), so
+  the devbox's registry goes in the environment: infra's `app.config` sets it
+  on the devbox target, and Stargazer's devbox tier requires it exported.
 - **The build flag**, which only an arm64 devbox needs. `FLYTE_DOCKER_BUILD_EXTRA_ARGS`
   is Flyte's own variable, so infra sets it for the devbox.
 - **The project key secret** declared on Union. That's a property of the
@@ -152,19 +153,65 @@ Measured 2026-10-28 unless marked.
 | Devbox | The cluster, its setup and its dashboard live together in infra, beside the dashboard code they deploy. | Stargazer's devbox tests and anyone running tasks on a devbox need infra to set it up. `verify-stargazer` drives notebooks through the dashboard and would span both repos. |
 | Tooling | Smaller context per repo (inferred). Infra already has its own AGENTS.md, skills and PR flow. | The docs split: `docs/architecture/app.md` and its companion move to infra or link across. |
 
-## Pieces, if it goes ahead
+## Pieces
 
-- [ ] `runtime/` holds the proxy, launch script, save banner and the one
+- [x] `runtime/` holds the proxy, launch script, save banner and the one
       image recipe; `per_notebook.py`'s deploy half goes to infra.
-- [ ] One image for all three places; the differences above resolved.
-- [ ] Release workflow: a calendar tag publishes the package to PyPI and the
-      image to GHCR. Reopens tickets `pypi-release` and `sdk-package`'s
-      SDK-only package piece.
-- [ ] The interface above written down in Stargazer's docs.
-- [ ] `STARGAZER_TARGET` leaves the SDK as above. It needs nothing else
-      from the split, so it can ship first as its own PR.
-- [ ] `app/` and `devbox/` move to infra, pinned to a release; the devbox
-      test tier splits as above, and infra's devbox rule goes.
+- [x] One image for all three places; the differences above resolved. Its
+      working directory is `/home/flyte`, since `fserve` unpacks the code
+      bundle and its parameters file into the working directory.
+- [x] Release workflow: a calendar tag publishes the package to PyPI and the
+      image to GHCR (`.github/workflows/release.yml`). Not run yet: PyPI's
+      trusted publisher for `stargazer-bio` has to be set up first.
+- [x] The interface above written down in Stargazer's docs
+      (`docs/architecture/runtime.md`, The Pod Contract).
+- [x] `STARGAZER_TARGET` leaves the SDK as above;
+      `STARGAZER_API_KEY_SECRET` names the project key's secret.
+- [x] `app/` and `devbox/` move to infra, pinned (for review) to the
+      branch's commit archive; the devbox test tier splits as above, and
+      infra's devbox rule goes.
+- [ ] After both merge: set up PyPI's trusted publisher, bump `version`,
+      tag the first release, and move infra's pin to `stargazer-bio==<it>`.
+- [ ] Before any dashboard runs a renamed release: saved notebooks' headers
+      name `stargazer-bio` (ticket `notebook-header-rename`).
+
+## Verification recipe
+
+Stargazer's image from the branch, on every surface it runs on:
+
+1. `docker buildx build --platform linux/amd64 --provenance=false --load -f runtime/Dockerfile -t localhost:30000/stargazer:<tag> .`
+2. Locally: `docker run -p 18080:8080 <image>`; `/__sg__/ready` is 200,
+   `/workspace` has the notebooks, and the sandbox venv has `stargazer-bio`
+   editable from `/stargazer`.
+3. Devbox: push it, then from infra
+   `STARGAZER_NOTEBOOK_IMAGE=localhost:30000/stargazer:<tag> uv run python devbox/dashboard.py`;
+   `POST /launch` a tutorial; in the pod, PID 1 is `fserve`, the user is
+   `flyte`, the code bundle is in `/home/flyte` and `/workspace` holds only
+   the user's files; write a file and find it in the store 30 s later.
+4. Stargazer's devbox tier with `FLYTE_IMAGE_REGISTRY=localhost:30000`.
+5. Union: push to GHCR under `test-<slug>`, deploy the test account's
+   dashboard from infra with `STARGAZER_NOTEBOOK_IMAGE` set to it (infra's
+   `verify-dashboard` skill), run a tutorial's cells, and launch a notebook
+   created from the Basic template, whose declared image layers on it.
+   Tear down.
+
+## Evidence (2026-10-28)
+
+- Local `docker run`: ready 200, notebooks seeded, sandbox has
+  `stargazer-bio 2026.10.28` from `/stargazer/src` (measured).
+- Devbox: dashboard deployed from infra (`2026.10.28-4361fa2-dirty` on its
+  page); the Assets tutorial's pod ran as `flyte` under `fserve`, with
+  `app/`, the bundle tarball and `flyte-parameters.json` in `/home/flyte` and
+  only `AGENTS.md` in `/workspace`; two probe files reached the store and
+  nothing else did (measured). Stargazer's `test_asset_storage.py`: 4 passed.
+- Union, as the test account: dashboard built on the remote builder from
+  infra's project; the tutorial served from
+  `ghcr.io/stargazerbio/stargazer:test-split-app-repo` and ran its cells; a
+  Basic-template notebook's image built in ~100 s as
+  `notebook-custom-7776a861…` on top of it and served (measured). Torn down.
+- Saved notebooks: all 7 of the test account's name `"stargazer"`, which
+  the renamed package refuses (`Package metadata name stargazer-bio does not
+  match given name stargazer`, measured in the image).
 
 ## Revisit when
 
