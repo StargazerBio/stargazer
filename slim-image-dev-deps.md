@@ -1,6 +1,6 @@
 ---
 title: Task images carry the whole dev group
-status: maybe
+status: done
 priority: low
 created: 2026-10-13
 ---
@@ -24,3 +24,7 @@ before deciding it's worth it.
 
 Found while adding the diagram tooling (ticket `import-layers-diagrams`), which
 went into its own `diagrams` group instead of `dev` for this reason.
+
+## Outcome
+
+Shipped in PR #98 (merge `eaa6d4d`): `gatk_env` and `scrna_env` images sync with `--no-dev`, and the tasks tier installs `pytest` and `pytest-asyncio` at their locked versions in each throwaway container rather than in the image. Measured on local linux/amd64 builds: gatk 110 → 77 packages, 3230 → 3031 MB; scrna 161 → 128, 2403 → 2204 MB. Tasks tier: gatk 39 passed, scrna 18 passed; unit tier 560 passed. Left: the dashboard image still installs the dev group, ticket `dashboard-image-no-dev`. No review comments.

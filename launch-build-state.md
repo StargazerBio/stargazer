@@ -1,6 +1,6 @@
 ---
 title: A launch's image build survives a dashboard restart
-status: review
+status: done
 priority: high
 created: 2026-10-27
 pr: 99
@@ -79,3 +79,7 @@ PYTHONPATH="$W:$W/src" uv run -q --project . --env-file tenant.env python -c "fr
 - A pip package that doesn't exist fails the build in under a second, too fast to restart in between; a `sleep` in `with_commands` gives a slow failure.
 - `Run.get` from a local shell needs `flyte.init_from_config(..., project='u-pryce')`: the default project is `flytesnacks`.
 
+
+## Outcome
+
+Shipped in PR #99 (merge `af99f11`): a per-user state table beside each index table (`app/user_state.py` on `SqlIndex.read`/`write`), and a pending launch is a row in it that `/launch/status` settles by its build run's phase, so a launch whose image is building survives a dashboard restart. Verified by the unit tier (578 passed), the postgres tier (36 passed, including a DSQL-style row-privileges login), infra's tests against the branch with its stashed change, and on Union with the test account's dashboard at `b0fdbc5` (the recipe above): a successful build across a restart served both modes with no second build, and a failing build across a restart reached the watching tab. Left: the infra change is still stashed in the infra repo and lands on infra's `main` before the next `upgrade`; a failed build with no page open isn't shown on the next visit, ticket `launch-failure-on-load`; a row whose build run can't be found stays building, ticket `launch-row-unresolvable-run`. No review comments.

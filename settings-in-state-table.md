@@ -1,10 +1,8 @@
 ---
 title: Dashboard settings move to the per-user state table
-status: backlog
+status: next
 priority: normal
 created: 2026-10-27
-blocked_by:
-  - launch-build-state
 ---
 
 A user's dashboard settings, the save interval and the filter the asset explorer opens on, are one JSON object in the workspace store (`users/<subject>/settings.json`). Each route that changes one setting reads the whole object, changes its field and writes it all back (`save_settings`, `save_explorer_default`, `reset_explorer_default` in `app/admin_app.py`), so two saves at once from two tabs can undo each other.
