@@ -16,7 +16,7 @@ consolidated into one set of skills that ships with the notebook image.
   servers aren't supported yet (docs.marimo.io, read 2026-10-28).
 - **The notebook pod doesn't use it.** The agent there is Claude Code in a
   terminal, started in `/workspace` with `/workspace/AGENTS.md`
-  (`app/notebook_agent.md`). Neither notebook image configures the server;
+  (`runtime/notebook_agent.md`). The notebook image doesn't configure the server;
   only a checkout's `.mcp.json` does.
 - **Its tools are thin wrappers over the SDK**: `query_files`,
   `upload_file`, `download_file`, `update_file`, `delete_file`,
@@ -28,13 +28,13 @@ consolidated into one set of skills that ships with the notebook image.
 ## Plan
 
 - [ ] **Decide the skill set.** What the user's agent needs that
-      `app/notebook_agent.md` holds today (where it is, marimo conventions,
+      `runtime/notebook_agent.md` holds today (where it is, marimo conventions,
       tasks, assets, workflows, local vs remote runs), split into skills
       that load on demand, with `AGENTS.md` left as the short always-loaded
       part. Consider marimo's official skills (`marimo-team/skills`) and
       `marimo pair`, which gives the agent the live notebook (run cells,
       read variables) instead of only the file.
-- [ ] **Ship them in both notebook images**, where Claude Code in
+- [ ] **Ship them in the notebook image**, where Claude Code in
       `/workspace` finds them. Check how they interact with the workspace's
       hydrate and save, as `/workspace/AGENTS.md` already does (a baked copy
       isn't saved until edited; an edited one wins at the next launch).

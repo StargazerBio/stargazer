@@ -1,6 +1,6 @@
 ---
 title: Ship the SDK as its own package
-status: maybe
+status: done
 priority: low
 created: 2026-10-14
 ---
@@ -119,3 +119,10 @@ a clean venv outside any checkout:
 - Launch a notebook on a notebook image built from a released SDK version and
   confirm its tasks run remotely.
 - Confirm a dashboard-only release leaves the notebook image's URI unchanged.
+
+## Outcome
+
+Delivered by ticket `split-app-repo` (StargazerBio/stargazer#102): the
+package is the SDK alone, `stargazer-bio`, with the app tier moved to infra
+and the runtime kept out of the package in `runtime/`. Publishing it is
+ticket `pypi-release`.

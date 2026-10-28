@@ -1,14 +1,12 @@
 ---
 title: Asset explorer on Preact and htm
-status: backlog
+status: next
 priority: normal
 created: 2026-10-27
-blocked_by:
-  - split-app-repo
 ---
 
-Done in the infra repo, once ticket `split-app-repo` has moved the dashboard
-there. The paths below are this repo's today and become infra's.
+Done in the infra repo, where the dashboard lives since ticket
+`split-app-repo`. The paths below are infra's.
 
 The asset explorer's script (`app/templates/_assets.html`, ~1,280 lines
 inline) keeps its state in one `state` object by hand and redraws the filter
