@@ -70,3 +70,20 @@ async def delete(key: str, value: str | None = None) -> bool:
         index.write, lambda execute: execute(f"{sql} RETURNING key", params).fetchone()
     )
     return removed is not None
+
+
+async def replace(key: str, old: str, new: str) -> bool:
+    """Set `key` to `new` only while it holds `old`; return whether it did.
+
+    Of several callers replacing the same value, exactly one gets True.
+    """
+    index = get_index()
+    replaced = await asyncio.to_thread(
+        index.write,
+        lambda execute: execute(
+            f"UPDATE {index.state_table} SET value = ?, updated_at = ? "
+            "WHERE key = ? AND value = ? RETURNING key",
+            [new, datetime.now(UTC).isoformat(), key, old],
+        ).fetchone(),
+    )
+    return replaced is not None

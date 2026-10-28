@@ -1330,6 +1330,7 @@ def _restart_dashboard():
     for task in asyncio.all_tasks():
         if task is not asyncio.current_task():
             task.cancel()
+    admin_app._serving.clear()
     _restart_flyte()
 
 
@@ -1390,6 +1391,144 @@ async def test_a_failure_is_reported_after_a_restart_until_the_next_launch(
         retry = await _alaunch(ac, "qc-run")
         assert retry.json() == {"building": "https://console.example/runs/build-2"}
         assert (await ac.get("/launch/status")).json()["failed"] == []
+
+
+@pytest.fixture
+def held_serve(monkeypatch):
+    """Hold every serve until the test releases it, as a slow `serve.aio` does."""
+    release = asyncio.Event()
+    real_serve = admin_app._serve
+
+    async def serve_when_released(env, slug, mode):
+        await release.wait()
+        return await real_serve(env, slug, mode)
+
+    monkeypatch.setattr("app.admin_app._serve", serve_when_released)
+    return release
+
+
+async def _poll_until_serving(ac: httpx.AsyncClient):
+    """Poll /launch/status until a poll has taken the built launch to serve."""
+    for _ in range(200):
+        await ac.get("/launch/status")
+        if admin_app._serving:
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("no poll took the launch")
+
+
+async def test_the_other_mode_during_the_build_shares_it(
+    aclient, served, builder, union
+):
+    """Edit then Run of one notebook mid-build start one build and serve both."""
+    builder.built = False
+    async with aclient as ac:
+        edit = await _alaunch(ac, "qc-run", mode="edit")
+        run = await _alaunch(ac, "qc-run", mode="run")
+        assert edit.json() == {"building": "https://console.example/runs/build-1"}
+        assert run.json() == {"building": "https://console.example/runs/build-1"}
+        assert len(builder.runs) == 1
+        builder.runs[0].finish()
+        await _status_once_built(ac)
+        assert served["served"] == 2
+        assert len(builder.runs) == 1
+
+
+async def test_concurrent_launches_start_one_build(aclient, served, builder, union):
+    """Two tabs launching the same notebook at once share one build run."""
+    builder.built = False
+    async with aclient as ac:
+        first, second = await asyncio.gather(
+            _alaunch(ac, "qc-run"), _alaunch(ac, "qc-run")
+        )
+        assert (
+            first.json()
+            == second.json()
+            == {"building": "https://console.example/runs/build-1"}
+        )
+        assert len(builder.runs) == 1
+
+
+async def test_a_restart_while_serving_after_the_build_still_serves(
+    aclient, served, builder, union, held_serve
+):
+    """A restart after the build, before its pod is served, serves it afterwards."""
+    builder.built = False
+    async with aclient as ac:
+        await _alaunch(ac, "qc-run")
+        builder.runs[0].finish()
+        await _poll_until_serving(ac)
+    _restart_dashboard()
+    held_serve.set()
+    async with _dashboard() as ac:
+        await _status_once_built(ac)
+        assert served["served"] == 1
+        assert await user_state.with_prefix("launch:") == {}
+
+
+async def test_a_launch_while_serving_after_the_build_serves_once(
+    aclient, served, builder, union, held_serve
+):
+    """Launching while the built pod is being served answers building, not a second pod."""
+    builder.built = False
+    async with aclient as ac:
+        await _alaunch(ac, "qc-run")
+        builder.runs[0].finish()
+        await _poll_until_serving(ac)
+        again = await _alaunch(ac, "qc-run")
+        assert again.json() == {"building": "https://console.example/runs/build-1"}
+        held_serve.set()
+        await _status_once_built(ac)
+        assert served["served"] == 1
+
+
+async def test_a_launch_works_without_its_state(
+    aclient, served, builder, union, monkeypatch
+):
+    """A built image serves even when the launch state can't be read."""
+
+    async def unreadable(key):
+        raise RuntimeError('relation "assets.u_x_state" does not exist')
+
+    monkeypatch.setattr(user_state, "get", unreadable)
+    async with aclient as ac:
+        resp = await _alaunch(ac, "qc-run")
+        assert resp.status_code == 200
+        assert resp.json() == {"url": "https://nb.example"}
+
+
+async def test_a_build_whose_state_cant_be_kept_says_why(
+    aclient, served, builder, union, monkeypatch
+):
+    """A build that can't be tracked answers a JSON error, not a bare 500."""
+    builder.built = False
+
+    async def unwritable(key, value):
+        raise RuntimeError("index unreachable")
+
+    monkeypatch.setattr(user_state, "put", unwritable)
+    async with aclient as ac:
+        resp = await _alaunch(ac, "qc-run")
+        assert resp.status_code == 500
+        assert resp.json() == {"error": "launch failed: index unreachable"}
+
+
+async def test_status_survives_a_state_write_failure(
+    aclient, served, builder, union, monkeypatch
+):
+    """A failed build whose reason can't be stored doesn't fail the whole status."""
+    builder.built = False
+    async with aclient as ac:
+        await _alaunch(ac, "qc-run")
+        builder.runs[0].finish(ok=False)
+
+        async def unwritable(*args, **kwargs):
+            raise RuntimeError("index unreachable")
+
+        monkeypatch.setattr(user_state, "replace", unwritable)
+        resp = await ac.get("/launch/status")
+        assert resp.status_code == 200
+        assert resp.json()["running"] == []
 
 
 # ---------------------------------------------------------------------------

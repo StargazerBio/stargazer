@@ -9,9 +9,11 @@ import pytest
 from unit.test_user_state import (  # noqa: F401 — pytest collects the imported tests
     test_a_set_value_reads_back,
     test_concurrent_conditional_deletes_take_it_once,
+    test_concurrent_replaces_take_it_once,
     test_delete_removes_the_key,
     test_delete_with_a_value_only_takes_that_value,
     test_put_replaces_the_value,
+    test_replace_only_takes_the_value_it_expects,
     test_with_prefix_takes_only_the_prefix,
 )
 

@@ -68,3 +68,24 @@ async def test_concurrent_conditional_deletes_take_it_once(state_index):
     await user_state.put("k", "v")
     taken = await asyncio.gather(*(user_state.delete("k", value="v") for _ in range(8)))
     assert taken.count(True) == 1
+
+
+async def test_replace_only_takes_the_value_it_expects(state_index):
+    """`replace` swaps a value only while the key still holds the old one."""
+    await user_state.put("k", "new")
+    assert await user_state.replace("k", "old", "mine") is False
+    assert await user_state.get("k") == "new"
+    assert await user_state.replace("k", "new", "mine") is True
+    assert await user_state.get("k") == "mine"
+    assert await user_state.replace("missing", "new", "mine") is False
+    assert await user_state.get("missing") is None
+
+
+async def test_concurrent_replaces_take_it_once(state_index):
+    """Of many replaces of the same value at once, exactly one takes it."""
+    await user_state.put("k", "v")
+    taken = await asyncio.gather(
+        *(user_state.replace("k", "v", f"claim-{n}") for n in range(8))
+    )
+    assert taken.count(True) == 1
+    assert await user_state.get("k") == f"claim-{taken.index(True)}"

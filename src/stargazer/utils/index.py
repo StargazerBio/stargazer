@@ -11,8 +11,7 @@ Locally, `SqliteIndex` is the index itself. On the devbox it's a Postgres
 server that the dashboard and every pod reach through `PostgresIndex`. On
 Union it's the user's `DsqlIndex` table, which their dashboard and every pod
 in their project reach directly. Beside each index table is a state table
-(`state_table_name`) for the dashboard's own per-user state, which only the
-dashboard writes.
+(`state_table_name`) for the dashboard's own per-user state.
 
 spec: [docs/architecture/types.md](../architecture/types.md)
 """
@@ -112,21 +111,21 @@ class SqlIndex:
     one keyvalue's lookup and the merge (each with a `?` parameter), and how
     statements run, and set `table`. Statements use `?` placeholders
     throughout. `write` and `read` are public so the dashboard can keep its
-    own rows in `state_table`, the table beside `table`. Writes are acknowledged only after they commit, so a
-    downstream task always sees its upstream task's rows, and a merge is one
-    statement, so concurrent merges each land.
+    own rows in `state_table`, the table beside `table`. Writes are
+    acknowledged only after they commit, so a downstream task always sees its
+    upstream task's rows, and a merge is one statement, so concurrent merges
+    each land.
     """
 
     table: str
     _JSON_TYPE: str
+    _KEYVALUE: str
+    _MERGE: str
 
     @property
     def state_table(self) -> str:
         """The dashboard's per-user state table, beside the index table."""
         return state_table_name(self.table)
-
-    _KEYVALUE: str
-    _MERGE: str
 
     def _key(self, key: str) -> str:
         """The `_KEYVALUE` parameter that names `key`."""
