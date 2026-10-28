@@ -1,6 +1,6 @@
 ---
 title: Move the dashboard and its deploy to infra
-status: review
+status: done
 priority: low
 created: 2026-10-27
 pr: 102
@@ -172,7 +172,8 @@ Measured 2026-10-28 unless marked.
       branch's commit archive; the devbox test tier splits as above, and
       infra's devbox rule goes.
 - [ ] After both merge: set up PyPI's trusted publisher, bump `version`,
-      tag the first release, and move infra's pin to `stargazer-bio==<it>`.
+      tag the first release, and move infra's pin to `stargazer-bio==<it>`
+      (ticket `pypi-release`).
 
 ## Verification recipe
 
@@ -235,3 +236,18 @@ git log origin/main --merges --first-parent -n 40 --format=%H | while read h; do
   would need an installed-SDK path everywhere `app/` uses it.
 - **2026-10-28**: this line. The dashboard builds no images from the SDK's
   source, so it can install a release; the runtime stays with the SDK.
+
+## Outcome
+
+Shipped in StargazerBio/stargazer#102 (`e458f01`) and StargazerBio/infra#4
+(`1bee807`), merged 2026-10-28. Stargazer is the SDK (`stargazer-bio`) and the
+notebook runtime (`runtime/`, one image, a calendar-tagged release workflow);
+infra holds the dashboard, its deploy and the devbox, pinned to a Stargazer
+commit's archive until the first release. Verified locally, on the devbox
+(dashboard from infra, notebook pods on the branch image, the devbox tier's
+storage and germline tests) and on Union as the test account (a tutorial and
+a layered Basic-template image on the GHCR test image), per the evidence
+above. The test account's stale notebooks were deleted; it was the only user.
+
+Left: the first release and infra's pin (ticket `pypi-release`). Neither PR
+had review comments.

@@ -21,16 +21,14 @@ vars from the shell goes too; that was tidiness, not a boundary.
 
 - [ ] Proxy: drop `term_proxy` (`/__sg__/term`), `_shell_env`,
       `_set_winsize`, and the overlay's injection; the save banner's
-      injection stays. Drop `app/terminal_overlay.html`.
-- [ ] Both images: the overlay file leaves `notebook_app_img_recipe`
-      (`app/per_notebook.py`) and `Dockerfile`, and the `stargazer-image`
-      workflow's paths.
+      injection stays. Drop `runtime/terminal_overlay.html`.
+- [ ] The image: the overlay file leaves `runtime/Dockerfile`.
 - [ ] Tests: `tests/unit/test_proxy.py` and `tests/unit/test_dockerfile.py`.
 - [ ] Docs: `docs/architecture/notebook.md`, `docs/architecture/overview.md`,
       `docs/getting-started.md`, `docs/guides/contributing.md`,
-      `docs/index.md`, and `app/launch-notebook.sh`'s header. Check
-      `app/save_banner.html` and `app/templates/_assets.html`, which mention
-      an overlay.
+      `docs/index.md`, and `runtime/launch-notebook.sh`'s header. Check
+      `runtime/save_banner.html`, and infra's `app/templates/_assets.html`,
+      which mention an overlay.
 
 ## To check before relying on it (unmeasured)
 
