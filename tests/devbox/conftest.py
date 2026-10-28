@@ -2,10 +2,11 @@
 
 These tests run on the local devbox, so they need it up, infra's devbox setup
 applied since it was created (it also starts the Postgres server that holds
-the asset index), and kubectl pointed at it. The session points Flyte at the
-devbox with `.flyte/config.yaml`, whose `image.registry` is the devbox's
-registry, bundling code from the repo root as SDK code does by default, and
-holds the store port-forward open while runs upload their code and inputs.
+the asset index), kubectl pointed at it, and `FLYTE_IMAGE_REGISTRY` naming
+its registry, `localhost:30000`. The session points Flyte at the devbox with
+`.flyte/config.yaml`, bundling code from the repo root as SDK code does by
+default, and holds the store port-forward open while runs upload their code
+and inputs.
 Runs carry the devbox storage settings in their run context, so nothing needs
 exporting first.
 """
@@ -77,8 +78,12 @@ def init_flyte_context():
     """Point Flyte at the devbox and hold the store port-forward open.
 
     Uploads go to the in-cluster signed-URL host, which the forward of the
-    object store (rustfs) answers on this machine.
+    object store (rustfs) answers on this machine. The registry has to be in
+    the environment before the session starts: Flyte fixes each image's
+    registry when `stargazer.config` defines it, at import.
     """
+    if os.environ.get("FLYTE_IMAGE_REGISTRY") != "localhost:30000":
+        pytest.fail("The devbox tier needs FLYTE_IMAGE_REGISTRY=localhost:30000")
     # Buildx attaches a provenance attestation by default, which turns even a
     # one-platform push into an index; an arm64 node finds no arm64 entry in
     # it and refuses the pull. A plain image pulls and runs under emulation.

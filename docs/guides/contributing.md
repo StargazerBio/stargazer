@@ -25,15 +25,12 @@ Use `flyte start devbox` to spin up a local Flyte cluster for development. See t
 
 Stargazer's images are built for x86_64 only, like the machines they run on in production. On Apple silicon the devbox itself runs natively and Stargazer's pods run under emulation, so they're slower than on Union. Docker Desktop runs them through Rosetta, so keep its Rosetta setting enabled.
 
-This environment is much closer to production and lets you actually test your task environments. After every fresh devbox, apply the cluster-side fixes in the infrastructure repository's `devbox/setup.sh`, which also start the Postgres server that holds the devbox's asset index; a dashboard for the devbox deploys from there too. Then point your Flyte config at the devbox's registry, so the images your runs build go where the devbox pulls from. In `.flyte/config.yaml`:
+This environment is much closer to production and lets you actually test your task environments. After every fresh devbox, apply the cluster-side fixes in the infrastructure repository's `devbox/setup.sh`, which also start the Postgres server that holds the devbox's asset index; a dashboard for the devbox deploys from there too. Then point image builds at the devbox's registry, so the images your runs build go where the devbox pulls from, and on Apple silicon have them pushed as plain images ([Configuration](../architecture/configuration.md#container-images) says why for both):
 
-```yaml
-image:
-  builder: local
-  registry: localhost:30000
+```bash
+export FLYTE_IMAGE_REGISTRY=localhost:30000
+export FLYTE_DOCKER_BUILD_EXTRA_ARGS=--provenance=false
 ```
-
-On Apple silicon also export `FLYTE_DOCKER_BUILD_EXTRA_ARGS=--provenance=false` before a run builds an image ([Configuration → Container Images](../architecture/configuration.md#container-images) says why).
 
 To have runs you submit store their assets on the devbox, export these first and keep the storage port-forward open while submitting:
 
@@ -61,7 +58,7 @@ uv run --all-extras pytest -m dsql                    # the index on the real DS
 
 - **Unit** (`tests/assets`, `notebooks`, `unit`, `utils`) is the cheap tests that run on Python alone. Every test gets its own empty store, index and cache under its temp directory, so nothing touches `~/.stargazer`, and runs with no `PINATA_JWT`. Tests that query the fixture files use a store seeded once per session (`tests/fixtures/seed.py`).
 - **Tasks** (`tests/tasks`) runs each task's tests in the image the task runs in, so the GATK and alignment tools never need to be on your machine. Run it when you add or change a task. The runner builds those images as a pod gets them, x86_64 like Union (emulated on Apple silicon), and runs the tests in them. A source change rebuilds the images first. Pass paths or `-k` to run a subset, such as `tests/tasks/gatk/test_sort_sam.py`.
-- **Devbox** (`tests/devbox`) is anything that needs a cluster: workflows across pods, the devbox's store and index. The devbox has to be up with its setup applied, and `.flyte/config.yaml` pointing at its registry. Add `-rP` to see each run's URL.
+- **Devbox** (`tests/devbox`) is anything that needs a cluster: workflows across pods, the devbox's store and index. The devbox has to be up with its setup applied, and `FLYTE_IMAGE_REGISTRY=localhost:30000` exported. Add `-rP` to see each run's URL.
 - **Pinata** (`tests/pinata`) calls the real Pinata API with the key in `tests/.secrets/pinata_jwt`, and fails without it.
 - **Postgres** (`tests/postgres`) runs the index tests against a Postgres 16 container it starts and removes itself, so it needs Docker running. Run it when you change the index.
 - **DSQL** (`tests/dsql`) runs the same index tests against the hosted index's Aurora DSQL cluster, as its admin, in a schema it makes and drops. It needs an admin's AWS session and the cluster's ARN in `STARGAZER_DSQL_CLUSTER_ARN`. Run it when you change the index's SQL or how it connects to DSQL.
@@ -135,7 +132,7 @@ Every change goes through a pull request — nothing is committed directly to `m
 
 See [Configuration → Container Images](../architecture/configuration.md#container-images) for what each image is. `uv add` covers Python deps via the lockfile, and contributors pulling your branch pick the change up on their next `uv sync`.
 
-**Flyte task images (`stargazer-scrna`, `stargazer-gatk`)** build themselves. Each is tagged by a hash of its recipe and the project's source, so a change to either builds a new one the first time something needs it: a run on the devbox or Union, or the tasks test tier, which builds into your local docker without pushing anywhere. `image.builder` in the Flyte config picks `local` (needs a working Docker daemon) or `remote` (Union only, builds on the cluster), and a local build pushes to the config's `image.registry`.
+**Flyte task images (`stargazer-scrna`, `stargazer-gatk`)** build themselves. Each is tagged by a hash of its recipe and the project's source, so a change to either builds a new one the first time something needs it: a run on the devbox or Union, or the tasks test tier, which builds into your local docker without pushing anywhere. `image.builder` in the Flyte config picks `local` (needs a working Docker daemon) or `remote` (Union only, builds on the cluster), and a local build pushes to `FLYTE_IMAGE_REGISTRY`.
 
 **The notebook image (`stargazer`)** builds from `runtime/Dockerfile`, from the repository root, when you change it or want the current source in it:
 

@@ -33,7 +33,7 @@ All env var defaults are set in `config.py`. If set (even to empty string), the 
 | `PINATA_GATEWAY` | IPFS gateway for public downloads | `https://maroon-written-fowl-769.mypinata.cloud`, the project's dedicated Pinata gateway | No |
 | `STARGAZER_API_KEY_SECRET` | The Flyte secret holding the project's API key, which every task environment then declares | None (unset → no key declared) | On a cluster with a login, such as Union |
 
-Where images are pushed is Flyte's own setting, `image.registry` in `.flyte/config.yaml` (or `FLYTE_IMAGE_REGISTRY`): Stargazer sets no registry of its own.
+Where images are pushed is Flyte's own setting, `FLYTE_IMAGE_REGISTRY`: Stargazer sets no registry of its own. Flyte fixes an image's registry when the image is defined, as `config.py` is imported, from that variable or from `image.registry` in `./.flyte/config.yaml`, not from the config file a later init reads. So a registry belongs in the environment of whatever targets the cluster that needs one (the devbox's is `localhost:30000`), never in a config file a Union run might also find.
 
 `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` are forwarded into task pods only when set explicitly. A pod can't use the local default store or index, so a remote run submitted locally with the defaults has nowhere shared to write.
 
@@ -127,7 +127,7 @@ The `stargazer` image is published for both `linux/amd64` and `linux/arm64`, so 
 
 ### Building locally
 
-The Flyte task images build the first time a run needs them, tagged by content hash, with the builder selected in the Flyte config: `local` needs a working Docker daemon, `remote` (Union only) builds on the cluster and pushes to Union's registry. A local build pushes to the config's `image.registry`. The `stargazer` image builds with `docker build -f runtime/Dockerfile .`; releases publish it. Commands in [Contributing → Building Images](../guides/contributing.md#building-images).
+The Flyte task images build the first time a run needs them, tagged by content hash, with the builder selected in the Flyte config: `local` needs a working Docker daemon, `remote` (Union only) builds on the cluster and pushes to Union's registry. A local build pushes to `FLYTE_IMAGE_REGISTRY`. The `stargazer` image builds with `docker build -f runtime/Dockerfile .`; releases publish it. Commands in [Contributing → Building Images](../guides/contributing.md#building-images).
 
 ### Adding a tool
 

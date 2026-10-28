@@ -90,7 +90,7 @@ The `spec:` line is **module-level only** — class and function docstrings do n
 
 ## Specs, Tickets and Reference Materials
 
-- **The devbox** - Its setup lives in infra (`devbox/setup.sh` there), and each of its steps carries the quirk it works around. Check it first when running on or debugging the devbox, and run it after recreating the container. A devbox quirk that Stargazer's own code works around gets a comment at that code. The devbox tier here assumes the devbox is set up and `.flyte/config.yaml` names its registry (`image.registry: localhost:30000`).
+- **The devbox** - Its setup lives in infra (`devbox/setup.sh` there), and each of its steps carries the quirk it works around. Check it first when running on or debugging the devbox, and run it after recreating the container. A devbox quirk that Stargazer's own code works around gets a comment at that code. The devbox tier here assumes the devbox is set up and `FLYTE_IMAGE_REGISTRY=localhost:30000` is exported (never `image.registry` in `.flyte/config.yaml`: Flyte reads that file's when an image is defined, so it would leak into a Union run from the same checkout).
 - **`.claude/reference/`** - Agent-facing reference material, read on demand:
   - **`flyte_v2_docs.md`** and **`sdk_examples_concise.md`** - The Flyte v2 documentation and SDK examples
   - **`tool_refs/`** - Bioinformatics tool documentation, the source of truth for tool parameters and behavior

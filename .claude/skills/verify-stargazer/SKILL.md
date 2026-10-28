@@ -76,7 +76,7 @@ rm -rf "$RUN_DIR/local" "$RUN_DIR/store" "$RUN_DIR"/index.db*
 
 For anything that runs across pods: workflows, task images, the devbox's object store and Postgres index. The devbox test tier is the driver: `uv run --all-extras pytest -m devbox -rP <tests>` passes the devbox storage settings to every run and reads the index through a port-forward. `-rP` prints each run's URL; keep the output as evidence. When no test covers the change, write one in `tests/devbox/` (the `write-tests` skill).
 
-Preconditions: the devbox is up, infra's `devbox/setup.sh` has run since it was last created (its verify step ends with `✓ Postgres ready`), `.flyte/config.yaml` names the devbox's registry (`image.registry: localhost:30000`), and `kubectl config current-context` is `flyte-devbox`.
+Preconditions: the devbox is up, infra's `devbox/setup.sh` has run since it was last created (its verify step ends with `✓ Postgres ready`), `FLYTE_IMAGE_REGISTRY=localhost:30000` is exported, and `kubectl config current-context` is `flyte-devbox`.
 
 - The setup clears Flyte's local cache, so run it after a recreate and before the first run, or the run skips images and bundles the wipe deleted.
 - A source change rebuilds the images that carry the project before the first run. Pods run emulated on Apple silicon, slower than on Union.

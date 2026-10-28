@@ -31,8 +31,9 @@ Rules:
   as its project. Union needs one; a cluster without a login (the devbox), or
   a local run, leaves it unset. Forwarded into every pod.
 
-Where images are pushed is Flyte's own setting: `image.registry` in
-`.flyte/config.yaml`, or `FLYTE_IMAGE_REGISTRY`.
+Where images are pushed is Flyte's own setting, `FLYTE_IMAGE_REGISTRY`. Flyte
+fixes an image's registry when the image is defined, so the environments here
+take it at import, not from the config a later init reads.
 
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
