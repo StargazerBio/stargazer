@@ -4,12 +4,12 @@ Asset storage has three parts: an **object store** for the bytes, an **index** f
 
 | Part | Locally | On Union | Set by |
 |------|---------|----------|--------|
-| Object store | `~/.stargazer/store` | The tenant bucket, under the deploy's root | `STARGAZER_STORE_ROOT` |
+| Object store | `~/.stargazer/store` | The user's own prefix in the user bucket | `STARGAZER_STORE_ROOT` |
 | Index | `~/.stargazer/index.db` (SQLite) | The user's own table on Aurora DSQL | `STARGAZER_INDEX_URL` |
 | Local cache | `~/.stargazer/local` | The pod's disk | `STARGAZER_LOCAL` |
 | Public tier | Off without a key | Pinata's public network | `PINATA_JWT` |
 
-On Union the dashboard and every pod in the user's project reach their table directly, logged in as the user. On the devbox, the local cluster for development, the index is a Postgres server that every pod and the dashboard reach the same way ([Contributing → Running on the Devbox](../guides/contributing.md#running-on-the-devbox)).
+**On Union every pod in the user's project runs as the user's own cloud role**: the dashboard, their notebook pods and the task pods their runs start. That role reaches their prefix of the store, their index table and nothing of anyone else's, and the pods reach both directly, with no service in between. Files Flyte uploads for a run land in the same prefix. Flyte's own record of each run, its inputs and outputs, stays in the platform's bucket, which every pod can read. On the devbox, the local cluster for development, the index is a Postgres server that every pod and the dashboard reach the same way ([Contributing → Running on the Devbox](../guides/contributing.md#running-on-the-devbox)).
 
 ## Identity and layout
 
