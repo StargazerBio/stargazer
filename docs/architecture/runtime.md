@@ -64,6 +64,7 @@ What a pod manager relies on from a release, and what it gives each pod. A chang
 | `STARGAZER_WORKSPACE_ROOT` | The workspace store's root; unset means nothing is hydrated or saved |
 | `STARGAZER_ADMIN_URL` | Where `/__sg__/dashboard` sends the browser |
 | `STARGAZER_INDEX_URL`, `STARGAZER_STORE_ROOT`, `STARGAZER_OWNER` | The owner's asset index and store, for the notebook and the runs it starts ([Configuration](configuration.md#environment-variables)) |
+| `AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE` | The cloud role the pod, and every client in it, acts as: on Union the owner's, which reaches their files and index and no one else's ([Configuration](configuration.md)) |
 | `STARGAZER_API_KEY_SECRET` | The secret holding the project's API key, which every task environment then declares ([Configuration](configuration.md#environment-variables)) |
 | `STARGAZER_NOTEBOOK_IMAGE` | The image the pod runs, which `notebook_base` builds a notebook's declared image on ([Notebooks](notebook.md#notebook-environment)) |
 

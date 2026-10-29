@@ -4,8 +4,9 @@
 Where asset bytes and metadata live, and the local cache in front of them.
 
 - **Bytes** go to an object store through `flyte.storage`: a local directory
-  when run locally, the tenant bucket on Union. Each file is stored once per user
-  at `<STARGAZER_STORE_ROOT>/users/<owner>/assets/<cid>/<name>`, where the
+  when run locally, the user bucket on Union, reached as the user's own
+  role. Each file is stored once per user at
+  `<STARGAZER_STORE_ROOT>/users/<owner>/assets/<cid>/<name>`, where the
   owner is `STARGAZER_OWNER` (the Union subject) or `local`. A file uploaded
   in pieces, whose CID is known only at the end, stays where it was written,
   `users/<owner>/uploads/<upload id>/<name>`, and its row points there.

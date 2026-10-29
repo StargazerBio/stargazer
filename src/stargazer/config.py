@@ -18,7 +18,7 @@ Rules:
 - STARGAZER_LOCAL: Scratch space for task outputs and the download cache.
   Defaults to ~/.stargazer/local.
 - STARGAZER_STORE_ROOT: Where asset bytes are stored — a local directory or a
-  bucket URI (e.g. `s3://union-us-west-2-stargazerbio/stargazer`). Defaults
+  bucket URI (e.g. `s3://stargazerbio-users`). Defaults
   to ~/.stargazer/store.
 - STARGAZER_INDEX_URL: The asset index — a SQLite file path, a
   `postgresql://` URL (the devbox's), or a `dsql://` URL naming a user's
