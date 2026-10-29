@@ -587,3 +587,46 @@ in `u-pryce` or `flytesnacks`. The `upgrade` hung after its deploy: Knative had
 the revision ready at 07:01 UTC while Union's app status stayed
 `ASSIGNED`, so `deploy_dashboard`'s serve watch, which has no timeout,
 never returned.
+
+## Verification recipe: Each user's files behind their own role
+
+A user's dashboard, notebook pods and runs read and write their files in
+`s3://stargazerbio-users/users/<subject>/`, as their own IAM role, and
+nothing else of anyone's.
+
+### Sub-features
+- **R1** The dashboard, notebook pods and task pods run as
+  `stargazer-user-<project>`, with the token mounted.
+- **R2** The dashboard's explorer lists the user's assets, downloads one,
+  and stores an upload under the new bucket.
+- **R3** A notebook's workspace saves to `users/<subject>/workspace/` in the
+  new bucket and comes back after the pod restarts.
+- **R4** A task in the user's project finds an asset the dashboard stored,
+  fetches it, and stores a new one under the new bucket.
+- **R5** Other projects and the shared role are refused on the user's
+  prefix (Piece 0's probe and `outsider`).
+
+### How to get to it (user POV)
+The test account's dashboard, `https://u-pryce.apps.stargazerbio.us-west-2.unionai.cloud`:
+the asset explorer, and a workspace notebook launched from it.
+
+### Driving it
+Preconditions: infra's `feat/per-user-storage-isolation` applied (tofu) and
+`./stargazer-users upgrade --email pryce@stargazer.bio` run from it; the
+built-in browser signed in to the console as the test account.
+
+1. R1: `kubectl get pods -n u-pryce-development -o yaml` (read-only) on the
+   dashboard, a notebook pod and a task pod shows `AWS_ROLE_ARN` =
+   `arn:aws:iam::791359099513:role/stargazer-user-u-pryce` and the
+   `aws-iam-token` mount.
+2. R2: in the explorer, the migrated assets list; one downloads; a small
+   upload appears, and `aws s3 ls s3://stargazerbio-users/users/387300641116005877/`
+   (`AWS_PROFILE=claude`) shows its object.
+3. R3: launch a workspace notebook, write a file, wait for a save, then
+   list `users/387300641116005877/workspace/`; stop the app, launch again,
+   and the file is there.
+4. R4: a task in `u-pryce` with `STARGAZER_INDEX_URL`, `STARGAZER_STORE_ROOT`
+   and `STARGAZER_OWNER` as a notebook forwards them `query()`s the
+   upload, `download()`s it and `upload()`s a derived file; its row's `uri`
+   is under the new bucket and the file is there.
+5. Teardown: stop every app started, no live runs in `u-pryce`.
