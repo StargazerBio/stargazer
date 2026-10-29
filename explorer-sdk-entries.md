@@ -1,5 +1,5 @@
 ---
-title: The SDK's tasks and workflows as explorer entries
+title: explorer-sdk-entries
 status: maybe
 priority: low
 created: 2026-10-27

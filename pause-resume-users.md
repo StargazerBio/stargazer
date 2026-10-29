@@ -1,5 +1,5 @@
 ---
-title: Pause and resume a user
+title: pause-resume-users
 status: done
 priority: normal
 created: 2026-10-24

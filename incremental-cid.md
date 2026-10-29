@@ -1,5 +1,5 @@
 ---
-title: Work out a CID from bytes as they arrive
+title: incremental-cid
 status: done
 priority: normal
 created: 2026-10-18

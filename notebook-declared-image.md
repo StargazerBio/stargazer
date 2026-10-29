@@ -1,5 +1,5 @@
 ---
-title: Notebook-declared pod image (main_img)
+title: notebook-declared-image
 status: done
 priority: low
 created: 2026-08-21

@@ -1,5 +1,5 @@
 ---
-title: Ship the SDK as its own package
+title: sdk-package
 status: done
 priority: low
 created: 2026-10-14

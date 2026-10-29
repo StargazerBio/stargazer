@@ -1,5 +1,5 @@
 ---
-title: Alpha notice against uploading sensitive data
+title: alpha-notice
 status: done
 priority: high
 created: 2026-10-13

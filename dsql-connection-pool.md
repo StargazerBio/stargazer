@@ -1,5 +1,5 @@
 ---
-title: Pool the DSQL index's connections through AWS's connector
+title: dsql-connection-pool
 status: maybe
 priority: low
 created: 2026-10-28

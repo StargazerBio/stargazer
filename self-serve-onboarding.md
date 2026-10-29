@@ -1,5 +1,5 @@
 ---
-title: Self-serve onboarding
+title: self-serve-onboarding
 status: maybe
 priority: high
 created: 2026-10-06

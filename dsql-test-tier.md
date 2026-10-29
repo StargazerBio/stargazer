@@ -1,5 +1,5 @@
 ---
-title: A test tier on the real DSQL cluster
+title: dsql-test-tier
 status: done
 priority: normal
 created: 2026-10-28

@@ -1,5 +1,5 @@
 ---
-title: Delete the keys the injection era left
+title: retire-org-key
 status: done
 priority: high
 created: 2026-10-24

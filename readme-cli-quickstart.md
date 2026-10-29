@@ -1,5 +1,5 @@
 ---
-title: Update README with CLI quickstart and bump to alpha status
+title: readme-cli-quickstart
 status: done
 priority: normal
 created: 2026-05-19

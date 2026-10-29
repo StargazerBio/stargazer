@@ -1,5 +1,5 @@
 ---
-title: Export the scRNA tasks from stargazer.tasks
+title: export-scrna-tasks
 status: done
 priority: high
 created: 2026-10-09

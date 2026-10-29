@@ -1,5 +1,5 @@
 ---
-title: A butler skill for the routine repo sweep
+title: butler
 status: done
 priority: normal
 created: 2026-10-20

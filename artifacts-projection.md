@@ -1,5 +1,5 @@
 ---
-title: Read-only Artifacts projection of selected outputs
+title: artifacts-projection
 status: maybe
 priority: normal
 created: 2026-10-06

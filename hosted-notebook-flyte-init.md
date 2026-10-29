@@ -1,5 +1,5 @@
 ---
-title: Hosted notebook kernels never reach the cluster
+title: hosted-notebook-flyte-init
 status: done
 priority: high
 created: 2026-10-20

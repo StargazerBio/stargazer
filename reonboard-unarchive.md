@@ -1,5 +1,5 @@
 ---
-title: Onboarding a returning user brings back their project and index
+title: reonboard-unarchive
 status: done
 priority: high
 created: 2026-10-27

@@ -1,5 +1,5 @@
 ---
-title: Cohesive marimo.toml integration
+title: marimo-toml
 status: done
 priority: low
 created: 2026-06-10

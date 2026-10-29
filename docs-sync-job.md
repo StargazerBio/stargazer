@@ -1,5 +1,5 @@
 ---
-title: Recurring docs-sync job
+title: docs-sync-job
 status: maybe
 priority: low
 created: 2026-05-19

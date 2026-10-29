@@ -1,5 +1,5 @@
 ---
-title: Execution tutorial edit pod evicted for disk use
+title: notebook-pod-ephemeral-storage
 status: done
 priority: high
 created: 2026-10-20

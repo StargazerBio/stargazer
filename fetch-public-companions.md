@@ -1,5 +1,5 @@
 ---
-title: fetch() asks Pinata for companions on every call
+title: fetch-public-companions
 status: done
 priority: normal
 created: 2026-10-20

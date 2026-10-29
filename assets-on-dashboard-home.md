@@ -1,5 +1,5 @@
 ---
-title: The asset browser moves onto the dashboard home
+title: assets-on-dashboard-home
 status: done
 priority: high
 created: 2026-10-18

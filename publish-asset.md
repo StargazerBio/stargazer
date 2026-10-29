@@ -1,5 +1,5 @@
 ---
-title: Publish an asset to the public tier
+title: publish-asset
 status: done
 priority: normal
 created: 2026-10-06

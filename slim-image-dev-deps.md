@@ -1,5 +1,5 @@
 ---
-title: Task images carry the whole dev group
+title: slim-image-dev-deps
 status: done
 priority: low
 created: 2026-10-13

@@ -1,5 +1,5 @@
 ---
-title: Tear down Union test deploys by hand
+title: union-test-cleanup
 status: done
 priority: normal
 created: 2026-10-13

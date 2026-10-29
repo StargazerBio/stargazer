@@ -1,5 +1,5 @@
 ---
-title: CI publishes the stargazer image when its Dockerfile or baked files change
+title: publish-stargazer-image
 status: done
 priority: normal
 created: 2026-10-21

@@ -1,5 +1,5 @@
 ---
-title: Agent harness on Claude Code defaults
+title: claude-code-harness
 status: done
 priority: normal
 created: 2026-10-26

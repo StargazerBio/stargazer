@@ -1,5 +1,5 @@
 ---
-title: Explorer filters, and a default filter each user picks
+title: explorer-filter-defaults
 status: done
 priority: normal
 created: 2026-10-26

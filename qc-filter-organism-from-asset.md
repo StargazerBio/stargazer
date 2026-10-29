@@ -1,5 +1,5 @@
 ---
-title: qc_filter takes organism separately from its input asset
+title: qc-filter-organism-from-asset
 status: done
 priority: low
 created: 2026-10-14

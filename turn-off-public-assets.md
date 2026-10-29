@@ -1,5 +1,5 @@
 ---
-title: A config that turns the public tier off in the dashboard
+title: turn-off-public-assets
 status: done
 priority: normal
 created: 2026-10-20

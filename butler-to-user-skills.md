@@ -1,5 +1,5 @@
 ---
-title: Butler moves to the user's own skills
+title: butler-to-user-skills
 status: done
 priority: low
 created: 2026-10-25

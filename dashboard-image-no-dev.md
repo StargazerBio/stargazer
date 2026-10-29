@@ -1,5 +1,5 @@
 ---
-title: The dashboard image carries the whole dev group
+title: dashboard-image-no-dev
 status: done
 priority: low
 created: 2026-10-27

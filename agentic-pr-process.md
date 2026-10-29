@@ -1,5 +1,5 @@
 ---
-title: Agentic PR process
+title: agentic-pr-process
 status: maybe
 priority: low
 created: 2026-05-19

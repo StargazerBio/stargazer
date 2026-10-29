@@ -1,5 +1,5 @@
 ---
-title: Move the dashboard and its deploy to infra
+title: split-app-repo
 status: done
 priority: low
 created: 2026-10-27

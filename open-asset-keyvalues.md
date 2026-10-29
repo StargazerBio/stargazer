@@ -1,5 +1,5 @@
 ---
-title: Extra keyvalues on typed assets
+title: open-asset-keyvalues
 status: done
 priority: high
 created: 2026-10-09

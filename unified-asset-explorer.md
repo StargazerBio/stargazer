@@ -1,5 +1,5 @@
 ---
-title: One asset explorer for everything but the workspace
+title: unified-asset-explorer
 status: done
 priority: high
 created: 2026-10-26

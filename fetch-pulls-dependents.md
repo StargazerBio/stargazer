@@ -1,5 +1,5 @@
 ---
-title: Asset.fetch() pulls dependents and queries storage on every call
+title: fetch-pulls-dependents
 status: done
 priority: high
 created: 2026-10-09

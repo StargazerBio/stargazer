@@ -1,5 +1,5 @@
 ---
-title: Notebooks declare their own app environment
+title: notebook-environment
 status: done
 priority: normal
 created: 2026-10-16

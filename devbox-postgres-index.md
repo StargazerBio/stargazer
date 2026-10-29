@@ -1,5 +1,5 @@
 ---
-title: The devbox's asset index moves to a Postgres pod
+title: devbox-postgres-index
 status: done
 priority: high
 created: 2026-10-20

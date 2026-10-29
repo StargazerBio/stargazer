@@ -1,5 +1,5 @@
 ---
-title: marimo's terminal replaces the terminal overlay
+title: marimo-terminal
 status: maybe
 priority: normal
 created: 2026-10-28

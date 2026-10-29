@@ -1,5 +1,5 @@
 ---
-title: Condensed context files for production use (separate from dev)
+title: production-context-files
 status: done
 priority: normal
 created: 2026-05-19

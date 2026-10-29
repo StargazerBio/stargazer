@@ -1,5 +1,5 @@
 ---
-title: Import layer rules and on-demand import diagrams
+title: import-layers-diagrams
 status: done
 priority: normal
 created: 2026-10-13

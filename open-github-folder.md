@@ -1,5 +1,5 @@
 ---
-title: Open a notebook from GitHub together with its folder
+title: open-github-folder
 status: maybe
 priority: low
 created: 2026-10-26

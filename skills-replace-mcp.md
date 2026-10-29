@@ -1,5 +1,5 @@
 ---
-title: Skills replace the MCP server for user agents
+title: skills-replace-mcp
 status: maybe
 priority: normal
 created: 2026-10-28

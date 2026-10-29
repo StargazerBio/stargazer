@@ -1,5 +1,5 @@
 ---
-title: Asset explorer on Preact and htm
+title: explorer-preact
 status: review
 priority: normal
 created: 2026-10-27

@@ -1,5 +1,5 @@
 ---
-title: Rebuild the stargazer-chat image with the new gateway default
+title: rebuild-chat-image
 status: done
 priority: normal
 created: 2026-10-15

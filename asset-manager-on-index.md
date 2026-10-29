@@ -1,5 +1,5 @@
 ---
-title: The asset page's Private tab on the user's index and store
+title: asset-manager-on-index
 status: done
 priority: high
 created: 2026-10-06
