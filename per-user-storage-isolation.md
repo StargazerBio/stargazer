@@ -478,3 +478,54 @@ noncurrent versions.
 in-memory obstore store make every call as written (put, get, head,
 list, a 12 MiB multipart put, delete), and `_whoami` runs with no AWS
 environment.
+
+## Piece 0 results (2026-10-29, partial)
+
+Part A applied by the user from infra's `feat/per-user-storage-isolation`
+(`d2688dc`, then `5bf9000`), state copied back to the main checkout. Read
+back with `AWS_PROFILE=claude`: the bucket with versioning and all six
+policy statements (the per-user grant renders as
+`users/${aws:PrincipalTag/stargazer-subject}/*`), and
+`stargazer-index-u-pryce` tagged `stargazer-subject=387300641116005877`
+with `stargazer-user-union-read` attached.
+
+**Measured:**
+- **`flyte edit settings --from-file`** applies a file as the scope's whole
+  override set: a file of `{}` removes all three overrides and the project
+  inherits again.
+- **The role override reaches task pods.** Union's image build for the
+  probe runs as a task in `u-pryce`, and with the settings on it ran as the
+  user's role: its push to ECR failed with `401 Unauthorized` (build run
+  `uwlw7bsk6dhbskhbrgqb`). The shared role pushes through Union's
+  `imagebuilder` policy. With the same ECR actions on
+  `stargazer-user-union-read` (`5bf9000`), the next build passed
+  (`upj56brzwt8g9xt9d5hd`, 7 s).
+- **Writes follow `run.run_base_dir` into our bucket.** Both builds'
+  `inputs.pb`, `outputs.pb` and `error.pb` landed under
+  `s3://stargazerbio-users/users/387300641116005877/flyte/runs/stargazerbio/u-pryce/development/<run>/…`,
+  written by Union's services (through `UnionServicesRunData`) and by the
+  pod; nothing for them in the tenant bucket.
+- **Union's reads don't.** Fetching the passed build's outputs failed:
+  `failed to get outputs: … object
+  's3://union-us-west-2-stargazerbio/users/387300641116005877/flyte/runs/stargazerbio/u-pryce/development/upj56brzwt8g9xt9d5hd/a0/0/outputs.pb'
+  not found`. Union's output API keeps its own bucket and takes only the
+  key from the run's location. So with `run.run_base_dir` in another
+  bucket, nothing that reads outputs through Union works: the CLI, the
+  console, and `flyte run`'s own image build step. The probe task never
+  started.
+
+**Not yet measured**, since the probe never ran: the token mount and
+`caller` in a task pod, the child `File` under `storage.raw_data_path`,
+and every refusal (the shared role on the bucket, the user's role on
+another prefix, another project's pods).
+
+**Remaining risk found on the way:** the user's role can push to ECR, as
+the shared role already lets every pod do, so any user can push to the
+image repository other users' tasks run from. Not new, but run data being
+private doesn't cover it.
+
+Settings reverted on `u-pryce`; the dashboard the `upgrade` woke is
+stopped; no runs going. The `upgrade` hung after its deploy: Knative had
+the revision ready at 07:01 UTC while Union's app status stayed
+`ASSIGNED`, so `deploy_dashboard`'s serve watch, which has no timeout,
+never returned.
