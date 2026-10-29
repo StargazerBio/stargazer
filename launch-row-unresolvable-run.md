@@ -1,6 +1,6 @@
 ---
 title: launch-row-unresolvable-run
-status: review
+status: done
 priority: low
 created: 2026-10-27
 pr: 10
@@ -11,3 +11,7 @@ A pending launch in the state table (ticket `launch-build-state`) is settled by 
 Seen only by reading the code, not on the tenant. A fix could treat NOT_FOUND as a failure with its own reason, or let a pending row expire after some time since `updated_at`.
 
 In review as StargazerBio/infra#10: a run the control plane can't find (connectrpc's `NOT_FOUND`, measured on the tenant) fails the launch with its own reason, and a relaunch builds again. Verified on the devbox with a seeded row; the tenant's state table can't be written from here.
+
+## Outcome
+
+Shipped in StargazerBio/infra#10 (merge `3236577`): a pending launch whose build run the control plane can't find (connectrpc's `NOT_FOUND`) fails with its own reason, and a launch treats a gone run as finished, so it builds again. Verified by a unit test and on the devbox with a seeded row, before and after; not on the tenant, whose state table can't be written from a workstation. No follow-ups were left on the PR.
