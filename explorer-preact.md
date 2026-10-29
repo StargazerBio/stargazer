@@ -1,12 +1,16 @@
 ---
 title: Asset explorer on Preact and htm
-status: next
+status: review
 priority: normal
 created: 2026-10-27
+pr: 7
 ---
 
 Done in the infra repo, where the dashboard lives since ticket
-`split-app-repo`. The paths below are infra's.
+`split-app-repo`. The paths below are infra's. The PR is
+StargazerBio/infra#7, on `refactor/explorer-preact`. The vendored files sit
+flat in `app/static/` rather than in `vendor/`, since the package data
+takes `static/*` only.
 
 The asset explorer's script (`app/templates/_assets.html`, ~1,280 lines
 inline) keeps its state in one `state` object by hand and redraws the filter
