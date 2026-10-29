@@ -3,6 +3,7 @@ title: per-user-storage-isolation
 status: doing
 priority: high
 created: 2026-10-05
+pr: 14
 ---
 
 Every project on the tenant runs as one IAM role, the shared
