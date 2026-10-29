@@ -1,6 +1,6 @@
 ---
 title: reonboard-tenant-check
-status: review
+status: done
 priority: normal
 created: 2026-10-28
 pr: 11
@@ -44,3 +44,13 @@ test account.
 4. Edit one row's keyvalues with `POST /assets/update` (`network:
    "private"`) and read it back from the list.
 5. `union_dashboard.py teardown`: no active app, no live run.
+
+## Outcome
+
+Shipped in StargazerBio/infra#11 (merge `13f3074`): a user labeled on more
+than one project is refused instead of given the first, and a role that
+onboarding creates gets its DSQL mapping revoked and granted again. Verified
+on the tenant with the test account: offboard then onboard from the branch
+brought back the same 80 assets and stored a keyvalue edit; 332 tests pass.
+Left: nothing. `u-387300641116005877` stays archived with only a
+`retired-stargazer-subject` label.
