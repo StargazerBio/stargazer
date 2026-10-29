@@ -1,6 +1,6 @@
 ---
 title: workspace-root-required
-status: review
+status: done
 priority: normal
 created: 2026-10-27
 pr: 9
@@ -22,3 +22,7 @@ Every real deploy already has a workspace root: infra's `stargazer-users` refuse
 - Devbox: `devbox/dashboard.py` deploys and a notebook is created, launched and saved.
 
 In review as StargazerBio/infra#9. A bare local run's root is `~/.stargazer/store`, the SDK's local store directory, which the deploy refuses.
+
+## Outcome
+
+Shipped in StargazerBio/infra#9 (merge `744d8fa`): `deploy_dashboard` refuses without a workspace root and bakes it into the dashboard, a bare local run keeps notebooks in `~/.stargazer/store`, and the 503 path, `_store_ready` and the template's not-configured state are gone, along with onboarding's own check. Verified with a bare local run before and after, on the devbox (create, launch, save) and on the tenant (the root in the app spec, create and delete). Nothing left; no follow-ups were left on the PR.
