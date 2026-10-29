@@ -1,6 +1,6 @@
 ---
 title: per-user-storage-isolation
-status: doing
+status: review
 priority: high
 created: 2026-10-05
 pr: 14
@@ -163,7 +163,7 @@ changing the pod's default role moves all of them at once.
   - [ ] Delete `stargazer-index-u-pryce` with onboarding's `_remove_role`
     (user's admin profile). Its DSQL mapping stays: DSQL never honours a
     mapping for a deleted role.
-- [ ] **Piece 2, Stargazer docs** (one PR): `configuration.md` (where
+- [x] **Piece 2, Stargazer docs** (stargazer PR 104): `configuration.md` (where
   hosted files and run data live), `runtime.md`'s pod contract (pods run
   as the user's role), `runtime_internals.md`.
 - [ ] **Piece 3, migration** (after Piece 1 deploys):
