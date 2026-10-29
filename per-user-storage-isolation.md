@@ -160,8 +160,8 @@ changing the pod's default role moves all of them at once.
     ARN (`ea786a4`).
   - [x] The rename for `u-pryce`: re-onboarded with `upgrade`, which made
     `stargazer-user-u-pryce`.
-  - [ ] Delete `stargazer-index-u-pryce` with onboarding's `_remove_role`
-    (user's admin profile). Its DSQL mapping stays: DSQL never honours a
+  - [x] Delete `stargazer-index-u-pryce` with onboarding's `_remove_role`
+    (user's admin profile; `GetRole` gives `NoSuchEntity`, 2026-10-29). Its DSQL mapping stays: DSQL never honours a
     mapping for a deleted role.
 - [x] **Piece 2, Stargazer docs** (stargazer PR 104): `configuration.md` (where
   hosted files and run data live), `runtime.md`'s pod contract (pods run
@@ -174,10 +174,13 @@ changing the pod's default role moves all of them at once.
     (results below). Its workspace prefix was empty; the old `notebooks/`,
     `settings.json`, `index/` and `index-lease/` are leftovers of earlier
     layouts and weren't copied.
-  - [ ] Delete the old `stargazer/users/` prefix (needs the user's OK).
+  - [x] Delete the old `stargazer/users/` prefix (the user, 2026-10-29;
+    `stargazer/` in Union's bucket lists 0 objects).
     Past runs' data in `metadata/v2/stargazerbio/u-pryce/` stays where it
     is.
-  - [ ] Update [alpha-notice](alpha-notice.md) to match.
+  - [x] [alpha-notice](alpha-notice.md): the notice's wording stays. Run
+    records are still readable by every pod, and infra's `app.md` now gives
+    that as its reason.
 
 **Verified when**, on the test account:
 - The germline workflow runs end to end, started from a notebook, with its
@@ -687,9 +690,22 @@ the user. All measured unless labelled.
   the user's role gets `AccessDenied` on `users/other/`. From task pods:
   Piece 0's `probe` and `outsider`.
 
-**Not run:** the germline workflow end to end. R4 drives the same storage
-calls a workflow's tasks make, from a task pod in the user's project, but
-not GATK's images or a multi-task run.
+- **Germline end to end** (the devbox tier's `seed` and `check` with the
+  storage settings a notebook forwards, run from SDK code with
+  `STARGAZER_API_KEY_SECRET=UNION_API_KEY`): seed
+  [`udnvtwxhzd74857ktvb6`](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/u-pryce/runs/udnvtwxhzd74857ktvb6),
+  `germline_short_variant_discovery`
+  [`ujq7pwb7j5x4z5vmzcc2`](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/u-pryce/runs/ujq7pwb7j5x4z5vmzcc2),
+  check
+  [`ucjtbngb5g6kg4g2rslf`](https://stargazerbio.us-west-2.unionai.cloud/v2/domain/development/project/u-pryce/runs/ucjtbngb5g6kg4g2rslf).
+  The cohort VCF (`joint_call_gvcfs`, `cohort-554f1b1b`, from `NA12829` on
+  `GRCh38`) is at
+  `s3://stargazerbio-users/users/387300641116005877/assets/bafkreifmhune…/cohort-554f1b1b_genotyped.vcf`;
+  another pod found it with `assemble()` and read sample `NA12829`, 47
+  records on `chr17:7658421-7697490`, as the devbox test expects. Every
+  step's output (index, BAMs, metrics, GVCF) landed under the user's prefix
+  in the new bucket, and `stargazer/` in Union's bucket stayed empty. The
+  GATK image built and pushed as the user's role.
 
 Teardown: `isocheck` stopped and deleted, `union_dashboard.py teardown`
 stopped the dashboard (`live runs: []`), no runs in `flytesnacks`.
