@@ -1,6 +1,6 @@
 ---
 title: reonboard-tenant-check
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-28
 ---
