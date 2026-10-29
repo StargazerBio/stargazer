@@ -89,9 +89,9 @@ For what only Union has: its login and RBAC, the remote image builder, notebook 
 
 A notebook or runtime change reaches Union in the image a dashboard launches, which is a release's. To drive it before a release:
 
-1. Build the image from the checkout for amd64 and push it to GHCR under a test tag, never a release tag or `latest`: `docker buildx build --platform linux/amd64 -f runtime/Dockerfile -t ghcr.io/stargazerbio/stargazer:test-<slug> --push .` (`docker login ghcr.io` with `gh auth token` first).
+1. Build the image from the checkout for amd64 and push it to the public `debug` package under the branch's slug: `docker buildx build --platform linux/amd64 -f runtime/Dockerfile -t ghcr.io/stargazerbio/debug:<slug> --push .` (`docker login ghcr.io` with `gh auth token` first). Its tags stay; there's nothing to delete. `ghcr.io/stargazerbio/stargazer` holds releases only.
 2. Deploy the test account's dashboard from an infra checkout with `STARGAZER_NOTEBOOK_IMAGE` set to that tag, and drive it there: infra's `verify-dashboard` skill.
-3. Tear down what you started, and delete the test tag's package version afterwards.
+3. Tear down what you started.
 
 ## Helpers
 
