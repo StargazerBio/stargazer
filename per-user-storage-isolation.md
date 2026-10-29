@@ -145,32 +145,38 @@ changing the pod's default role moves all of them at once.
   - [x] The managed policy's ECR pull and push (`5bf9000`), and its write
     to the project's run metadata prefix by the `stargazer-project` tag,
     which onboarding sets (`21c172a`).
-  - [ ] `tenant.env`'s `STARGAZER_WORKSPACE_ROOT` becomes
-    `s3://stargazerbio-users`.
-  - [ ] Onboarding makes `stargazer-user-<project>` in place of
+  - [x] `tenant.env`'s `STARGAZER_WORKSPACE_ROOT` becomes
+    `s3://stargazerbio-users` (`ea786a4`).
+  - [x] Onboarding makes `stargazer-user-<project>` in place of
     `stargazer-index-<project>` (`app.deploy.iam_role_name`). The
     role-making code moves out of `stargazer_users.user_index` into a
     module of its own, since it's no longer the index's. A new role
-    already gets its DSQL login mapped afresh.
-  - [ ] Onboarding applies the project's two settings.
-  - [ ] Deploys: dashboards and notebook pods get `AWS_ROLE_ARN` and
+    already gets its DSQL login mapped afresh (`ea786a4`:
+    `stargazer_users/user_role.py`).
+  - [x] Onboarding applies the project's two settings (`ea786a4`).
+  - [x] Deploys: dashboards and notebook pods get `AWS_ROLE_ARN` and
     `AWS_WEB_IDENTITY_TOKEN_FILE`. The index URL's `role_arn` is the same
-    ARN.
-  - [ ] The rename, once: re-onboard `u-pryce`, then have offboarding's
-    code remove `stargazer-index-u-pryce` and its DSQL mapping.
+    ARN (`ea786a4`).
+  - [x] The rename for `u-pryce`: re-onboarded with `upgrade`, which made
+    `stargazer-user-u-pryce`.
+  - [ ] Delete `stargazer-index-u-pryce` with onboarding's `_remove_role`
+    (user's admin profile). Its DSQL mapping stays: DSQL never honours a
+    mapping for a deleted role.
 - [ ] **Piece 2, Stargazer docs** (one PR): `configuration.md` (where
   hosted files and run data live), `runtime.md`'s pod contract (pods run
   as the user's role), `runtime_internals.md`.
-- [ ] **Piece 3, migration** (admin, after Piece 1 deploys):
-  - Copy the test account's `assets/`, `uploads/`, `notebooks/` and
-    `settings.json` to `s3://stargazerbio-users/users/387300641116005877/`.
-  - Rewrite its index rows: `uri` prefix
-    `s3://union-us-west-2-stargazerbio/stargazer/` →
-    `s3://stargazerbio-users/` in `assets.u_pryce`, as the DSQL admin.
-  - Delete the old `stargazer/users/` prefix once the dashboard and a
-    notebook read from the new one. Past runs' data in
-    `metadata/v2/stargazerbio/u-pryce/` stays where it is.
-  - Update [alpha-notice](alpha-notice.md) to match.
+- [ ] **Piece 3, migration** (after Piece 1 deploys):
+  - [x] Copy the test account's `assets/` and `uploads/` to
+    `s3://stargazerbio-users/users/387300641116005877/` and rewrite its index
+    rows' `uri` prefix `s3://union-us-west-2-stargazerbio/stargazer/` →
+    `s3://stargazerbio-users/`: a task in `u-pryce`, as the user's own role
+    (results below). Its workspace prefix was empty; the old `notebooks/`,
+    `settings.json`, `index/` and `index-lease/` are leftovers of earlier
+    layouts and weren't copied.
+  - [ ] Delete the old `stargazer/users/` prefix (needs the user's OK).
+    Past runs' data in `metadata/v2/stargazerbio/u-pryce/` stays where it
+    is.
+  - [ ] Update [alpha-notice](alpha-notice.md) to match.
 
 **Verified when**, on the test account:
 - The germline workflow runs end to end, started from a notebook, with its
@@ -630,3 +636,59 @@ built-in browser signed in to the console as the test account.
    upload, `download()`s it and `upload()`s a derived file; its row's `uri`
    is under the new bucket and the file is there.
 5. Teardown: stop every app started, no live runs in `u-pryce`.
+
+## Verification results (2026-10-29)
+
+Infra's `feat/per-user-storage-isolation` at `ea786a4`, applied (tofu: no
+changes beyond `21c172a`) and `upgrade --email pryce@stargazer.bio` run by
+the user. All measured unless labelled.
+
+- **R1:** `stargazer-user-u-pryce` exists, tagged
+  `stargazer-subject=387300641116005877` and `stargazer-project=u-pryce`,
+  with `dsql-connect` and `stargazer-user-union-read`. `u-pryce`'s settings
+  hold `storage.raw_data_path` and the two variables. The dashboard pod and
+  the notebook pod carry `AWS_ROLE_ARN` =
+  `arn:aws:iam::791359099513:role/stargazer-user-u-pryce`, the token path,
+  `STARGAZER_STORE_ROOT` and `STARGAZER_WORKSPACE_ROOT` =
+  `s3://stargazerbio-users`, and the `aws-iam-token` mount (`kubectl get
+  pod -o jsonpath`, read-only). Task pods: every run below reports
+  `assumed-role/stargazer-user-u-pryce` from STS. The `upgrade` didn't hang
+  this time.
+- **Migration** (run `up2wqwdt6qvnhk7pmx5k`, image from Flyte's Debian base
+  plus `stargazer-bio==2026.10.28`; the release image's `flyte` rejected the
+  client's `--user-log-level` flag, run `ug2qjsbwh4lpp8fh8xbk`): caller
+  `assumed-role/stargazer-user-u-pryce`, 80 objects copied (6,063,016,447
+  bytes), 80 rows on the old root before, 0 after, 80 on the new root, none
+  missing its file.
+- **R2** (the dashboard, `2026.10.28-ea786a4`, driven from the built-in
+  browser as the test account): `/assets/list?source=mine` returns 80 rows,
+  all under `s3://stargazerbio-users/`. `/assets/download/<cid>?network=private`
+  of `demo_cohort.csv` returns 200, 61 bytes, SHA-256 `7e045fc6…a0cc`, the
+  same as the object read straight from the bucket. A 62-byte upload
+  through `/assets/tus` (201, then 204) is indexed at
+  `s3://stargazerbio-users/users/387300641116005877/uploads/fa7a1ccc…/isolation-r2.txt`
+  with `_owner` stamped, and the object is there and not in the old prefix.
+- **R3:** a new workspace notebook `isocheck`, saved by the dashboard to
+  `users/387300641116005877/workspace/isocheck.py`, launched in edit mode;
+  its pod logged `[sg] hydrated 1 file(s)`. A cell wrote
+  `/workspace/r3-isolation.txt` and reported its caller as
+  `assumed-role/stargazer-user-u-pryce`; within 30 s both files were in the
+  new bucket's `workspace/` and nothing in the old one. After `/stop` and a
+  new `/launch`, the new pod logged `[sg] hydrated 2 file(s)`.
+- **R4** (run `u86bl6f7jwm2klsjtcjd`, with the env a notebook forwards):
+  the task `query()`d the R2 upload at its new `uri`, `download()`ed its
+  text, and `upload()`ed a derived `verify_note` at
+  `s3://stargazerbio-users/users/387300641116005877/assets/bafkreicj2f645h…/isolation-r4.txt`
+  with `_owner` and `source` in its keyvalues; the object holds the
+  derived text.
+- **R5** from the notebook cell: the shared role, assumed with the pod's
+  token, gets `AccessDenied` on `ListObjectsV2` of the user's prefix, and
+  the user's role gets `AccessDenied` on `users/other/`. From task pods:
+  Piece 0's `probe` and `outsider`.
+
+**Not run:** the germline workflow end to end. R4 drives the same storage
+calls a workflow's tasks make, from a task pod in the user's project, but
+not GATK's images or a multi-task run.
+
+Teardown: `isocheck` stopped and deleted, `union_dashboard.py teardown`
+stopped the dashboard (`live runs: []`), no runs in `flytesnacks`.
