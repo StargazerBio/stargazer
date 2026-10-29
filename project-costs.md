@@ -1,6 +1,6 @@
 ---
 title: project-costs
-status: review
+status: done
 priority: normal
 created: 2026-10-28
 pr: 12
@@ -27,3 +27,12 @@ Measured 2026-10-28: run `udfjxtnlj2xsnqmphb69` in `admin` succeeded on `2026-10
 3. `Run.get(<run>).outputs()`: the namespaces' costs come to the node cost within a few cents, for the period the export's latest partition names.
 4. `aws s3 cp --profile claude s3://union-us-west-2-stargazerbio/metadata/v2/stargazerbio/admin/development/<run>/a0/0/report.html .` has the same tables. The built-in browser's console session is the test account's, which can't open `admin`.
 5. `flyte get run --in-phase running -p admin -d development` is empty.
+
+## Outcome
+
+Shipped in StargazerBio/infra#12 (merge `8097680`): the `project_costs`
+task in the `admin` project, the `stargazer-costs-reader` role, and
+`./stargazer-costs deploy|run`. Verified by run `udfjxtnlj2xsnqmphb69` on
+the tenant, matching the hand-pulled October numbers (namespaces $29.33 of
+$29.72 node cost); 332 tests pass. Left: running it daily and showing the
+numbers on the dashboard, ticket `project-costs-daily`.
