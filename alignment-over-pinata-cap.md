@@ -1,5 +1,5 @@
 ---
-title: Alignment can't be uploaded to Pinata
+title: alignment-over-pinata-cap
 status: done
 priority: normal
 created: 2026-10-13

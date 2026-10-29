@@ -1,5 +1,5 @@
 ---
-title: A build that failed with no page open is shown on the next visit
+title: launch-failure-on-load
 status: backlog
 priority: normal
 created: 2026-10-27

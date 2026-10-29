@@ -1,5 +1,5 @@
 ---
-title: A workspace notebook can share a built-in notebook's app name
+title: workspace-slug-shadows-shipped
 status: done
 priority: normal
 created: 2026-10-26

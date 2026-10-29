@@ -1,5 +1,5 @@
 ---
-title: The asset graph as a living constellation
+title: constellation-graph
 status: done
 priority: normal
 created: 2026-10-26

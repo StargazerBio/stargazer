@@ -1,5 +1,5 @@
 ---
-title: Let CI push the stargazer image to ghcr
+title: stargazer-image-actions-access
 status: done
 priority: high
 created: 2026-10-21

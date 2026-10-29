@@ -1,5 +1,5 @@
 ---
-title: Onboarding moves to the infra repo
+title: onboarding-to-infra
 status: done
 priority: high
 created: 2026-10-21

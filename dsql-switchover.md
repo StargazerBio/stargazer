@@ -1,5 +1,5 @@
 ---
-title: Every dashboard switches its asset index to DSQL
+title: dsql-switchover
 status: done
 priority: high
 created: 2026-10-21

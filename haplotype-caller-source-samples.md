@@ -1,5 +1,5 @@
 ---
-title: haplotype_caller stores source_samples as a string
+title: haplotype-caller-source-samples
 status: done
 priority: high
 created: 2026-10-09

@@ -1,5 +1,5 @@
 ---
-title: normalize stores normalized counts in the counts layer
+title: normalize-counts-layer
 status: done
 priority: high
 created: 2026-10-09

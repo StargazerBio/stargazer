@@ -1,5 +1,5 @@
 ---
-title: App internal addresses skip Union's login
+title: internal-address-auth
 status: done
 priority: high
 created: 2026-10-06

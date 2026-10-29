@@ -1,5 +1,5 @@
 ---
-title: Settings and cleanup move into the dashboard header
+title: dashboard-header-controls
 status: done
 priority: normal
 created: 2026-10-26

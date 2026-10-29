@@ -1,5 +1,5 @@
 ---
-title: Rate limits on the dashboard's anonymous public routes
+title: public-surface-rate-limit
 status: maybe
 priority: low
 created: 2026-10-22

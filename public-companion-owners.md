@@ -1,5 +1,5 @@
 ---
-title: Every public record has an owner, and fetch takes the caller's public companions
+title: public-companion-owners
 status: done
 priority: normal
 created: 2026-10-21

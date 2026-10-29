@@ -1,5 +1,5 @@
 ---
-title: Check a returning user's index on the tenant
+title: reonboard-tenant-check
 status: backlog
 priority: normal
 created: 2026-10-28

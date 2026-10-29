@@ -1,5 +1,5 @@
 ---
-title: Resumable uploads up to 10 GB from the asset page
+title: tus-browser-uploads
 status: done
 priority: normal
 created: 2026-06-10

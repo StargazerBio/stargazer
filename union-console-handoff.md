@@ -1,5 +1,5 @@
 ---
-title: Union console handoff (per-user project access)
+title: union-console-handoff
 status: done
 priority: normal
 created: 2026-09-29

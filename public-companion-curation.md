@@ -1,5 +1,5 @@
 ---
-title: Curate which public companions a popular asset gets
+title: public-companion-curation
 status: done
 priority: normal
 created: 2026-10-20

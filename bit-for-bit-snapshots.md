@@ -1,5 +1,5 @@
 ---
-title: Bit-for-bit snapshot reproducibility
+title: bit-for-bit-snapshots
 status: done
 priority: low
 created: 2026-06-10

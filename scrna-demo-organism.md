@@ -1,5 +1,5 @@
 ---
-title: The scrna_demo bundle is labeled mouse but holds human data
+title: scrna-demo-organism
 status: done
 priority: normal
 created: 2026-10-14

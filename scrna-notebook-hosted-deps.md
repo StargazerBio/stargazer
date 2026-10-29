@@ -1,5 +1,5 @@
 ---
-title: The scRNA notebook runs on its own pod's machine
+title: scrna-notebook-hosted-deps
 status: done
 priority: normal
 created: 2026-10-26

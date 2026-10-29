@@ -1,5 +1,5 @@
 ---
-title: Public uploads over TUS, up to 10 GB
+title: tus-public-uploads
 status: done
 priority: normal
 created: 2026-10-21

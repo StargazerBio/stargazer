@@ -1,5 +1,5 @@
 ---
-title: A cached public companion shadows the user's own
+title: stale-companion-cache
 status: maybe
 priority: low
 created: 2026-10-20

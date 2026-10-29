@@ -1,5 +1,5 @@
 ---
-title: Launching a notebook whose image takes minutes to build
+title: long-image-build-launch
 status: done
 priority: low
 created: 2026-10-22

@@ -1,5 +1,5 @@
 ---
-title: A workspace notebook stored under a built-in name shares its app
+title: stored-builtin-slug-notebooks
 status: maybe
 priority: low
 created: 2026-10-27

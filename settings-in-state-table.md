@@ -1,5 +1,5 @@
 ---
-title: Dashboard settings move to the per-user state table
+title: settings-in-state-table
 status: done
 priority: normal
 created: 2026-10-27

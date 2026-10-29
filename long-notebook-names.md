@@ -1,5 +1,5 @@
 ---
-title: Notebooks with long names never launch
+title: long-notebook-names
 status: done
 priority: normal
 created: 2026-10-18

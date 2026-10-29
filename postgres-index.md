@@ -1,5 +1,5 @@
 ---
-title: The asset index runs on Postgres as well as SQLite
+title: postgres-index
 status: done
 priority: high
 created: 2026-10-20

@@ -1,5 +1,5 @@
 ---
-title: The scRNA notebook moves to a top-level notebooks folder
+title: top-level-notebooks
 status: maybe
 priority: normal
 created: 2026-10-17

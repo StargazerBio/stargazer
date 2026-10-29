@@ -1,5 +1,5 @@
 ---
-title: Dashboard errors sent as 502 never reach the page
+title: app-502s-behind-cloudflare
 status: done
 priority: normal
 created: 2026-10-19

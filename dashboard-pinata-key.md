@@ -1,5 +1,5 @@
 ---
-title: Dashboards get the Pinata key as a secret
+title: dashboard-pinata-key
 status: done
 priority: high
 created: 2026-10-17

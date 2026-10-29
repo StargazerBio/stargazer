@@ -1,5 +1,5 @@
 ---
-title: Keep the org's Pinata key out of user code
+title: private-pinata-key
 status: maybe
 priority: normal
 created: 2026-10-18

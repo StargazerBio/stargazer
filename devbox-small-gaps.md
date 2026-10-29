@@ -1,5 +1,5 @@
 ---
-title: Small gaps found while testing on the devbox
+title: devbox-small-gaps
 status: done
 priority: high
 created: 2026-10-09

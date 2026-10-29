@@ -1,5 +1,5 @@
 ---
-title: Give notebook pods the Pinata key as a secret
+title: notebook-pinata-key
 status: done
 priority: normal
 created: 2026-10-18

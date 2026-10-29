@@ -1,5 +1,5 @@
 ---
-title: Cluster runs for notebook-defined workflows
+title: notebook-cluster-runs
 status: done
 priority: normal
 created: 2026-10-20

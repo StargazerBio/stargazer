@@ -1,5 +1,5 @@
 ---
-title: In-notebook local-vs-remote toggle UI
+title: local-remote-toggle
 status: done
 priority: normal
 created: 2026-05-19

@@ -1,5 +1,5 @@
 ---
-title: A worktree for every change
+title: worktree-workflow
 status: done
 priority: normal
 created: 2026-10-09

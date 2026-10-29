@@ -1,5 +1,5 @@
 ---
-title: Cleanup sweep after the Oct 19–21 refactors
+title: post-refactor-sweep
 status: done
 priority: normal
 created: 2026-10-22

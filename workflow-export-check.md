@@ -1,5 +1,5 @@
 ---
-title: Check workflow exports against the workflow modules
+title: workflow-export-check
 status: done
 priority: low
 created: 2026-10-15

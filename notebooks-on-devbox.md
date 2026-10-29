@@ -1,5 +1,5 @@
 ---
-title: Notebooks on the devbox
+title: notebooks-on-devbox
 status: done
 priority: normal
 created: 2026-10-08

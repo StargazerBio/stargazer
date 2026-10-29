@@ -1,5 +1,5 @@
 ---
-title: Data-aware caching
+title: data-aware-caching
 status: maybe
 priority: low
 created: 2026-05-19

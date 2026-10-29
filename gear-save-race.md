@@ -1,5 +1,5 @@
 ---
-title: A running pod's save can overwrite a gear edit
+title: gear-save-race
 status: done
 priority: low
 created: 2026-10-21

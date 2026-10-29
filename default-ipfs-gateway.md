@@ -1,5 +1,5 @@
 ---
-title: The default IPFS gateway no longer serves files
+title: default-ipfs-gateway
 status: done
 priority: high
 created: 2026-10-09

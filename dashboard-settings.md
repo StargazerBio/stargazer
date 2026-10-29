@@ -1,5 +1,5 @@
 ---
-title: A Settings section on the dashboard, starting with the save interval
+title: dashboard-settings
 status: done
 priority: normal
 created: 2026-10-18

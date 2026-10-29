@@ -1,5 +1,5 @@
 ---
-title: Upload public assets for the quickstart workflow to Pinata
+title: quickstart-public-assets
 status: done
 priority: normal
 created: 2026-05-19

@@ -1,5 +1,5 @@
 ---
-title: The hosted asset index moves to Aurora DSQL
+title: dsql-asset-index
 status: done
 priority: high
 created: 2026-10-20

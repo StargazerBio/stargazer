@@ -1,5 +1,5 @@
 ---
-title: Org-wide platform key in every pod
+title: org-wide-platform-key
 status: done
 priority: high
 created: 2026-10-05

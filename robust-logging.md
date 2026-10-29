@@ -1,5 +1,5 @@
 ---
-title: More robust logging
+title: robust-logging
 status: maybe
 priority: low
 created: 2026-05-19

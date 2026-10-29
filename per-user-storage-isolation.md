@@ -1,5 +1,5 @@
 ---
-title: Per-user storage isolation
+title: per-user-storage-isolation
 status: maybe
 priority: high
 created: 2026-10-05

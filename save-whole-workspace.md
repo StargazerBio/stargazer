@@ -1,5 +1,5 @@
 ---
-title: The workspace saves every file, and snapshots go
+title: save-whole-workspace
 status: done
 priority: normal
 created: 2026-10-16

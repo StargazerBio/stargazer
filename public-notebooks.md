@@ -1,5 +1,5 @@
 ---
-title: Public notebooks
+title: public-notebooks
 status: done
 priority: normal
 created: 2026-10-16

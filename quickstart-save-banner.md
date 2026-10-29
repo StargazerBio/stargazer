@@ -1,5 +1,5 @@
 ---
-title: The docker quickstart crashes on start and opens outside the workspace
+title: quickstart-save-banner
 status: done
 priority: high
 created: 2026-10-20

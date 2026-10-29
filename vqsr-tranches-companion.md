@@ -1,5 +1,5 @@
 ---
-title: Store the VQSR tranches file as a companion asset
+title: vqsr-tranches-companion
 status: done
 priority: high
 created: 2026-10-09

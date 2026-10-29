@@ -1,5 +1,5 @@
 ---
-title: Open a notebook from GitHub in the workspace
+title: open-from-github
 status: done
 priority: normal
 created: 2026-10-17

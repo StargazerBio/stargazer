@@ -1,5 +1,5 @@
 ---
-title: Tickets on the planning branch
+title: planning-tickets
 status: done
 priority: normal
 created: 2026-10-09
