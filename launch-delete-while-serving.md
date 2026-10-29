@@ -1,6 +1,6 @@
 ---
 title: launch-delete-while-serving
-status: maybe
+status: backlog
 priority: low
 created: 2026-10-29
 ---
