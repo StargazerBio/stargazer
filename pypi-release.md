@@ -1,6 +1,6 @@
 ---
 title: Publish the SDK to PyPI as stargazer-bio
-status: review
+status: done
 priority: normal
 created: 2026-05-20
 pr: 5
@@ -27,3 +27,13 @@ and `latest`. Infra pins a Stargazer commit's archive until then.
 
 Later: notebook headers could pin a release (`stargazer-bio == <version>`)
 instead of `/stargazer`'s source, for reproducible community notebooks.
+
+## Outcome
+
+Shipped: Stargazer `v2026.10.28`, the first release, on PyPI as
+`stargazer-bio` and on GHCR as `ghcr.io/stargazerbio/stargazer:v2026.10.28`
+and `latest`. Infra pins it (StargazerBio/infra#5, `1318008`). Verified by the
+Release run's three jobs, the published files on both registries, and the test
+account's dashboard on Union showing `2026.10.28-1318008` and running the
+Assets tutorial on the release image. Left: notebook headers pinning a release
+(above), and releases stay manual, a tag per release.
