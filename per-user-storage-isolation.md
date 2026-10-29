@@ -19,11 +19,23 @@ bucket only that user's role can reach:
   user's files under `users/<subject>/`.
 - **One IAM role per user**, holding everything that's theirs alone.
 - **Their project's pods run as that role by default**, and the project's
-  Flyte settings point run data into their prefix.
+  Flyte settings point the files Flyte uploads into their prefix.
 
 No Union step is needed. The shared role stays, and any pod can still
-assume it, but nothing of anyone's is in its reach unless they write to
-the tenant bucket on purpose.
+assume it, but nothing in the user bucket is in its reach.
+
+**Not covered:**
+- **Run metadata.** Inputs, outputs and errors (`.pb`) stay in Union's
+  bucket under `metadata/v2/stargazerbio/<project>/`, readable by every pod
+  through the shared role. Union's output API reads them only from its own
+  bucket, even when `run.run_base_dir` names another (measured, Piece 0).
+  For Stargazer they hold asset metadata, store URIs and small values; the
+  files move. Moving them waits on Union fixing that read, which the user
+  raises with them.
+- **The image repository.** Every pod can push to the ECR repository
+  other users' tasks run from: the shared role always could, and the
+  user's role has to, since Union builds images from a task pod in the
+  user's project.
 
 The interim mitigation is [alpha-notice](alpha-notice.md): the dashboard and the
 upload form tell users not to upload sensitive data.
@@ -89,28 +101,31 @@ changing the pod's default role moves all of them at once.
 - **The bucket** `stargazerbio-users`, with Block Public Access,
   versioning, SSE-S3 and a noncurrent-version expiry. Each user's files
   sit under `users/<subject>/`: Stargazer's (`assets/`, `uploads/`,
-  `notebooks/`, `settings.json`) and Flyte's (`flyte/runs/`, `flyte/raw/`).
+  `notebooks/`, `settings.json`) and the files Flyte uploads
+  (`flyte/raw/`).
 - **Its bucket policy** grants each role tagged `stargazer-subject` object
   read, write and delete under `users/<that subject>/`, and `ListBucket` on
   that prefix only, so no per-user policy names the bucket. It denies the
   shared role outright, denies non-TLS requests, and allows Union's
-  services (`adminflyterole`) the `users/*/flyte/` prefixes, so the console
-  and executor still read inputs and outputs. Union's roles themselves are
-  untouched.
+  services (`adminflyterole`) the `users/*/flyte/` prefixes, which run
+  metadata needs once Union reads it from there. Union's roles themselves
+  are untouched.
 - **One IAM role per user,** `stargazer-user-<project>`, replacing
-  `stargazer-index-<project>`, tagged `stargazer-subject=<subject>`, with:
+  `stargazer-index-<project>`, tagged `stargazer-subject=<subject>` and
+  `stargazer-project=<project>`, with:
   - `dsql-connect`: their index table, as today.
   - `stargazer-user-union-read`, a managed policy shared by every user's
-    role: read on Union's three buckets, for code bundles and anything else
-    Flyte reads there.
+    role: read on Union's three buckets (code bundles and anything else
+    Flyte reads there), write to the run metadata prefix its project tag
+    names, and ECR pull and push for image builds.
   - Anything per-user later becomes another policy on it.
 - **All of it is code:** the bucket, its policy and the managed policy in
   infra's tofu stack (`aws/storage.tf`), each user's role, tag and
   attachment in onboarding.
-- **Each user's project settings:** `run.run_base_dir` and
-  `storage.raw_data_path` point into their `flyte/` prefix, and
-  `environment_variables` sets `AWS_ROLE_ARN` to their role and
-  `AWS_WEB_IDENTITY_TOKEN_FILE` to the token path, for every task pod.
+- **Each user's project settings:** `storage.raw_data_path` points at
+  their `flyte/raw/` prefix, and `environment_variables` sets
+  `AWS_ROLE_ARN` to their role and `AWS_WEB_IDENTITY_TOKEN_FILE` to the
+  token path, for every task pod. `run.run_base_dir` stays unset.
 - **App pods** (dashboard, notebooks) get the same two variables from
   their deploys, since the project setting reaches task pods only.
 - **Stargazer's code doesn't change:** its calls use the pod's default
@@ -119,14 +134,17 @@ changing the pod's default role moves all of them at once.
 
 ## Pieces
 
-- [ ] **Piece 0, the tenant check.** Part A by the user's admin profile
-  (my AWS access is read-only), Part B by me. Runbook below.
+- [x] **Piece 0, the tenant check.** Part A by the user's admin profile
+  (my AWS access is read-only), Part B by me. Runbook and results below.
 - [ ] **Piece 1, infra** (one PR, branch `feat/per-user-storage-isolation`):
   - [x] `aws/storage.tf`: the bucket, its policy and
     `stargazer-user-union-read` (commit `d2688dc`; plan below).
   - [x] Onboarding tags the role with the user's subject and attaches
     `stargazer-user-union-read`; offboarding detaches it before deleting
     the role (commit `d2688dc`).
+  - [x] The managed policy's ECR pull and push (`5bf9000`), and its write
+    to the project's run metadata prefix by the `stargazer-project` tag,
+    which onboarding sets (`21c172a`).
   - [ ] `tenant.env`'s `STARGAZER_WORKSPACE_ROOT` becomes
     `s3://stargazerbio-users`.
   - [ ] Onboarding makes `stargazer-user-<project>` in place of
@@ -134,7 +152,7 @@ changing the pod's default role moves all of them at once.
     role-making code moves out of `stargazer_users.user_index` into a
     module of its own, since it's no longer the index's. A new role
     already gets its DSQL login mapped afresh.
-  - [ ] Onboarding applies the project's three settings.
+  - [ ] Onboarding applies the project's two settings.
   - [ ] Deploys: dashboards and notebook pods get `AWS_ROLE_ARN` and
     `AWS_WEB_IDENTITY_TOKEN_FILE`. The index URL's `role_arn` is the same
     ARN.
@@ -142,12 +160,7 @@ changing the pod's default role moves all of them at once.
     code remove `stargazer-index-u-pryce` and its DSQL mapping.
 - [ ] **Piece 2, Stargazer docs** (one PR): `configuration.md` (where
   hosted files and run data live), `runtime.md`'s pod contract (pods run
-  as the user's role), `runtime_internals.md`. If Piece 0 shows the
-  pod-wide role doesn't work, this piece instead gives Stargazer's own
-  calls the role (obstore's `S3Store` takes `role_arn` and
-  `web_identity_token_file`, and `flyte.storage.get_underlying_filesystem`
-  passes `config=` through to it, measured locally), and run data stays
-  exposed.
+  as the user's role), `runtime_internals.md`.
 - [ ] **Piece 3, migration** (admin, after Piece 1 deploys):
   - Copy the test account's `assets/`, `uploads/`, `notebooks/` and
     `settings.json` to `s3://stargazerbio-users/users/387300641116005877/`.
@@ -161,8 +174,8 @@ changing the pod's default role moves all of them at once.
 
 **Verified when**, on the test account:
 - The germline workflow runs end to end, started from a notebook, with its
-  run data and outputs under the user's prefix and nothing new in the
-  tenant bucket.
+  files under the user's prefix and its run metadata only under the
+  project's prefix in Union's bucket.
 - The dashboard uploads, lists and downloads an asset; a notebook's
   workspace survives a restart; the console shows a run's inputs and
   outputs.
@@ -181,9 +194,9 @@ changing the pod's default role moves all of them at once.
    existing user, and there is one (`u-pryce`), so it's cheapest now.
    Piece 0 uses the existing `stargazer-index-u-pryce`, since a policy
    behaves the same whatever its role's name.
-3. **Pods default to the user's role,** so Flyte's run data and
-   Stargazer's files are both private without any code knowing about roles.
-   Private is the default; sharing takes a deliberate write with the
+3. **Pods default to the user's role,** so the files Flyte uploads and
+   Stargazer's files are both private without any code knowing about
+   roles. Private is the default; sharing takes a deliberate write with the
    shared role.
 4. **Union's roles stay untouched.** Their services get in through our
    bucket's policy, and the user's role gets read on their buckets.
@@ -199,6 +212,11 @@ changing the pod's default role moves all of them at once.
    nothing.
 7. **Every AWS change is code.** Shared resources in tofu, per-user ones in
    onboarding; no hand-run `aws` commands, Piece 0 included.
+8. **Run metadata stays in Union's bucket for now.** Union's output API
+   reads it only from there, so moving it breaks the CLI, the console and
+   image builds. The user's role writes only its own project's prefix
+   there, by tag; the shared role already reads all of it, so the grant
+   exposes nothing new.
 
 ## Piece 0 runbook
 
@@ -228,13 +246,12 @@ block, encryption, versioning, lifecycle and policy, and the managed policy
 `users/${aws:PrincipalTag/stargazer-subject}` (checked in `tofu console`).
 
 **2. Re-run onboarding's role step for the test account,** from the same
-branch, so `stargazer-index-u-pryce` gets its subject tag and the managed
-policy. `upgrade` ensures the index (role included) and redeploys the
-dashboard.
+branch, so `stargazer-index-u-pryce` gets its tags and the managed policy.
+It calls the step on its own, without `upgrade`'s dashboard redeploy.
 
 ```bash
 cd ~/Desktop/stargazerbio/infra/.claude/worktrees/per-user-storage-isolation
-AWS_PROFILE=pryce ./stargazer-users upgrade --email pryce@stargazer.bio
+AWS_PROFILE=pryce uv run -q --env-file tenant.env python -c "from stargazer_users.user_index import ensure_user_index; ensure_user_index('u-pryce', '387300641116005877')"
 ```
 
 Then tell me Part A is done, with anything that was refused. I check the
@@ -250,7 +267,6 @@ recorded under `## Piece 0 results`.
 (`flyte edit settings --from-file` prints the diff and applies it):
 
 ```yaml
-run.run_base_dir: s3://stargazerbio-users/users/387300641116005877/flyte/runs
 storage.raw_data_path: s3://stargazerbio-users/users/387300641116005877/flyte/raw
 environment_variables:
   AWS_ROLE_ARN: arn:aws:iam::791359099513:role/stargazer-index-u-pryce
@@ -450,15 +466,16 @@ the file locally and the venv's `flyte` script can't see `--with` packages
 - `outsider` in `flytesnacks`: `caller` is the shared role; `default_list`,
   `default_put` and `assume_user_role` are refused.
 
-**5. Where the run data landed,** read-only: the `probe` run's inputs and
-outputs under `users/387300641116005877/flyte/runs/`, nothing for it under
-`metadata/v2/stargazerbio/u-pryce/development/`, and its outputs readable
-through Union (`flyte get run`, and the console in the built-in browser).
+**5. Where the run data landed,** read-only: the child's file under
+`users/387300641116005877/flyte/raw/`, the run's `.pb` files under
+`metadata/v2/stargazerbio/u-pryce/development/<run>/`, and its outputs
+readable through Union (the SDK's `Run.outputs()` and action details, and
+the console in the built-in browser).
 
 **6. Revert the settings** right after: until Pieces 1–3 land, `u-pryce`'s
 Stargazer store is still in the tenant bucket, where the user's role can
 only read, so its real runs would fail. Set the project back to inheriting
-all three, and confirm with `get settings`. Stop the dashboard Part A's
+both, with a settings file of `{}`, and confirm with `get settings`. Stop the dashboard Part A's
 `upgrade` woke, and confirm no probe run is still going in either project.
 The probe deletes the objects it wrote under `probe/`; the child's file
 stays under `flyte/raw/` as run data, and the lifecycle rule expires its
@@ -479,7 +496,7 @@ in-memory obstore store make every call as written (put, get, head,
 list, a 12 MiB multipart put, delete), and `_whoami` runs with no AWS
 environment.
 
-## Piece 0 results (2026-10-29, partial)
+## Piece 0 results (2026-10-29)
 
 Part A applied by the user from infra's `feat/per-user-storage-isolation`
 (`d2688dc`, then `5bf9000`), state copied back to the main checkout. Read
@@ -514,18 +531,59 @@ with `stargazer-user-union-read` attached.
   console, and `flyte run`'s own image build step. The probe task never
   started.
 
-**Not yet measured**, since the probe never ran: the token mount and
-`caller` in a task pod, the child `File` under `storage.raw_data_path`,
-and every refusal (the shared role on the bucket, the user's role on
-another prefix, another project's pods).
+**With the split** (`21c172a` applied, role tags
+`stargazer-subject=387300641116005877` and `stargazer-project=u-pryce`
+read back; settings `storage.raw_data_path` and the two variables only):
+
+- **`probe` in `u-pryce` succeeded** (run `u9z4bwv8t7wbqvlh5wvk`; the
+  CLI's log stream dropped with `Request was cancelled`, so the report
+  comes from `flyte get logs`):
+  - `whoami`: `AWS_ROLE_ARN` is the user's role, the token file exists at
+    the variable's path, `sub` `system:serviceaccount:u-pryce-development:default`,
+    `aud` `sts.amazonaws.com`, `AWS_REGION` and `AWS_STS_REGIONAL_ENDPOINTS`
+    set, `caller`
+    `arn:aws:sts::791359099513:assumed-role/stargazer-index-u-pryce/…`. So
+    EKS's webhook keeps a preset `AWS_ROLE_ARN` and still mounts the token.
+  - `child_file`:
+    `s3://stargazerbio-users/users/387300641116005877/flyte/raw/g2/stargazerbio/u-pryce/development/u9z4bwv8t7wbqvlh5wvk/…/child.txt`.
+  - `default_creds`: `own_put`, `own_get` (`hello`), `own_head` (`5`),
+    `own_list`, `own_multipart_12MiB`, `own_multipart_size` (`12582912`),
+    `own_delete` and `child_file_get` succeed; `own_head_missing` is a
+    `404`, so `StorageClient.upload`'s exists check works as it is;
+    `other_get`, `other_put`, `other_list` and `root_list` are `403`.
+  - `tenant_bucket`: `list_own_runs` reads 381 keys; `put` outside the
+    project's metadata prefix is `403`.
+  - `shared_role`, assumed with the pod's token: `child_file_get` and
+    `list_own` are `403`.
+- **`outsider` in `flytesnacks` succeeded** (run `u4ddw6gdwq45dcx2mz84`):
+  its pod runs as the shared role; listing and writing the user's prefix
+  are `403`, and `AssumeRoleWithWebIdentity` on the user's role is
+  `AccessDenied`.
+- **Where it landed:** the run's `outputs.pb` and the child's `inputs.pb`
+  and `outputs.pb` under
+  `metadata/v2/stargazerbio/u-pryce/development/u9z4bwv8t7wbqvlh5wvk/` in
+  Union's bucket, written by the pods as the user's role; the child's file
+  is the run's only object in ours. The probe's own test objects were
+  deleted by the probe.
+- **Through Union:** the SDK reads the run's outputs and the child's
+  `File` reference; the console (signed in as the test account in the
+  built-in browser) shows the child's input and its file output. The
+  console links a file to the AWS S3 console rather than downloading it
+  through Union, so a file in our bucket costs nothing there.
+
+Earlier attempts left `flyte/runs/` objects for runs
+`uwlw7bsk6dhbskhbrgqb`, `upj56brzwt8g9xt9d5hd` and `iJLTp5zfKXJ_jnXpQhho`
+under the test account's prefix; they're harmless and go with the
+account's data.
 
 **Remaining risk found on the way:** the user's role can push to ECR, as
 the shared role already lets every pod do, so any user can push to the
 image repository other users' tasks run from. Not new, but run data being
 private doesn't cover it.
 
-Settings reverted on `u-pryce`; the dashboard the `upgrade` woke is
-stopped; no runs going. The `upgrade` hung after its deploy: Knative had
+Teardown: settings reverted on `u-pryce` (`get settings` shows all three
+empty), the dashboard the `upgrade` woke is stopped, and no runs are going
+in `u-pryce` or `flytesnacks`. The `upgrade` hung after its deploy: Knative had
 the revision ready at 07:01 UTC while Union's app status stayed
 `ASSIGNED`, so `deploy_dashboard`'s serve watch, which has no timeout,
 never returned.
