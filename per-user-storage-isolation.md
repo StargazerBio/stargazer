@@ -90,18 +90,23 @@ changing the pod's default role moves all of them at once.
   versioning, SSE-S3 and a noncurrent-version expiry. Each user's files
   sit under `users/<subject>/`: Stargazer's (`assets/`, `uploads/`,
   `notebooks/`, `settings.json`) and Flyte's (`flyte/runs/`, `flyte/raw/`).
-- **Its bucket policy** denies the shared role outright, denies non-TLS
-  requests, and allows Union's services (`adminflyterole`) the
-  `users/*/flyte/` prefixes, so the console and executor still read inputs
-  and outputs. Union's roles themselves are untouched.
+- **Its bucket policy** grants each role tagged `stargazer-subject` object
+  read, write and delete under `users/<that subject>/`, and `ListBucket` on
+  that prefix only, so no per-user policy names the bucket. It denies the
+  shared role outright, denies non-TLS requests, and allows Union's
+  services (`adminflyterole`) the `users/*/flyte/` prefixes, so the console
+  and executor still read inputs and outputs. Union's roles themselves are
+  untouched.
 - **One IAM role per user,** `stargazer-user-<project>`, replacing
-  `stargazer-index-<project>`, with:
+  `stargazer-index-<project>`, tagged `stargazer-subject=<subject>`, with:
   - `dsql-connect`: their index table, as today.
-  - `user-store`: object read, write and delete under their own
-    `users/<subject>/`, and `ListBucket` on that prefix only.
-  - `union-read`: read on Union's three buckets, for code bundles and
-    anything else Flyte reads there.
+  - `stargazer-user-union-read`, a managed policy shared by every user's
+    role: read on Union's three buckets, for code bundles and anything else
+    Flyte reads there.
   - Anything per-user later becomes another policy on it.
+- **All of it is code:** the bucket, its policy and the managed policy in
+  infra's tofu stack (`aws/storage.tf`), each user's role, tag and
+  attachment in onboarding.
 - **Each user's project settings:** `run.run_base_dir` and
   `storage.raw_data_path` point into their `flyte/` prefix, and
   `environment_variables` sets `AWS_ROLE_ARN` to their role and
@@ -116,23 +121,25 @@ changing the pod's default role moves all of them at once.
 
 - [ ] **Piece 0, the tenant check.** Part A by the user's admin profile
   (my AWS access is read-only), Part B by me. Runbook below.
-- [ ] **Piece 1, infra** (one PR):
-  - `aws/storage.tf`: the bucket and its policy, imported from Piece 0.
-    `tenant.env`'s `STARGAZER_WORKSPACE_ROOT` becomes
+- [ ] **Piece 1, infra** (one PR, branch `feat/per-user-storage-isolation`):
+  - [x] `aws/storage.tf`: the bucket, its policy and
+    `stargazer-user-union-read` (commit `d2688dc`; plan below).
+  - [x] Onboarding tags the role with the user's subject and attaches
+    `stargazer-user-union-read`; offboarding detaches it before deleting
+    the role (commit `d2688dc`).
+  - [ ] `tenant.env`'s `STARGAZER_WORKSPACE_ROOT` becomes
     `s3://stargazerbio-users`.
-  - Onboarding makes `stargazer-user-<project>` in place of
-    `stargazer-index-<project>` (`app.deploy.iam_role_name`), with its
-    three policies, `user-store` scoped to the user's subject. The
+  - [ ] Onboarding makes `stargazer-user-<project>` in place of
+    `stargazer-index-<project>` (`app.deploy.iam_role_name`). The
     role-making code moves out of `stargazer_users.user_index` into a
     module of its own, since it's no longer the index's. A new role
-    already gets its DSQL login mapped afresh. Onboarding also applies the
-    project's three settings. Offboarding deletes the policies, then the
-    role.
-  - Deploys: dashboards and notebook pods get `AWS_ROLE_ARN` and
+    already gets its DSQL login mapped afresh.
+  - [ ] Onboarding applies the project's three settings.
+  - [ ] Deploys: dashboards and notebook pods get `AWS_ROLE_ARN` and
     `AWS_WEB_IDENTITY_TOKEN_FILE`. The index URL's `role_arn` is the same
     ARN.
-  - The rename, once: re-onboard `u-pryce`, then delete
-    `stargazer-index-u-pryce` and revoke its DSQL mapping as the admin.
+  - [ ] The rename, once: re-onboard `u-pryce`, then have offboarding's
+    code remove `stargazer-index-u-pryce` and its DSQL mapping.
 - [ ] **Piece 2, Stargazer docs** (one PR): `configuration.md` (where
   hosted files and run data live), `runtime.md`'s pod contract (pods run
   as the user's role), `runtime_internals.md`. If Piece 0 shows the
@@ -182,133 +189,57 @@ changing the pod's default role moves all of them at once.
    bucket's policy, and the user's role gets read on their buckets.
 5. **Deny the shared role in the bucket policy**, not only leave it
    ungranted. It costs one statement and survives a broader Union grant.
+6. **The bucket policy grants each prefix by the role's subject tag**
+   (`${aws:PrincipalTag/stargazer-subject}`), so tofu owns every statement
+   that names the bucket and onboarding only tags and attaches. A
+   per-user inline policy would have put the bucket's access rules in two
+   places. Its `Allow` to `*` is pinned to the account by
+   `aws:PrincipalAccount`, which Block Public Access requires, and an
+   untagged principal leaves the variable unresolved, so it matches
+   nothing.
+7. **Every AWS change is code.** Shared resources in tofu, per-user ones in
+   onboarding; no hand-run `aws` commands, Piece 0 included.
 
 ## Piece 0 runbook
 
-Values measured 2026-10-28 with `AWS_PROFILE=claude`. The runs need
-Part A first: with the settings in place and no bucket, every `u-pryce`
-run would fail.
+The runs need Part A first: with the settings in place and no bucket,
+every `u-pryce` run would fail.
 
 ### Part A: AWS, by the user's admin profile
 
-In zsh, from any directory outside the repo. A few minutes.
+Everything here is code on infra's `feat/per-user-storage-isolation`
+branch, in the worktree `.claude/worktrees/per-user-storage-isolation`.
 
-**0. Shell.**
+**1. Apply the stack.** The stack's state lives in the main checkout's
+`aws/terraform.tfstate`; the worktree holds a copy of it, so copy it back
+after applying.
 
 ```bash
+cd ~/Desktop/stargazerbio/infra/.claude/worktrees/per-user-storage-isolation/aws
 aws sso login --profile pryce
-export AWS_PROFILE=pryce AWS_REGION=us-west-2
-BUCKET=stargazerbio-users
-SUBJECT=387300641116005877
-ROLE=stargazer-index-u-pryce
-SHARED_ARN=arn:aws:iam::791359099513:role/union-us-west-2-stargazerbio-userflyterole
-UNION_ARN=arn:aws:iam::791359099513:role/union-us-west-2-stargazerbio-adminflyterole
-mkdir -p /tmp/isolation-probe && cd /tmp/isolation-probe
+AWS_PROFILE=pryce AWS_REGION=us-west-2 ../tofu.sh apply
+cp terraform.tfstate ~/Desktop/stargazerbio/infra/aws/terraform.tfstate
 ```
 
-**1. The bucket.** New buckets already block public access and encrypt
-with SSE-S3; both are set explicitly so tofu can import them as they are.
+It should show `Plan: 7 to add, 0 to change, 0 to destroy` (the plan I ran
+with `AWS_PROFILE=claude` on 2026-10-28): the bucket, its public access
+block, encryption, versioning, lifecycle and policy, and the managed policy
+`stargazer-user-union-read`. The bucket policy renders the prefix as
+`users/${aws:PrincipalTag/stargazer-subject}` (checked in `tofu console`).
+
+**2. Re-run onboarding's role step for the test account,** from the same
+branch, so `stargazer-index-u-pryce` gets its subject tag and the managed
+policy. `upgrade` ensures the index (role included) and redeploys the
+dashboard.
 
 ```bash
-aws s3api create-bucket --bucket "$BUCKET" --create-bucket-configuration LocationConstraint=us-west-2
-aws s3api put-public-access-block --bucket "$BUCKET" --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
-aws s3api put-bucket-encryption --bucket "$BUCKET" --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
-aws s3api put-bucket-versioning --bucket "$BUCKET" --versioning-configuration Status=Enabled
-aws s3api put-bucket-lifecycle-configuration --bucket "$BUCKET" --lifecycle-configuration '{"Rules":[{"ID":"expire-noncurrent","Status":"Enabled","Filter":{},"NoncurrentVersionExpiration":{"NoncurrentDays":30},"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":7}}]}'
-cat > bucket-policy.json <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "DenyInsecureTransport",
-      "Effect": "Deny",
-      "Principal": "*",
-      "Action": "s3:*",
-      "Resource": ["arn:aws:s3:::${BUCKET}", "arn:aws:s3:::${BUCKET}/*"],
-      "Condition": {"Bool": {"aws:SecureTransport": "false"}}
-    },
-    {
-      "Sid": "DenySharedPodRole",
-      "Effect": "Deny",
-      "Principal": "*",
-      "Action": "s3:*",
-      "Resource": ["arn:aws:s3:::${BUCKET}", "arn:aws:s3:::${BUCKET}/*"],
-      "Condition": {"ArnEquals": {"aws:PrincipalArn": "${SHARED_ARN}"}}
-    },
-    {
-      "Sid": "UnionServicesRunData",
-      "Effect": "Allow",
-      "Principal": {"AWS": "${UNION_ARN}"},
-      "Action": ["s3:GetObject*", "s3:PutObject*", "s3:DeleteObject*", "s3:AbortMultipartUpload"],
-      "Resource": "arn:aws:s3:::${BUCKET}/users/*/flyte/*"
-    },
-    {
-      "Sid": "UnionServicesList",
-      "Effect": "Allow",
-      "Principal": {"AWS": "${UNION_ARN}"},
-      "Action": "s3:ListBucket",
-      "Resource": "arn:aws:s3:::${BUCKET}"
-    }
-  ]
-}
-EOF
-aws s3api put-bucket-policy --bucket "$BUCKET" --policy file://bucket-policy.json
+cd ~/Desktop/stargazerbio/infra/.claude/worktrees/per-user-storage-isolation
+AWS_PROFILE=pryce ./stargazer-users upgrade --email pryce@stargazer.bio
 ```
 
-**2. The user's role.** `s3:prefix` is set on `ListObjectsV2` only, so a
-`HeadObject` on a missing key may be refused (403) instead of not found
-(404); the probe measures it, since `StorageClient.upload` asks whether a
-file exists before it writes. `union-read` gives read only, so anything
-Flyte still writes to Union's buckets fails loudly in the probe.
-
-```bash
-cat > user-store.json <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "OwnObjects",
-      "Effect": "Allow",
-      "Action": ["s3:GetObject*", "s3:PutObject*", "s3:DeleteObject*", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"],
-      "Resource": "arn:aws:s3:::${BUCKET}/users/${SUBJECT}/*"
-    },
-    {
-      "Sid": "ListOwnPrefix",
-      "Effect": "Allow",
-      "Action": "s3:ListBucket",
-      "Resource": "arn:aws:s3:::${BUCKET}",
-      "Condition": {"StringLike": {"s3:prefix": ["users/${SUBJECT}/*"]}}
-    }
-  ]
-}
-EOF
-cat > union-read.json <<'EOF'
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "UnionBucketsRead",
-      "Effect": "Allow",
-      "Action": ["s3:GetObject*", "s3:ListBucket"],
-      "Resource": [
-        "arn:aws:s3:::union-us-west-2-stargazerbio",
-        "arn:aws:s3:::union-us-west-2-stargazerbio/*",
-        "arn:aws:s3:::union-us-west-2-stargazerbio-fast-registration",
-        "arn:aws:s3:::union-us-west-2-stargazerbio-fast-registration/*",
-        "arn:aws:s3:::union-persistent-a6832e5930a20d18",
-        "arn:aws:s3:::union-persistent-a6832e5930a20d18/*"
-      ]
-    }
-  ]
-}
-EOF
-aws iam put-role-policy --role-name "$ROLE" --policy-name user-store --policy-document file://user-store.json
-aws iam put-role-policy --role-name "$ROLE" --policy-name union-read --policy-document file://union-read.json
-echo other | aws s3 cp - "s3://$BUCKET/users/other/probe.txt"
-```
-
-`users/other/probe.txt` stands in for another user's file. Then tell me
-Part A is done, with any step that was refused.
+Then tell me Part A is done, with anything that was refused. I check the
+role's tag and attachment read-only, and stop the dashboard `upgrade`
+woke once Part B is done.
 
 ### Part B: Flyte, by me
 
@@ -510,7 +441,9 @@ the file locally and the venv's `flyte` script can't see `--with` packages
     `s3://stargazerbio-users/users/387300641116005877/flyte/raw/`.
   - `default_creds`: every `own_*` call and `child_file_get` succeed;
     `own_head_missing` is not found, or refused (then the `ListBucket`
-    grant needs another shape); `other_*` and `root_list` are refused.
+    grant needs another shape); `other_*` and `root_list` are refused
+    (`users/other/` holds nothing, so `other_get` is refused for want of
+    `ListBucket` there, and `other_put` is the real test).
   - `tenant_bucket`: `list_own_runs` works (read), `put` is refused.
   - `shared_role`: the assume succeeds (it trusts every namespace), then
     `child_file_get` and `list_own` are refused.
@@ -525,16 +458,11 @@ through Union (`flyte get run`, and the console in the built-in browser).
 **6. Revert the settings** right after: until Pieces 1–3 land, `u-pryce`'s
 Stargazer store is still in the tenant bucket, where the user's role can
 only read, so its real runs would fail. Set the project back to inheriting
-all three, and confirm with `get settings`. Then remove the stand-in file
-and the probe's leftovers, which needs Part A's admin profile:
-
-```bash
-aws s3 rm --recursive "s3://$BUCKET/users/other/"
-aws s3 rm --recursive "s3://$BUCKET/users/$SUBJECT/probe/"
-```
-
-Keep the bucket, its policy and the role's two new policies: Piece 1
-imports them. Confirm no probe run is still going in either project.
+all three, and confirm with `get settings`. Stop the dashboard Part A's
+`upgrade` woke, and confirm no probe run is still going in either project.
+The probe deletes the objects it wrote under `probe/`; the child's file
+stays under `flyte/raw/` as run data, and the lifecycle rule expires its
+noncurrent versions.
 
 **Unverified**, settled by the runbook's own output:
 - Whether the three project settings take effect, and on which writes
