@@ -67,9 +67,12 @@ itself and refreshing it.
 
 - One bucket, `stargazerbio-users`, holding each user's files at
   `users/<subject>/`, the layout they have now and have locally.
-- The user's role (`stargazer-index-<project>`) gets a second policy,
-  `user-store`: object read, write and delete under its own
-  `users/<subject>/`, and `ListBucket` on that prefix only.
+- Each user has one IAM role, `stargazer-user-<project>`, covering every
+  resource that's theirs alone: `dsql-connect` for their index table, as
+  today, and a second policy, `user-store`: object read, write and delete
+  under their own `users/<subject>/`, and `ListBucket` on that prefix
+  only. It replaces `stargazer-index-<project>`, and whatever is per-user
+  later becomes another policy on it.
 - The bucket policy denies the shared role outright and denies non-TLS
   requests. The deny holds even if Union widens the shared role's S3 grant.
 - Pods keep the shared role as their default credentials, which Flyte uses
@@ -99,10 +102,17 @@ itself and refreshing it.
   - `aws/storage.tf`: the bucket, imported from Piece 0, with versioning,
     Block Public Access, SSE-S3, the lifecycle rule and the bucket policy.
     `tenant.env`'s `STARGAZER_WORKSPACE_ROOT` becomes `s3://stargazerbio-users`.
-  - Onboarding puts `user-store` on the role, scoped to the user's
-    subject, and offboarding deletes it before the role.
-  - Deploys: dashboards and notebook pods get `STARGAZER_USER_ROLE_ARN`
-    (the role ARN `app.deploy` already builds for the index URL).
+  - Onboarding makes `stargazer-user-<project>` in place of
+    `stargazer-index-<project>` (`app.deploy.iam_role_name`), with both
+    policies, `user-store` scoped to the user's subject. The role-making
+    code moves out of `stargazer_users.user_index` into a module of its
+    own, since it's no longer the index's. A new role already gets its
+    DSQL login mapped afresh. Offboarding deletes both policies, then the
+    role.
+  - The rename, once: re-onboard `u-pryce`, then delete
+    `stargazer-index-u-pryce` and revoke its DSQL mapping as the admin.
+  - Deploys: dashboards and notebook pods get `STARGAZER_USER_ROLE_ARN`,
+    the same ARN the index URL's `role_arn` carries.
     `app/assets.py` and `app/workspace_store.py` use Stargazer's helper.
 - [ ] **Piece 3, migration** (admin, after Piece 2 deploys):
   - Copy the test account's `assets/`, `uploads/`, `notebooks/` and
@@ -131,9 +141,11 @@ itself and refreshing it.
    Onboarding stays IAM-only, with no per-user bucket, CORS, lifecycle or
    policy to create, and the layout stays the one local runs use
    (D6 below). Per-user cost and deletion work by prefix.
-2. **The index's role gets the storage policy.** One role per user for
-   everything that's theirs. The name says `index` for now; renaming it
-   means new roles and new DSQL mappings for no change in access.
+2. **One role per user for everything that's theirs,** named for the user
+   rather than the index. Renaming costs a new role and DSQL mapping per
+   existing user, and there is one (`u-pryce`), so it's cheapest now.
+   Piece 0 uses the existing `stargazer-index-u-pryce`, since a policy
+   behaves the same whatever its role's name.
 3. **Only Stargazer's calls assume the role.** Overriding `AWS_ROLE_ARN`
    for the whole pod would move Flyte's own I/O onto the user's role, which
    would then need a copy of Union's grants, kept in step with theirs.
