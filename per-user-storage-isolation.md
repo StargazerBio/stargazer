@@ -1,6 +1,6 @@
 ---
 title: per-user-storage-isolation
-status: review
+status: done
 priority: high
 created: 2026-10-05
 pr: 14
@@ -709,3 +709,30 @@ the user. All measured unless labelled.
 
 Teardown: `isocheck` stopped and deleted, `union_dashboard.py teardown`
 stopped the dashboard (`live runs: []`), no runs in `flytesnacks`.
+
+## Outcome
+
+Shipped in StargazerBio/infra#14 (merge `7df1664`) and
+StargazerBio/stargazer#104 (merge `4119cd9`). Each user has one IAM role,
+`stargazer-user-<project>`, which every pod in their project runs as: the
+dashboard and notebook pods from their deploys, task pods from the
+project's settings. It reaches their prefix of the user bucket
+`stargazerbio-users` (granted by its `stargazer-subject` tag in the
+bucket's policy, which denies Union's shared role), their DSQL index, and
+their project's run metadata in Union's bucket. Files Flyte uploads go to
+the user's prefix; run metadata stays in Union's bucket. All of it is code:
+the bucket and the shared policy in infra's tofu, the role, tags and
+project settings in onboarding.
+
+Verified on the tenant as the test account (Piece 0 results, Verification
+results above): the probe's refusals from both projects, the test
+account's 80 files migrated as its own role, the dashboard's list, download
+and upload, a notebook's save and restart, a run storing an asset, and the
+germline workflow end to end with every output in the user's prefix. Unit
+tier 343 and Postgres tier 19 in infra; the docs build clean. The old
+`stargazer-index-u-pryce` role and the old prefix are deleted. No comments
+on either PR.
+
+Left: run metadata (ticket `per-user-run-metadata`, waiting on Union), the
+shared image repository (ticket `shared-image-repository`), and the hang in
+`upgrade` (ticket `deploy-watch-timeout`).

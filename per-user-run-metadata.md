@@ -3,8 +3,6 @@ title: per-user-run-metadata
 status: maybe
 priority: normal
 created: 2026-10-29
-blocked_by:
-  - per-user-storage-isolation
 ---
 
 Flyte's run records (each action's `inputs.pb`, `outputs.pb` and
