@@ -1,6 +1,6 @@
 ---
 title: stale-companion-cache
-status: backlog
+status: doing
 priority: low
 created: 2026-10-20
 ---
