@@ -5,6 +5,7 @@ docs_dir = "docs"
 repo_url = "https://github.com/StargazerBio/stargazer"
 repo_name = "StargazerBio/stargazer"
 dev_addr = "0.0.0.0:8001"
+extra_css = ["stylesheets/stargazer.css"]
 
 nav = [
   { "Home" = "index.md" },
@@ -35,16 +36,22 @@ nav = [
 [project.theme]
 logo = "assets/8-bit_stargazer_no-bg.png"
 favicon = "assets/8-bit_stargazer_no-bg_32x32.png"
-
-[[project.theme.palette]]
-scheme = "default"
-toggle.icon = "lucide/sun"
-toggle.name = "Switch to dark mode"
+font.text = "IBM Plex Sans"
+font.code = "IBM Plex Mono"
 
 [[project.theme.palette]]
 scheme = "slate"
+primary = "custom"
+accent = "custom"
 toggle.icon = "lucide/moon"
 toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+scheme = "default"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
 
 [[project.plugins]]
 mkdocstrings = {enabled = true, handlers = {python = {paths = ["src"]}}}
