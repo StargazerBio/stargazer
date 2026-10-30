@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 name = "stargazer-bio"
 # The release's date (`v2026.10.28` is version 2026.10.28; a second release
 # that day is 2026.10.28.1). The release workflow refuses a tag that differs.
-version = "2026.10.28"
+version = "2026.10.30"
 description = "Bioinformatics workflow orchestration on Flyte v2, with assets identified by their IPFS CID"
 readme = "README.md"
 requires-python = ">=3.14"
