@@ -1,6 +1,6 @@
 ---
 title: launch-delete-while-serving
-status: review
+status: done
 priority: low
 created: 2026-10-29
 pr: 16
@@ -53,3 +53,15 @@ right away `POST /workspace/delete`. Watch `App.get("nb-<slug>-edit")` every
 second: it must never come up. Read the notebook's object versions in the
 user bucket (`aws s3api list-object-versions`): the delete marker must stay
 the latest. Tear down with `union_dashboard.py teardown`.
+
+## Outcome
+
+Shipped in StargazerBio/infra#16 (merged 2026-10-30): the delete drops the
+launch rows, cancels this process's serve after the build and waits for it,
+then takes the app down. Verified on the Union tenant as above (`main`
+left an active pod for the deleted notebook; the fix left none), and by two
+unit tests. Left: two millisecond-wide windows (an app-create request
+already in flight when the serve is cancelled, and a claim committed but not
+yet registered in `_serving`), named in the PR. The pod writing a deleted
+notebook back on its shutdown save, found while verifying, is ticket
+`delete-running-notebook-resurrects`.
