@@ -3482,7 +3482,7 @@ wheels = [
 
 [[package]]
 name = "stargazer-bio"
-version = "2026.10.28"
+version = "2026.10.30"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
