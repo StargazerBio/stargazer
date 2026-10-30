@@ -1,6 +1,6 @@
 ---
 title: unhydrated-notebook-banner
-status: review
+status: done
 priority: normal
 created: 2026-10-30
 pr: 108
@@ -51,3 +51,11 @@ Open `http://localhost:8093/` in a browser: the banner shows (NL-2). For NL-3, r
 
 - The empty `AWS_*` values make the hydrate fail on S3's list request (a 400 for the missing bucket), which is the failure this needs; the launch script logs `warning: could not load saved notebooks` and carries on.
 - marimo writes a one-cell blank `qc.py` into `/workspace` as it opens, so the file exists after start; `SG_UNSAVED_NOTEBOOK` is set before marimo starts, from the hydrate's result.
+
+## Outcome
+
+Shipped in PR #108 (merge 94955cc). `/__sg__/save-status` returns the notebook that didn't hydrate as `not_loaded`, and the save banner leads with it: the notebook opened blank, nothing typed into it is saved, and stopping it from the dashboard and opening it again gets it back (reloading wouldn't, since the hydrate only runs at pod start).
+
+Verified with the recipe above on the branch's image run locally through the hosted launch script: NL-1, NL-2 and NL-3 passed. Unit tier 282 passed. Not driven on the Union tenant.
+
+Left: a pod whose notebook was deleted while it started shows the banner too until it's torn down, and there the line "Your saved notebook is unchanged" doesn't hold.
