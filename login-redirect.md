@@ -22,7 +22,7 @@ Union doesn't take custom domains, so the app itself can't be served from starga
 - [ ] The lookup: listing projects needs a key that can read them org-wide. The alternative is a subject → project map that onboarding writes. Pick one
 - [ ] A signed-in user with no project gets a plain page saying they don't have a workspace yet, not an error
 - [ ] Startup latency: a scaled-to-zero redirect app adds its cold start to the dashboard's. Measure it and decide on a minimum of one replica
-- [ ] `stargazer.bio/login` forwarding to the app. The apex doesn't resolve today (the docs are at `docs.stargazer.bio`), so this lands with the landing page, or as a stub page at that address until then
+- [ ] `stargazer.bio/login` forwarding to the app. The landing page lives in `StargazerBio/stargazer.bio` (GitHub Pages, PR #1 there), whose `login/index.html` forwards to the tenant's sign-in for now. Point it at the app's address
 
 ## Verification recipe
 
