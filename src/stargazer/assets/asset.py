@@ -192,7 +192,8 @@ class Asset:
         Alignment's ``reference_cid``, stay behind. An asset built from a
         local file that was never uploaded is returned in place. Copies
         already on disk are reused; a companion file left by an earlier fetch
-        is replaced when a different one of that name is picked now.
+        is replaced when a different one of that name is picked now. A
+        companion named like the asset itself is skipped.
         """
         import stargazer.utils.storage as _storage
         from stargazer.assets import specialize
@@ -201,7 +202,8 @@ class Asset:
         local = await client.download(self)
         if self.cid:
             for record in await client.companions(self.cid):
-                await client.download(specialize(record), local.parent)
+                if record["name"] != local.name:
+                    await client.download(specialize(record), local.parent)
         return local
 
     async def update(self, path: Path, **kwargs) -> None:

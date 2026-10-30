@@ -14,6 +14,7 @@ from stargazer.assets import (
     Alignment,
     Reference,
     ReferenceIndex,
+    SequenceDict,
     assemble,
 )
 from stargazer.utils.cid import compute_cid
@@ -252,6 +253,47 @@ async def test_a_companion_stored_later_replaces_the_cached_public_one(
         "ref.fa": b">chr1\nACGT\n",
         "ref.fa.bwt": b"my bwt",
     }
+
+
+@pytest.mark.asyncio
+async def test_fetch_links_the_newest_of_the_users_companions_of_one_name(
+    client, tmp_path
+):
+    """Two of the user's own `ref.dict`s: the one stored last is linked."""
+    ref = Reference()
+    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
+    for data in (b"UR:/old", b"UR:/new"):
+        await SequenceDict().update(
+            _write(tmp_path / data.decode()[4:] / "ref.dict", data),
+            build="T",
+            companion_of=ref.cid,
+        )
+
+    local = await ref.fetch()
+
+    assert _listing(local.parent) == {
+        "ref.fa": b">chr1\nACGT\n",
+        "ref.dict": b"UR:/new",
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_companion_named_like_its_asset_leaves_the_asset_alone(
+    client, tmp_path
+):
+    """The asset's own cached file keeps its bytes."""
+    ref = Reference()
+    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
+    await AlignerIndex().update(
+        _write(tmp_path / "x" / "ref.fa", b"NOT A FASTA"),
+        aligner="bwa",
+        build="T",
+        companion_of=ref.cid,
+    )
+
+    local = await ref.fetch()
+
+    assert local.read_bytes() == b">chr1\nACGT\n"
 
 
 @pytest.mark.asyncio
