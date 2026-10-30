@@ -227,6 +227,34 @@ async def test_fetch_fills_in_public_companions_when_the_user_has_none(
 
 
 @pytest.mark.asyncio
+async def test_a_companion_stored_later_replaces_the_cached_public_one(
+    tmp_path, monkeypatch
+):
+    """The user's own `.bwt`, stored after a fetch linked the public one, is linked on the next."""
+    public = FakePublicTier(tmp_path / "gateway")
+    c = make_client(tmp_path, public=public, gateway=str(public.gateway))
+    monkeypatch.setattr(storage_mod, "default_client", c)
+    ref = Reference()
+    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
+    public.add("ref.fa", b">chr1\nACGT\n", asset="reference", _owner="maintainer")
+    public.add("ref.fa.bwt", b"their bwt", companion_of=ref.cid, _owner="maintainer")
+    await ref.fetch()
+
+    await AlignerIndex().update(
+        _write(tmp_path / "w" / "ref.fa.bwt", b"my bwt"),
+        aligner="bwa",
+        build="T",
+        companion_of=ref.cid,
+    )
+    local = await ref.fetch()
+
+    assert _listing(local.parent) == {
+        "ref.fa": b">chr1\nACGT\n",
+        "ref.fa.bwt": b"my bwt",
+    }
+
+
+@pytest.mark.asyncio
 async def test_public_companions_come_from_the_parents_publisher(tmp_path, monkeypatch):
     """Another publisher's index for a public reference isn't mixed in."""
     public = FakePublicTier(tmp_path / "gateway")

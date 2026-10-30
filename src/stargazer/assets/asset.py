@@ -191,7 +191,8 @@ class Asset:
         Outputs that record it as an input under another key, such as an
         Alignment's ``reference_cid``, stay behind. An asset built from a
         local file that was never uploaded is returned in place. Copies
-        already on disk are reused.
+        already on disk are reused; a companion file left by an earlier fetch
+        is replaced when a different one of that name is picked now.
         """
         import stargazer.utils.storage as _storage
         from stargazer.assets import specialize
