@@ -1,6 +1,6 @@
 ---
 title: delete-running-notebook-resurrects
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-30
 ---
