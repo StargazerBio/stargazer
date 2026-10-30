@@ -1,6 +1,6 @@
 ---
 title: unhydrated-notebook-banner
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-30
 ---
