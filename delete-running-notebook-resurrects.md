@@ -1,6 +1,6 @@
 ---
 title: delete-running-notebook-resurrects
-status: review
+status: done
 priority: normal
 created: 2026-10-30
 pr: 106
@@ -28,8 +28,9 @@ StargazerBio/infra#17 (the dashboard):
 - [x] Pod: a workspace notebook missing after the hydrate
   (`SG_UNSAVED_NOTEBOOK`, set by the launch script) is never uploaded.
 - [x] Dashboard: delete the notebook from the store before stopping its pods.
-- [ ] Release with stargazer#106, then bump infra's pin. The dashboard change
-  only takes effect with pods that keep the rule.
+- [x] Release with stargazer#106 (`v2026.10.30`), then bump infra's pin
+  (StargazerBio/infra#18). The dashboard change only takes effect with pods
+  that keep the rule.
 
 ## Verification
 
@@ -73,3 +74,16 @@ doesn't say so yet.
    (`aws s3api list-object-versions`). Every notebook's latest version must
    be its delete marker.
 5. Tear down with `union_dashboard.py teardown`.
+
+## Outcome
+
+Shipped in StargazerBio/stargazer#106 (merge `50c0e24`, released as
+`v2026.10.30`) and StargazerBio/infra#17 (merge `f1ad30d`). Pods don't write
+back a file the store no longer has, or save the blank they open for a
+notebook that didn't hydrate, and the dashboard deletes from the store before
+stopping the pods. Verified on the tenant as above, and again on the release
+itself from infra#18's branch: four notebooks deleted from before the hydrate
+to a pod just ready, none came back. Left: infra#18 (the pin) to merge, then
+`stargazer-users upgrade` for live dashboards. Also left: the in-flight-pass
+window, which only a conditional write would close, and saying in the save
+banner when a pod's notebook didn't hydrate. Neither PR had review comments.
