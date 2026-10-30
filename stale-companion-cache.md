@@ -1,6 +1,6 @@
 ---
 title: stale-companion-cache
-status: review
+status: done
 priority: low
 created: 2026-10-20
 pr: 105
@@ -47,3 +47,11 @@ full unit tier passes: 279 tests.
 ## Verification recipe
 
 `uv run --all-extras pytest tests/utils/test_storage.py -k companion`
+
+## Outcome
+
+Shipped in StargazerBio/stargazer#105 (merge `10f98a8`), released in `v2026.10.30`:
+`fetch()` relinks a companion whose cached link isn't its own cache copy (`samefile`),
+links the newest of the user's companions of one name, and skips a companion named like
+its asset. Verified in the unit tier (the reproducing test failed on `main`; 279 passed).
+Nothing left. The PR had no review comments.
