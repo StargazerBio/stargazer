@@ -1,6 +1,6 @@
 ---
 title: deploy-watch-timeout
-status: review
+status: done
 priority: normal
 created: 2026-10-29
 pr: 15
@@ -56,3 +56,14 @@ On the devbox, `uv run python devbox/dashboard.py` with `app.deploy._WATCH_SECON
 to 1 (a small driver script) on a stopped dashboard. Expect the warning
 `Serve for flytesnacks: the serve watch gave no answer in 1.0 s; the app is up`, then the
 dashboard's URL, and `kubectl get ksvc -n flyte` ready. Afterwards, redeploy from main.
+
+## Outcome
+
+Shipped in StargazerBio/infra#15 (merge `042d53a`): a dashboard deploy bounds Flyte's
+serve watch at `_WATCH_SECONDS` (300 s), leaving image builds unbounded, then lets the
+existing `App.get` polls decide, so a watch that never answers ends in the endpoint or a
+clear failure instead of a hang. Verified by unit tests on Flyte's real `App.watch` over
+a silent stream (it hung before the fix), and on the devbox with the bound cut to 1 s
+(the deploy returned the endpoint at 32.5 s). Left: a stream that goes quiet on its own,
+as Union's did, wasn't reproduced; it now fails clearly after about 7 minutes. The PR had
+no review comments.
