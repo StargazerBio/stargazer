@@ -20,7 +20,9 @@ Where asset bytes and metadata live, and the local cache in front of them.
   `companions()` decides which public companions join the user's own.
 - **The cache** is `<STARGAZER_LOCAL>/<cid>/<name>`. Uploads seed it,
   downloads fill it, and `Asset.fetch()` hardlinks companions next to their
-  asset.
+  asset. A file named by its own CID never changes; a companion linked into
+  its asset's directory is relinked when a later fetch picks a different
+  file of that name.
 
 `get_client()` builds a client from the environment; `default_client` is the
 lazily built process-wide instance (`_LazyClient`).
@@ -218,10 +220,11 @@ class StorageClient:
 
         The copy lives at `<local_dir>/<cid>/<name>`; with `directory` it is
         also linked into that directory (how companions land beside their
-        asset). An asset with no CID is a local file that was never stored:
-        it is returned in place. An asset with a CID but no file is located
-        through the index, or failing that the public IPFS gateway, and its
-        `path` is set to what was found.
+        asset), replacing a different file of the same name there. An asset
+        with no CID is a local file that was never stored: it is returned in
+        place. An asset with a CID but no file is located through the index,
+        or failing that the public IPFS gateway, and its `path` is set to
+        what was found.
 
         Raises:
             FileNotFoundError: when the asset has neither a file nor a CID, or
@@ -260,6 +263,11 @@ class StorageClient:
         if directory is None:
             return own
         target = Path(directory) / name
+        # The directory is named for another asset's CID, so a file already
+        # at `target` may be a different companion of the same name, linked
+        # by an earlier fetch.
+        if target.exists() and not target.samefile(own):
+            target.unlink(missing_ok=True)
         _materialize(own, target)
         return target
 
@@ -292,13 +300,16 @@ class StorageClient:
         companions from whoever published `cid` itself; a file nobody
         published has no publisher to follow. Anyone else's are left out, so
         two publishers' builds of a popular reference never mix. A name
-        already taken isn't taken again: a user's own `.bwt` stands, and the
-        publisher's fills in only what the user lacks.
+        already taken isn't taken again: of the user's own, the newest stands,
+        and the publisher's fills in only what the user lacks.
 
         Returns:
             Rows with `cid`, `uri`, `name` and `keyvalues`
         """
-        rows = await self.index.query({"companion_of": cid})
+        own: dict[str, dict] = {}
+        for row in await self.index.query({"companion_of": cid}):
+            own.setdefault(row["name"], row)
+        rows = list(own.values())
         if self.public is None:
             return rows
         records = await self.public.query({"companion_of": cid})
@@ -307,7 +318,7 @@ class StorageClient:
         parent = await self.public.get(cid)
         caller = os.environ.get("STARGAZER_OWNER")
         owners = [caller, parent["keyvalues"]["_owner"] if parent else None]
-        taken = {row["name"] for row in rows}
+        taken = set(own)
         for owner in filter(None, owners):
             for record in records:
                 public = self._public_record(record)
