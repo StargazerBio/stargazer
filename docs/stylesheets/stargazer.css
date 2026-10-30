@@ -1,6 +1,6 @@
 /* The dashboard's palette and type on the docs: violet from the lily's
-   petals as the brand color, Plex Mono for headings, and a deep violet night
-   in place of the theme's near-black, so the landing page, the dashboard and
+   petals as the brand color, Plex Mono for headings, and the dashboard's
+   navy canvas under its violet glow, so the landing page, the dashboard and
    the docs read as one product. */
 
 :root {
@@ -19,24 +19,32 @@
 }
 
 [data-md-color-scheme="slate"] {
-  --md-hue: 262deg;
-  --md-default-bg-color: hsla(var(--md-hue), 32%, 11%, 1);
-  --md-default-bg-color--light: hsla(var(--md-hue), 32%, 11%, 0.54);
-  --md-default-bg-color--lighter: hsla(var(--md-hue), 32%, 11%, 0.26);
-  --md-default-bg-color--lightest: hsla(var(--md-hue), 32%, 11%, 0.07);
-  --md-code-bg-color: hsla(var(--md-hue), 30%, 15%, 1);
-  --md-code-bg-color--light: hsla(var(--md-hue), 30%, 15%, 0.9);
-  --md-code-bg-color--lighter: hsla(var(--md-hue), 30%, 15%, 0.54);
-  --md-footer-bg-color: hsla(var(--md-hue), 32%, 8%, 0.87);
-  --md-footer-bg-color--dark: hsla(var(--md-hue), 32%, 7%, 1);
+  --md-hue: 216deg;
+  --md-default-bg-color: #0d1117;
+  --md-default-bg-color--light: rgba(13, 17, 23, 0.54);
+  --md-default-bg-color--lighter: rgba(13, 17, 23, 0.26);
+  --md-default-bg-color--lightest: rgba(13, 17, 23, 0.07);
+  --md-code-bg-color: #161b22;
+  --md-code-bg-color--light: rgba(22, 27, 34, 0.9);
+  --md-code-bg-color--lighter: rgba(22, 27, 34, 0.54);
+  --md-footer-bg-color: rgba(13, 17, 23, 0.87);
+  --md-footer-bg-color--dark: #0a0d12;
   --md-primary-fg-color: var(--sg-violet);
   --md-primary-fg-color--light: #d3c4f5;
   --md-primary-fg-color--dark: #8f73d6;
-  --md-primary-bg-color: hsla(var(--md-hue), 32%, 11%, 1);
+  --md-primary-bg-color: #0d1117;
   --md-accent-fg-color: #d3c4f5;
   --md-accent-fg-color--transparent: rgba(185, 160, 236, 0.1);
   --md-typeset-a-color: var(--sg-violet);
   --md-code-hl-string-color: var(--sg-green);
+}
+
+/* The dashboard's violet and sage wash over the page, fixed like its sky. */
+body[data-md-color-scheme="slate"] {
+  background:
+    radial-gradient(60% 50% at 50% 12%, rgba(167, 139, 250, 0.10), transparent 70%) fixed,
+    radial-gradient(45% 40% at 78% 82%, rgba(134, 199, 108, 0.06), transparent 70%) fixed,
+    #0d1117;
 }
 
 .md-header__title,
