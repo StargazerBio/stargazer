@@ -27,6 +27,8 @@ reads and writes too (the pod contract in the runtime doc). At launch, `hydrate(
 `/workspace`. While the pod runs, a background loop saves every file whose size
 or modification time changed, every `SG_SAVE_INTERVAL_SECONDS` (30 by default,
 0 for none), and deletes from the store the files deleted from `/workspace`.
+A file it holds that's gone from the store was deleted there, by the
+dashboard, and isn't put back.
 The `lifespan` shutdown hook does a final pass when the pod scales to zero.
 Dotfiles, `__pycache__/`, `__marimo__/` and files over `MAX_SAVED_BYTES` are
 never saved.
@@ -299,8 +301,12 @@ async def sync_once() -> list[str]:
     A file whose size and modification time match what was last stored isn't
     read at all, and nor is one over `MAX_SAVED_BYTES`. A file deleted from
     `/workspace` is deleted from the store, if this pod hydrated or saved it.
-    A failed upload or delete is logged and retried on the next pass rather
-    than raised.
+    One this pod hydrated or saved that's gone from the store was deleted
+    elsewhere, by the dashboard's delete while the pod was still up, and
+    isn't put back: the pass after the delete would otherwise undo it,
+    whenever the file changed since the last pass (marimo rewrites a notebook
+    as it opens). A failed upload or delete is logged and retried on the next
+    pass rather than raised.
     """
     prefix = _user_prefix("workspace")
     if prefix is None or not WORKSPACE_DIR.is_dir():
@@ -313,7 +319,11 @@ async def sync_once() -> list[str]:
             stamp = _stamp(path)
             if _synced.get(rel) == stamp or stamp[0] > MAX_SAVED_BYTES:
                 continue
-            await _upload(f"{prefix}/{rel}", path.read_bytes())
+            uri = f"{prefix}/{rel}"
+            if rel in _synced and not await flyte.storage.exists(uri):
+                _synced[rel] = stamp
+                continue
+            await _upload(uri, path.read_bytes())
         except Exception as exc:
             print(f"[sg] saving {rel} failed: {exc}")
             continue

@@ -428,6 +428,30 @@ async def test_deleted_file_is_deleted_from_the_store(pod_dirs):
     assert (stored / "qc.py").read_text() == "# qc\n"
 
 
+async def test_a_file_deleted_from_the_store_is_not_put_back(pod_dirs):
+    """A file the dashboard deletes while the pod holds it stays deleted, edits and all."""
+    workspace, stored = pod_dirs
+    stored.mkdir(parents=True)
+    (stored / "qc.py").write_text("# qc\n")
+    await proxy.hydrate_async()
+    proxy._seed_from_disk()
+    (workspace / "made.py").write_text("# made here\n")
+    assert await proxy.sync_once() == ["made.py"]
+
+    (stored / "qc.py").unlink()
+    (stored / "made.py").unlink()
+    (workspace / "qc.py").write_text("# qc, as marimo rewrote it on open\n")
+    (workspace / "made.py").write_text("# made here, edited\n")
+    (workspace / "new.py").write_text("# new\n")
+
+    assert await proxy.sync_once() == ["new.py"]
+    assert not (stored / "qc.py").exists()
+    assert not (stored / "made.py").exists()
+    (workspace / "qc.py").write_text("# qc, edited again\n")
+    assert await proxy.sync_once() == []
+    assert not (stored / "qc.py").exists()
+
+
 async def test_store_files_the_pod_never_had_are_kept(pod_dirs):
     """After a failed hydrate the workspace is empty, and saving mustn't wipe the store."""
     workspace, stored = pod_dirs
