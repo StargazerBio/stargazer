@@ -452,6 +452,21 @@ async def test_a_file_deleted_from_the_store_is_not_put_back(pod_dirs):
     assert not (stored / "qc.py").exists()
 
 
+async def test_a_notebook_that_did_not_hydrate_is_never_saved(pod_dirs, monkeypatch):
+    """The blank marimo opens for a notebook gone from the store never reaches it."""
+    workspace, stored = pod_dirs
+    monkeypatch.setenv("SG_UNSAVED_NOTEBOOK", "qc.py")
+    await proxy.hydrate_async()
+    proxy._seed_from_disk()
+    (workspace / "qc.py").write_text("")
+    (workspace / "other.py").write_text("# other\n")
+
+    assert await proxy.sync_once() == ["other.py"]
+    (workspace / "qc.py").write_text("# typed into the blank\n")
+    assert await proxy.sync_once() == []
+    assert not (stored / "qc.py").exists()
+
+
 async def test_store_files_the_pod_never_had_are_kept(pod_dirs):
     """After a failed hydrate the workspace is empty, and saving mustn't wipe the store."""
     workspace, stored = pod_dirs

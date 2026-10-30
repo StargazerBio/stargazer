@@ -28,7 +28,8 @@ reads and writes too (the pod contract in the runtime doc). At launch, `hydrate(
 or modification time changed, every `SG_SAVE_INTERVAL_SECONDS` (30 by default,
 0 for none), and deletes from the store the files deleted from `/workspace`.
 A file it holds that's gone from the store was deleted there, by the
-dashboard, and isn't put back.
+dashboard, and isn't put back, and nor is the blank marimo opens for a
+notebook that didn't hydrate (`SG_UNSAVED_NOTEBOOK`).
 The `lifespan` shutdown hook does a final pass when the pod scales to zero.
 Dotfiles, `__pycache__/`, `__marimo__/` and files over `MAX_SAVED_BYTES` are
 never saved.
@@ -305,19 +306,27 @@ async def sync_once() -> list[str]:
     elsewhere, by the dashboard's delete while the pod was still up, and
     isn't put back: the pass after the delete would otherwise undo it,
     whenever the file changed since the last pass (marimo rewrites a notebook
-    as it opens). A failed upload or delete is logged and retried on the next
-    pass rather than raised.
+    as it opens). Nor is the pod's notebook when it didn't hydrate
+    (`SG_UNSAVED_NOTEBOOK`, set by the launch script): the blank marimo opens
+    in its place would undo the delete, or, after a failed hydrate, overwrite
+    the stored notebook. A failed upload or delete is logged and retried on
+    the next pass rather than raised.
     """
     prefix = _user_prefix("workspace")
     if prefix is None or not WORKSPACE_DIR.is_dir():
         return []
     _init_storage()
     files = _workspace_files()
+    unsaved = os.environ.get("SG_UNSAVED_NOTEBOOK")
     saved = []
     for rel, path in sorted(files.items()):
         try:
             stamp = _stamp(path)
-            if _synced.get(rel) == stamp or stamp[0] > MAX_SAVED_BYTES:
+            if (
+                rel == unsaved
+                or _synced.get(rel) == stamp
+                or stamp[0] > MAX_SAVED_BYTES
+            ):
                 continue
             uri = f"{prefix}/{rel}"
             if rel in _synced and not await flyte.storage.exists(uri):

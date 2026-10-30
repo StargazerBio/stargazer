@@ -51,6 +51,14 @@ python -c "import sg_proxy; sg_proxy.hydrate()" \
 # launched in it — open here.
 cd "${WORKSPACE_DIR}" 2>/dev/null || true
 
+# A workspace notebook that didn't hydrate is gone from the store: deleted while
+# this pod started, or the hydrate failed. marimo opens a blank one in its
+# place, which the proxy never saves, so it can't undo the delete or overwrite
+# the stored notebook.
+if [[ "${NOTEBOOK_PATH}" == "${WORKSPACE_DIR}/"* && ! -e "${NOTEBOOK_PATH}" ]]; then
+  export SG_UNSAVED_NOTEBOOK="${NOTEBOOK_PATH#"${WORKSPACE_DIR}/"}"
+fi
+
 # `-q`: marimo's banner advertises its own port, 8081, which only the proxy
 # can reach.
 marimo -q "${MODE}" --sandbox "${NOTEBOOK_PATH}" \
