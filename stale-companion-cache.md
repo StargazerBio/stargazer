@@ -1,8 +1,9 @@
 ---
 title: stale-companion-cache
-status: doing
+status: review
 priority: low
 created: 2026-10-20
+pr: 105
 ---
 
 `fetch()` links companions into the parent's cache directory,
@@ -27,3 +28,22 @@ it matters only when the two builds differ.
 
 One way: when linking a companion, replace a file at the target that isn't
 the same file as the companion's own cache copy (`os.path.samefile`).
+
+- [x] Relink a companion whose cached link isn't its own cache copy (`samefile`)
+- [x] Keep the newest of the user's own companions per name, so the relink can't let the oldest win
+- [x] Skip a companion named like its asset, so the asset's own cache file never changes
+
+## Verification
+
+Unit tier, `tests/utils/test_storage.py`, against an isolated store and a
+fake public tier (measured). `test_a_companion_stored_later_replaces_the_cached_public_one`
+reproduces the bug. It fails on `main` with
+`{'ref.fa.bwt': b'their bwt'} != {'ref.fa.bwt': b'my bwt'}` and passes on
+the branch. Two guards cover regressions that review found in the first
+commit: `test_fetch_links_the_newest_of_the_users_companions_of_one_name`
+and `test_a_companion_named_like_its_asset_leaves_the_asset_alone`. The
+full unit tier passes: 279 tests.
+
+## Verification recipe
+
+`uv run --all-extras pytest tests/utils/test_storage.py -k companion`
