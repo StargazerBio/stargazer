@@ -69,7 +69,7 @@ async def my_tool(ref: Reference, alignment: Alignment) -> MyOutput:
 - **Always `update()` outputs** to store them and record their metadata
 - **Use `asyncio.gather`** to fetch multiple inputs in parallel
 - **Write outputs under `_storage.default_client.local_dir`, named after the sample** — samples fanned out in one process share that directory, so a fixed filename lets them overwrite each other
-- **Pick the environment whose image carries the tool** — `gatk_env` or `scrna_env` in `src/stargazer/config.py`, where resources are set too. A new tool goes onto that image (see [Configuration → Adding a tool](../architecture/configuration.md#adding-a-tool))
+- **Pick the environment whose image carries the tool** — `gatk_env` or `scrna_env` in `src/stargazer/config.py`, where resources are set too. A new tool goes onto that image (see [Configuration → Container Images](../architecture/configuration.md#container-images))
 - **Use `pathlib.Path`** for all filesystem operations; `_run` converts its arguments to `str` for the subprocess
 
 ## 4. Register in the MCP Server

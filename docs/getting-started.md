@@ -10,7 +10,7 @@ If you want to add tasks or workflows to Stargazer itself, see [Contributing](gu
 docker run -p 8080:8080 ghcr.io/stargazerbio/stargazer
 ```
 
-Serves [Marimo](https://marimo.io/) notebooks at `http://localhost:8080` in edit mode, opening on the Assets tutorial. The rest are in the file explorer, in a `notebooks/` folder: `tutorials/`, in reading order Assets, Tasks, Workflows and Execution, `workflows/`, and `templates/` with `blank.py` and `basic.py` to start your own from. Each runs with the packages its own header declares. Start a notebook of your own by copying a template rather than with marimo's *Create a new notebook*, whose notebooks don't have Stargazer installed. From there you can import stargazer tasks, run workflows, and visualize results interactively. The published image is the latest release; [Contributing → Building Images](guides/contributing.md#building-images) builds it from a checkout under the same name. It is the image hosted notebooks run on (see [Notebooks](architecture/notebook.md) for the notebook types and [Notebook Runtime](architecture/runtime.md) for what's in it).
+Serves [Marimo](https://marimo.io/) notebooks at `http://localhost:8080` in edit mode, opening on the Assets tutorial. The rest are in the file explorer, in a `notebooks/` folder: `tutorials/`, in reading order Assets, Tasks, Workflows and Execution, `workflows/`, and `templates/` with `blank.py` and `basic.py` to start your own from. Start a notebook of your own by copying a template rather than with marimo's *Create a new notebook*, whose notebooks don't have Stargazer installed. This is the image hosted notebooks run on (see [Notebooks](architecture/notebook.md) and [Notebook Runtime](architecture/runtime.md)).
 
 ## Use Your Own Files
 
@@ -20,7 +20,7 @@ Mount a directory at `/workspace`, the notebook's working directory:
 docker run -p 8080:8080 -v "$PWD/data":/workspace ghcr.io/stargazerbio/stargazer
 ```
 
-Its files show up in the notebook's file explorer and in the dropdown terminal, so a notebook reads them by relative path (`pd.read_csv("reads/sample.csv")`). It is the same place a hosted notebook keeps the files beside it. The `notebooks/` folder is copied there when the container starts, skipping any file the directory already has, so your edits to them are kept with your files. On Linux the container runs as user 1000, so the directory must be writable by that user.
+Its files show up in the notebook's file explorer and in the dropdown terminal, so a notebook reads them by relative path (`pd.read_csv("reads/sample.csv")`). The `notebooks/` folder is copied there at start, skipping files the directory already has, so your edits are kept. On Linux the container runs as user 1000, so the directory must be writable by that user.
 
 To keep assets between runs, mount a volume at `/home/flyte/.stargazer`, which holds the asset store, its index and the download cache:
 
