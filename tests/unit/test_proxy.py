@@ -490,6 +490,7 @@ def test_file_over_the_limit_is_not_saved_and_is_reported(
     assert owner_client.get("/__sg__/save-status").json() == {
         "limit_bytes": 10,
         "unsaved": [],
+        "not_loaded": None,
     }
 
     big = workspace / "data" / "big.h5ad"
@@ -501,7 +502,19 @@ def test_file_over_the_limit_is_not_saved_and_is_reported(
     assert owner_client.get("/__sg__/save-status").json() == {
         "limit_bytes": 10,
         "unsaved": [{"path": "data/big.h5ad", "bytes": 11}],
+        "not_loaded": None,
     }
+
+
+def test_save_status_names_the_notebook_that_did_not_load(
+    pod_dirs, owner_client, monkeypatch
+):
+    """The banner learns the open notebook didn't load, so it can say edits are lost."""
+    workspace, _ = pod_dirs
+    workspace.mkdir()
+    monkeypatch.setenv("SG_UNSAVED_NOTEBOOK", "qc.py")
+
+    assert owner_client.get("/__sg__/save-status").json()["not_loaded"] == "qc.py"
 
 
 def test_interval_from_env_saves_while_serving(pod_dirs, monkeypatch):

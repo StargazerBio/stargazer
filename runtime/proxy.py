@@ -39,15 +39,17 @@ It also injects a Quake-style dropdown terminal into marimo's HTML: every
 before `</body>`, toggled with Ctrl+` and wired to the `/__sg__/term`
 websocket below. Beside it goes a banner naming any file over
 `MAX_SAVED_BYTES`, which isn't saved, with the cell that stores it as an
-asset instead.
+asset instead, and the open notebook when it didn't hydrate, since nothing
+typed into the blank is saved.
 
 Reserved paths the proxy handles itself instead of forwarding:
 
 - `GET /__sg__/dashboard` — 302 to the owner's dashboard
   (`STARGAZER_ADMIN_URL`), so notebooks can link back with a stable relative
   path.
-- `GET /__sg__/save-status` — the files in `/workspace` over `MAX_SAVED_BYTES`,
-  which aren't saved; the injected banner polls it.
+- `GET /__sg__/save-status` — the files in `/workspace` over `MAX_SAVED_BYTES`
+  and the notebook that didn't hydrate, which aren't saved; the injected
+  banner polls it.
 - `GET /__sg__/ready` — 200 once local marimo answers, 503 while it's still
   cold-starting.
 - `WS  /__sg__/term` — PTY websocket. Spawns a login `bash` and
@@ -510,10 +512,12 @@ async def dashboard_redirect() -> Response:
 
 @asgi_app.get("/__sg__/save-status")
 async def save_status() -> dict:
-    """The files in `/workspace` too big to save, for the injected banner.
+    """What the pod won't save, for the injected banner.
 
-    Read from disk on each request rather than from the last save pass, so the
-    banner works with the periodic save turned off too.
+    `unsaved` is the files in `/workspace` too big to save, read from disk on
+    each request rather than from the last save pass, so the banner works
+    with the periodic save turned off too. `not_loaded` is the open notebook
+    when it didn't hydrate (`SG_UNSAVED_NOTEBOOK`), else `None`.
     """
     unsaved = []
     if WORKSPACE_DIR.is_dir():
@@ -522,7 +526,11 @@ async def save_status() -> dict:
                 size = path.stat().st_size
                 if size > MAX_SAVED_BYTES:
                     unsaved.append({"path": rel, "bytes": size})
-    return {"limit_bytes": MAX_SAVED_BYTES, "unsaved": unsaved}
+    return {
+        "limit_bytes": MAX_SAVED_BYTES,
+        "unsaved": unsaved,
+        "not_loaded": os.environ.get("SG_UNSAVED_NOTEBOOK"),
+    }
 
 
 @asgi_app.get("/__sg__/ready")

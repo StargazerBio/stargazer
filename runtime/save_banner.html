@@ -2,10 +2,11 @@
   Notice for files too big to save with the workspace, spliced into every
   marimo HTML page before the closing body tag by runtime/proxy.py (read into
   `_SAVE_BANNER_INJECTION` at import), right after the terminal overlay. An
-  injected fragment, not a document. It polls the proxy's /__sg__/save-status
-  and, for each file over the limit, says it won't be kept and shows the cell
-  that stores it as an asset instead. Filenames go in as text nodes, never
-  markup. Baked next to the proxy in the image (runtime/Dockerfile).
+  injected fragment, not a document. It polls the proxy's /__sg__/save-status.
+  When the open notebook didn't load, it says the blank in its place isn't
+  saved and how to get the notebook back. For each file over the limit, it
+  says it won't be kept and shows the cell that stores it as an asset instead.
+  Filenames go in as text nodes, never markup. Baked next to the proxy in the image (runtime/Dockerfile).
 -->
 <style>
   #sg-save-banner { position: fixed; right: 16px; bottom: 16px; z-index: 2147483500;
@@ -20,6 +21,7 @@
     color: inherit; font-size: 18px; line-height: 1; cursor: pointer; opacity: .7; }
   #sg-save-banner .sg-save-close:hover { opacity: 1; }
   #sg-save-banner .sg-save-file + .sg-save-file { margin-top: 10px; }
+  #sg-save-banner a { color: inherit; }
   #sg-save-banner code { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
   #sg-save-banner pre { margin: 6px 0 0; padding: 8px 10px; border-radius: 6px;
     background: rgba(0,0,0,.35); overflow-x: auto; white-space: pre; }
@@ -31,7 +33,7 @@
 (function () {
   if (window.__sgSaveBannerInit) return; window.__sgSaveBannerInit = true;
   var POLL_MS = 10000;
-  var banner, list, shown = '', dismissed = '';
+  var banner, title, list, shown = '', dismissed = '';
 
   // Binary units, so the 100 MB limit (100 * 1024^2 bytes) reads as 100 MB.
   function size(bytes) {
@@ -79,10 +81,26 @@
     return entry;
   }
 
+  function notLoadedEntry(path) {
+    var entry = el('div', 'sg-save-file');
+    entry.appendChild(el('code', null, path));
+    entry.appendChild(document.createTextNode(
+      " didn't load, so it opened blank, and nothing you do in it is saved. " +
+      'Your saved notebook is unchanged. To get it back, stop this notebook ' +
+      'from '));
+    var link = el('a', null, 'your dashboard');
+    link.href = '/__sg__/dashboard';
+    entry.appendChild(link);
+    entry.appendChild(document.createTextNode(' and open it again.'));
+    return entry;
+  }
+
   function build() {
     banner = el('div'); banner.id = 'sg-save-banner'; banner.hidden = true;
     banner.setAttribute('role', 'status');
-    var head = el('div', 'sg-save-head', 'Some files won’t be saved');
+    var head = el('div', 'sg-save-head');
+    title = el('span');
+    head.appendChild(title);
     var close = el('button', 'sg-save-close', '×');
     close.type = 'button'; close.setAttribute('aria-label', 'Dismiss');
     close.addEventListener('click', function () { dismissed = shown; banner.hidden = true; });
@@ -94,11 +112,16 @@
 
   function render(status) {
     var key = status.unsaved.map(function (f) { return f.path + ':' + f.bytes; }).join('|');
+    if (status.not_loaded) key = 'not-loaded:' + status.not_loaded + '|' + key;
     if (!key || key === dismissed) { banner.hidden = true; return; }
     if (key !== shown) {
-      list.replaceChildren.apply(list, status.unsaved.map(function (f) {
+      var entries = status.unsaved.map(function (f) {
         return fileEntry(f, status.limit_bytes);
-      }));
+      });
+      if (status.not_loaded) entries.unshift(notLoadedEntry(status.not_loaded));
+      list.replaceChildren.apply(list, entries);
+      title.textContent = status.not_loaded
+        ? 'This notebook isn’t being saved' : 'Some files won’t be saved';
       shown = key;
     }
     banner.hidden = false;
