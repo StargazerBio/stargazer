@@ -11,6 +11,9 @@ consolidated into one set of skills that ships with the notebook image.
 
 ## Why the MCP server doesn't earn its place
 
+Since ticket agent-mcp, the notebook pod's agent panel has the server's
+tools, so the first two points below no longer hold.
+
 - **marimo can't use it.** marimo's chat panel takes MCP servers only from
   its presets (`[mcp] presets = ["marimo", "context7"]`); its docs say custom
   servers aren't supported yet (docs.marimo.io, read 2026-10-28).
