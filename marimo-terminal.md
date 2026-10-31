@@ -1,8 +1,9 @@
 ---
 title: marimo-terminal
-status: doing
+status: review
 priority: normal
 created: 2026-10-28
+pr: 114
 ---
 
 The notebook pod's terminal and its agent become marimo's own instead of what
