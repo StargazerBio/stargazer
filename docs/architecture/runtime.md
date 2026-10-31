@@ -9,7 +9,7 @@ For what the notebooks themselves are, see [Notebooks](notebook.md). The launch,
 `runtime/Dockerfile` builds it, from the repository root. It holds:
 
 - **The SDK's source at `/stargazer`.** Notebooks don't run in the image's Python: each notebook's PEP 723 header names `stargazer-bio` with `/stargazer` as its source, and marimo's sandbox builds the notebook a venv from that header when it opens. The built-in notebooks are under `/stargazer/src/stargazer/notebooks/`.
-- **The runtime venv**: `flyte`, the launcher marimo (pinned, and put into every sandbox, so the kernel and the launcher are the same build) and the proxy's web packages.
+- **The runtime venv**: `flyte`, the launcher marimo (pinned, and put into every sandbox, so the kernel and the launcher are the same build), `pydantic-ai-slim` with the OpenAI and Anthropic providers for marimo's AI chat and completions, and the proxy's web packages.
 - **The bioinformatics tools** (gatk, samtools, bwa, bwa-mem2), on every sandbox's path, so a notebook can run a tool on the pod's own data.
 - **Claude Code**, pinned, for the terminal, with `/workspace/AGENTS.md` telling it where it is and how Stargazer notebooks, tasks and runs work.
 

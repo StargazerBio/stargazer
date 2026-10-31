@@ -37,12 +37,17 @@ RUN mkdir -p /opt/claude-cli \
 # `flyte` among them (hosted pods start under it, and the proxy stores
 # notebooks with it), and the launcher marimo, pinned: notebooks don't list
 # marimo in their headers, and `--sandbox` puts this version into every
-# kernel's venv. The SDK isn't installed here: each notebook's sandbox venv
-# builds it from /stargazer.
+# kernel's venv. pydantic-ai-slim is what marimo's AI chat and completions run
+# on in the server, with the OpenAI and Anthropic providers; marimo only
+# brings it in its `recommended` extra. Below 2 for this marimo, which predates
+# pydantic-ai 2.0 (later marimos need >=2.34), so the two move together. The
+# SDK isn't installed here: each notebook's sandbox venv builds it from
+# /stargazer.
 COPY pyproject.toml /tmp/runtime/
 RUN python -m venv /opt/venv \
     && uv pip install --no-cache --python /opt/venv/bin/python \
         --group /tmp/runtime/pyproject.toml:runtime marimo==0.23.6 \
+        "pydantic-ai-slim[openai,anthropic]>=1.52,<2" \
     && rm -rf /tmp/runtime
 
 # The proxy is a top-level module, not under `app/`: a hosted pod's code bundle
