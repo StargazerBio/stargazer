@@ -1,8 +1,9 @@
 ---
 title: uninvited-sign-in
-status: maybe
+status: review
 priority: normal
 created: 2026-10-30
+pr: 6
 ---
 
 A visitor without an invite who clicks Log in on stargazer.bio gets stuck at Union's sign-in. They never reach anything Stargazer controls. `stargazer.bio/login` forwards to the login app (infra `app/login.py`). That app is `requires_auth=True`, so Union's gate runs first:
@@ -27,3 +28,7 @@ Sign in through `stargazer.bio/login` in a fresh browser session with an account
 - [x] A Union user with no `stargazer-login` policy (measured 2026-10-31). I removed the test account's assignment at 04:06:52 UTC, leaving it only `stargazer-u-pryce`. In the built-in browser, signed in as the test account, the login app then returned HTTP 403: `text/plain`, body `Forbidden`, server `cloudflare`, on a blank dark page. It has no text, no link back, and no mention of Stargazer or Union, and it came straight away with no sign-in step. I gave the assignment back at 04:07:18. The gate still answered 403 four seconds later, which is its per-session cache. At 04:11 it sent the browser to sign in again. After GitHub SSO, the login app passed the test account through to `u-pryce`'s dashboard, so access is back.
 
 Whatever these show, the sign-in page already gives one dead end: support@union.ai. Someone who isn't a Stargazer user will email Union rather than Stargazer.
+
+## Change
+
+The first option, in `StargazerBio/stargazer.bio` PR #6: `stargazer.bio/login` stops on an invite-only page with Continue to sign in and Request access (mailto pryce@stargazer.bio). A browser that has continued once skips the page after that. It was verified locally in headless Chrome against a stubbed login app; the PR has the evidence.
