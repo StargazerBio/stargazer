@@ -358,8 +358,8 @@ def test_agent_bridge_closes_when_the_agent_exits(owner_client, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_proxy_injects_the_agent_redirect_and_banner_into_html(owner_client, upstream):
-    """HTML responses get the agent redirect and the save banner before </body>."""
+def _serve_html(upstream):
+    """Make marimo answer every request with a minimal HTML page."""
     upstream(
         lambda req: httpx.Response(
             200,
@@ -368,6 +368,14 @@ def test_proxy_injects_the_agent_redirect_and_banner_into_html(owner_client, ups
         )
     )
 
+
+def test_proxy_injects_the_agent_redirect_and_banner_into_html(
+    owner_client, upstream, monkeypatch, tmp_path
+):
+    """With a store, HTML gets the agent redirect and the save banner before </body>."""
+    monkeypatch.setenv("STARGAZER_WORKSPACE_ROOT", str(tmp_path / "store"))
+    _serve_html(upstream)
+
     resp = owner_client.get("/")
 
     assert resp.status_code == 200
@@ -375,6 +383,17 @@ def test_proxy_injects_the_agent_redirect_and_banner_into_html(owner_client, ups
         assert resp.content.index(injected) < resp.content.index(b"</body>")
     assert b"/__sg__/term" not in resp.content
     assert b"/__sg__/save-status" in resp.content
+
+
+def test_proxy_leaves_the_banner_out_without_a_store(owner_client, upstream):
+    """Without a store nothing is saved, so HTML gets the agent redirect but no banner."""
+    _serve_html(upstream)
+
+    resp = owner_client.get("/")
+
+    assert resp.content.index(b"/__sg__/agent/") < resp.content.index(b"</body>")
+    assert b"sg-save-banner" not in resp.content
+    assert b"/__sg__/save-status" not in resp.content
 
 
 def test_proxy_streams_non_html_untouched(owner_client, upstream):

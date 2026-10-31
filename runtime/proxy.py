@@ -146,8 +146,8 @@ _STRIPPED_HEADERS = {"host", "cookie"}
 # module (runtime/Dockerfile), so resolving it relative to __file__ works both
 # in-repo and in-pod.
 _AGENT_REDIRECT_INJECTION = (Path(__file__).parent / "agent_redirect.html").read_bytes()
-# The notice naming files too big to save, spliced in the same way and baked
-# beside it.
+# The notice naming files too big to save, spliced in the same way when the pod
+# has a store, and baked beside it.
 _SAVE_BANNER_INJECTION = (Path(__file__).parent / "save_banner.html").read_bytes()
 
 _STARTING_PAGE = """<!doctype html>
@@ -794,11 +794,11 @@ async def http_proxy(request: Request, path: str) -> Response:
         # headers and let Starlette recompute the length.
         content = await resp.aread()
         await resp.aclose()
-        content = content.replace(
-            b"</body>",
-            _AGENT_REDIRECT_INJECTION + _SAVE_BANNER_INJECTION + b"</body>",
-            1,
-        )
+        injection = _AGENT_REDIRECT_INJECTION
+        # Without a store nothing is saved, so there's nothing to warn about.
+        if _user_prefix("workspace") is not None:
+            injection += _SAVE_BANNER_INJECTION
+        content = content.replace(b"</body>", injection + b"</body>", 1)
         forbidden = _HOP_BY_HOP | {"content-encoding", "content-length"}
         out_headers = {
             k: v for k, v in resp.headers.items() if k.lower() not in forbidden
