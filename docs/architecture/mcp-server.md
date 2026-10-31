@@ -45,7 +45,7 @@ Tasks and workflows are not registered as individual MCP tools. The client disco
 | `update_file` | Merge a metadata patch onto an existing file | `cid: str, keyvalues: dict[str, str]` |
 | `publish_file` | Upload one of the user's stored files to the public tier, same CID | `cid: str` |
 
-`upload_file` requires `keyvalues["asset"]` and rejects underscore-prefixed keys, which are reserved and stamped automatically (`_owner`). A registered asset key builds that subclass: its declared fields must parse to their types, and any other key is kept as a text [extra key](types.md#extra-keys) on the typed asset. An unregistered key is stored as a generic asset, its keyvalues verbatim. `update_file` runs the same validation on its patch, then merges it onto the user's index row — supplied keys are added or overwritten, omitted keys preserved (no key removal), and the bytes/CID are untouched so `*_cid` provenance edges stay valid. It's the in-place fix for a mis-tagged record (no delete-and-re-upload, no CID churn). `download_file` fetches a CID that isn't in the user's index from the public IPFS gateway. `publish_file` needs a Pinata key, refuses a CID that isn't in the user's index, and raises if Pinata assigns a different CID ([Configuration → The public tier](configuration.md#the-public-tier)).
+`upload_file` and `update_file` validate through `build_asset()` ([Types](types.md)): `keyvalues["asset"]` is required, underscore-prefixed keys are reserved, and a registered kind must parse to its declared fields (other keys become [extras](types.md)). `update_file` merges its patch onto the existing row (keys added or overwritten, none removed, CID untouched) so mis-tagged records can be fixed in place. `download_file` falls back to the public gateway for a CID not in the user's index. `publish_file` needs a Pinata key ([Configuration → The public tier](configuration.md#the-public-tier)).
 
 ### Bundles
 
@@ -54,7 +54,7 @@ Tasks and workflows are not registered as individual MCP tools. The client disco
 | `list_bundles` | List available resource bundles | (none) |
 | `fetch_resource_bundle` | Download a predefined bundle into local storage | `bundle_name: str` |
 
-Bundles are curated sets of public files defined as YAML manifests in the codebase. `fetch_resource_bundle` downloads each file by CID from the IPFS gateway into the local cache and registers it in the user's index, so `assemble()` can discover it with or without a Pinata key. See [Configuration — Resource Bundles](configuration.md#resource-bundles).
+`fetch_resource_bundle` registers a bundle's public files in the user's index ([Configuration → Resource Bundles](configuration.md#resource-bundles)).
 
 ## Resources
 
