@@ -67,6 +67,6 @@ The setup block also declares the dashboard tile's `main_name` and `main_descrip
 
 ## In-Notebook AI
 
-Claude Code rides along in the notebook editor, in marimo's agent panel: it works in `/workspace`, with a condensed context file (`runtime/notebook_agent.md`) as `AGENTS.md`, and the editor watches the open notebook's file, so the agent's edits show up in it. marimo's terminal (Ctrl+`) has `claude` on its path for signing in. Both are part of the editor, not run mode. The stargazer MCP server serves agent users through external coding tools, exposing `list_tasks`, `run_task`, `query_files` and the rest of the catalog.
+Claude Code and OpenCode ride along in the notebook editor, in marimo's agent panel: each works in `/workspace`, with a condensed context file (`runtime/notebook_agent.md`) as `AGENTS.md`, and the editor watches the open notebook's file, so an agent's edits show up in it. marimo's terminal (Ctrl+`) has `claude` and `opencode` on its path for signing in, and a hosted pod keeps each sign-in for the user's next session. The panel and the terminal are part of the editor, not run mode. The stargazer MCP server serves agent users through external coding tools, exposing `list_tasks`, `run_task`, `query_files` and the rest of the catalog.
 
 For the mechanics behind this page, see the agent reference `.claude/reference/architecture/notebook_internals.md`.

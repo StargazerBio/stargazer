@@ -34,10 +34,17 @@ The `lifespan` shutdown hook does a final pass when the pod scales to zero.
 Dotfiles, `__pycache__/`, `__marimo__/` and files over `MAX_SAVED_BYTES` are
 never saved.
 
-**Agent.** The terminal and the agent are marimo's own. marimo's agent panel
-dials Claude Code at a fixed port on the page's host, which a hosted pod
+**Sign-ins.** The agents' sign-ins (`AGENT_SIGN_INS`, in the home directory)
+are kept the same way under `<STARGAZER_WORKSPACE_ROOT>/users/<subject>/agents/`,
+beside the workspace rather than in it, so they never show up among the user's
+files: put back at launch, readable by the owner alone, saved by the same
+passes when they change, and deleted from the store on a sign-out.
+
+**Agents.** The terminal and the agents are marimo's own. marimo's agent panel
+dials each agent at a fixed port on the page's host, which a hosted pod
 doesn't serve, so every `text/html` response gets a script spliced in before
-`</body>` that points that URL at `/__sg__/agent` below. Beside it goes a
+`</body>` that points Claude Code's and OpenCode's at `/__sg__/agent/<name>`
+below. Beside it goes a
 banner naming any file over `MAX_SAVED_BYTES`, which isn't saved, with the
 cell that stores it as an asset instead, and the open notebook when it didn't
 hydrate, since nothing typed into the blank is saved.
@@ -52,9 +59,9 @@ Reserved paths the proxy handles itself instead of forwarding:
   banner polls it.
 - `GET /__sg__/ready` — 200 once local marimo answers, 503 while it's still
   cold-starting.
-- `WS  /__sg__/agent` — marimo's agent panel. Runs `AGENT_COMMAND`, the
-  Agent Client Protocol adapter for Claude Code, per connection and relays
-  its stdio line by line, the framing marimo's `stdio-to-ws` uses. The
+- `WS  /__sg__/agent/<name>` — marimo's agent panel. Runs the agent's entry
+  in `AGENT_COMMANDS`, which speaks the Agent Client Protocol on stdio, per
+  connection and relays its stdio line by line, the framing marimo's `stdio-to-ws` uses. The
   child's environment is scrubbed of secret-shaped vars; that's tidiness,
   not a boundary.
 
@@ -103,9 +110,13 @@ MAX_SAVED_BYTES = 100 * 1024**2
 _AGENT_SECRET_KEYS = {"PINATA_JWT"}
 _AGENT_SECRET_SUFFIXES = ("_SECRET", "_TOKEN", "_JWT", "_KEY", "_PASSWORD")
 
-# Claude Code over the Agent Client Protocol, one process per agent-panel
-# connection, installed on PATH by the image (runtime/Dockerfile).
-AGENT_COMMAND = ["claude-agent-acp"]
+# The agents marimo's panel can start, each speaking the Agent Client Protocol
+# on stdio, one process per panel connection, installed on PATH by the image
+# (runtime/Dockerfile). The names are marimo's.
+AGENT_COMMANDS = {
+    "claude": ["claude-agent-acp"],
+    "opencode": ["opencode", "acp"],
+}
 # A protocol message is one line, and a file the agent reads or writes rides
 # in one: well past asyncio's 64 KiB default line limit.
 _AGENT_LINE_LIMIT = 64 * 1024**2
@@ -115,7 +126,7 @@ _AGENT_LINE_LIMIT = 64 * 1024**2
 _STRIPPED_PREFIXES = ("x-user-",)
 _STRIPPED_HEADERS = {"host", "cookie"}
 
-# The script pointing marimo's agent panel at `/__sg__/agent`, spliced into
+# The script pointing marimo's agent panel at `/__sg__/agent/`, spliced into
 # every marimo HTML page before </body>. Kept as a static asset
 # (agent_redirect.html) so it gets real HTML/JS tooling instead of living as a
 # Python string. Read once at import. In the image it's baked next to this
@@ -142,10 +153,23 @@ display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
 # connections), short for readiness probes.
 _upstream: httpx.AsyncClient | None = None
 
+# Where the agents keep a sign-in, relative to the home directory: Claude
+# Code's credentials and its account state, which it asks to set up again
+# without, and OpenCode's credentials. Nothing else in the home directory is
+# kept.
+AGENT_SIGN_INS = (
+    ".claude/.credentials.json",
+    ".claude.json",
+    ".local/share/opencode/auth.json",
+)
+
 # Relative path -> (size, mtime) of each file as it was last stored. Seeded at
 # proxy startup from the freshly hydrated disk, so nothing re-uploads needlessly,
 # and the set of files a pass may delete from the store.
 _synced: dict[str, tuple[int, int]] = {}
+
+# The same for `AGENT_SIGN_INS`, relative to the home directory.
+_sign_ins_synced: dict[str, tuple[int, int]] = {}
 
 _storage_ready = False
 
@@ -261,10 +285,18 @@ async def hydrate_async() -> None:
     _init_storage()
     n = await _download_prefix(prefix, WORKSPACE_DIR)
     print(f"[sg] hydrated {n} file(s)")
+    home = Path.home()
+    n = await _download_prefix(_user_prefix("agents"), home)
+    for rel in AGENT_SIGN_INS:
+        with suppress(FileNotFoundError):
+            (home / rel).chmod(0o600)
+    if n:
+        print(f"[sg] restored {n} agent sign-in file(s)")
 
 
 def hydrate() -> None:
-    """Fill `/workspace` from the owner's stored workspace.
+    """Fill `/workspace` from the owner's stored workspace, and the home
+    directory from their stored sign-ins.
 
     Run by the launch script, as its own process, before marimo starts, so the
     notebook marimo opens already exists on disk. Always leaves the dir in
@@ -278,10 +310,13 @@ def _seed_from_disk() -> None:
 
     Called by `lifespan` at proxy startup, after the launch script's
     `hydrate()` (a separate process), so the first pass doesn't re-upload what
-    was just downloaded. It's also what a later pass may delete from the
+    was just downloaded, and the same for the agents' sign-ins. It's also what a later pass may delete from the
     store: only files this pod knew about. After a failed
     hydrate the workspace is empty, so nothing stored is ever deleted.
     """
+    for rel in AGENT_SIGN_INS:
+        with suppress(FileNotFoundError):
+            _sign_ins_synced.setdefault(rel, _stamp(Path.home() / rel))
     if not WORKSPACE_DIR.is_dir():
         return
     for rel, path in _workspace_files().items():
@@ -361,6 +396,42 @@ async def sync_once() -> list[str]:
     return saved
 
 
+async def save_sign_ins() -> list[str]:
+    """Save each agent sign-in that changed; return what was saved or deleted.
+
+    One whose size and modification time match what was last stored isn't
+    read. One this pod restored or saved that's gone from the home directory
+    was signed out of, and is deleted from the store. A failed upload or
+    delete is logged and retried on the next pass rather than raised.
+    """
+    prefix = _user_prefix("agents")
+    if prefix is None:
+        return []
+    _init_storage()
+    changed = []
+    for rel in AGENT_SIGN_INS:
+        path = Path.home() / rel
+        try:
+            if not path.is_file():
+                if rel in _sign_ins_synced:
+                    await asyncio.to_thread(_delete_sync, f"{prefix}/{rel}")
+                    del _sign_ins_synced[rel]
+                    changed.append(rel)
+                continue
+            stamp = _stamp(path)
+            if _sign_ins_synced.get(rel) == stamp:
+                continue
+            await _upload(f"{prefix}/{rel}", path.read_bytes())
+        except Exception as exc:
+            print(f"[sg] saving sign-in {rel} failed: {exc}")
+            continue
+        _sign_ins_synced[rel] = stamp
+        changed.append(rel)
+    if changed:
+        print(f"[sg] saved sign-ins {', '.join(changed)}")
+    return changed
+
+
 def _save_interval() -> float:
     """Seconds between save passes, from the pod's env; 0 means none.
 
@@ -378,6 +449,7 @@ async def _sync_loop(interval: float) -> None:
         await asyncio.sleep(interval)
         try:
             await sync_once()
+            await save_sign_ins()
         except Exception as exc:  # keep the loop alive whatever happens
             print(f"[sg] workspace sync pass failed: {exc}")
 
@@ -405,6 +477,7 @@ async def lifespan(_: FastAPI):
             await loop_task
     try:
         await sync_once()
+        await save_sign_ins()
     except Exception as exc:  # never block shutdown
         print(f"[sg] workspace shutdown sync failed: {exc}")
     global _upstream
@@ -566,20 +639,24 @@ def _agent_env() -> dict[str, str]:
     }
 
 
-@asgi_app.websocket("/__sg__/agent")
-async def agent_bridge(websocket: WebSocket) -> None:
-    """Bridge marimo's agent panel to a Claude Code process over its stdio.
+@asgi_app.websocket("/__sg__/agent/{name}")
+async def agent_bridge(websocket: WebSocket, name: str) -> None:
+    """Bridge marimo's agent panel to an agent process over its stdio.
 
-    Starts `AGENT_COMMAND` with a secret-scrubbed environment (`_agent_env`)
+    Starts `name`'s entry in `AGENT_COMMANDS`, refusing any other name with
+    1008, with a secret-scrubbed environment (`_agent_env`)
     in the pod's working directory, `/workspace`. Each frame from the panel,
     text or binary, is written to the agent's stdin as one line, and each line
     the agent prints is sent back as one text frame. Its stderr goes to the pod's log. The
     agent is killed when the panel disconnects, and the panel is disconnected
     when the agent exits.
     """
+    if (command := AGENT_COMMANDS.get(name)) is None:
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
     agent = await asyncio.create_subprocess_exec(
-        *AGENT_COMMAND,
+        *command,
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         env=_agent_env(),

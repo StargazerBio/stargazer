@@ -11,7 +11,8 @@
 # Three things happen on startup:
 #
 #   1. Hydrate: copy the owner's whole workspace from the workspace store into
-#      /workspace, via the proxy module's `hydrate()`. A new user, or a deploy
+#      /workspace, and their agent sign-ins into the home directory, via the
+#      proxy module's `hydrate()`. A new user, or a deploy
 #      without a store, starts with an empty dir. The session then cd's into
 #      /workspace so marimo, its terminal and its agent all work there.
 #   2. Start marimo on 127.0.0.1:8081 in sandbox mode (notebook's PEP 723
@@ -47,7 +48,7 @@ python -c "import sg_proxy; sg_proxy.hydrate()" \
   || echo "warning: could not load saved notebooks; starting with an empty workspace" >&2
 
 # Work directly in the workspace dir. marimo (backgrounded) and the proxy
-# (exec'd) both inherit this cwd, so marimo's terminal and the agent the proxy
+# (exec'd) both inherit this cwd, so marimo's terminal and the agents the proxy
 # starts for its agent panel open here.
 cd "${WORKSPACE_DIR}" 2>/dev/null || true
 

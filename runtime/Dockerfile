@@ -5,11 +5,13 @@
 # `docker run` gets the entrypoint below, which opens the notebooks locally.
 # Built from the repo root: `docker build -f runtime/Dockerfile .`
 
-# Claude Code for marimo's agent panel: the Agent Client Protocol adapter,
-# pinned, with the Claude Code binary its agent SDK ships. Node is copied into
-# the image below.
+# The agents for marimo's agent panel, pinned: Claude Code's Agent Client
+# Protocol adapter, with the Claude Code binary its agent SDK ships, and
+# OpenCode, a native binary that speaks the protocol itself. Node is copied
+# into the image below.
 FROM node:22.23.4-bookworm-slim AS agent
 RUN npm install -g --omit=dev @agentclientprotocol/claude-agent-acp@0.99.1 \
+        opencode-ai@1.19.5 \
     && npm cache clean --force
 
 FROM python:3.14-slim-bookworm
@@ -39,11 +41,14 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
 COPY --from=agent /usr/local/bin/node /usr/local/bin/
 COPY --from=agent /usr/local/lib/node_modules/@agentclientprotocol \
     /usr/local/lib/node_modules/@agentclientprotocol
+COPY --from=agent /usr/local/lib/node_modules/opencode-ai/bin/opencode.exe \
+    /usr/local/bin/opencode
 RUN ACP=/usr/local/lib/node_modules/@agentclientprotocol/claude-agent-acp \
     && ln -s "$ACP/dist/index.js" /usr/local/bin/claude-agent-acp \
     && ln -s "$(ls -d "$ACP"/node_modules/@anthropic-ai/claude-agent-sdk-linux-* \
         | grep -v musl)/claude" /usr/local/bin/claude \
-    && claude --version && claude-agent-acp --help >/dev/null
+    && claude --version && claude-agent-acp --help >/dev/null \
+    && opencode --version
 
 # The runtime's venv: the proxy's packages from the project's `runtime` group,
 # `flyte` among them (hosted pods start under it, and the proxy stores

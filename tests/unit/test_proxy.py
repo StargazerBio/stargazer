@@ -165,7 +165,7 @@ def test_on_union_the_agent_needs_a_token(on_union):
 
     with (
         pytest.raises(WebSocketDisconnect) as exc,
-        client.websocket_connect("/__sg__/agent"),
+        client.websocket_connect("/__sg__/agent/claude"),
     ):
         pass
     assert exc.value.code == 1008
@@ -271,10 +271,12 @@ for line in sys.stdin:
 
 def test_agent_bridge_relays_lines_to_the_agent_process(owner_client, monkeypatch):
     """Each message, text or binary as marimo sends it, is a line on the agent's stdin; each stdout line is a message."""
-    monkeypatch.setattr(proxy, "AGENT_COMMAND", [sys.executable, "-c", _FAKE_AGENT])
+    monkeypatch.setitem(
+        proxy.AGENT_COMMANDS, "opencode", [sys.executable, "-c", _FAKE_AGENT]
+    )
     monkeypatch.setenv("PINATA_JWT", "pinata-secret")
 
-    with owner_client.websocket_connect("/__sg__/agent") as ws:
+    with owner_client.websocket_connect("/__sg__/agent/opencode") as ws:
         ws.send_text('{"jsonrpc":"2.0","id":1,"method":"initialize"}')
         first = json.loads(ws.receive_text())
         ws.send_bytes(b'{"jsonrpc":"2.0","id":2}')
@@ -287,12 +289,22 @@ def test_agent_bridge_relays_lines_to_the_agent_process(owner_client, monkeypatc
     assert second["got"] == '{"jsonrpc":"2.0","id":2}'
 
 
+def test_agent_bridge_refuses_an_agent_it_does_not_run(owner_client):
+    """Only the agents the image installs can be started."""
+    with (
+        pytest.raises(WebSocketDisconnect) as exc,
+        owner_client.websocket_connect("/__sg__/agent/bash"),
+    ):
+        pass
+    assert exc.value.code == 1008
+
+
 def test_agent_bridge_closes_when_the_agent_exits(owner_client, monkeypatch):
     """An agent that dies takes the panel's connection with it."""
-    monkeypatch.setattr(proxy, "AGENT_COMMAND", [sys.executable, "-c", "pass"])
+    monkeypatch.setitem(proxy.AGENT_COMMANDS, "claude", [sys.executable, "-c", "pass"])
 
     with (
-        owner_client.websocket_connect("/__sg__/agent") as ws,
+        owner_client.websocket_connect("/__sg__/agent/claude") as ws,
         pytest.raises(WebSocketDisconnect),
     ):
         ws.receive_text()
@@ -316,7 +328,7 @@ def test_proxy_injects_the_agent_redirect_and_banner_into_html(owner_client, ups
     resp = owner_client.get("/")
 
     assert resp.status_code == 200
-    for injected in (b"/__sg__/agent", b"sg-save-banner"):
+    for injected in (b"/__sg__/agent/", b"sg-save-banner"):
         assert resp.content.index(injected) < resp.content.index(b"</body>")
     assert b"/__sg__/term" not in resp.content
     assert b"/__sg__/save-status" in resp.content
@@ -373,7 +385,15 @@ def pod_dirs(tmp_path, monkeypatch):
     monkeypatch.setenv("STARGAZER_WORKSPACE_ROOT", str(store))
     monkeypatch.setattr(proxy, "WORKSPACE_DIR", tmp_path / "workspace")
     monkeypatch.setattr(proxy, "_synced", {})
+    monkeypatch.setattr(proxy, "_sign_ins_synced", {})
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     return tmp_path / "workspace", store / "users" / OWNER / "workspace"
+
+
+@pytest.fixture
+def pod_home(pod_dirs, tmp_path):
+    """The pod's home directory and where the owner's sign-ins are stored."""
+    return tmp_path / "home", tmp_path / "store" / "users" / OWNER / "agents"
 
 
 def test_hydrate_restores_every_file_at_its_path(pod_dirs):
@@ -583,3 +603,71 @@ def test_interval_zero_saves_only_at_shutdown(pod_dirs, monkeypatch):
         assert not (stored / "late.py").exists()
 
     assert (stored / "late.py").read_text() == "# late edit\n"
+
+
+# ---------------------------------------------------------------------------
+# Agent sign-ins: stored beside the workspace, put back at launch
+# ---------------------------------------------------------------------------
+
+
+def test_hydrate_puts_back_stored_sign_ins_for_the_owner_only(pod_home):
+    """A sign-in stored by an earlier pod is back in the home dir, readable by the owner alone."""
+    home, stored = pod_home
+    (stored / ".claude").mkdir(parents=True)
+    (stored / ".claude" / ".credentials.json").write_text('{"token": "t"}')
+
+    proxy.hydrate()
+
+    restored = home / ".claude" / ".credentials.json"
+    assert restored.read_text() == '{"token": "t"}'
+    assert restored.stat().st_mode & 0o777 == 0o600
+    assert not (proxy.WORKSPACE_DIR / ".claude").exists()
+
+
+async def test_a_sign_in_is_saved_once_and_nothing_else_from_home(pod_home):
+    """Each agent's sign-in file saves when it changes; the rest of home never does."""
+    home, stored = pod_home
+    await proxy.hydrate_async()
+    (home / ".claude").mkdir(parents=True)
+    (home / ".claude" / ".credentials.json").write_text('{"token": "t"}')
+    (home / ".claude.json").write_text('{"oauthAccount": {}}')
+    (home / ".claude" / "history.jsonl").write_text("prompt\n")
+    (home / ".local" / "share" / "opencode").mkdir(parents=True)
+    (home / ".local" / "share" / "opencode" / "auth.json").write_text('{"k": 1}')
+
+    assert await proxy.save_sign_ins() == [
+        ".claude/.credentials.json",
+        ".claude.json",
+        ".local/share/opencode/auth.json",
+    ]
+    assert await proxy.save_sign_ins() == []
+    assert (stored / ".claude" / ".credentials.json").read_text() == '{"token": "t"}'
+    assert (stored / ".local" / "share" / "opencode" / "auth.json").exists()
+    assert not (stored / ".claude" / "history.jsonl").exists()
+
+
+async def test_signing_out_deletes_the_stored_sign_in(pod_home):
+    """A sign-in file gone from home is gone from the store, so a sign-out lasts."""
+    home, stored = pod_home
+    (stored / ".claude").mkdir(parents=True)
+    (stored / ".claude" / ".credentials.json").write_text('{"token": "t"}')
+    await proxy.hydrate_async()
+    proxy._seed_from_disk()
+
+    (home / ".claude" / ".credentials.json").unlink()
+
+    assert await proxy.save_sign_ins() == [".claude/.credentials.json"]
+    assert not (stored / ".claude" / ".credentials.json").exists()
+
+
+def test_a_sign_in_is_saved_at_shutdown(pod_home, monkeypatch):
+    """A sign-in made just before the pod stops survives it."""
+    home, stored = pod_home
+    monkeypatch.setenv("SG_SAVE_INTERVAL_SECONDS", "0")
+    proxy.hydrate()
+
+    with TestClient(proxy.asgi_app):
+        (home / ".local" / "share" / "opencode").mkdir(parents=True)
+        (home / ".local" / "share" / "opencode" / "auth.json").write_text('{"k": 1}')
+
+    assert (stored / ".local" / "share" / "opencode" / "auth.json").exists()
