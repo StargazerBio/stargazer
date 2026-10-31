@@ -287,7 +287,7 @@ fi
 #
 #    - rustfs-svc.flyte → 127.0.0.1, plus a port-forward to it on :9000, so
 #      code-bundle uploads from here reach the store at the signed-URL host
-#      from step 1. devbox/dashboard.py and the devbox tests hold the forward
+#      from step 1. the infra repo's devbox/dashboard.py and the devbox tests hold the forward
 #      open themselves; a `flyte.run` submitted by hand needs it running, or
 #      the upload fails with "ConnectError: All connection attempts failed".
 #    - *.devbox.stargazer.bio → 127.0.0.1, so the browser reaches apps on the
@@ -295,7 +295,7 @@ fi
 # ---------------------------------------------------------------------------
 laptop_steps() {
     cat <<EOF
-  # 1) Resolve the storage host to a port-forward on :9000 (devbox/dashboard.py opens one while it deploys; run 'kubectl port-forward -n flyte svc/rustfs-svc 9000:9000' when submitting runs yourself):
+  # 1) Resolve the storage host to a port-forward on :9000 (the infra repo's devbox/dashboard.py opens one while it deploys; run 'kubectl port-forward -n flyte svc/rustfs-svc 9000:9000' when submitting runs yourself):
   echo '127.0.0.1 rustfs-svc.flyte' | sudo tee -a /etc/hosts
 
   # 2) Wildcard-resolve *.$DOMAIN → 127.0.0.1 (the published :30081 port is unchanged):
