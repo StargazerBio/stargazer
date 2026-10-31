@@ -20,3 +20,9 @@ The login app can't fix this because none of its code runs before the gate. Any 
 ## First step
 
 Sign in through `stargazer.bio/login` in a fresh browser session with an account that was never invited. Record what Union shows, then do the same with a Union user who has no `stargazer-login` policy. If Union's pages already explain the situation clearly, this ticket may not be needed.
+
+- [x] The signed-out path up to the sign-in page (measured 2026-10-30, curl). `stargazer.bio/login/` is live and refreshes to the login app. The login app returns a 302 to the tenant's `/login`, which returns a 307 to `signin.us-west-2.unionai.cloud/oauth/v2/authorize` (Union's ZITADEL instance, scope `urn:zitadel:iam:org:roles:id:stargazerbio`). That lands on a page titled "Sign in to stargazerbio" with Continue with Google, Github (Stargazer Bio) and Microsoft, an email field, and "Need help accessing your workspace? Contact support@union.ai". There's no sign-up link. The page never mentions Stargazer.
+- [ ] A never-invited account, past the provider's sign-in. This needs a person, because it means signing in to an outside account with its own credentials. Union's public docs don't describe this case.
+- [ ] A Union user with no `stargazer-login` policy. The only users are the admin, who can see every project, and the test account, which has the policy. Testing this means taking the policy off the test account for a while, then giving it back with `upgrade`. The gate's decision is cached per browser session, so the check needs a fresh one.
+
+Whatever these show, the sign-in page already gives one dead end: support@union.ai. Someone who isn't a Stargazer user will email Union rather than Stargazer.
