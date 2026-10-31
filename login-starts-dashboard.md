@@ -1,6 +1,6 @@
 ---
 title: login-starts-dashboard
-status: review
+status: done
 priority: normal
 created: 2026-10-31
 pr: 28
@@ -31,3 +31,9 @@ On the tenant as the test account, with the branch's login app served as a copy 
 ## Verification (2026-10-31, branch at `02e27c7`)
 
 All on the tenant, as the test account, through a `login-test` copy that has since been deleted. The stopped dashboard (404) turned `STARTED` from the visit, and its address answered 10 s later. The starting page then moved on to the rendered dashboard by itself. Paused, the visit showed "Workspace paused" with pryce@stargazer.bio, and the dashboard stayed `STOPPED`. Resumed and running, the visit went straight to the dashboard.
+
+## Outcome
+
+Shipped in StargazerBio/infra#28 (merged 2026-10-31). The login app reads the visitor's dashboard record with their `flyte_*` session cookies and starts a stopped dashboard, waiting on a starting page. For a paused user it shows a "Workspace paused" page with pryce@stargazer.bio. It was verified on the tenant through a `login-test` copy (above).
+
+Left: the live login app runs this only once it's redeployed from `main` (`deploy_login`, or a bare `stargazer-users upgrade`). A bookmarked dashboard address still gets Union's 404.
