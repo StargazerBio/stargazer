@@ -79,6 +79,14 @@ COPY runtime/launch-notebook.sh runtime/start-local.sh /usr/local/bin/
 COPY --chown=flyte:flyte pyproject.toml uv.lock README.md /stargazer/
 COPY --chown=flyte:flyte src/ /stargazer/src/
 
+# The `stargazer` MCP server for the agent panel, which the launch script
+# starts. Its own venv, from the lock: the runtime venv holds no SDK. Editable,
+# so `init_flyte()` bundles a run from /stargazer, as a notebook's does; the
+# chown hands the egg-info the install leaves back to the runtime user.
+RUN UV_PROJECT_ENVIRONMENT=/opt/mcp uv sync --project /stargazer --locked \
+        --no-dev --extra mcp --no-cache \
+    && chown -R flyte:flyte /stargazer
+
 # /workspace starts with the agent's context: Claude Code starts there and
 # reads its AGENTS.md. The proxy records what's already there at startup as
 # saved, so a hosted pod keeps this copy out of the user's store until they

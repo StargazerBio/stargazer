@@ -63,7 +63,8 @@ Reserved paths the proxy handles itself instead of forwarding:
   in `AGENT_COMMANDS`, which speaks the Agent Client Protocol on stdio, per
   connection and relays its stdio line by line, the framing marimo's `stdio-to-ws` uses. The
   child's environment is scrubbed of secret-shaped vars; that's tidiness,
-  not a boundary.
+  not a boundary. Each session the panel opens gets the pod's `stargazer`
+  MCP server (`STARGAZER_MCP_SERVER`) beside the panel's own servers.
 
 While marimo is still starting, a browser request gets a small self-refreshing
 "Starting your notebook…" page instead of an error.
@@ -76,6 +77,7 @@ spec: [docs/architecture/runtime.md](../docs/architecture/runtime.md)
 """
 
 import asyncio
+import json
 import os
 from contextlib import asynccontextmanager, suppress
 from functools import cache
@@ -116,6 +118,17 @@ _AGENT_SECRET_SUFFIXES = ("_SECRET", "_TOKEN", "_JWT", "_KEY", "_PASSWORD")
 AGENT_COMMANDS = {
     "claude": ["claude-agent-acp"],
     "opencode": ["opencode", "acp"],
+}
+# The pod's `stargazer` MCP server, at `stargazer --http`'s default address,
+# which the launch script starts in edit mode with the pod's whole env. marimo
+# opens every session with no MCP servers, so the bridge adds this one to each
+# request that lists them (`session/new`, `session/load`, ...), in the
+# protocol's own shape; both agents take HTTP servers.
+STARGAZER_MCP_SERVER = {
+    "type": "http",
+    "name": "stargazer",
+    "url": "http://127.0.0.1:8000/mcp",
+    "headers": [],
 }
 # A protocol message is one line, and a file the agent reads or writes rides
 # in one: well past asyncio's 64 KiB default line limit.
@@ -639,6 +652,24 @@ def _agent_env() -> dict[str, str]:
     }
 
 
+def _with_stargazer_mcp(message: bytes) -> bytes:
+    """Add `STARGAZER_MCP_SERVER` to a panel request that lists MCP servers.
+
+    Any other message, including one that only mentions `mcpServers` in its
+    text, passes through byte for byte. The substring check keeps the large
+    messages (file contents the agent asked the panel to read) from being
+    parsed.
+    """
+    if b'"mcpServers"' not in message:
+        return message
+    request = json.loads(message)
+    servers = (request.get("params") or {}).get("mcpServers")
+    if "method" not in request or not isinstance(servers, list):
+        return message
+    servers.append(STARGAZER_MCP_SERVER)
+    return json.dumps(request).encode()
+
+
 @asgi_app.websocket("/__sg__/agent/{name}")
 async def agent_bridge(websocket: WebSocket, name: str) -> None:
     """Bridge marimo's agent panel to an agent process over its stdio.
@@ -646,7 +677,9 @@ async def agent_bridge(websocket: WebSocket, name: str) -> None:
     Starts `name`'s entry in `AGENT_COMMANDS`, refusing any other name with
     1008, with a secret-scrubbed environment (`_agent_env`)
     in the pod's working directory, `/workspace`. Each frame from the panel,
-    text or binary, is written to the agent's stdin as one line, and each line
+    text or binary, is written to the agent's stdin as one line, with the
+    pod's MCP server added to the session requests (`_with_stargazer_mcp`),
+    and each line
     the agent prints is sent back as one text frame. Its stderr goes to the pod's log. The
     agent is killed when the panel disconnects, and the panel is disconnected
     when the agent exits.
@@ -678,7 +711,7 @@ async def agent_bridge(websocket: WebSocket, name: str) -> None:
             # marimo sends each message as a binary frame.
             if (data := msg.get("bytes")) is None:
                 data = msg.get("text", "").encode()
-            agent.stdin.write(data.rstrip(b"\r\n") + b"\n")
+            agent.stdin.write(_with_stargazer_mcp(data.rstrip(b"\r\n")) + b"\n")
             await agent.stdin.drain()
 
     tasks = {
