@@ -1,0 +1,10 @@
+// OpenCode's user config in the image, at ~/.config/opencode/opencode.jsonc.
+// `run_task` and `run_workflow` answer when their run ends, which can take
+// many minutes, and OpenCode gives up on an MCP request after a minute
+// unless this is set. An hour, in milliseconds.
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "mcp_timeout": 3600000
+  }
+}
