@@ -49,7 +49,7 @@ The marimo notebook is the primary user surface. The hosted app serves a per-use
 
 For local use, the same image hosted notebooks run on, **`stargazer`**, opens a Marimo notebook in edit mode for running pipelines and exploring data locally, with Claude Code or OpenCode in its agent panel — see [Notebook Runtime](runtime.md).
 
-The MCP server runs over stdio from a source install with the `mcp` extra; any MCP client connects to `stargazer`. Tasks and workflows can also be managed directly via the [Flyte CLI](cli.md#flyte-cli). Source contributors install natively — see [Contributing](../guides/contributing.md).
+The MCP server runs over stdio from a source install with the `mcp` extra; any MCP client connects to `stargazer`. In the notebook, the agents in its agent panel have its tools. Tasks and workflows can also be managed directly via the [Flyte CLI](cli.md#flyte-cli). Source contributors install natively — see [Contributing](../guides/contributing.md).
 
 ## Configuration
 

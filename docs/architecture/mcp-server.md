@@ -7,9 +7,11 @@ Stargazer exposes its bioinformatics capabilities through a [Model Context Proto
 | Transport | Client | Use Case |
 |-----------|--------|----------|
 | **stdio** (default) | Claude Code, OpenCode | Local. The client spawns `stargazer` as a subprocess. |
-| **Streamable HTTP** | Remote MCP clients | Remote. `stargazer --http`. |
+| **Streamable HTTP** | Remote MCP clients, the notebook's agent panel | Remote. `stargazer --http`. |
 
 The same server implementation supports both transports, selected at startup by the `--http` flag. The `stargazer` command needs the `mcp` extra installed.
+
+A notebook pod in edit mode runs the server over HTTP on loopback, and the agents in marimo's agent panel get it in every session ([Notebook Runtime → The Proxy](runtime.md#the-proxy)). Its runs go to the pod's backend, in a hosted pod the owner's own project.
 
 ## Tools
 

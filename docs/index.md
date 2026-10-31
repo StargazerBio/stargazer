@@ -13,7 +13,7 @@ Stargazer is a bioinformatics pipeline framework built on [Flyte v2](https://fly
 
 The marimo notebook is the primary user surface — the hosted app serves per-user notebooks for learning, running pipelines, and authoring (see [Notebooks](architecture/notebook.md)). For local use, each release publishes one end-user Docker image, **`stargazer`** — a Marimo notebook for running pipelines and exploring data, with Claude Code or OpenCode in the notebook's agent panel.
 
-The MCP server runs from a source install and connects to any MCP-compatible client (Claude Code, OpenCode, Cursor, etc.). Source contributors work natively against the repo — see [Contributing](guides/contributing.md).
+The MCP server's tools are in the notebook's agent panel, and it runs from a source install for any MCP-compatible client (Claude Code, OpenCode, Cursor, etc.). Source contributors work natively against the repo — see [Contributing](guides/contributing.md).
 
 ## Documentation
 

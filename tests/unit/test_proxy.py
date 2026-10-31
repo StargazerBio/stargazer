@@ -289,6 +289,49 @@ def test_agent_bridge_relays_lines_to_the_agent_process(owner_client, monkeypatc
     assert second["got"] == '{"jsonrpc":"2.0","id":2}'
 
 
+def test_agent_bridge_adds_the_stargazer_server_to_each_session(
+    owner_client, monkeypatch
+):
+    """A session request reaches the agent with the pod's MCP server beside the panel's own."""
+    monkeypatch.setitem(
+        proxy.AGENT_COMMANDS, "claude", [sys.executable, "-c", _FAKE_AGENT]
+    )
+    theirs = {"name": "theirs", "command": "theirs-mcp", "args": [], "env": []}
+
+    with owner_client.websocket_connect("/__sg__/agent/claude") as ws:
+        ws.send_bytes(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "session/new",
+                    "params": {"cwd": "/workspace", "mcpServers": []},
+                }
+            ).encode()
+        )
+        new = json.loads(json.loads(ws.receive_text())["got"])
+        ws.send_bytes(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "session/load",
+                    "params": {"sessionId": "s", "mcpServers": [theirs]},
+                }
+            ).encode()
+        )
+        load = json.loads(json.loads(ws.receive_text())["got"])
+
+    stargazer = {
+        "type": "http",
+        "name": "stargazer",
+        "url": "http://127.0.0.1:8000/mcp",
+        "headers": [],
+    }
+    assert new["params"] == {"cwd": "/workspace", "mcpServers": [stargazer]}
+    assert load["params"]["mcpServers"] == [theirs, stargazer]
+
+
 def test_agent_bridge_refuses_an_agent_it_does_not_run(owner_client):
     """Only the agents the image installs can be started."""
     with (

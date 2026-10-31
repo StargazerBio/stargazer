@@ -8,7 +8,7 @@
 # Run locally, the image's entrypoint (start-local.sh) passes the Assets
 # tutorial, with the rest of its notebooks beside it in /workspace.
 #
-# Three things happen on startup:
+# Four things happen on startup:
 #
 #   1. Hydrate: copy the owner's whole workspace from the workspace store into
 #      /workspace, and their agent sign-ins into the home directory, via the
@@ -17,7 +17,9 @@
 #      /workspace so marimo, its terminal and its agent all work there.
 #   2. Start marimo on 127.0.0.1:8081 in sandbox mode (notebook's PEP 723
 #      header drives the venv), watching the notebook's file in edit mode.
-#   3. Start the reverse proxy on 0.0.0.0:8080 (the public port).
+#   3. In edit mode, start the `stargazer` MCP server on 127.0.0.1:8000, which
+#      the proxy hands to each agent session in marimo's agent panel.
+#   4. Start the reverse proxy on 0.0.0.0:8080 (the public port).
 #      It also writes changed files back to the store on an interval.
 #
 # Pending workspace edits are saved one last time before Knative idles the pod
@@ -69,6 +71,13 @@ WATCH=()
 # can reach.
 marimo -q "${MODE}" --sandbox "${WATCH[@]}" "${NOTEBOOK_PATH}" \
   --port 8081 --host 127.0.0.1 --headless --no-token &
+
+# The agents' env has no project key (the proxy's `_agent_env`), so the server
+# runs here, with the pod's whole env, where it can start runs in the owner's
+# project. The panel is edit mode's only.
+if [[ "${MODE}" == "edit" ]]; then
+  /opt/mcp/bin/stargazer --http &
+fi
 
 # `--timeout-graceful-shutdown` is required for the shutdown flush to run, not
 # just a tuning knob. On SIGTERM uvicorn drains open connections and in-flight
