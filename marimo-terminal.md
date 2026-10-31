@@ -64,7 +64,7 @@ lingers that long after a sign-out.
       `runtime/launch-notebook.sh`'s header. Check `runtime/save_banner.html`.
 
 - [x] Sign-ins persist in the store.
-- [ ] A real agent turn locally, with a sign-in.
+- [x] A real agent turn locally, with a sign-in.
 - [ ] Union, as the test account: both agents connect, a sign-in survives a
       restart, and `/__sg__/agent/<name>` without a token is refused.
 
@@ -80,6 +80,31 @@ lingers that long after a sign-out.
   `~/.claude/history.jsonl` wasn't); the second restored them at mode 600 and
   `opencode auth list` showed the credential; deleting Claude's credentials
   in it deleted them from the store.
+
+- With a real claude.ai sign-in (`docker exec -it <container> claude`, since
+  the in-app browser pane denies the clipboard read marimo's terminal uses for
+  paste): the proxy saved `.claude/.credentials.json` and `.claude.json`
+  within one pass. In the panel, Claude answered from the open notebook's
+  folder (`/workspace/notebooks/tutorials`), read `/workspace/AGENTS.md`
+  ("Stargazer notebook"), and, after approving a grep and one edit, added
+  `mo.md("Hello from the agent panel.")` to `assets.py`, which the editor
+  showed live through `--watch`. After `docker stop` and a new container on
+  the same store: both files restored at mode 600, `claude auth status`
+  `loggedIn: true`, and a prompt over `/__sg__/agent/claude` answered with
+  no new sign-in. Container and store deleted afterwards.
+
+## Verification recipe
+
+1. `docker build -f runtime/Dockerfile -t stargazer:test .`
+2. `docker run -d --name sg -p 8091:8080 -v <empty dir>:/store
+   -e STARGAZER_WORKSPACE_ROOT=/store -e SG_OWNER_SUBJECT=tester
+   -e SG_SAVE_INTERVAL_SECONDS=5 stargazer:test`
+3. `docker exec -it sg claude`, sign in; check
+   `<dir>/users/tester/agents/` holds the two Claude files.
+4. Open `localhost:8091`, AI panel, Agents, new Claude session; ask where it
+   is, then ask it to add a cell; the editor shows the cell.
+5. `docker stop sg`, run step 2 again, open a Claude session: it answers
+   without a sign-in. Delete the container and the store dir.
 
 ## Elsewhere
 
