@@ -32,7 +32,7 @@ A file in `/workspace` isn't an asset until a notebook stores it with `await ass
 
 ## Agents — Claude Code and OpenCode in the Notebook
 
-Press ++ctrl+grave++ in the notebook to open its terminal and sign in once: run `claude` for Claude Code, or `opencode auth login` for OpenCode. Then open the AI panel from the sidebar, switch to **Agents** and start a new Claude or OpenCode session. A hosted notebook keeps your sign-in for your next session; the local image keeps it until the container stops. The agent works in the notebook's working directory, with the Stargazer SDK installed at `/stargazer` and the tools the bundled workflows call (GATK, samtools, BWA) on the `PATH`, so it can run them for you. When it edits the open notebook, the changed cells show up in the editor, ready to run. The terminal and the agent are part of the editor, so a notebook opened to run has neither.
+Press ++ctrl+grave++ in the notebook to open its terminal and sign in once: run `claude` for Claude Code, or `opencode auth login` for OpenCode. Then open the AI panel from the sidebar, switch to **Agents** and start a new Claude or OpenCode session. A hosted notebook keeps your sign-in for your next session; the local image keeps it until the container stops. The agent works in the open notebook's folder, with the Stargazer SDK installed at `/stargazer` and the tools the bundled workflows call (GATK, samtools, BWA) on the `PATH`, so it can run them for you. When it edits the open notebook, the changed cells show up in the editor, ready to run. The terminal and the agent are part of the editor, so a notebook opened to run has neither.
 
 ## MCP Client Configuration
 
