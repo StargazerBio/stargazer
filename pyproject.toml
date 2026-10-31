@@ -136,8 +136,7 @@ ignore = [
     "ISC004",
     # try-except-pass. All sites reviewed and deliberate: best-effort pod
     # probes that fall back to GitHub, idempotent teardown of possibly-absent
-    # apps, get-or-create existence probes, a readiness check, and the child
-    # side of `pty.fork()` where logging is unsafe.
+    # apps, get-or-create existence probes and a readiness check.
     "S110",
 ]
 
@@ -145,10 +144,6 @@ ignore = [
 # A marimo cell ends with a bare expression — that IS the render mechanism, not
 # a useless statement. Applies to every notebook surface.
 "src/stargazer/notebooks/**" = ["B018"]
-# The PTY/fork path deliberately uses blocking primitives: the pseudo-terminal
-# master fd is long-lived (no context manager), and reaping the child needs a
-# blocking wait.
-"runtime/proxy.py" = ["ASYNC222", "SIM115"]
 # Streaming uploads hand a live file object to the HTTP client, so it outlives
 # any `with` block and is closed by the client.
 "src/stargazer/utils/pinata.py" = ["ASYNC230", "SIM115"]

@@ -3,15 +3,17 @@
 The proxy is baked into the notebook image as a standalone module; here we
 import it directly. Covered: what the proxy forwards from the platform-forwarded
 `X-User-Subject`, the signed-token gate on Union, what is (not) forwarded to
-marimo, the starting page while marimo is cold, terminal-overlay and
-save-banner injection and streaming passthrough, and the workspace
+marimo, the starting page while marimo is cold, the agent bridge, agent-redirect
+and save-banner injection and streaming passthrough, and the workspace
 hydrate/sync against a local store root through the real `flyte.storage`
 calls. The upstream marimo server is faked with an
 `httpx.MockTransport` installed as the proxy's shared upstream client.
 """
 
 import asyncio
+import json
 import os
+import sys
 import time
 
 import httpx
@@ -157,13 +159,13 @@ def test_on_union_an_expired_token_is_refused(on_union, upstream):
     assert client.get("/api/status").status_code == 401
 
 
-def test_on_union_the_terminal_needs_a_token(on_union):
-    """The terminal websocket is a shell in the pod: forged headers don't open it."""
+def test_on_union_the_agent_needs_a_token(on_union):
+    """The agent websocket runs commands in the pod: forged headers don't open it."""
     client = TestClient(proxy.asgi_app, headers={"X-User-Subject": OWNER})
 
     with (
         pytest.raises(WebSocketDisconnect) as exc,
-        client.websocket_connect("/__sg__/term"),
+        client.websocket_connect("/__sg__/agent/claude"),
     ):
         pass
     assert exc.value.code == 1008
@@ -221,22 +223,22 @@ def test_non_html_request_gets_plain_503_while_marimo_is_cold(owner_client, upst
 
 
 # ---------------------------------------------------------------------------
-# Dropdown terminal — secret scrub + HTML overlay injection
+# Agent bridge — stdio relay + secret scrub
 # ---------------------------------------------------------------------------
 
 
-def test_shell_env_scrubs_named_secrets(monkeypatch):
-    """Named secrets stay out of the interactive shell's environment."""
+def test_agent_env_scrubs_named_secrets(monkeypatch):
+    """Named secrets stay out of the agent's environment."""
     monkeypatch.setenv("PINATA_JWT", "pinata-secret")
     monkeypatch.setenv("PINATA_GATEWAY", "https://dweb.link")  # not a secret
 
-    env = proxy._shell_env()
+    env = proxy._agent_env()
 
     assert "PINATA_JWT" not in env
     assert env["PINATA_GATEWAY"] == "https://dweb.link"
 
 
-def test_shell_env_scrubs_secret_shaped_suffixes(monkeypatch):
+def test_agent_env_scrubs_secret_shaped_suffixes(monkeypatch):
     """Future secret-shaped vars are dropped by suffix without an explicit entry."""
     monkeypatch.setenv("SOME_API_TOKEN", "x")
     monkeypatch.setenv("DB_PASSWORD", "x")
@@ -245,7 +247,7 @@ def test_shell_env_scrubs_secret_shaped_suffixes(monkeypatch):
     monkeypatch.setenv("THIRDPARTY_JWT", "x")
     monkeypatch.setenv("HARMLESS_VALUE", "keep")
 
-    env = proxy._shell_env()
+    env = proxy._agent_env()
 
     for leaked in (
         "SOME_API_TOKEN",
@@ -256,7 +258,56 @@ def test_shell_env_scrubs_secret_shaped_suffixes(monkeypatch):
     ):
         assert leaked not in env
     assert env["HARMLESS_VALUE"] == "keep"
-    assert env["TERM"] == "xterm-256color"
+
+
+# Stands in for `claude-agent-acp`: answers each line on stdin with one line
+# naming what it got and whether it can see the Pinata key.
+_FAKE_AGENT = """
+import json, os, sys
+for line in sys.stdin:
+    print(json.dumps({"got": line.rstrip("\\n"), "pinata": os.environ.get("PINATA_JWT")}), flush=True)
+"""
+
+
+def test_agent_bridge_relays_lines_to_the_agent_process(owner_client, monkeypatch):
+    """Each message, text or binary as marimo sends it, is a line on the agent's stdin; each stdout line is a message."""
+    monkeypatch.setitem(
+        proxy.AGENT_COMMANDS, "opencode", [sys.executable, "-c", _FAKE_AGENT]
+    )
+    monkeypatch.setenv("PINATA_JWT", "pinata-secret")
+
+    with owner_client.websocket_connect("/__sg__/agent/opencode") as ws:
+        ws.send_text('{"jsonrpc":"2.0","id":1,"method":"initialize"}')
+        first = json.loads(ws.receive_text())
+        ws.send_bytes(b'{"jsonrpc":"2.0","id":2}')
+        second = json.loads(ws.receive_text())
+
+    assert first == {
+        "got": '{"jsonrpc":"2.0","id":1,"method":"initialize"}',
+        "pinata": None,
+    }
+    assert second["got"] == '{"jsonrpc":"2.0","id":2}'
+
+
+def test_agent_bridge_refuses_an_agent_it_does_not_run(owner_client):
+    """Only the agents the image installs can be started."""
+    with (
+        pytest.raises(WebSocketDisconnect) as exc,
+        owner_client.websocket_connect("/__sg__/agent/bash"),
+    ):
+        pass
+    assert exc.value.code == 1008
+
+
+def test_agent_bridge_closes_when_the_agent_exits(owner_client, monkeypatch):
+    """An agent that dies takes the panel's connection with it."""
+    monkeypatch.setitem(proxy.AGENT_COMMANDS, "claude", [sys.executable, "-c", "pass"])
+
+    with (
+        owner_client.websocket_connect("/__sg__/agent/claude") as ws,
+        pytest.raises(WebSocketDisconnect),
+    ):
+        ws.receive_text()
 
 
 # ---------------------------------------------------------------------------
@@ -264,8 +315,8 @@ def test_shell_env_scrubs_secret_shaped_suffixes(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_proxy_injects_the_overlay_and_banner_into_html(owner_client, upstream):
-    """HTML responses get the terminal overlay and the save banner before </body>."""
+def test_proxy_injects_the_agent_redirect_and_banner_into_html(owner_client, upstream):
+    """HTML responses get the agent redirect and the save banner before </body>."""
     upstream(
         lambda req: httpx.Response(
             200,
@@ -277,8 +328,9 @@ def test_proxy_injects_the_overlay_and_banner_into_html(owner_client, upstream):
     resp = owner_client.get("/")
 
     assert resp.status_code == 200
-    for injected in (b"sg-term-overlay", b"/__sg__/term", b"sg-save-banner"):
+    for injected in (b"/__sg__/agent/", b"sg-save-banner"):
         assert resp.content.index(injected) < resp.content.index(b"</body>")
+    assert b"/__sg__/term" not in resp.content
     assert b"/__sg__/save-status" in resp.content
 
 
@@ -333,7 +385,15 @@ def pod_dirs(tmp_path, monkeypatch):
     monkeypatch.setenv("STARGAZER_WORKSPACE_ROOT", str(store))
     monkeypatch.setattr(proxy, "WORKSPACE_DIR", tmp_path / "workspace")
     monkeypatch.setattr(proxy, "_synced", {})
+    monkeypatch.setattr(proxy, "_sign_ins_synced", {})
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     return tmp_path / "workspace", store / "users" / OWNER / "workspace"
+
+
+@pytest.fixture
+def pod_home(pod_dirs, tmp_path):
+    """The pod's home directory and where the owner's sign-ins are stored."""
+    return tmp_path / "home", tmp_path / "store" / "users" / OWNER / "agents"
 
 
 def test_hydrate_restores_every_file_at_its_path(pod_dirs):
@@ -543,3 +603,71 @@ def test_interval_zero_saves_only_at_shutdown(pod_dirs, monkeypatch):
         assert not (stored / "late.py").exists()
 
     assert (stored / "late.py").read_text() == "# late edit\n"
+
+
+# ---------------------------------------------------------------------------
+# Agent sign-ins: stored beside the workspace, put back at launch
+# ---------------------------------------------------------------------------
+
+
+def test_hydrate_puts_back_stored_sign_ins_for_the_owner_only(pod_home):
+    """A sign-in stored by an earlier pod is back in the home dir, readable by the owner alone."""
+    home, stored = pod_home
+    (stored / ".claude").mkdir(parents=True)
+    (stored / ".claude" / ".credentials.json").write_text('{"token": "t"}')
+
+    proxy.hydrate()
+
+    restored = home / ".claude" / ".credentials.json"
+    assert restored.read_text() == '{"token": "t"}'
+    assert restored.stat().st_mode & 0o777 == 0o600
+    assert not (proxy.WORKSPACE_DIR / ".claude").exists()
+
+
+async def test_a_sign_in_is_saved_once_and_nothing_else_from_home(pod_home):
+    """Each agent's sign-in file saves when it changes; the rest of home never does."""
+    home, stored = pod_home
+    await proxy.hydrate_async()
+    (home / ".claude").mkdir(parents=True)
+    (home / ".claude" / ".credentials.json").write_text('{"token": "t"}')
+    (home / ".claude.json").write_text('{"oauthAccount": {}}')
+    (home / ".claude" / "history.jsonl").write_text("prompt\n")
+    (home / ".local" / "share" / "opencode").mkdir(parents=True)
+    (home / ".local" / "share" / "opencode" / "auth.json").write_text('{"k": 1}')
+
+    assert await proxy.save_sign_ins() == [
+        ".claude/.credentials.json",
+        ".claude.json",
+        ".local/share/opencode/auth.json",
+    ]
+    assert await proxy.save_sign_ins() == []
+    assert (stored / ".claude" / ".credentials.json").read_text() == '{"token": "t"}'
+    assert (stored / ".local" / "share" / "opencode" / "auth.json").exists()
+    assert not (stored / ".claude" / "history.jsonl").exists()
+
+
+async def test_signing_out_deletes_the_stored_sign_in(pod_home):
+    """A sign-in file gone from home is gone from the store, so a sign-out lasts."""
+    home, stored = pod_home
+    (stored / ".claude").mkdir(parents=True)
+    (stored / ".claude" / ".credentials.json").write_text('{"token": "t"}')
+    await proxy.hydrate_async()
+    proxy._seed_from_disk()
+
+    (home / ".claude" / ".credentials.json").unlink()
+
+    assert await proxy.save_sign_ins() == [".claude/.credentials.json"]
+    assert not (stored / ".claude" / ".credentials.json").exists()
+
+
+def test_a_sign_in_is_saved_at_shutdown(pod_home, monkeypatch):
+    """A sign-in made just before the pod stops survives it."""
+    home, stored = pod_home
+    monkeypatch.setenv("SG_SAVE_INTERVAL_SECONDS", "0")
+    proxy.hydrate()
+
+    with TestClient(proxy.asgi_app):
+        (home / ".local" / "share" / "opencode").mkdir(parents=True)
+        (home / ".local" / "share" / "opencode" / "auth.json").write_text('{"k": 1}')
+
+    assert (stored / ".local" / "share" / "opencode" / "auth.json").exists()

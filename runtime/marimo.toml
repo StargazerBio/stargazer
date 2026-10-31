@@ -1,0 +1,6 @@
+# marimo's user config in the image, at ~/.config/marimo/marimo.toml. A change
+# made in the editor's settings lasts until the pod stops.
+
+# The agent panel, where Claude Code or OpenCode edits the open notebook.
+[experimental]
+external_agents = true

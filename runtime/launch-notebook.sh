@@ -11,11 +11,12 @@
 # Three things happen on startup:
 #
 #   1. Hydrate: copy the owner's whole workspace from the workspace store into
-#      /workspace, via the proxy module's `hydrate()`. A new user, or a deploy
+#      /workspace, and their agent sign-ins into the home directory, via the
+#      proxy module's `hydrate()`. A new user, or a deploy
 #      without a store, starts with an empty dir. The session then cd's into
-#      /workspace so marimo and the proxy's dropdown terminal both work there.
+#      /workspace so marimo, its terminal and its agent all work there.
 #   2. Start marimo on 127.0.0.1:8081 in sandbox mode (notebook's PEP 723
-#      header drives the venv).
+#      header drives the venv), watching the notebook's file in edit mode.
 #   3. Start the reverse proxy on 0.0.0.0:8080 (the public port).
 #      It also writes changed files back to the store on an interval.
 #
@@ -47,8 +48,8 @@ python -c "import sg_proxy; sg_proxy.hydrate()" \
   || echo "warning: could not load saved notebooks; starting with an empty workspace" >&2
 
 # Work directly in the workspace dir. marimo (backgrounded) and the proxy
-# (exec'd) both inherit this cwd, so the dropdown terminal — and any `claude`
-# launched in it — open here.
+# (exec'd) both inherit this cwd, so marimo's terminal and the agents the proxy
+# starts for its agent panel open here.
 cd "${WORKSPACE_DIR}" 2>/dev/null || true
 
 # A workspace notebook that didn't hydrate is gone from the store: deleted while
@@ -59,9 +60,14 @@ if [[ "${NOTEBOOK_PATH}" == "${WORKSPACE_DIR}/"* && ! -e "${NOTEBOOK_PATH}" ]]; 
   export SG_UNSAVED_NOTEBOOK="${NOTEBOOK_PATH#"${WORKSPACE_DIR}/"}"
 fi
 
+# `--watch` brings the agent's edits to the open notebook into the editor,
+# which otherwise keeps its own copy and saves it back over them.
+WATCH=()
+[[ "${MODE}" == "edit" ]] && WATCH=(--watch)
+
 # `-q`: marimo's banner advertises its own port, 8081, which only the proxy
 # can reach.
-marimo -q "${MODE}" --sandbox "${NOTEBOOK_PATH}" \
+marimo -q "${MODE}" --sandbox "${WATCH[@]}" "${NOTEBOOK_PATH}" \
   --port 8081 --host 127.0.0.1 --headless --no-token &
 
 # `--timeout-graceful-shutdown` is required for the shutdown flush to run, not

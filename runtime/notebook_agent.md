@@ -1,16 +1,16 @@
 # Stargazer notebook
 
-You're in the terminal of a Stargazer notebook: a container serving one user's marimo notebooks, either hosted (opened from their Stargazer dashboard) or run locally from the `stargazer` Docker image. Stargazer is a bioinformatics pipeline framework built on Flyte v2. Every file is a typed asset identified by its IPFS CID; tasks find their inputs by querying asset metadata, not by path.
+You're the agent in a Stargazer notebook's editor, opened from marimo's agent panel: a container serving one user's marimo notebooks, either hosted (opened from their Stargazer dashboard) or run locally from the `stargazer` Docker image. Stargazer is a bioinformatics pipeline framework built on Flyte v2. Every file is a typed asset identified by its IPFS CID; tasks find their inputs by querying asset metadata, not by path.
 
 ## Where you are
 
-- `/workspace`, your working directory, holds the user's notebooks side by side at the top, plus whatever files they keep beside them. It's theirs and there's no undo: ask before you delete or overwrite a file you didn't create, and treat their stored assets the same way.
+- `/workspace` holds the user's notebooks side by side at the top, plus whatever files they keep beside them. You start in the open notebook's folder there. It's theirs and there's no undo: ask before you delete or overwrite a file you didn't create, and treat their stored assets the same way.
 - Hosted (`$STARGAZER_ADMIN_URL`, their dashboard, is set): every change in `/workspace` is saved to the user's storage within seconds, and a file deleted here is deleted there. Dotfiles, `__pycache__/`, `__marimo__/` and files over 100 MB aren't saved. Keep large data as an asset instead, then delete the file:
   `await default_client.upload(build_asset({"asset": "data"}), Path("/workspace/big.bam"))`, with `build_asset` from `stargazer.assets` and `default_client` from `stargazer.utils.storage`. Everything outside `/workspace` (your home directory, `/tmp`, anything you install) is gone when the notebook stops, which it does after 30 idle minutes.
 - Local image: `/workspace` is usually a directory the user mounted from their machine, and assets live in `~/.stargazer`.
 - `/stargazer` is the Stargazer SDK this image was built with, and every notebook installs it from there. Read it for reference: `src/stargazer/` for tasks, workflows and assets, `src/stargazer/notebooks/tutorials/` for worked notebooks. Don't edit it: an edit changes what every open notebook imports, and it's never saved.
-- On PATH: `gatk`, `samtools`, `bwa`, `bwa-mem2`, `uv`, `marimo`.
-- The editor doesn't reload an open notebook when its file changes on disk, and its own saves write its copy back over the file. Prefer new files (another notebook, or a module the notebook imports). Edit an open notebook's file only when the user asks, and tell them the editor shows the change only once the notebook is opened afresh (hosted: stop it and launch it again from the dashboard).
+- On PATH: `gatk`, `samtools`, `bwa`, `bwa-mem2`, `uv`, `marimo`, `claude`, `opencode`.
+- The editor watches the open notebook's file: an edit you save there shows up in it, with the cells you changed marked stale until the user runs them. A user editing the same cell at the same time can save their copy over yours, so make one edit at a time and tell them what changed.
 
 ## marimo notebooks
 

@@ -1,0 +1,34 @@
+<!--
+  Spliced into every marimo HTML page before the closing body tag by
+  runtime/proxy.py (read into `_AGENT_REDIRECT_INJECTION` at import), beside the
+  save banner. marimo's agent panel dials each agent at a fixed port on the
+  page's host, ws(s)://<host>:<port>/message, which a hosted pod doesn't
+  serve: the platform routes only the pod's one port. This points the URLs of
+  the agents the image installs, at marimo's ports for them, at the proxy's
+  /__sg__/agent/<name> on the page's own origin, behind the same sign-in as the
+  page. Every other websocket is left alone. The panel opens its socket with
+  `new WebSocket(url)` when it connects, long after this runs.
+-->
+<script>
+(function () {
+  if (window.__sgAgentRedirect) return; window.__sgAgentRedirect = true;
+  var Native = window.WebSocket;
+  var agents = {};
+  agents['//' + location.hostname + ':3017/message'] = 'claude';
+  agents['//' + location.hostname + ':3023/message'] = 'opencode';
+  function SgWebSocket(url, protocols) {
+    var u = String(url);
+    var name = agents[u.slice(u.indexOf('//'))];
+    if (name) {
+      u = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' +
+        location.host + '/__sg__/agent/' + name;
+    }
+    return protocols === undefined ? new Native(u) : new Native(u, protocols);
+  }
+  SgWebSocket.prototype = Native.prototype;
+  ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'].forEach(function (k) {
+    SgWebSocket[k] = Native[k];
+  });
+  window.WebSocket = SgWebSocket;
+})();
+</script>
