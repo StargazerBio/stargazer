@@ -1,6 +1,6 @@
 ---
 title: uninvited-sign-in
-status: review
+status: done
 priority: normal
 created: 2026-10-30
 pr: 6
@@ -32,3 +32,13 @@ Whatever these show, the sign-in page already gives one dead end: support@union.
 ## Change
 
 The first option, in `StargazerBio/stargazer.bio` PR #6: `stargazer.bio/login` stops on an invite-only page with Continue to sign in and Request access (mailto pryce@stargazer.bio). A browser that has continued once skips the page after that. It was verified locally in headless Chrome against a stubbed login app; the PR has the evidence.
+
+## Outcome
+
+Shipped in StargazerBio/stargazer.bio#6 (`e036470`), merged 2026-10-31.
+Verified locally in headless Chrome against a stubbed login app (the PR has
+the evidence); on the live domain, `https://stargazer.bio/login/` now serves
+the invite-only page with Continue to sign in and Request access (measured
+2026-10-31, curl). Left: the open checkbox above, what Union shows an
+uninvited account with a verified, public email. The PR had no review
+comments.
