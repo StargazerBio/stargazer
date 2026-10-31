@@ -1,6 +1,6 @@
 """Fixtures for the devbox tier (`uv run --all-extras pytest -m devbox`).
 
-These tests run on the local devbox, so they need it up, infra's devbox setup
+These tests run on the local devbox, so they need it up, `devbox/setup.sh`
 applied since it was created (it also starts the Postgres server that holds
 the asset index), kubectl pointed at it, and `FLYTE_IMAGE_REGISTRY` naming
 its registry, `localhost:30000`. The session points Flyte at the devbox with
@@ -26,7 +26,7 @@ from stargazer.config import PROJECT_ROOT
 from stargazer.utils.index import PostgresIndex
 
 # Where a pod on the devbox stores assets: the devbox's bucket, its Postgres
-# index (infra's devbox setup runs the server), and a stand-in owner.
+# index (`devbox/setup.sh` runs the server), and a stand-in owner.
 STORAGE = {
     "STARGAZER_STORE_ROOT": "s3://flyte-data/stargazer",
     "STARGAZER_INDEX_URL": (

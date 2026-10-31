@@ -1,0 +1,93 @@
+# The asset index's Postgres 16 server (the version Aurora DSQL is compatible
+# with). The dashboard, task pods and notebook pods all reach it through
+# `PostgresIndex` at postgres.stargazer.svc.cluster.local:5432; INDEX_URL in
+# the infra repo's devbox/dashboard.py names the same user, password and database (all
+# `stargazer`, as it's a local cluster).
+#
+# It's not Flyte's own Postgres (`postgresql.flyte`, embedded in the devbox
+# container), so the index doesn't depend on how the devbox image keeps
+# Flyte's state.
+#
+# From this machine: `kubectl port-forward -n stargazer svc/postgres
+# 15432:5432`, then postgresql://stargazer:stargazer@127.0.0.1:15432/stargazer.
+# A forward dies with the pod it reached.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: stargazer
+---
+# On k3s's `local-path` class, so the index survives the pod restarting or
+# being evicted (the devbox tests check this). Recreating the devbox wipes it
+# along with the store.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: stargazer
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: stargazer
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_USER
+              value: stargazer
+            - name: POSTGRES_PASSWORD
+              value: stargazer
+            - name: POSTGRES_DB
+              value: stargazer
+          ports:
+            - containerPort: 5432
+          # Over TCP: the first-boot init server listens on the socket only.
+          readinessProbe:
+            exec:
+              command: [pg_isready, -h, 127.0.0.1, -U, stargazer, -d, stargazer]
+            periodSeconds: 5
+          # Small, since the node's memory is tight (devbox/setup.sh): 53 Mi
+          # idle, measured 2026-10-20.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: stargazer
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

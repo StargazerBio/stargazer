@@ -21,14 +21,14 @@ The bioinformatics tools (gatk, bwa, bwa-mem2, samtools) aren't needed: their te
 
 ## Running on the Devbox
 
-Use `flyte start devbox` to run a local Flyte cluster, much closer to production than a local run. See the [official devbox docs](https://www.union.ai/docs/v2/flyte/user-guide/run-modes/running-devbox/). After every fresh devbox, apply the cluster-side fixes in the infrastructure repository's `devbox/setup.sh`, which also starts the Postgres server that holds the devbox's asset index. Stargazer's pods are x86_64, so on Apple silicon they run emulated (keep Docker Desktop's Rosetta setting on). Then point image builds at the devbox's registry:
+Use `flyte start devbox` to run a local Flyte cluster, much closer to production than a local run. See the [official devbox docs](https://www.union.ai/docs/v2/flyte/user-guide/run-modes/running-devbox/). After every fresh devbox, run `devbox/setup.sh` from the repo root to apply the cluster-side fixes, which also starts the Postgres server that holds the devbox's asset index. Stargazer's pods are x86_64, so on Apple silicon they run emulated (keep Docker Desktop's Rosetta setting on). Then point image builds at the devbox's registry:
 
 ```bash
 export FLYTE_IMAGE_REGISTRY=localhost:30000
 export FLYTE_DOCKER_BUILD_EXTRA_ARGS=--provenance=false  # Apple silicon only
 ```
 
-To have submitted runs store their assets on the devbox, also export `STARGAZER_STORE_ROOT`, `STARGAZER_INDEX_URL` and `STARGAZER_OWNER` (`setup.sh` prints the values) and keep its storage port-forward open. The devbox tests (`pytest -m devbox`) check that whole path.
+To have submitted runs store their assets on the devbox, also export `STARGAZER_STORE_ROOT`, `STARGAZER_INDEX_URL` and `STARGAZER_OWNER` (the values are in `setup.sh`'s output and `devbox/postgres.yaml`) and keep its storage port-forward open. The devbox tests (`pytest -m devbox`) check that whole path.
 
 ## Running Tests
 
