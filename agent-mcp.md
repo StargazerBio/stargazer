@@ -1,6 +1,6 @@
 ---
 title: agent-mcp
-status: review
+status: done
 priority: normal
 created: 2026-10-30
 pr: 115
@@ -72,3 +72,14 @@ node may keep an old pull), redeploy the test dashboard with
 OpenCode session (its free model needs no sign-in) and ask for a
 `run_task`; watch `union_dashboard.py check <app>` for the run. Tear down
 with `union_dashboard.py teardown`.
+
+## Outcome
+
+Shipped in StargazerBio/stargazer#115 (`f0904cd`), merged 2026-10-31. The
+image runs the `stargazer` MCP server beside marimo in edit mode, and the
+agent bridge adds it to every panel session. Verified locally (all 11 tools,
+OpenCode calling them through the bridge) and on Union as the test account
+(`run_task samtools_faidx` and `run_workflow prepare_reference` from a
+workspace notebook's OpenCode). Left: a tool call over a minute on Union with
+the `mcp_timeout` fix, and a Claude Code turn, which needs a sign-in. The PR
+had no review comments.
