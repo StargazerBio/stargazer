@@ -6,6 +6,7 @@ repo_url = "https://github.com/StargazerBio/stargazer"
 repo_name = "StargazerBio/stargazer"
 dev_addr = "0.0.0.0:8001"
 extra_css = ["stylesheets/stargazer.css"]
+extra_javascript = ["javascripts/home-link.js"]
 
 nav = [
   { "Home" = "index.md" },
@@ -32,6 +33,9 @@ nav = [
     { "API" = "reference/api.md" },
   ]},
 ]
+
+[project.extra]
+homepage = "https://stargazer.bio"
 
 [project.theme]
 logo = "assets/8-bit_stargazer_no-bg.png"
