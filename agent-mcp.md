@@ -41,14 +41,14 @@ with its free default model it called `stargazer_list_tasks` (the SDK's
 workflows came back) and `stargazer_query_files`. A signed-out Claude Code
 `session/new` made five requests to the server, but a prompt needs a sign-in.
 On Union as the test account, from a workspace notebook's panel, OpenCode's
-\`query_files\` read the user's index, and \`run_task samtools_faidx\` started
-a \`build-image\` run and \`gatk.samtools_faidx\` (\`us2xfskxpdkvj4vmmj9l\`), both
-SUCCEEDED in \`u-pryce\`. The agent got "Request timed out", because OpenCode
-gives up on an MCP request after a minute. The image's \`opencode.jsonc\` now
-sets \`experimental.mcp_timeout\` to an hour: a 1 ms override made a local
+`query_files` read the user's index, and `run_task samtools_faidx` started
+a `build-image` run and `gatk.samtools_faidx` (`us2xfskxpdkvj4vmmj9l`), both
+SUCCEEDED in `u-pryce`. The agent got "Request timed out", because OpenCode
+gives up on an MCP request after a minute. The image's `opencode.jsonc` now
+sets `experimental.mcp_timeout` to an hour: a 1 ms override made a local
 call fail and the image's config made it pass. On the re-launched pod,
-\`run_workflow prepare_reference\` (\`u2nx6prsxzwf24drkcqk\`) returned its
-\`Reference\` to the agent, but in under a minute. Not driven: a call over a
+`run_workflow prepare_reference` (`u2nx6prsxzwf24drkcqk`) returned its
+`Reference` to the agent, but in under a minute. Not driven: a call over a
 minute on Union with the fix, and a Claude turn (needs a sign-in).
 
 ## Verification recipe
