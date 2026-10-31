@@ -57,3 +57,8 @@ body[data-md-color-scheme="slate"] {
 }
 
 .md-typeset h1 { letter-spacing: -0.035em; }
+
+.sg-home-link,
+.sg-home-link:hover {
+  color: inherit;
+}
