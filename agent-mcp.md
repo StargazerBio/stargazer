@@ -1,8 +1,9 @@
 ---
 title: agent-mcp
-status: doing
+status: review
 priority: normal
 created: 2026-10-30
+pr: 115
 ---
 
 The agents in a notebook's agent panel (Claude Code and OpenCode) get the
@@ -17,19 +18,30 @@ their own config.
 
 ## Plan
 
-- [ ] **The server runs beside marimo.** The image builds the SDK with the
+- [x] **The server runs beside marimo.** The image builds the SDK with the
       `mcp` extra into its own venv from `uv.lock`, editable from
       `/stargazer` so `init_flyte()` bundles runs from the same tree the
       notebooks do. In edit mode the launch script starts `stargazer --http`
       on loopback with the pod's whole env: the agents' env has no project
       key (`_agent_env()` strips `_UNION_EAGER_API_KEY`), so a server they
       spawned couldn't start runs.
-- [ ] **The bridge adds it to each session.** Every panel request that
+- [x] **The bridge adds it to each session.** Every panel request that
       carries `mcpServers` (`session/new`, `session/load`, `session/resume`,
       `session/fork`) gets the server's HTTP entry appended before it reaches
       the agent.
-- [ ] **Docs and the pod's AGENTS.md** say the tools are there and when to
+- [x] **Docs and the pod's AGENTS.md** say the tools are there and when to
       use them.
+
+## Verification
+
+Locally, on `stargazer:agent-mcp`: the server answered `tools/list` with
+all 11 tools (~133 MB RSS), and a `run`-mode pod had nothing on 8000.
+Through the bridge, OpenCode's `session/new` connected to the server, and
+with its free default model it called `stargazer_list_tasks` (the SDK's
+workflows came back) and `stargazer_query_files`. A signed-out Claude Code
+`session/new` made five requests to the server, but a prompt needs a sign-in.
+Not driven: Union (the server reaching the owner's project with the project
+key) and a Claude turn that calls a tool.
 
 ## Verification recipe
 
