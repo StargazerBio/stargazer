@@ -93,6 +93,7 @@ RUN UV_PROJECT_ENVIRONMENT=/opt/mcp uv sync --project /stargazer --locked \
 # edit it. ~/.stargazer exists so a volume mounted there takes its ownership.
 COPY --chown=flyte:flyte runtime/notebook_agent.md /workspace/AGENTS.md
 COPY --chown=flyte:flyte runtime/marimo.toml /home/flyte/.config/marimo/marimo.toml
+COPY --chown=flyte:flyte runtime/opencode.jsonc /home/flyte/.config/opencode/opencode.jsonc
 RUN mkdir -p /home/flyte/.stargazer \
     && chown -R flyte:flyte /workspace /home/flyte/.stargazer /home/flyte/.config
 
