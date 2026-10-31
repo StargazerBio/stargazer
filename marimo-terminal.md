@@ -65,7 +65,7 @@ lingers that long after a sign-out.
 
 - [x] Sign-ins persist in the store.
 - [x] A real agent turn locally, with a sign-in.
-- [ ] Union, as the test account: both agents connect, a sign-in survives a
+- [x] Union, as the test account: both agents connect, a sign-in survives a
       restart, and `/__sg__/agent/<name>` without a token is refused.
 
 ## Verification so far
@@ -93,6 +93,21 @@ lingers that long after a sign-out.
   `loggedIn: true`, and a prompt over `/__sg__/agent/claude` answered with
   no new sign-in. Container and store deleted afterwards.
 
+- Union, test account `u-pryce`, image `ghcr.io/stargazerbio/debug:marimo-terminal`
+  (amd64), dashboard redeployed with `STARGAZER_NOTEBOOK_IMAGE` set to it:
+  a new workspace notebook `agent-check` in edit mode served the editor with
+  the redirect injected and `external_agents` on. Claude and OpenCode sessions
+  both reached "Agent is connected" over `wss://`. marimo's terminal opened in
+  `/workspace`. A stand-in OpenCode `auth.json` written there reached
+  `s3://stargazerbio-users/users/<subject>/agents/.local/share/opencode/auth.json`
+  within one pass (the pod's own role); after `update app --deactivate` and a
+  relaunch, the new pod had it back at mode 600 and `opencode auth list` showed
+  it; deleting it (and `.claude.json`) emptied the `agents/` prefix. A
+  websocket to `/__sg__/agent/claude` with no cookie, or with a forged
+  `X-User-Subject`, was redirected to Union's login. The in-cluster address,
+  which skips that login, is covered by `_TokenGate` (unit-tested), not driven.
+  Torn down: notebook deleted, every app in `u-pryce` stopped, no live runs.
+
 ## Verification recipe
 
 1. `docker build -f runtime/Dockerfile -t stargazer:test .`
@@ -105,6 +120,15 @@ lingers that long after a sign-out.
    is, then ask it to add a cell; the editor shows the cell.
 5. `docker stop sg`, run step 2 again, open a Claude session: it answers
    without a sign-in. Delete the container and the store dir.
+
+On Union: push the image to `ghcr.io/stargazerbio/debug:<slug>`, redeploy the
+test account's dashboard with `STARGAZER_NOTEBOOK_IMAGE` (infra's
+`verify-dashboard`), create a workspace notebook, open it in edit mode, write
+a sign-in file in marimo's terminal (type it: the in-app browser pane denies
+the clipboard read marimo uses for paste), check
+`aws s3 ls --profile claude s3://stargazerbio-users/users/<subject>/agents/`,
+deactivate and relaunch, check the file is back, delete it, check the prefix
+empties. Tear down with `union_dashboard.py teardown`.
 
 ## Elsewhere
 
