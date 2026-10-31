@@ -32,5 +32,5 @@ def test_dockerfile_ships_every_file_the_proxy_reads_beside_itself():
         if op == "COPY" and args[-1] == "/usr/local/lib/"
         for src in args[:-1]
     }
-    assert "terminal_overlay.html" in needed
+    assert "agent_redirect.html" in needed
     assert needed - copied == set()

@@ -4,6 +4,14 @@
 # (`launch-notebook.sh <mode> <path>`) and passes the pod contract in its env.
 # `docker run` gets the entrypoint below, which opens the notebooks locally.
 # Built from the repo root: `docker build -f runtime/Dockerfile .`
+
+# Claude Code for marimo's agent panel: the Agent Client Protocol adapter,
+# pinned, with the Claude Code binary its agent SDK ships. Node is copied into
+# the image below.
+FROM node:22.23.4-bookworm-slim AS agent
+RUN npm install -g --omit=dev @agentclientprotocol/claude-agent-acp@0.99.1 \
+    && npm cache clean --force
+
 FROM python:3.14-slim-bookworm
 
 RUN apt-get update \
@@ -26,12 +34,16 @@ RUN case "$(uname -m)" in x86_64) MM=linux-64 ;; aarch64) MM=linux-aarch64 ;; es
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && install -m 755 /root/.local/bin/uv /root/.local/bin/uvx /usr/local/bin/
 
-# Claude Code, pinned and installed under a fixed HOME so it sits at stable
-# paths whichever user runs it; the pin only holds with auto-update off.
-RUN mkdir -p /opt/claude-cli \
-    && curl -fsSL https://claude.ai/install.sh | HOME=/opt/claude-cli bash -s 2.1.304 \
-    && chmod -R a+rX /opt/claude-cli \
-    && ln -s /opt/claude-cli/.local/bin/claude /usr/local/bin/claude
+# `claude` on PATH, for `/login` in marimo's terminal, is the binary the agent
+# runs, so the two are one version; the pin only holds with auto-update off.
+COPY --from=agent /usr/local/bin/node /usr/local/bin/
+COPY --from=agent /usr/local/lib/node_modules/@agentclientprotocol \
+    /usr/local/lib/node_modules/@agentclientprotocol
+RUN ACP=/usr/local/lib/node_modules/@agentclientprotocol/claude-agent-acp \
+    && ln -s "$ACP/dist/index.js" /usr/local/bin/claude-agent-acp \
+    && ln -s "$(ls -d "$ACP"/node_modules/@anthropic-ai/claude-agent-sdk-linux-* \
+        | grep -v musl)/claude" /usr/local/bin/claude \
+    && claude --version && claude-agent-acp --help >/dev/null
 
 # The runtime's venv: the proxy's packages from the project's `runtime` group,
 # `flyte` among them (hosted pods start under it, and the proxy stores
@@ -39,21 +51,21 @@ RUN mkdir -p /opt/claude-cli \
 # marimo in their headers, and `--sandbox` puts this version into every
 # kernel's venv. pydantic-ai-slim is what marimo's AI chat and completions run
 # on in the server, with the OpenAI and Anthropic providers; marimo only
-# brings it in its `recommended` extra. Below 2 for this marimo, which predates
-# pydantic-ai 2.0 (later marimos need >=2.34), so the two move together. The
+# brings it in its `recommended` extra. The range is that extra's for this
+# marimo (plus the Anthropic provider), so the two move together. The
 # SDK isn't installed here: each notebook's sandbox venv builds it from
 # /stargazer.
 COPY pyproject.toml /tmp/runtime/
 RUN python -m venv /opt/venv \
     && uv pip install --no-cache --python /opt/venv/bin/python \
-        --group /tmp/runtime/pyproject.toml:runtime marimo==0.23.6 \
-        "pydantic-ai-slim[openai,anthropic]>=1.52,<2" \
+        --group /tmp/runtime/pyproject.toml:runtime marimo==0.25.1 \
+        "pydantic-ai-slim[openai,anthropic]>=1.107,<3" \
     && rm -rf /tmp/runtime
 
 # The proxy is a top-level module, not under `app/`: a hosted pod's code bundle
 # unpacks an `app/` package into the working directory, which would shadow it.
 COPY runtime/proxy.py /usr/local/lib/sg_proxy.py
-COPY runtime/terminal_overlay.html runtime/save_banner.html /usr/local/lib/
+COPY runtime/agent_redirect.html runtime/save_banner.html /usr/local/lib/
 COPY runtime/launch-notebook.sh runtime/start-local.sh /usr/local/bin/
 # Owned by the runtime user: each sandbox builds `stargazer-bio` from this tree
 # and writes its egg-info here. The lock is there for the task images a kernel
@@ -62,13 +74,14 @@ COPY runtime/launch-notebook.sh runtime/start-local.sh /usr/local/bin/
 COPY --chown=flyte:flyte pyproject.toml uv.lock README.md /stargazer/
 COPY --chown=flyte:flyte src/ /stargazer/src/
 
-# /workspace starts with the terminal agent's context: Claude Code starts there
-# and reads its AGENTS.md. The proxy records what's already there at startup as
+# /workspace starts with the agent's context: Claude Code starts there and
+# reads its AGENTS.md. The proxy records what's already there at startup as
 # saved, so a hosted pod keeps this copy out of the user's store until they
 # edit it. ~/.stargazer exists so a volume mounted there takes its ownership.
 COPY --chown=flyte:flyte runtime/notebook_agent.md /workspace/AGENTS.md
+COPY --chown=flyte:flyte runtime/marimo.toml /home/flyte/.config/marimo/marimo.toml
 RUN mkdir -p /home/flyte/.stargazer \
-    && chown -R flyte:flyte /workspace /home/flyte/.stargazer
+    && chown -R flyte:flyte /workspace /home/flyte/.stargazer /home/flyte/.config
 
 # What a local /workspace starts with: the SDK's whole notebooks folder
 # (templates, tutorials, workflows), without the package files: the notebooks
@@ -80,7 +93,11 @@ RUN mkdir /opt/workspace \
         -prune -exec rm -rf {} + \
     && cp /workspace/AGENTS.md /opt/workspace/
 
+# A locale the slim image has: marimo's terminal sets en_US.UTF-8 unless one
+# is set, and bash warns that it doesn't exist.
 ENV PATH="/opt/venv/bin:${PATH}" \
+    LANG="C.UTF-8" \
+    LC_ALL="C.UTF-8" \
     PYTHONPATH="/usr/local/lib" \
     UV_LINK_MODE="copy" \
     DISABLE_AUTOUPDATER="1"

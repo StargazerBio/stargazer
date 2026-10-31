@@ -3,15 +3,17 @@
 The proxy is baked into the notebook image as a standalone module; here we
 import it directly. Covered: what the proxy forwards from the platform-forwarded
 `X-User-Subject`, the signed-token gate on Union, what is (not) forwarded to
-marimo, the starting page while marimo is cold, terminal-overlay and
-save-banner injection and streaming passthrough, and the workspace
+marimo, the starting page while marimo is cold, the agent bridge, agent-redirect
+and save-banner injection and streaming passthrough, and the workspace
 hydrate/sync against a local store root through the real `flyte.storage`
 calls. The upstream marimo server is faked with an
 `httpx.MockTransport` installed as the proxy's shared upstream client.
 """
 
 import asyncio
+import json
 import os
+import sys
 import time
 
 import httpx
@@ -157,13 +159,13 @@ def test_on_union_an_expired_token_is_refused(on_union, upstream):
     assert client.get("/api/status").status_code == 401
 
 
-def test_on_union_the_terminal_needs_a_token(on_union):
-    """The terminal websocket is a shell in the pod: forged headers don't open it."""
+def test_on_union_the_agent_needs_a_token(on_union):
+    """The agent websocket runs commands in the pod: forged headers don't open it."""
     client = TestClient(proxy.asgi_app, headers={"X-User-Subject": OWNER})
 
     with (
         pytest.raises(WebSocketDisconnect) as exc,
-        client.websocket_connect("/__sg__/term"),
+        client.websocket_connect("/__sg__/agent"),
     ):
         pass
     assert exc.value.code == 1008
@@ -221,22 +223,22 @@ def test_non_html_request_gets_plain_503_while_marimo_is_cold(owner_client, upst
 
 
 # ---------------------------------------------------------------------------
-# Dropdown terminal — secret scrub + HTML overlay injection
+# Agent bridge — stdio relay + secret scrub
 # ---------------------------------------------------------------------------
 
 
-def test_shell_env_scrubs_named_secrets(monkeypatch):
-    """Named secrets stay out of the interactive shell's environment."""
+def test_agent_env_scrubs_named_secrets(monkeypatch):
+    """Named secrets stay out of the agent's environment."""
     monkeypatch.setenv("PINATA_JWT", "pinata-secret")
     monkeypatch.setenv("PINATA_GATEWAY", "https://dweb.link")  # not a secret
 
-    env = proxy._shell_env()
+    env = proxy._agent_env()
 
     assert "PINATA_JWT" not in env
     assert env["PINATA_GATEWAY"] == "https://dweb.link"
 
 
-def test_shell_env_scrubs_secret_shaped_suffixes(monkeypatch):
+def test_agent_env_scrubs_secret_shaped_suffixes(monkeypatch):
     """Future secret-shaped vars are dropped by suffix without an explicit entry."""
     monkeypatch.setenv("SOME_API_TOKEN", "x")
     monkeypatch.setenv("DB_PASSWORD", "x")
@@ -245,7 +247,7 @@ def test_shell_env_scrubs_secret_shaped_suffixes(monkeypatch):
     monkeypatch.setenv("THIRDPARTY_JWT", "x")
     monkeypatch.setenv("HARMLESS_VALUE", "keep")
 
-    env = proxy._shell_env()
+    env = proxy._agent_env()
 
     for leaked in (
         "SOME_API_TOKEN",
@@ -256,7 +258,44 @@ def test_shell_env_scrubs_secret_shaped_suffixes(monkeypatch):
     ):
         assert leaked not in env
     assert env["HARMLESS_VALUE"] == "keep"
-    assert env["TERM"] == "xterm-256color"
+
+
+# Stands in for `claude-agent-acp`: answers each line on stdin with one line
+# naming what it got and whether it can see the Pinata key.
+_FAKE_AGENT = """
+import json, os, sys
+for line in sys.stdin:
+    print(json.dumps({"got": line.rstrip("\\n"), "pinata": os.environ.get("PINATA_JWT")}), flush=True)
+"""
+
+
+def test_agent_bridge_relays_lines_to_the_agent_process(owner_client, monkeypatch):
+    """Each message, text or binary as marimo sends it, is a line on the agent's stdin; each stdout line is a message."""
+    monkeypatch.setattr(proxy, "AGENT_COMMAND", [sys.executable, "-c", _FAKE_AGENT])
+    monkeypatch.setenv("PINATA_JWT", "pinata-secret")
+
+    with owner_client.websocket_connect("/__sg__/agent") as ws:
+        ws.send_text('{"jsonrpc":"2.0","id":1,"method":"initialize"}')
+        first = json.loads(ws.receive_text())
+        ws.send_bytes(b'{"jsonrpc":"2.0","id":2}')
+        second = json.loads(ws.receive_text())
+
+    assert first == {
+        "got": '{"jsonrpc":"2.0","id":1,"method":"initialize"}',
+        "pinata": None,
+    }
+    assert second["got"] == '{"jsonrpc":"2.0","id":2}'
+
+
+def test_agent_bridge_closes_when_the_agent_exits(owner_client, monkeypatch):
+    """An agent that dies takes the panel's connection with it."""
+    monkeypatch.setattr(proxy, "AGENT_COMMAND", [sys.executable, "-c", "pass"])
+
+    with (
+        owner_client.websocket_connect("/__sg__/agent") as ws,
+        pytest.raises(WebSocketDisconnect),
+    ):
+        ws.receive_text()
 
 
 # ---------------------------------------------------------------------------
@@ -264,8 +303,8 @@ def test_shell_env_scrubs_secret_shaped_suffixes(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_proxy_injects_the_overlay_and_banner_into_html(owner_client, upstream):
-    """HTML responses get the terminal overlay and the save banner before </body>."""
+def test_proxy_injects_the_agent_redirect_and_banner_into_html(owner_client, upstream):
+    """HTML responses get the agent redirect and the save banner before </body>."""
     upstream(
         lambda req: httpx.Response(
             200,
@@ -277,8 +316,9 @@ def test_proxy_injects_the_overlay_and_banner_into_html(owner_client, upstream):
     resp = owner_client.get("/")
 
     assert resp.status_code == 200
-    for injected in (b"sg-term-overlay", b"/__sg__/term", b"sg-save-banner"):
+    for injected in (b"/__sg__/agent", b"sg-save-banner"):
         assert resp.content.index(injected) < resp.content.index(b"</body>")
+    assert b"/__sg__/term" not in resp.content
     assert b"/__sg__/save-status" in resp.content
 
 

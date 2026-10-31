@@ -20,7 +20,7 @@ Mount a directory at `/workspace`, the notebook's working directory:
 docker run -p 8080:8080 -v "$PWD/data":/workspace ghcr.io/stargazerbio/stargazer
 ```
 
-Its files show up in the notebook's file explorer and in the dropdown terminal, so a notebook reads them by relative path (`pd.read_csv("reads/sample.csv")`). The `notebooks/` folder is copied there at start, skipping files the directory already has, so your edits are kept. On Linux the container runs as user 1000, so the directory must be writable by that user.
+Its files show up in the notebook's file explorer and its terminal, so a notebook reads them by relative path (`pd.read_csv("reads/sample.csv")`). The `notebooks/` folder is copied there at start, skipping files the directory already has, so your edits are kept. On Linux the container runs as user 1000, so the directory must be writable by that user.
 
 To keep assets between runs, mount a volume at `/home/flyte/.stargazer`, which holds the asset store, its index and the download cache:
 
@@ -32,7 +32,7 @@ A file in `/workspace` isn't an asset until a notebook stores it with `await ass
 
 ## Agent — Claude Code in the Notebook
 
-Press ++ctrl+grave++ in the notebook to drop down a terminal, and run `claude` to log in and start Claude Code. It opens in the notebook's working directory, with the Stargazer SDK installed at `/stargazer` and the tools the bundled workflows call (GATK, samtools, BWA) on the `PATH`, so the agent can run them for you.
+Press ++ctrl+grave++ in the notebook to open its terminal, and run `claude` once to sign in. Then open the AI panel from the sidebar, switch to **Agents** and start a new Claude session. Claude Code works in the notebook's working directory, with the Stargazer SDK installed at `/stargazer` and the tools the bundled workflows call (GATK, samtools, BWA) on the `PATH`, so it can run them for you. When it edits the open notebook, the changed cells show up in the editor, ready to run. The terminal and the agent are part of the editor, so a notebook opened to run has neither.
 
 ## MCP Client Configuration
 

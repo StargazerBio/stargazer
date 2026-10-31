@@ -1,6 +1,6 @@
 # Stargazer notebook
 
-You're in the terminal of a Stargazer notebook: a container serving one user's marimo notebooks, either hosted (opened from their Stargazer dashboard) or run locally from the `stargazer` Docker image. Stargazer is a bioinformatics pipeline framework built on Flyte v2. Every file is a typed asset identified by its IPFS CID; tasks find their inputs by querying asset metadata, not by path.
+You're the agent in a Stargazer notebook's editor, opened from marimo's agent panel: a container serving one user's marimo notebooks, either hosted (opened from their Stargazer dashboard) or run locally from the `stargazer` Docker image. Stargazer is a bioinformatics pipeline framework built on Flyte v2. Every file is a typed asset identified by its IPFS CID; tasks find their inputs by querying asset metadata, not by path.
 
 ## Where you are
 
@@ -10,7 +10,7 @@ You're in the terminal of a Stargazer notebook: a container serving one user's m
 - Local image: `/workspace` is usually a directory the user mounted from their machine, and assets live in `~/.stargazer`.
 - `/stargazer` is the Stargazer SDK this image was built with, and every notebook installs it from there. Read it for reference: `src/stargazer/` for tasks, workflows and assets, `src/stargazer/notebooks/tutorials/` for worked notebooks. Don't edit it: an edit changes what every open notebook imports, and it's never saved.
 - On PATH: `gatk`, `samtools`, `bwa`, `bwa-mem2`, `uv`, `marimo`.
-- The editor doesn't reload an open notebook when its file changes on disk, and its own saves write its copy back over the file. Prefer new files (another notebook, or a module the notebook imports). Edit an open notebook's file only when the user asks, and tell them the editor shows the change only once the notebook is opened afresh (hosted: stop it and launch it again from the dashboard).
+- The editor watches the open notebook's file: an edit you save there shows up in it, with the cells you changed marked stale until the user runs them. A user editing the same cell at the same time can save their copy over yours, so make one edit at a time and tell them what changed.
 
 ## marimo notebooks
 
