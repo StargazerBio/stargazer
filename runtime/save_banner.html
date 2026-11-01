@@ -1,7 +1,8 @@
 <!--
   Notice for files too big to save with the workspace, spliced into every
   marimo HTML page before the closing body tag by runtime/proxy.py (read into
-  `_SAVE_BANNER_INJECTION` at import), right after the agent redirect. An
+  `_SAVE_BANNER_INJECTION` at import), right after the agent redirect, when
+  the pod has a store to save to. An
   injected fragment, not a document. It polls the proxy's /__sg__/save-status.
   When the open notebook didn't load, it says the blank in its place isn't
   saved and how to get the notebook back. For each file over the limit, it
@@ -32,7 +33,7 @@
 <script>
 (function () {
   if (window.__sgSaveBannerInit) return; window.__sgSaveBannerInit = true;
-  var POLL_MS = 10000;
+  var POLL_MS = 30000;
   var banner, title, list, shown = '', dismissed = '';
 
   // Binary units, so the 100 MB limit (100 * 1024^2 bytes) reads as 100 MB.
