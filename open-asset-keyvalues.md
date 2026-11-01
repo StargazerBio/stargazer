@@ -81,7 +81,7 @@ The bare `Asset` stays the place for kinds of file nobody has registered yet.
 
   | Extras allowed on public | Types |
   |---|---|
-  | none: can't be uploaded at all | `Alignment` (8 declared fields, so 10 keys with `asset` and `_owner`). Already broken on `main`, before this change: ticket `alignment-over-pinata-cap` |
+  | none: can't be uploaded at all | `Alignment` (8 declared fields, so 10 keys with `asset` and `_owner`). Already broken on `main`, before this change: ticket [[alignment-over-pinata-cap]] |
   | 0 | `Variants`, `KnownSites` |
   | 1 | `AnnData` |
   | 2 | `VQSRModel` |
@@ -162,7 +162,7 @@ Rewritten after measuring the cap (see Decisions): 9, not 10, and uploads only.
 - [x] The route tests' fake `PinataClient` runs the real check in
   `create_signed_upload_url()`, so `tests/unit/test_assets_routes.py` covers
   the page's 400. Two sign tests used an `Alignment`, which the check now
-  refuses (ticket `alignment-over-pinata-cap`); they sign an `R1` instead.
+  refuses (ticket [[alignment-over-pinata-cap]]); they sign an `R1` instead.
 - [x] `MAX_KEYVALUES = 9`, checked in `upload()` after `_stamp_owner()` and in
   `create_signed_upload_url()`.
 - [x] `/assets/sign` turns the `ValueError` into a 400: "Public assets can
@@ -189,7 +189,7 @@ Rewritten after measuring the cap (see Decisions): 9, not 10, and uploads only.
   which round-trips it through Flyte's type engine, and also finds it with
   `assemble(lane=...)`. Both copies must be `R1` with the extra key intact. Add
   the test to `tests/devbox/test_asset_storage.py` and a sub-feature line to
-  the asset storage recipe, now in ticket `devbox-postgres-index`. Run with
+  the asset storage recipe, now in ticket [[devbox-postgres-index]]. Run with
   the `verify-stargazer` skill.
 - [x] **MCP.** `upload_file` with `asset=alignment, lane=3`, then `query_files`
   with `lane=3`: the record comes back with `lane`.
@@ -234,7 +234,7 @@ Merged in #25 (2026-10-13, `7f11457`).
 and the asset page in Chrome. Details are under Verification below.
 
 **What's left:**
-- Ticket `alignment-over-pinata-cap`: no `Alignment` can be uploaded to
+- Ticket [[alignment-over-pinata-cap]]: no `Alignment` can be uploaded to
   Pinata. That was already true on `main`; it now fails with a clear message.
 - The Deferred items below.
 - An asset found with `assemble()` carries `_owner` among its extras. This

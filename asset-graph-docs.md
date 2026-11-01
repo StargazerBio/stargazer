@@ -14,8 +14,8 @@ possible. The term "asset graph" is used across the docs and the Assets
 tutorial.
 
 Claims are held to what's true today. Three gaps found while planning are
-their own tickets: `publish-with-companions`,
-`reuse-reference-companions` and `provenance-on-every-output`.
+their own tickets: [[publish-with-companions]],
+[[reuse-reference-companions]] and [[provenance-on-every-output]].
 
 - [x] `docs/index.md` rewritten to lead with the system
 - [x] New `docs/asset-graph.md`, in nav after Home

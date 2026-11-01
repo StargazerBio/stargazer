@@ -7,7 +7,7 @@ pr: 54
 ---
 
 The first of three steps toward the hosted index on Aurora DSQL (ticket
-`dsql-asset-index`): local, then the devbox (ticket `devbox-postgres-index`),
+[[dsql-asset-index]]): local, then the devbox (ticket [[devbox-postgres-index]]),
 then Union. This one is the local story.
 
 `SqliteIndex` and a new `PostgresIndex` share one implementation of the five
@@ -50,5 +50,5 @@ Shipped in #54 (merged 2026-10-20, `587e6bc`): `PostgresIndex` beside
 `SqliteIndex` on one SQL implementation, `make_index` dispatch for
 `postgresql://`, and the `postgres` test tier. Verified as above. Local
 users see no change. Left: the devbox's index on a Postgres pod (ticket
-`devbox-postgres-index`), then the hosted index on DSQL (ticket
-`dsql-asset-index`).
+[[devbox-postgres-index]]), then the hosted index on DSQL (ticket
+[[dsql-asset-index]]).

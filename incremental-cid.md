@@ -10,9 +10,9 @@ pr: 45
 in pieces of any size, it gives the same CID `compute_cid` gives for the
 whole file, and `compute_cid` becomes a wrapper over it, so there's still one
 implementation of an asset's identity. Split out of ticket
-`tus-browser-uploads`, whose private uploads work out the CID as the chunks
+[[tus-browser-uploads]], whose private uploads work out the CID as the chunks
 pass through the dashboard, and which can't start until ticket
-`asset-manager-on-index` merges. Nothing open touches `cid.py`.
+[[asset-manager-on-index]] merges. Nothing open touches `cid.py`.
 
 ## Design
 
@@ -49,5 +49,5 @@ fed in pieces of any size, and `compute_cid` is the builder fed a file.
 Verified with the unit tier, the Pinata drift test against the real API
 (4 of 4), and a 1 GiB timing at the same speed as before (above).
 
-Left: nothing uses the builder yet. Ticket `tus-browser-uploads` will, to
+Left: nothing uses the builder yet. Ticket [[tus-browser-uploads]] will, to
 work out an upload's CID as its chunks pass through the dashboard.

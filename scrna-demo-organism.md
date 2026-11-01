@@ -24,7 +24,7 @@ Fix the bundle's description and keyvalues, and find out what the data
 actually is (likely a PBMC sample; the tutorials' text may describe it as
 brain).
 
-Found while verifying ticket `normalize-counts-layer`.
+Found while verifying ticket [[normalize-counts-layer]].
 
 ## Verification
 
@@ -42,7 +42,7 @@ tutorial). Measured 2026-10-14, isolated store seeded from the bundle,
   (merge; other keys unchanged), read back by a `bundle=scrna_demo` query.
 - The catalog hook now runs on bundle YAML; it skipped the relabel before.
 
-Deferred: ticket `qc-filter-organism-from-asset`.
+Deferred: ticket [[qc-filter-organism-from-asset]].
 
 ## Outcome
 
@@ -55,4 +55,4 @@ Verified: `qc_filter` with the raw asset's organism flags 13 MT genes and
 keeps 6,307 cells (0 and 8,506 on `main`); the scRNA pipeline notebook
 exports with exit 0 and all 14 checks `ok`.
 
-Left: ticket `qc-filter-organism-from-asset`.
+Left: ticket [[qc-filter-organism-from-asset]].

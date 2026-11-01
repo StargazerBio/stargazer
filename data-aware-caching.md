@@ -47,7 +47,7 @@ function's own source.
   `.fai`, `.dict`, aligner index) by querying at run time. A hit returns a
   result that was right when it ran; a miss can pick up different
   companions. Leave it unless it bites, and see ticket
-  `stale-companion-cache`.
+  [[stale-companion-cache]].
 - **Scope.** Union's cache is per project (inferred), and each user has their
   own, so one user's cached output, in their private storage, never reaches
   another. Confirm before relying on it.

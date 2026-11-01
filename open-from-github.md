@@ -9,7 +9,7 @@ pr: 91
 A notebook that isn't in the SDK, such as one in someone else's repo, doesn't
 ship in the notebook image, so a dashboard user can't run it. Bring a notebook
 from GitHub into the user's workspace, where it's saved like any other file
-(ticket `save-whole-workspace`). One shape is a box on the dashboard that
+(ticket [[save-whole-workspace]]). One shape is a box on the dashboard that
 takes a GitHub link and drops the file into the workspace. That works for
 notebooks in anyone's repo, not only this one, and a link pinned to a commit
 gets the same file every time.
@@ -19,7 +19,7 @@ gets the same file every time.
 - **One file** (decided 2026-10-26). A link to a `.py` file becomes a
   top-level workspace notebook, the way Copy brings in an SDK notebook. A
   notebook that imports files beside it is out of scope here (ticket
-  `open-github-folder`).
+  [[open-github-folder]]).
 - **Pods reach GitHub** (measured 2026-10-26). A task pod in `u-pryce` got
   HTTP 200 from `raw.githubusercontent.com`, `api.github.com` (unauthenticated)
   and `codeload.github.com` (run `u8x6jd7fn9nw4zmf5zfg`). The dashboard and
@@ -68,7 +68,7 @@ built-in browser pane signed in to the console as the test account.
 
 - Every shipped tutorial's file stem is also its tile's slug, so an opened
   tutorial shares its app name (`nb-assets-run`) with the shipped one
-  (ticket `workspace-slug-shadows-shipped`). Stop the shipped tutorial first.
+  (ticket [[workspace-slug-shadows-shipped]]). Stop the shipped tutorial first.
 
 ## Verification (2026-10-26, branch `feat/open-from-github` at `7844d1c`)
 
@@ -92,4 +92,4 @@ in the built-in browser.
 
 ## Outcome
 
-Shipped in PR #91 (merge `c1029b5`). The Workspace grid's Open from GitHub tile downloads one `.py` file from a GitHub page or raw link (`app/github_import.py`, `raw.githubusercontent.com` only, 1 MB cap, no redirects) into the user's workspace as a new notebook (`POST /workspace/github`). Verified by the unit tier and on Union (Verification above). Left: a whole folder, ticket `open-github-folder`; an opened notebook can still take a shipped notebook's name until ticket `workspace-slug-shadows-shipped` merges. No review comments.
+Shipped in PR #91 (merge `c1029b5`). The Workspace grid's Open from GitHub tile downloads one `.py` file from a GitHub page or raw link (`app/github_import.py`, `raw.githubusercontent.com` only, 1 MB cap, no redirects) into the user's workspace as a new notebook (`POST /workspace/github`). Verified by the unit tier and on Union (Verification above). Left: a whole folder, ticket [[open-github-folder]]; an opened notebook can still take a shipped notebook's name until ticket [[workspace-slug-shadows-shipped]] merges. No review comments.

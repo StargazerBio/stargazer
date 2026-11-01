@@ -10,7 +10,7 @@ Flyte's run records (each action's `inputs.pb`, `outputs.pb` and
 `metadata/v2/stargazerbio/<project>/`, where every pod can read them
 through the shared `userflyterole`. For Stargazer they hold asset metadata,
 store URIs and small values; the files themselves are private since ticket
-`per-user-storage-isolation`.
+[[per-user-storage-isolation]].
 
 Moving them is one project setting, `run.run_base_dir`, pointed at the
 user's `flyte/runs/` prefix. The bucket policy already lets Union's services

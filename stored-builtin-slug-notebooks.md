@@ -6,7 +6,7 @@ created: 2026-10-27
 ---
 
 Create and Open from GitHub refuse a built-in notebook's name (ticket
-`workspace-slug-shadows-shipped`), but a workspace notebook stored under one
+[[workspace-slug-shadows-shipped]]), but a workspace notebook stored under one
 before that, such as `assets.py`, keeps it. Its pod is still
 `nb-<slug>-<mode>`, the same app as the built-in notebook's, so launching one
 replaces the other. The user can download it, delete it and create it again

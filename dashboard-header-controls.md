@@ -9,7 +9,7 @@ pr: 94
 The dashboard's Settings section becomes a Settings button in the header
 that opens a modal, and the cleanup broom moves from the footer to sit
 beside it. The home page is left with the Workspace section and the asset
-explorer (tickets `unified-asset-explorer`, `explorer-filter-defaults`), and
+explorer (tickets [[unified-asset-explorer]], [[explorer-filter-defaults]]), and
 the controls that are about the user rather than a notebook sit together at
 the top.
 
@@ -63,7 +63,7 @@ Blocked by the tickets in review whose PRs edit
 
 1. **A modal, not a page.** There's one setting today, and a page would be a
    round trip for one number. Later settings go in the modal, starting with
-   the explorer's default filter (ticket `explorer-filter-defaults`).
+   the explorer's default filter (ticket [[explorer-filter-defaults]]).
 2. **The broom stays an icon button with its tooltip.** It's a maintenance
    action, so it sits beside Settings rather than becoming a labelled button.
 3. **Choices made in implementation.** The user's dialog takes the freed

@@ -50,3 +50,5 @@ clone.
 
 Left: running `upgrade` from a GitHub Action. It was decided against for now
 (2026-10-13).
+
+Related: [[flyte-images]], [[flyte-apps]].

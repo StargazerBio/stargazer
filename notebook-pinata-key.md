@@ -7,9 +7,9 @@ pr: 44
 ---
 
 Hosted notebook pods get the org's Pinata key, as a Flyte secret, the way
-dashboards do (ticket `dashboard-pinata-key`). Without it a notebook sees
+dashboards do (ticket [[dashboard-pinata-key]]). Without it a notebook sees
 only the user's own store: public data doesn't join its queries, and
-publishing a stored file from a notebook (ticket `publish-asset`) raises.
+publishing a stored file from a notebook (ticket [[publish-asset]]) raises.
 Tasks and dashboards already have the key, so any user can already reach it
 from a task they run (decided 2026-10-18: "put the pinata key everywhere").
 
@@ -18,7 +18,7 @@ from a task they run (decided 2026-10-18: "put the pinata key everywhere").
 `per_notebook_env` declares `secrets=STARGAZER_SECRETS`, the same list the
 task environments and the dashboard declare. Union injects it and keeps only
 a reference in the app's spec (measured 2026-10-17, ticket
-`dashboard-pinata-key`). The devbox drops app secrets, so a devbox notebook
+[[dashboard-pinata-key]]). The devbox drops app secrets, so a devbox notebook
 still has no public tier.
 
 **The terminal doesn't get it.** The proxy scrubs secret-shaped vars from
@@ -87,4 +87,4 @@ the secret.
 
 The key was never out of reach: on `main` before this, notebook code got it
 through a ten-line task declaring the secret (run `ujgbbqc4xtlwgbb2hjst`).
-Keeping it private is ticket `private-pinata-key` (`maybe`).
+Keeping it private is ticket [[private-pinata-key]] (`maybe`).

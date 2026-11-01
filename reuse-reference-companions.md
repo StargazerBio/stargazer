@@ -18,7 +18,7 @@ and what's true: an index built once, by anyone who publishes it, serving
 everyone who runs the pipeline. Opened from the docs revision that
 introduces the asset graph and "collaboration without coordination".
 
-Not ticket `data-aware-caching`: Flyte's cache is per project (inferred
+Not ticket [[data-aware-caching]]: Flyte's cache is per project (inferred
 there), keyed on a run's inputs, so it would at best skip a user's own
 repeat, never use a publisher's index. Both can land; they don't overlap.
 

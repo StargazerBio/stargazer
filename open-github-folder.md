@@ -5,7 +5,7 @@ priority: low
 created: 2026-10-26
 ---
 
-Opening a notebook from GitHub (ticket `open-from-github`) brings in one file.
+Opening a notebook from GitHub (ticket [[open-from-github]]) brings in one file.
 A notebook that imports modules or reads data files beside it won't run
 without them. Bringing in its folder raises questions the one-file version
 avoids: where the sibling files land in the workspace, since the dashboard

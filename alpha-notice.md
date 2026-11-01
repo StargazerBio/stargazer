@@ -8,7 +8,7 @@ pr: 21
 
 Users' storage isn't isolated yet: every project on the tenant runs as one IAM
 role, so code in one user's notebook could read another user's objects
-([per-user-storage-isolation](per-user-storage-isolation.md)). Until that's
+([[per-user-storage-isolation]]). Until that's
 hardened, say plainly what not to upload. The dashboard footer and the asset
 page's upload form read "Stargazer is alpha software. Don't upload sensitive
 data, such as identifiable patient data." `docs/architecture/app.md` stops
@@ -35,6 +35,6 @@ control) and the asset page's upload form carry the notice, and
 `docs/architecture/app.md` says storage isn't isolated yet. Verified by the two
 unit tests, which fail without the notice, and by eye on a devbox deploy of the
 dashboard. The upload form's copy can't be seen on a deployed dashboard until
-the page leaves Pinata ([asset-manager-on-index](asset-manager-on-index.md));
+the page leaves Pinata ([[asset-manager-on-index]]);
 hardening the isolation itself is
-[per-user-storage-isolation](per-user-storage-isolation.md).
+[[per-user-storage-isolation]].

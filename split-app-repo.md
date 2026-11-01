@@ -173,7 +173,7 @@ Measured 2026-10-28 unless marked.
       infra's devbox rule goes.
 - [ ] After both merge: set up PyPI's trusted publisher, bump `version`,
       tag the first release, and move infra's pin to `stargazer-bio==<it>`
-      (ticket `pypi-release`).
+      (ticket [[pypi-release]]).
 
 ## Verification recipe
 
@@ -228,11 +228,11 @@ git log origin/main --merges --first-parent -n 40 --format=%H | while read h; do
 ## History
 
 - **2026-10-14**, from notebook image rebuilds: stay one repo, package only
-  the SDK (ticket `sdk-package`).
+  the SDK (ticket [[sdk-package]]).
 - **2026-10-21**, as AWS admin calls crept into onboarding: onboarding and
   the AWS stacks moved to infra; `app/` stayed until it could pin a
   released SDK.
-- **2026-10-27**: `sdk-package` shelved, since splitting all of `app/` off
+- **2026-10-27**: [[sdk-package]] shelved, since splitting all of `app/` off
   would need an installed-SDK path everywhere `app/` uses it.
 - **2026-10-28**: this line. The dashboard builds no images from the SDK's
   source, so it can install a release; the runtime stays with the SDK.
@@ -249,5 +249,5 @@ storage and germline tests) and on Union as the test account (a tutorial and
 a layered Basic-template image on the GHCR test image), per the evidence
 above. The test account's stale notebooks were deleted; it was the only user.
 
-Left: the first release and infra's pin (ticket `pypi-release`). Neither PR
+Left: the first release and infra's pin (ticket [[pypi-release]]). Neither PR
 had review comments.

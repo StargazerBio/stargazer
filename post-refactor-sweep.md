@@ -28,8 +28,8 @@ issues. The fixes are four commits on the branch, net about 700 lines lighter:
 - [x] App tier: shared helpers, docstrings that match the code. The asset
   browser compares records with the visitor, not the owner an admin stands in for.
 - [x] Docs: stale claims fixed, history and measurements out of durable docs,
-  one owner per explanation. Gaps went to tickets `long-image-build-launch`
-  and `public-surface-rate-limit`.
+  one owner per explanation. Gaps went to tickets [[long-image-build-launch]]
+  and [[public-surface-rate-limit]].
 
 Verification: unit tier 485 passed and every pre-commit hook passed. Pinata
 tier 11 passed against the real API. The scRNA tasks tier passed 18 in its
@@ -39,7 +39,7 @@ metadata edit all worked. On Union, the test account's dashboard deployed from
 the branch with the expected env and listed its 64 DSQL assets. A Basic
 notebook launch then hung: the redeployed dashboard pod has no
 `EAGER_API_KEY` (measured), so its in-pod image build waited on a browser
-sign-in until Cloudflare returned a 504. That's ticket `org-wide-platform-key`,
+sign-in until Cloudflare returned a 504. That's ticket [[org-wide-platform-key]],
 not this branch. The test notebook "Sweep 1022" is left in the test account's
 workspace. Everything was torn down: dashboard stopped, no live runs.
 
@@ -49,4 +49,4 @@ Shipped in PR #81 (merge `01681e1`): four commits over the files #51–#80 touch
 
 Verified with the unit tier (485), the Pinata tier (11) against the real API, the scRNA tasks tier (18), a local dashboard driven in Chrome, and on Union with the test account: the dashboard deployed from the branch with the expected env and listed its 64 DSQL assets. No comments on the PR.
 
-Left: a notebook launch on Union wasn't verified (ticket `org-wide-platform-key`), and the test notebook "Sweep 1022" is still in the test account's workspace. The gaps the sweep found are tickets `long-image-build-launch` and `public-surface-rate-limit`.
+Left: a notebook launch on Union wasn't verified (ticket [[org-wide-platform-key]]), and the test notebook "Sweep 1022" is still in the test account's workspace. The gaps the sweep found are tickets [[long-image-build-launch]] and [[public-surface-rate-limit]].

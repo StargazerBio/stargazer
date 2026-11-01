@@ -7,11 +7,11 @@ pr: 96
 ---
 
 Once everything but the workspace is in the explorer (ticket
-`unified-asset-explorer`), finding things is the explorer's whole job. Its
+[[unified-asset-explorer]]), finding things is the explorer's whole job. Its
 filters become fast and direct: search as you type, types and sources as
 toggles with counts, and keyvalue filters picked straight from an entry.
 Each user can save the filter they want to land on as their default, and
-change or clear it in Settings (ticket `dashboard-header-controls`).
+change or clear it in Settings (ticket [[dashboard-header-controls]]).
 
 ## Current State
 
@@ -76,7 +76,7 @@ the view is empty.
    keyvalue chips, Clear, the result count, Save as default.
 2. "Filter by this" on each keyvalue in the detail card.
 3. The graph and list views render the filtered entries; the graph's legend
-   becomes the type chips in ticket `constellation-graph`.
+   becomes the type chips in ticket [[constellation-graph]].
 
 ### Phase 3: Settings, docs and verification
 
@@ -194,4 +194,4 @@ lock held.
 
 ## Outcome
 
-Shipped in PR #96 (merge `4f795d7`): the explorer's search, type chips with counts, keyvalue chips with "filter by this", Clear and the result count, all filtering loaded entries in the browser; sources still fetch. The owner saves the filter as `explorer_default` in `settings.json` (`POST`/`DELETE /settings/explorer-default`), the page opens on it fitted to the visitor, and Settings shows it with Reset. Verified by the unit tier (560 passed) and on Union with the test account's dashboard at `7dcebf7` and `cbb10cb` (the recipe above). Left: the graph's legend becoming the type chips, ticket `constellation-graph`. No review comments.
+Shipped in PR #96 (merge `4f795d7`): the explorer's search, type chips with counts, keyvalue chips with "filter by this", Clear and the result count, all filtering loaded entries in the browser; sources still fetch. The owner saves the filter as `explorer_default` in `settings.json` (`POST`/`DELETE /settings/explorer-default`), the page opens on it fitted to the visitor, and Settings shows it with Reset. Verified by the unit tier (560 passed) and on Union with the test account's dashboard at `7dcebf7` and `cbb10cb` (the recipe above). Left: the graph's legend becoming the type chips, ticket [[constellation-graph]]. No review comments.

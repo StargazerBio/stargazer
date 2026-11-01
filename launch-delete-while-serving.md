@@ -7,7 +7,7 @@ pr: 16
 ---
 
 Deleting a workspace notebook removes its launch rows (ticket
-`launch-row-on-delete`), but not a serve already under way. When a
+[[launch-row-on-delete]]), but not a serve already under way. When a
 notebook's image build has finished and the dashboard is serving its pod
 (`_serving` in infra's `app/admin_app.py`), a delete in that window leaves
 the serve running: the serve's own settle finds the row gone and writes
@@ -39,7 +39,7 @@ serve's watch shows no app is left half-deployed.
 
 Turned up separately: a pod deleted while starting writes its notebook back
 on its shutdown save, about 5 s after the delete. That bug is on `main` too
-and isn't fixed by infra#16; ticket `delete-running-notebook-resurrects`.
+and isn't fixed by infra#16; ticket [[delete-running-notebook-resurrects]].
 
 ## Verification recipe
 
@@ -64,4 +64,4 @@ unit tests. Left: two millisecond-wide windows (an app-create request
 already in flight when the serve is cancelled, and a claim committed but not
 yet registered in `_serving`), named in the PR. The pod writing a deleted
 notebook back on its shutdown save, found while verifying, is ticket
-`delete-running-notebook-resurrects`.
+[[delete-running-notebook-resurrects]].

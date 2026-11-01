@@ -140,3 +140,5 @@ empties. Tear down with `union_dashboard.py teardown`.
 ## Outcome
 
 Shipped in PR 114 (merge `103d23e`): the notebook pod's terminal and agents are marimo's own (its terminal and its agent panel with Claude Code and OpenCode), the proxy keeps only the redirect script and `/__sg__/agent/<name>`, and the agents' sign-ins are kept under `users/<subject>/agents/` in the workspace store. Verified locally with a real claude.ai sign-in (an agent turn, a live edit through `--watch`, the sign-in surviving a restart) and on Union as the test account (both agents over `wss://`, a sign-in file through S3 and back in a relaunched pod, sign-out emptying the prefix, the agent socket refused without a login); evidence above and in the PR. No review comments. Left: a real Claude sign-in on Union and driving the in-cluster address against `/__sg__/agent/*` (unit-tested); the README's agent line and infra's `_assets.html` overlay mention, both noted in the PR.
+
+Related: [[agent-mcp]], [[agent-bridge-close-noise]], [[marimo-toml]].

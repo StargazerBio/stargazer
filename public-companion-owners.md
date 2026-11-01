@@ -6,7 +6,7 @@ created: 2026-10-21
 pr: 75
 ---
 
-The two commits from ticket `public-companion-curation` that didn't make it into PR #74's merge, cherry-picked unchanged onto branch `fix/public-companion-owners`:
+The two commits from ticket [[public-companion-curation]] that didn't make it into PR #74's merge, cherry-picked unchanged onto branch `fix/public-companion-owners`:
 
 - **Every public record needs an owner.** `PinataClient` refuses an upload, signed upload URL or metadata edit whose keyvalues have no `_owner`, before any request, and `query` and `get` skip public files with none. Anyone with the key can upload straight to Pinata, so the read side is what holds.
 - **`fetch()` takes the caller's public companions too.** `StorageClient.companions` returns the user's own rows, then public companions the caller published, then the parent publisher's, skipping a name already taken. Anyone else's are left out.

@@ -14,3 +14,5 @@ starlette's `close()` raises `WebSocketDisconnect`. Seen in the
 Harmless (the agent is already killed), but it buries real errors in the pod
 log. Suppress `WebSocketDisconnect` too, with a unit test that disconnects
 mid-session and checks the bridge returns cleanly.
+
+Related: [[agent-mcp]], [[marimo-terminal]].

@@ -32,7 +32,7 @@ summaries = await dispatch(where, audit_cohorts, sheets=sheets)
 
 - [x] The Execution tutorial keeps its two explicit calls, and a closing section introduces the control as the reusable form, running `audit_cohorts` wherever it's set.
 
-The scRNA notebook and the `basic` template don't get it here. Neither dispatches: they await their workflows in-process. And their workflows are defined in regular cells, which a cluster can't load: Flyte's task pod imports the notebook module and looks the task up as an attribute, and importing a marimo notebook doesn't run its cells. Measured with a throwaway notebook: a cell-defined task's loader args resolved to `AttributeError: module 'cell_task' has no attribute 'cell_task'`, and the same task as `@app.function` loaded. Ticket `notebook-cluster-runs` covers that.
+The scRNA notebook and the `basic` template don't get it here. Neither dispatches: they await their workflows in-process. And their workflows are defined in regular cells, which a cluster can't load: Flyte's task pod imports the notebook module and looks the task up as an attribute, and importing a marimo notebook doesn't run its cells. Measured with a throwaway notebook: a cell-defined task's loader args resolved to `AttributeError: module 'cell_task' has no attribute 'cell_task'`, and the same task as `@app.function` loaded. Ticket [[notebook-cluster-runs]] covers that.
 
 ## Pieces
 
@@ -48,4 +48,4 @@ Shipped in PR #62 (merge `40c329e`): `stargazer.notebooks.ui` with `run_location
 
 Verified: unit tests written first (failed on `NotImplementedError`), with a mutation check on the cluster path's `wait()`; unit tier 504 passed. The Execution tutorial driven headless against an isolated store: the control rendered with "On this machine" as its default, and section 6 returned 3 `CohortSummary` results with the same CIDs as section 3. "On the cluster" with no cluster configured raised at upload rather than running locally.
 
-Left: a real cluster run through the control was not verified (only a patched-runner unit test covers it). The scRNA notebook and the `basic` template move onto the control in ticket `notebook-cluster-runs`. `dispatch` handles one output only and shows no console link for a cluster run.
+Left: a real cluster run through the control was not verified (only a patched-runner unit test covers it). The scRNA notebook and the `basic` template move onto the control in ticket [[notebook-cluster-runs]]. `dispatch` handles one output only and shows no console link for a cluster run.

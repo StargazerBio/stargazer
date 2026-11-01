@@ -14,7 +14,7 @@ with the default filters on `MT-` and stores the result as `mouse`.
 Reading the asset's `organism` would leave one source of truth, at the cost
 of the argument, and an unlabeled asset would need a default.
 
-Found in ticket `scrna-demo-organism`.
+Found in ticket [[scrna-demo-organism]].
 
 ## Decision
 
@@ -43,7 +43,7 @@ Branch `fix/qc-filter-organism-from-asset`, PR #61. Measured 2026-10-20.
   do not raise), and pass after: scrna tasks tier 19 passed, unit tier 502.
 - The scRNA notebook exports with exit 0 and 14/14 `ok` checks; `s1d1` is
   stored as `human` with 13 MT genes flagged and 6,307 cells kept, as in
-  ticket `scrna-demo-organism`.
+  ticket [[scrna-demo-organism]].
 - `scrna_clustering_pipeline` run locally through Flyte: labeled `s1d1`
   reaches `annotated` (6,307 cells); an unlabeled copy fails with
   `AnnData 'unlabeled' has organism ''; set its organism field to one of:
@@ -51,7 +51,7 @@ Branch `fix/qc-filter-organism-from-asset`, PR #61. Measured 2026-10-20.
 - The only caller passing `organism=` was the pipeline itself. Every AnnData
   the repo produces (bundle, test fixtures, verify seed) is already labeled.
 
-Found along the way: ticket `registry-type-names-py314`.
+Found along the way: ticket [[registry-type-names-py314]].
 
 ## Outcome
 
@@ -59,4 +59,4 @@ PR #61 (`36ea20f`, merged 2026-10-21). `qc_filter` takes the organism from
 its input `AnnData` and raises on an unlabeled or unsupported one; the
 pipeline no longer passes `organism=`. Verified as above. Its PR also
 carried the AGENTS.md rule to answer a merged PR's comments (`1140e8e`).
-No comments were left on it. Left: ticket `registry-type-names-py314`.
+No comments were left on it. Left: ticket [[registry-type-names-py314]].

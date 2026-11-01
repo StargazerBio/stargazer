@@ -7,9 +7,9 @@ pr: 60
 ---
 
 The second of three steps toward the hosted index on Aurora DSQL (ticket
-`dsql-asset-index`). The devbox's index moves from the stand-in user's
+[[dsql-asset-index]]). The devbox's index moves from the stand-in user's
 dashboard to a Postgres deployment, reached by task and notebook pods
-through `PostgresIndex` (ticket `postgres-index`).
+through `PostgresIndex` (ticket [[postgres-index]]).
 
 - [x] A Postgres deployment in `cli/devbox-setup.sh`, and its entry in
   `devbox_workarounds.md`
@@ -21,7 +21,7 @@ through `PostgresIndex` (ticket `postgres-index`).
   fixture drops the `assets` table before every test, so it would wipe the
   devbox's index, and it would test the same `postgres:16-alpine` engine
 
-Union keeps the dashboard-served index until `dsql-asset-index`, so nothing
+Union keeps the dashboard-served index until [[dsql-asset-index]], so nothing
 is removed here.
 
 ## Verified (2026-10-20, branch `feat/devbox-postgres-index`)
@@ -52,7 +52,7 @@ dashboard, its notebook pods and devbox runs all use it through
 `devbox/`, and `devbox_workarounds.md` was folded into `devbox/setup.sh`'s
 commented steps. Verified as above: devbox tier 8 passed, postgres tier 10,
 unit 505. Left: the dashboard-served index (`HttpIndex`, the `/index` routes,
-Litestream) still runs on Union, and goes in ticket `dsql-asset-index`.
+Litestream) still runs on Union, and goes in ticket [[dsql-asset-index]].
 
 ## Verification recipe: Asset storage on the devbox
 

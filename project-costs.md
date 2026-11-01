@@ -35,4 +35,4 @@ task in the `admin` project, the `stargazer-costs-reader` role, and
 `./stargazer-costs deploy|run`. Verified by run `udfjxtnlj2xsnqmphb69` on
 the tenant, matching the hand-pulled October numbers (namespaces $29.33 of
 $29.72 node cost); 332 tests pass. Left: running it daily and showing the
-numbers on the dashboard, ticket `project-costs-daily`.
+numbers on the dashboard, ticket [[project-costs-daily]].

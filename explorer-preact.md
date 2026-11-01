@@ -7,7 +7,7 @@ pr: 7
 ---
 
 Done in the infra repo, where the dashboard lives since ticket
-`split-app-repo`. The paths below are infra's. The PR is
+[[split-app-repo]]. The paths below are infra's. The PR is
 StargazerBio/infra#7, on `refactor/explorer-preact`. The vendored files sit
 flat in `app/static/` rather than in `vendor/`, since the package data
 takes `static/*` only.

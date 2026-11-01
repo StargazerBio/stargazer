@@ -25,4 +25,4 @@ App pods only schedule on the `union-us-west-2-awsr7i2xlarge` pool (the m7a defa
 
 ## Outcome
 
-Shipped in infra PR #20 (the dashboard's CPU) and infra PR #26 (merge `73279f7`, the "Opening your workspace" page): a cold login after a quiet hour went from 97 s to ~73 s (60 s login app, 13 s dashboard), measured on the tenant as above. No review comments. Left: keeping the login app warm, now ticket `login-warm`.
+Shipped in infra PR #20 (the dashboard's CPU) and infra PR #26 (merge `73279f7`, the "Opening your workspace" page): a cold login after a quiet hour went from 97 s to ~73 s (60 s login app, 13 s dashboard), measured on the tenant as above. No review comments. Left: keeping the login app warm, now ticket [[login-warm]].

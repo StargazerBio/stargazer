@@ -19,4 +19,4 @@ rows, best-effort like the pod teardown. Verified by
 unit tier 336) and on the tenant as the test account: two deleted
 notebooks' stale failures cleared from `/launch/status` after a delete
 from the fixed dashboard. No comments on the PR. Left: a delete while the
-pod is being served (ticket `launch-delete-while-serving`).
+pod is being served (ticket [[launch-delete-while-serving]]).

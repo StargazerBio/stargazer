@@ -10,10 +10,10 @@ The dashboard gets a Settings section for the user's own preferences, and the
 workspace save interval is its first setting. Pods read the interval from
 `SG_SAVE_INTERVAL_SECONDS`, 5 s when unset, and nothing sets it: the
 per-deployment setting `STARGAZER_SAVE_INTERVAL_SECONDS` came out of ticket
-`save-whole-workspace` (PR #41) before merge, so that the setting lives here,
+[[save-whole-workspace]] (PR #41) before merge, so that the setting lives here,
 with the user.
 
-Blocked by `save-whole-workspace` because the pods' interval and the
+Blocked by [[save-whole-workspace]] because the pods' interval and the
 workspace store's layout land in that PR. Settings is for the user. The gear
 on a notebook tile stays as it is, for that notebook's resources.
 
@@ -53,7 +53,7 @@ and work since the last save is lost if the notebook stops unexpectedly.
 
 ## Related tickets
 
-- `assets-on-dashboard-home` reworks the dashboard's home page, so whichever
+- [[assets-on-dashboard-home]] reworks the dashboard's home page, so whichever
   lands second places Settings in the new layout.
 
 ## Outcome

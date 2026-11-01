@@ -38,7 +38,7 @@ assume it, but nothing in the user bucket is in its reach.
   user's role has to, since Union builds images from a task pod in the
   user's project.
 
-The interim mitigation is [alpha-notice](alpha-notice.md): the dashboard and the
+The interim mitigation is [[alpha-notice]]: the dashboard and the
 upload form tell users not to upload sensitive data.
 
 ## Current state
@@ -84,7 +84,7 @@ upload form tell users not to upload sensitive data.
 - `u-pryce` holds a `development` secret `UNION_API_KEY`, so its pods can
   launch child actions. Bucket name `stargazerbio-users` is free.
 
-**From `dsql-asset-index`** (measured 2026-10-20): task pods and app pods
+**From [[dsql-asset-index]]** (measured 2026-10-20): task pods and app pods
 (dashboard, notebooks) both run as their namespace's `default` service
 account, with the projected token at
 `/var/run/secrets/eks.amazonaws.com/serviceaccount/token`, and a role
@@ -178,7 +178,7 @@ changing the pod's default role moves all of them at once.
     `stargazer/` in Union's bucket lists 0 objects).
     Past runs' data in `metadata/v2/stargazerbio/u-pryce/` stays where it
     is.
-  - [x] [alpha-notice](alpha-notice.md): the notice's wording stays. Run
+  - [x] [[alpha-notice]]: the notice's wording stays. Run
     records are still readable by every pod, and infra's `app.md` now gives
     that as its reason.
 
@@ -452,7 +452,7 @@ flyte_probe run --follow -p flytesnacks -d development isolation_probe.py outsid
 
 `flyte_probe` adds boto3 with `uv run --with`, because `flyte run` imports
 the file locally and the venv's `flyte` script can't see `--with` packages
-(measured for `dsql-asset-index`). Through it, `--help` resolves `probe`'s
+(measured for [[dsql-asset-index]]). Through it, `--help` resolves `probe`'s
 `--subject` and `outsider`'s `--subject` and `--user_role_arn` (measured
 2026-10-28; nothing was run).
 
@@ -733,6 +733,6 @@ tier 343 and Postgres tier 19 in infra; the docs build clean. The old
 `stargazer-index-u-pryce` role and the old prefix are deleted. No comments
 on either PR.
 
-Left: run metadata (ticket `per-user-run-metadata`, waiting on Union), the
-shared image repository (ticket `shared-image-repository`), and the hang in
-`upgrade` (ticket `deploy-watch-timeout`).
+Left: run metadata (ticket [[per-user-run-metadata]], waiting on Union), the
+shared image repository (ticket [[shared-image-repository]]), and the hang in
+`upgrade` (ticket [[deploy-watch-timeout]]).

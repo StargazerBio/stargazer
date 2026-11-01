@@ -11,5 +11,5 @@ Since PR #98 the task images (`gatk_env`, `scrna_env`) sync with `--no-dev`, whi
 
 Shipped with the split (StargazerBio/infra#4): the dashboard image now builds
 from infra's own project with `extra_args="--no-dev"`. It deployed and served
-on the devbox and on Union (ticket `split-app-repo`'s evidence). The size
+on the devbox and on Union (ticket [[split-app-repo]]'s evidence). The size
 difference wasn't measured.

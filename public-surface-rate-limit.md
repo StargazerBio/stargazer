@@ -12,3 +12,5 @@ meters bandwidth, so heavy anonymous traffic costs gateway bandwidth rather
 than Pinata API calls. Nothing limits how often one client asks. Decide
 whether a per-client limit is worth adding before the dashboards are opened
 more widely.
+
+Related: [[post-refactor-sweep]].

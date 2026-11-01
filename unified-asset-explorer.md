@@ -14,8 +14,8 @@ Workflows, Tutorials and Public notebooks sections go, and their entries are
 found, filtered and opened from the explorer like any other asset.
 
 This is the first of three tickets on the explorer. Ticket
-`explorer-filter-defaults` gives it real filters and per-user defaults, and
-ticket `constellation-graph` redraws its graph.
+[[explorer-filter-defaults]] gives it real filters and per-user defaults, and
+ticket [[constellation-graph]] redraws its graph.
 
 ## Current State
 
@@ -24,7 +24,7 @@ ticket `constellation-graph` redraws its graph.
   and Run (`POST /launch` with `section`), and Copy to workspace on
   workflows. Tiles poll `/launch/status` to show "Open" and Stop once a pod
   runs.
-- Ticket `public-notebooks` (PR #90) adds a Public notebooks section with
+- Ticket [[public-notebooks]] (PR #90) adds a Public notebooks section with
   Copy to workspace, and makes the asset browser leave out `asset=notebook`.
 - The asset browser (`app/templates/_assets.html`, routes in
   `app/assets.py`) has Public and Private tabs, each a separate listing
@@ -99,7 +99,7 @@ Publish and Unpublish.
    use it.
 3. `dashboard.html`: the Workflows, Tutorials and Public notebooks sections
    go. `dashboard()` stops passing `tutorials` and `workflows`.
-4. Leaving out `asset=notebook` (from ticket `public-notebooks`) is
+4. Leaving out `asset=notebook` (from ticket [[public-notebooks]]) is
    reversed for the listing, and kept for the upload form's types.
 
 ### Phase 3: Docs and verification
@@ -134,14 +134,14 @@ Publish and Unpublish.
 1. **Shipped notebooks are listed, not stored.** They're projected from the
    image when the explorer lists them. Nothing writes them to an index or to
    Pinata, which keeps the 2026-10-17 decision that repo notebooks aren't
-   published (ticket `public-notebooks`) and leaves nothing to drift when
+   published (ticket [[public-notebooks]]) and leaves nothing to drift when
    the image changes. Their CID is real, from their bytes, so they are
    addressed like any asset.
 2. **Tutorial and workflow become a keyvalue, `category`.** The sections'
    difference survives as something the explorer can filter on.
 3. **The default sources are Mine and Stargazer.** The public tier is every
    user's shared records, so it's opt-in, as the Private tab was the default
-   before. Ticket `explorer-filter-defaults` lets a user change this.
+   before. Ticket [[explorer-filter-defaults]] lets a user change this.
 4. **One listing route.** The explorer asks for the sources it shows and
    gets one list, rather than the page stitching three routes together.
 
@@ -256,4 +256,4 @@ before 12 polls and 4 alerts, after 9 polls and 1 alert, measured).
 
 ## Outcome
 
-Shipped in PR #95 (merge `749614b`), rebased onto `main` after #90, #93 and #94 merged, with `9bb0a16` carrying the built-in name through the explorer. The dashboard is Workspace plus one asset explorer whose sources are Mine (the owner only), Public and Stargazer (the built-in notebooks as `asset=notebook` entries addressed by file CID); notebook cards launch, stop, copy and download like the tiles did. Verified by the unit tier (549 passed, new `TestSources` tests) and on Union with the test account's dashboard at `1f30d42` (the recipe above). Left: the SDK's tasks and workflows as explorer entries, ticket `explorer-sdk-entries` (`maybe`); filters and default sources, ticket `explorer-filter-defaults`; the graph redraw, ticket `constellation-graph`. No review comments.
+Shipped in PR #95 (merge `749614b`), rebased onto `main` after #90, #93 and #94 merged, with `9bb0a16` carrying the built-in name through the explorer. The dashboard is Workspace plus one asset explorer whose sources are Mine (the owner only), Public and Stargazer (the built-in notebooks as `asset=notebook` entries addressed by file CID); notebook cards launch, stop, copy and download like the tiles did. Verified by the unit tier (549 passed, new `TestSources` tests) and on Union with the test account's dashboard at `1f30d42` (the recipe above). Left: the SDK's tasks and workflows as explorer entries, ticket [[explorer-sdk-entries]] (`maybe`); filters and default sources, ticket [[explorer-filter-defaults]]; the graph redraw, ticket [[constellation-graph]]. No review comments.

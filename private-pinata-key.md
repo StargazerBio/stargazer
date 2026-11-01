@@ -8,7 +8,7 @@ created: 2026-10-18
 The org's Pinata key is shared by every user, and any user can read it:
 it's in every task pod, every dashboard and every notebook pod, and
 anyone who can run a task can declare the org-wide secret. Measured on
-2026-10-18 (ticket `notebook-pinata-key`): from a notebook with no key in
+2026-10-18 (ticket [[notebook-pinata-key]]): from a notebook with no key in
 its environment, a ten-line task declaring the secret got the full key.
 Whoever holds it can upload, edit metadata and delete any file on the org's
 public Pinata account, shared reference data included.
@@ -25,5 +25,5 @@ Keeping it private would mean only the dashboard holds it:
   org-wide today, so this needs Union to scope it, or a project-scoped
   secret only the dashboards' project can mount. Unchecked.
 
-Related: `org-wide-platform-key` (the platform key in every pod) and
-`per-user-storage-isolation` (one IAM role for every project).
+Related: [[org-wide-platform-key]] (the platform key in every pod) and
+[[per-user-storage-isolation]] (one IAM role for every project).

@@ -18,8 +18,8 @@ DSQL, and the dashboard drops out of the index path.
 Locally nothing changes: `SqliteIndex` and `~/.stargazer/index.db` stay. The
 devbox gets a plain Postgres pod. Local-to-cluster promotion stays out of
 scope. The work goes in three steps: the shared SQL index (ticket
-`postgres-index`), the devbox's Postgres pod (ticket
-`devbox-postgres-index`), then this ticket, Union.
+[[postgres-index]]), the devbox's Postgres pod (ticket
+[[devbox-postgres-index]]), then this ticket, Union.
 
 ## Why DSQL
 
@@ -91,7 +91,7 @@ This doesn't need that.
   client assumes the per-user role, using the same token file.
 - The shared role has never had DSQL access, so nothing has to be taken away
   from it. That's what makes this work without Union where storage
-  isolation doesn't (ticket `per-user-storage-isolation`).
+  isolation doesn't (ticket [[per-user-storage-isolation]]).
 
 ## Design
 
@@ -122,7 +122,7 @@ This doesn't need that.
   - The shared role can't log in as `u-pryce`'s database role.
   - Confirm `INSERT … ON CONFLICT` and `->>` filters behave as in SQLite.
   - Time the assume, token and connect steps a task pays per call.
-- [x] **DSQL on `PostgresIndex`** (ticket `postgres-index`): connecting with
+- [x] **DSQL on `PostgresIndex`** (ticket [[postgres-index]]): connecting with
   a token from the assumed per-user role, retrying serialization errors, and
   reconnecting when a connection times out. `make_index` accepts the DSQL
   URL form.
@@ -620,8 +620,8 @@ redeploying it (`onboard` re-runs and `upgrade`).
 
 ## Outcome
 
-Shipped in PR #77 (merge `ef05a1a`): `DsqlIndex` (a user's table on Aurora DSQL, logged in with their IAM role from their namespace), `PostgresIndex` retrying serialization failures, and dashboards deployed with `STARGAZER_DSQL_CLUSTER_ARN` indexing in their user's table. Onboarding moved to infra on the way (ticket `onboarding-to-infra`), where it makes each user's IAM role, table, login and grants; the cluster is in infra's OpenTofu (`aws/`).
+Shipped in PR #77 (merge `ef05a1a`): `DsqlIndex` (a user's table on Aurora DSQL, logged in with their IAM role from their namespace), `PostgresIndex` retrying serialization failures, and dashboards deployed with `STARGAZER_DSQL_CLUSTER_ARN` indexing in their user's table. Onboarding moved to infra on the way (ticket [[onboarding-to-infra]]), where it makes each user's IAM role, table, login and grants; the cluster is in infra's OpenTofu (`aws/`).
 
 Verified on the tenant: Piece 0 (the cluster's SQL, per-user isolation, `flytesnacks` refused), Piece 1 (every index call from a `u-pryce` task, ~30 ms a call), and end to end (onboarding the test account from infra, a dashboard upload listed from DSQL and found by a task). Unit tier 538, postgres tier 20, infra 24 plus 2 against Postgres. No comments on the PR.
 
-Left: migrating users' rows, switching every dashboard over, removing Litestream and the dashboard's index API, the docs, and the germline workflow on DSQL: ticket `dsql-switchover`.
+Left: migrating users' rows, switching every dashboard over, removing Litestream and the dashboard's index API, the docs, and the germline workflow on DSQL: ticket [[dsql-switchover]].

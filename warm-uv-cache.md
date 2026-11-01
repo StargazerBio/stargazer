@@ -5,7 +5,7 @@ priority: normal
 created: 2026-10-31
 ---
 
-Every notebook pod and every `docker run` of the Stargazer image downloads about 100 packages from PyPI before its first notebook's kernel starts. That's what `marimo --sandbox` is for: each notebook gets a venv built from its own PEP 723 header, so notebooks can need different things (`stargazer-bio` vs `stargazer-bio[bio]`) and the kernel stays out of the runtime venv. But nothing from those venvs is in the image. Both `uv` installs in `runtime/Dockerfile` run with `--no-cache` and as root, so the `flyte` user starts every container with an empty uv cache at `~/.cache/uv`. Ticket `notebook-pod-ephemeral-storage` measured 101 to 111 packages installed per notebook on a hosted pod.
+Every notebook pod and every `docker run` of the Stargazer image downloads about 100 packages from PyPI before its first notebook's kernel starts. That's what `marimo --sandbox` is for: each notebook gets a venv built from its own PEP 723 header, so notebooks can need different things (`stargazer-bio` vs `stargazer-bio[bio]`) and the kernel stays out of the runtime venv. But nothing from those venvs is in the image. Both `uv` installs in `runtime/Dockerfile` run with `--no-cache` and as root, so the `flyte` user starts every container with an empty uv cache at `~/.cache/uv`. Ticket [[notebook-pod-ephemeral-storage]] measured 101 to 111 packages installed per notebook on a hosted pod.
 
 Keep `--sandbox` and the per-notebook headers. Bake a warm uv cache into the image instead, so a kernel's venv is mostly a copy from local disk and only packages a user adds to a header come from PyPI.
 

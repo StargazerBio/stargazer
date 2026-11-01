@@ -46,4 +46,4 @@ the demo file anonymously in 1.8 s.
 
 Left: anonymous downloads now spend the account's gateway bandwidth. The
 README quickstart's `stargazer-chat` image keeps the old default until it's
-rebuilt: ticket `rebuild-chat-image`.
+rebuilt: ticket [[rebuild-chat-image]].

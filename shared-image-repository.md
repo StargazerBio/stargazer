@@ -10,7 +10,7 @@ Every project's images go to one ECR repository,
 user's pods can push to it: the shared `userflyterole` always could
 (Union's `imagebuilder` policy), and each user's role must, since Union's
 image builder runs as a task in the user's project (measured 2026-10-29,
-ticket `per-user-storage-isolation`). Image tags are content hashes, so one
+ticket [[per-user-storage-isolation]]). Image tags are content hashes, so one
 user could push a different image under a tag another user's tasks pull,
 and run their code as that user.
 

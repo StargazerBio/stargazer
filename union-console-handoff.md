@@ -40,3 +40,5 @@ Shipped in PR #66 (merge `1d55737`): the dashboard header links to its own proje
 Verified (measured): unit tier 519 passed, with the new tests failing first. On the test account's deployed dashboard, the link opened `u-pryce`'s runs in Development, signed in. The dashboard was deactivated afterwards, with nothing left running in `u-pryce` or `flytesnacks`.
 
 Left: the sign-in redirect on a deep link wasn't exercised, since the browser was already signed in. No new tickets.
+
+Related: [[onboarding-to-infra]].

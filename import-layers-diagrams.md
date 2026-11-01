@@ -25,7 +25,7 @@ committed.
 
 - [x] Nested `ruff.toml` bans, `TID251` enabled in `pyproject.toml`
 - [x] `pydeps` dependency, `[tool.pydeps]` defaults, `cli/diagrams.sh`, `diagrams/` gitignored
-- [x] No system Graphviz: pydeps writes dot, pygraphviz (wheels bundle Graphviz) renders; both in a `diagrams` group the script installs, not `dev`, which ships in images (ticket `slim-image-dev-deps`)
+- [x] No system Graphviz: pydeps writes dot, pygraphviz (wheels bundle Graphviz) renders; both in a `diagrams` group the script installs, not `dev`, which ships in images (ticket [[slim-image-dev-deps]])
 - [x] Docs: overview layering, contributing guide, `cli/README.md`, AGENTS.md
 
 ## Verification
@@ -61,4 +61,4 @@ every boundary, it changes nothing else in lint output, and existing code has
 no violations. Diagrams drew with no system Graphviz, and the unit tier passed
 (410) after the rebase onto `main`.
 
-Left: the root-module gap above, and ticket `slim-image-dev-deps`.
+Left: the root-module gap above, and ticket [[slim-image-dev-deps]].

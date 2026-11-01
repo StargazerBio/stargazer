@@ -9,7 +9,7 @@ Publishing an asset should publish its companions with it, so a reference
 goes public as the set of files tools need: the FASTA, its `.fai`, `.dict`
 and aligner index. Today `StorageClient.publish(cid)` (and MCP
 `publish_file`) puts one file on the public tier, and its companions stay
-private (ticket `publish-asset`: "Companions aren't published with it").
+private (ticket [[publish-asset]]: "Companions aren't published with it").
 A user who publishes a reference and forgets the indices hands everyone
 the FASTA alone, and every downstream `fetch()` gets no public companions
 to fill in with.
@@ -25,7 +25,7 @@ the asset graph and "collaboration without coordination".
   (`index.query({"companion_of": cid})`, newest per name, the same rows
   `companions()` takes first), each with its own keyvalues and `_owner`
   restamped. `fetch()` already takes public companions only from the
-  parent's publisher (ticket `public-companion-curation`), and the same
+  parent's publisher (ticket [[public-companion-curation]]), and the same
   caller publishes both, so they count.
 - Check every companion against Pinata's limits (9 keyvalues, 250
   characters) before sending anything, so a set doesn't go half public.

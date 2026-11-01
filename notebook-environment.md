@@ -88,7 +88,7 @@ gets `notebook_env`, which means the standard image and `DEFAULT_RESOURCES`.
 | `args`, `port` | dashboard | The launch script, the mode picked on the tile, the notebook's path, and the proxy's port. |
 | `requires_auth` | dashboard | Always `True`: the platform login is the pod's only access control. |
 | `domain` | dashboard | The notebook-named URL. |
-| the owner's env vars | dashboard | Owner, index URL, store root and org belong to whoever launches the notebook, not whoever wrote it. That decides it once public notebooks exist (ticket `public-notebooks`). |
+| the owner's env vars | dashboard | Owner, index URL, store root and org belong to whoever launches the notebook, not whoever wrote it. That decides it once public notebooks exist (ticket [[public-notebooks]]). |
 | `scaling` | dashboard for now | `(0, 1)` replicas, 30 minutes to scale down. A notebook could own `scaledown_after` later. |
 
 **Why an `AppEnvironment` and not a `TaskEnvironment`.** An earlier draft of
@@ -228,7 +228,7 @@ Shipped in PR #79 (merge `f978578`). A notebook declares its pod as `main_env`, 
 
 Verified on Union with the test account from `9801642`: a custom image with `bcftools` built and served, and the Edit pod's cgroup limits matching the declared 2 CPU and 4Gi. Unit tier 521 after the review commit. The rebased branch wasn't re-run on Union, per the user.
 
-Left: the race between a gear save and a running pod's save (ticket `gear-save-race`). Whether a notebook should own `scaledown_after` stays open until one needs it.
+Left: the race between a gear save and a running pod's save (ticket [[gear-save-race]]). Whether a notebook should own `scaledown_after` stays open until one needs it.
 
 ## Verification recipe: Notebook-declared environments on Union
 

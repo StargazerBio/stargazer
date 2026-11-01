@@ -13,13 +13,13 @@ asset is in the graph and list browser that the separate asset page has
 today, with upload, download and metadata edits. The separate `/assets` page
 and its link in the avatar menu go.
 
-Split out of `asset-manager-on-index` on 2026-10-18, which puts the Private
+Split out of [[asset-manager-on-index]] on 2026-10-18, which puts the Private
 tab on the user's own index and store first. It waits on that and on
-`save-whole-workspace` (PR #41), since all three change the dashboard's
+[[save-whole-workspace]] (PR #41), since all three change the dashboard's
 templates.
 
-Ticket `public-notebooks` makes a published notebook an asset. Whichever of
-this ticket and `public-notebooks` lands second makes the browser leave out
+Ticket [[public-notebooks]] makes a published notebook an asset. Whichever of
+this ticket and [[public-notebooks]] lands second makes the browser leave out
 `asset=notebook`, since notebooks have their own section.
 
 ## Pieces
@@ -28,7 +28,7 @@ this ticket and `public-notebooks` lands second makes the browser leave out
       sections: the Graph and List views, the detail card and the upload
       panel. The routes stay under `/assets/*`. The `/assets` page and its
       link in the avatar menu go.
-- [ ] (`public-notebooks` is still in backlog, so not yet.) If `public-notebooks` has landed, the browser leaves out
+- [ ] ([[public-notebooks]] is still in backlog, so not yet.) If [[public-notebooks]] has landed, the browser leaves out
       `asset=notebook` rows. Test it: a notebook row in the index → it isn't
       in the browser's listing.
 - [x] Docs: `docs/architecture/app.md` and
@@ -64,5 +64,5 @@ page and its avatar-menu link are gone, and the routes stay under
 browsing, a private upload, a metadata edit and a download whose SHA-256
 matched, with notebook tiles still launching. The unit tier passed. Left:
 leaving `asset=notebook` rows out of the browser moves to ticket
-`public-notebooks`. Review added the `AGENTS.md` rule that durable docs
+[[public-notebooks]]. Review added the `AGENTS.md` rule that durable docs
 describe the present, with no log of what changed.

@@ -64,7 +64,7 @@ user's own index holds none for its CID (`StorageClient.companions`).
   mixed from two builds. This is the bug that reproduced.
 
 A related case this decision doesn't change is ticket
-`stale-companion-cache`.
+[[stale-companion-cache]].
 
 ## Verification (on `fix/fetch-public-companions`)
 
@@ -87,9 +87,9 @@ PR #58 (`c30f6f5`, merged 2026-10-20). `fetch()` takes companions from
 `StorageClient.companions(cid)`: the user's own, or the public tier's only
 when the user has none. Verified as above. Left over:
 
-- Ticket `stale-companion-cache`: a cached public companion outlives the
+- Ticket [[stale-companion-cache]]: a cached public companion outlives the
   user storing their own with the same filename.
-- From the merge comment: ticket `public-companion-curation`, since a
+- From the merge comment: ticket [[public-companion-curation]], since a
   popular public asset can collect companions from many publishers; and
-  ticket `turn-off-public-assets`, a config that turns the public tier off
+  ticket [[turn-off-public-assets]], a config that turns the public tier off
   in the dashboard.

@@ -20,3 +20,5 @@ PR #64 (`1e95bd0`, merged 2026-10-21): `.claude/skills/butler/SKILL.md`,
 listed in `AGENTS.md`'s skill table. Its first run, right after the merge,
 was the test: it closed this ticket and answered #60's review feedback.
 Not done: a report-only check for apps and runs left up on the tenant.
+
+Related: [[butler-to-user-skills]], [[board]].

@@ -7,7 +7,7 @@ pr: 90
 ---
 
 A notebook in a user's workspace is a plain file (ticket
-`save-whole-workspace`). It becomes an asset when it's published (decided
+[[save-whole-workspace]]). It becomes an asset when it's published (decided
 2026-10-17). A Publish button on a workspace notebook's tile puts it on
 Pinata's public network as a `Notebook` asset, with its CID and keyvalues.
 The dashboard then lists public notebooks next to the user's own. Opening a
@@ -39,7 +39,7 @@ value limit is refused with the existing message, before anything is sent.
   owner's dashboard offers it, and the route refuses a record whose `_owner`
   isn't the user.
 - **The public switch applies.** With `STARGAZER_PUBLIC_ASSETS=off` (ticket
-  `turn-off-public-assets`), the dashboard hides Publish, Unpublish and the
+  [[turn-off-public-assets]]), the dashboard hides Publish, Unpublish and the
   public notebooks section, and their routes answer 503 like the other public
   routes.
 
@@ -55,7 +55,7 @@ as of 2026-10-21). Publish is for workspace notebooks only.
 ## Reading the public tier
 
 Hosted dashboards have the Pinata key as a secret (ticket
-`dashboard-pinata-key`, merged as #40), so they can read Pinata's public
+[[dashboard-pinata-key]], merged as #40), so they can read Pinata's public
 index. Union injects app secrets without putting the value in the app record
 (measured 2026-10-17).
 
@@ -64,7 +64,7 @@ index. Union injects app secrets without putting the value in the app record
 Once notebooks are stored as `asset=notebook` rows, the asset browser on the
 dashboard's home page leaves them out, since notebooks have their own
 sections there. Test it: a notebook row in the index isn't in the browser's
-listing. Carried over from ticket `assets-on-dashboard-home`.
+listing. Carried over from ticket [[assets-on-dashboard-home]].
 
 ## Plan
 
@@ -136,4 +136,4 @@ built-in browser pane signed in to the console as the test account.
 
 ## Outcome
 
-Shipped in PR #90 (merge `4f28d29`). A workspace notebook's tile publishes it to the public tier as an `asset=notebook` record with its title, description and slug, and republishes or unpublishes it; everyone's published notebooks are listed and can be copied into a workspace. Verified by the unit tier (509 passed, 16 new tests in `tests/unit/test_public_notebooks.py`) and on Union with the test account's dashboard at `b126036` (Verification above). Nothing deferred, no review comments. The Public notebooks section it added became the explorer's Public source in ticket `unified-asset-explorer`.
+Shipped in PR #90 (merge `4f28d29`). A workspace notebook's tile publishes it to the public tier as an `asset=notebook` record with its title, description and slug, and republishes or unpublishes it; everyone's published notebooks are listed and can be copied into a workspace. Verified by the unit tier (509 passed, 16 new tests in `tests/unit/test_public_notebooks.py`) and on Union with the test account's dashboard at `b126036` (Verification above). Nothing deferred, no review comments. The Public notebooks section it added became the explorer's Public source in ticket [[unified-asset-explorer]].

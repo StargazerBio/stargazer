@@ -10,7 +10,7 @@ pr: 43
 `_owner`. The CID doesn't change. A follow-up from [plan 27](archive/27_asset_storage_index.md).
 
 It's the step under every Publish button: on an asset (ticket
-`assets-on-dashboard-home`) and on a notebook (ticket `public-notebooks`).
+[[assets-on-dashboard-home]]) and on a notebook (ticket [[public-notebooks]]).
 This ticket is the SDK half and an MCP tool; the buttons come with those
 tickets.
 
@@ -59,7 +59,7 @@ Pinata. Branch `feat/publish-asset`, PR #43.
 Found along the way: hosted notebook pods hold no Pinata key (measured
 2026-10-17), so `publish` in a hosted notebook raises. It works in tasks, on
 the dashboard and locally with a key. The Publish buttons will run on the
-dashboard. Notebook pods get the key in ticket `notebook-pinata-key` (PR
+dashboard. Notebook pods get the key in ticket [[notebook-pinata-key]] (PR
 #44, decided 2026-10-18); their terminals still scrub it.
 
 ## Outcome
@@ -70,6 +70,6 @@ keyvalues, `_owner` restamped, and raises if Pinata's CID differs from
 ours. The MCP server exposes it as `publish_file`. Verified with the unit
 tier and against the real Pinata API (above).
 
-Left: the Publish buttons on the dashboard (ticket `assets-on-dashboard-home`)
-and publishing a notebook (ticket `public-notebooks`). Companions aren't
+Left: the Publish buttons on the dashboard (ticket [[assets-on-dashboard-home]])
+and publishing a notebook (ticket [[public-notebooks]]). Companions aren't
 published with their asset.

@@ -26,7 +26,7 @@ its samples by name but not to the exact BAMs or GVCFs. Two runs of the
 same sample against different references are told apart only by `build`.
 
 Opened from the docs revision that introduces the asset graph (ticket
-`asset-graph-docs`), which states the convention: an output records what
+[[asset-graph-docs]]), which states the convention: an output records what
 it was made from.
 
 ## Shape
