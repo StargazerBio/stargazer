@@ -19,7 +19,7 @@ One path from the client to the dashboard, and backends added behind it as
 they're needed. The store backend comes first; public uploads keep today's
 100 MB signed-URL path until the Pinata backend replaces it.
 
-Waits on ticket `assets-on-dashboard-home` (decided 2026-10-18): that moves
+Waits on ticket [[assets-on-dashboard-home]] (decided 2026-10-18): that moves
 the upload form onto the dashboard's home page, and this rewrites it, so
 this goes second.
 
@@ -28,16 +28,16 @@ this goes second.
 - **The asset page's upload is capped at 100 MB** (`MAX_UPLOAD_BYTES` in
   `app/assets.py`). The cap is Pinata's: today the browser uploads to Pinata
   through a signed URL, and that takes only Pinata's plain upload, which stops
-  at 100 MB. Ticket `asset-manager-on-index` moves private uploads to browser
+  at 100 MB. Ticket [[asset-manager-on-index]] moves private uploads to browser
   → dashboard → store, and keeps 100 MB to start, because the dashboard has
   512 Mi–1 Gi of memory and no declared disk.
 - **Pinata takes up to 10 GiB over TUS,** and signed upload URLs speak full
   TUS (measured 2026-06-10): creating an upload against a signed URL returns
   a signed, resumable upload URL, with the keyvalues, filename, network and
   size cap from minting inside the signature. Hosted dashboards can mint them
-  once they have the key (ticket `dashboard-pinata-key`).
+  once they have the key (ticket [[dashboard-pinata-key]]).
 - **The browser can't upload straight to the bucket.** It has no CORS rule
-  (measured 2026-10-07, in `asset-manager-on-index`, and again 2026-10-18).
+  (measured 2026-10-07, in [[asset-manager-on-index]], and again 2026-10-18).
   Going through the dashboard needs none.
 - **Direct to the bucket was considered and not taken** (2026-10-18): a CORS
   rule we'd add ourselves, part URLs the dashboard signs, and the CID worked
@@ -45,7 +45,7 @@ this goes second.
   for S3 stores. Everything through the dashboard is one client path, with
   the backends behind it.
 - **A big file already in a notebook's workspace doesn't need this.** The
-  pod uploads it itself (ticket `save-whole-workspace`).
+  pod uploads it itself (ticket [[save-whole-workspace]]).
 
 ## Design
 
@@ -107,7 +107,7 @@ this goes second.
       `StorageClient.upload` (`src/stargazer/utils/storage.py`), and every
       reader going through the row: `StorageClient.download` and `delete`,
       and the asset page's private download (ticket
-      `asset-manager-on-index`).
+      [[asset-manager-on-index]]).
 - [x] **Q2. Does the tenant bucket abort unfinished multipart uploads?**
       No (measured 2026-10-18 with the read-only AWS access):
   - The bucket's one lifecycle rule is `items_non_current_versions_expiration`:
@@ -166,7 +166,7 @@ this goes second.
 ## Pieces
 
 - [x] An incremental CID builder in `src/stargazer/utils/cid.py`: its own
-      ticket, `incremental-cid` (split out 2026-10-18).
+      ticket, [[incremental-cid]] (split out 2026-10-18).
 - [x] `StorageClient.upload` skips the transfer when the CID has a row
       whose `uri` exists. A test in `tests/utils/test_storage.py`: a row
       pointing at a file outside the CID path, then `upload` of the same
@@ -187,11 +187,11 @@ this goes second.
   - an upload idle past its timeout → aborted, and a `PATCH` to it → 404
 - [x] The upload form sends private uploads with `tus-js-client` to
       `/assets/tus`, and shows a 10 GB limit for them.
-- [x] The Pinata backend: split out as ticket `tus-public-uploads`.
+- [x] The Pinata backend: split out as ticket [[tus-public-uploads]].
 - [x] Docs: `docs/architecture/app.md` and
       `.opencode/reference/architecture/app_internals.md` (the upload path),
       and the upload limit in the user guides, in product terms.
-- [x] Verify on Union with the test account's dashboard (private; the public half is in `tus-public-uploads`):
+- [x] Verify on Union with the test account's dashboard (private; the public half is in [[tus-public-uploads]]):
   - upload a private file over 5 GB from the asset page, take the browser
     offline partway (devtools), bring it back, and see it resume
   - upload a public file over 100 MB, see its CID in the Public tab, then
@@ -217,4 +217,4 @@ Shipped in PR #72 (merge `f106f42`). Private uploads from the asset page go over
 
 Verified with tests written first (unit tier 527 passed, 536 after the rebase onto #73) and on Union with the test account in Chrome: 150 MB in about 8 s with the CID matching `compute_cid`; the same file again kept one row and one object; 1 GB reloaded at ~30% resumed on the same upload ID and finished with the matching CID; no unfinished multipart uploads afterwards; the dashboard used 269 Mi. Not driven: the offline wait (no network toggle in the extension). The probe files (1.15 GB, asset `tus_probe`) stay in the test account's store.
 
-Left: public uploads over TUS (ticket `tus-public-uploads`). The bucket's abort rule isn't in Union's Terraform, so a re-apply could drop it; accepted on 2026-10-26, to be dealt with if it happens. No comments on the PR.
+Left: public uploads over TUS (ticket [[tus-public-uploads]]). The bucket's abort rule isn't in Union's Terraform, so a re-apply could drop it; accepted on 2026-10-26, to be dealt with if it happens. No comments on the PR.

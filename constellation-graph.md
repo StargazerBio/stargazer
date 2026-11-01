@@ -13,7 +13,7 @@ scratch on each change. Redraw it as a constellation: assets are stars,
 provenance links are the lines between them, and the whole thing moves with
 real physics.
 
-Waits on ticket `explorer-filter-defaults`, whose filter state the graph
+Waits on ticket [[explorer-filter-defaults]], whose filter state the graph
 reacts to and whose type chips become its legend.
 
 ## Current State

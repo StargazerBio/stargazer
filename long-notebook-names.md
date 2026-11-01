@@ -49,7 +49,7 @@ the project) was wrong.
   Copy derives its slug from a shipped workflow's title, all of which fit.
 - [x] `/launch` returns the serve error when the app it would recover doesn't
   exist. It's a 422, not a 502: Cloudflare, in front of Union apps, swaps a
-  502's body for its own "Bad gateway" (ticket `app-502s-behind-cloudflare`).
+  502's body for its own "Bad gateway" (ticket [[app-502s-behind-cloudflare]]).
 - [x] Unit tests: create at 22 characters (accepted) and 23 (refused), and a
   launch whose deploy was refused.
 
@@ -83,4 +83,4 @@ instead of "still starting". Verified on Union before the rebase onto #53
 (above); the unit tier passed after it (500), and the tenant check wasn't
 repeated. Left: the create box still accepts 60 characters as you type, and
 a 502's body is still replaced by Cloudflare's (ticket
-`app-502s-behind-cloudflare`).
+[[app-502s-behind-cloudflare]]).

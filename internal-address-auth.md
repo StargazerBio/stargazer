@@ -48,7 +48,7 @@ project check never runs.
 - Notebook pods check in the proxy's `_TokenGate`, on every HTTP and
   websocket request.
 - `/index/*` stays open: tasks and notebooks call it with no token. It goes
-  away with ticket `dsql-asset-index`.
+  away with ticket [[dsql-asset-index]].
 
 ## Verified (2026-10-18, PR #51)
 
@@ -72,6 +72,6 @@ identity from Union's signed token alone, and admit the owner or a subject in
 `STARGAZER_ADMIN_SUBJECTS`. Verified on the tenant as above: forged headers
 from another project get 401, someone else's genuine token gets 403, and the
 owner and an admin get through. Left: `/index/*` is still open on the
-in-cluster address until ticket `dsql-asset-index` removes it, and code in any
+in-cluster address until ticket [[dsql-asset-index]] removes it, and code in any
 pod can still act in any project with the org key (ticket
-`org-wide-platform-key`).
+[[org-wide-platform-key]]).

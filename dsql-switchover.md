@@ -6,7 +6,7 @@ created: 2026-10-21
 pr: 78
 ---
 
-What ticket `dsql-asset-index` left after PR #77: the code to index on DSQL is in, and onboarding in infra makes each user's table, login and IAM role, but every user's dashboard still keeps its own SQLite index, because infra's `tenant.env` leaves `STARGAZER_DSQL_CLUSTER_ARN` commented out. Turning it on before their rows move would show every user an empty index.
+What ticket [[dsql-asset-index]] left after PR #77: the code to index on DSQL is in, and onboarding in infra makes each user's table, login and IAM role, but every user's dashboard still keeps its own SQLite index, because infra's `tenant.env` leaves `STARGAZER_DSQL_CLUSTER_ARN` commented out. Turning it on before their rows move would show every user an empty index.
 
 ## Pieces
 

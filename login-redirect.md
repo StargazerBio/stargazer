@@ -22,7 +22,7 @@ Union doesn't take custom domains, so the app itself can't be served from starga
 - [x] Login app in infra `app/login.py`, deployed by `upgrade` (`deploy_login`) into its own project `stargazer`. Onboarding gives every user the policy `stargazer-login` (viewer there), and `upgrade` gives it to existing users (infra PR #19)
 - [x] The lookup: neither an org-wide key nor a map. The visitor's own ID token, sent as `Bearer` to `ListProjects`, lists exactly the projects they can view (measured with a probe app in `u-pryce`), and the subject label picks theirs
 - [x] A signed-in user with no project gets a "No workspace yet" page (404)
-- [ ] Startup latency: moved to ticket `login-cold-start`
+- [ ] Startup latency: moved to ticket [[login-cold-start]]
 - [x] `stargazer.bio/login` forwarding to the app: `login/index.html` in `StargazerBio/stargazer.bio` (GitHub Pages, PR #1 there), which merges after infra PR #19 is deployed
 
 ## Verification (2026-10-30, from the branch at `bc917a3`)
@@ -40,4 +40,4 @@ As the test account in a fresh browser session: open `stargazer.bio/login`, sign
 
 Shipped in infra #19 (merged 2026-10-30) and stargazer.bio #1. `app/login.py` serves `login.apps.stargazerbio.us-west-2.unionai.cloud` from the project `stargazer`, finds the visitor's dashboard by listing their projects with their own ID token, and shows a no-workspace page (a template, from review) to a user without one. Onboarding gives every user `stargazer-login` (viewer on `stargazer`); `upgrade` deploys the app and gives existing users that access. Verified on the tenant from the branch: the test account landed on its dashboard with no second sign-in, a signed-out request went to Union's sign-in and back, and a user with no project got the no-workspace page.
 
-Left: the app runs once `stargazer-users upgrade` deploys it from `main`; the whole path from `stargazer.bio/login` runs once Namecheap's DNS points the bare domain at GitHub Pages. Cold start is ticket `login-cold-start`.
+Left: the app runs once `stargazer-users upgrade` deploys it from `main`; the whole path from `stargazer.bio/login` runs once Namecheap's DNS points the bare domain at GitHub Pages. Cold start is ticket [[login-cold-start]].

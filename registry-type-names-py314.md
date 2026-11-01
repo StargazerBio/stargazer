@@ -21,7 +21,7 @@ on who commits. The task images are built on a py3.14 base, so the MCP
 (inferred, not checked). Render unions the same way on both versions, and
 consider pinning the dev Python in `.python-version`.
 
-Found while working on ticket `qc-filter-organism-from-asset`.
+Found while working on ticket [[qc-filter-organism-from-asset]].
 
 ## Outcome
 

@@ -55,3 +55,5 @@ Shipped in StargazerBio/stargazer#105 (merge `10f98a8`), released in `v2026.10.3
 links the newest of the user's companions of one name, and skips a companion named like
 its asset. Verified in the unit tier (the reproducing test failed on `main`; 279 passed).
 Nothing left. The PR had no review comments.
+
+Related: [[fetch-public-companions]], [[data-aware-caching]].

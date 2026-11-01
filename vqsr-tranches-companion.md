@@ -31,3 +31,5 @@ branch both tasks succeeded (runs `rl7r5j2wnw92gmgdqmvj`,
 a second storage client sharing only the store and index, and failed before
 the fix. Left: VQSR runs only in INDEL mode on the fixtures, since Mills
 holds no SNPs, so SNP mode isn't tested.
+
+Related: [[gatk]].

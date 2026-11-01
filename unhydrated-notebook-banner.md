@@ -8,7 +8,7 @@ pr: 108
 
 A pod whose notebook isn't in `/workspace` after the hydrate opens it blank
 and never saves it (`SG_UNSAVED_NOTEBOOK`, from ticket
-`delete-running-notebook-resurrects`). That's right when the notebook was
+[[delete-running-notebook-resurrects]]). That's right when the notebook was
 deleted, since the pod is being torn down anyway. After a failed hydrate,
 though, the user sees a blank notebook, and what they type into it is lost
 without a word.

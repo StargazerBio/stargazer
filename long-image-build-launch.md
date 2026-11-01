@@ -94,7 +94,7 @@ On the dashboard, a workspace notebook whose `main_env` declares an image layer 
 
 ### Driving it
 
-Preconditions: as in ticket `notebook-environment`'s Union recipe (`.flyte/union.yaml` linked, `STARGAZER_TARGET=union`, infra's `tenant.env` exported for the deploy, the built-in browser signed in to the console as the test account).
+Preconditions: as in ticket [[notebook-environment]]'s Union recipe (`.flyte/union.yaml` linked, `STARGAZER_TARGET=union`, infra's `tenant.env` exported for the deploy, the built-in browser signed in to the console as the test account).
 
 - **Deploy.** `uv run --all-extras python .claude/skills/verify-stargazer/scripts/union_dashboard.py deploy` from the branch's worktree; it prints the dashboard URL.
 - **Notebook.** Create a workspace notebook from **Basic**, open its gear, and set `main_env`'s image to a layer no one has built, so the build is short and certainly new: `notebook_base.with_apt_packages("jq").with_env_vars({"SG_BUILD_PROBE": "<timestamp>"})`. Save.

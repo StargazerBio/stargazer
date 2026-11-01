@@ -9,7 +9,7 @@ pr: 59
 `test_discovery_finds_all_workflows` compares the registry to a hand-kept list
 of workflow names, so a workflow left out of `stargazer.workflows.__all__` is
 left out of the list too and the test still passes. That's how the scRNA tasks
-went unexported (ticket `export-scrna-tasks`), whose fix replaced the task test
+went unexported (ticket [[export-scrna-tasks]]), whose fix replaced the task test
 with a walk over the modules under `stargazer.tasks`.
 
 Do the same for workflows. The task walk should carry over unchanged. While

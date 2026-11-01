@@ -97,10 +97,10 @@ follows. Verified on local arm64 builds and in Chrome (rounds above).
 Left:
 
 - The published `:latest` still crashes on start until it's rebuilt and
-  pushed (ticket `republish-stargazer-image`).
+  pushed (ticket [[republish-stargazer-image]]).
 - `41c03a4`, staging the notebooks as `/opt/notebooks` without a wrapper
   folder, was committed after the branch was pushed and missed the merge. It
-  rides on `fix/org-wide-platform-key` (ticket `org-wide-platform-key`).
+  rides on `fix/org-wide-platform-key` (ticket [[org-wide-platform-key]]).
 - The amd64 build wasn't run.
 - marimo warns "Failed to add marimo to script metadata" on each notebook:
   the headers say `requires-python >=3.11`, stargazer needs 3.13.

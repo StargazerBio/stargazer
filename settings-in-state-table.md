@@ -8,7 +8,7 @@ pr: 101
 
 A user's dashboard settings, the save interval and the filter the asset explorer opens on, are one JSON object in the workspace store (`users/<subject>/settings.json`). Each route that changes one setting reads the whole object, changes its field and writes it all back (`save_settings`, `save_explorer_default`, `reset_explorer_default` in `app/admin_app.py`), so two saves at once from two tabs can undo each other.
 
-Once ticket `launch-build-state` gives each user a state table on their index, each setting is its own row there, written on its own.
+Once ticket [[launch-build-state]] gives each user a state table on their index, each setting is its own row there, written on its own.
 
 ## Plan
 
@@ -40,7 +40,7 @@ The save interval and the asset explorer's default filter are each kept on their
 
 ### Driving it
 
-Preconditions: the `verify-stargazer` Union tenant preconditions; the built-in browser pane signed in to the console as the test account. The test account's state table exists (made for ticket `launch-build-state`).
+Preconditions: the `verify-stargazer` Union tenant preconditions; the built-in browser pane signed in to the console as the test account. The test account's state table exists (made for ticket [[launch-build-state]]).
 
 - **Deploy.** With infra's `tenant.env` exported and `STARGAZER_TARGET=union`, `uv run --all-extras python .claude/skills/verify-stargazer/scripts/union_dashboard.py deploy`; open the printed URL from the console page with `location.href`. The footer shows the branch's commit.
 - **`st-fresh`.** On the page, `document.querySelector('#settings-modal input[name=save_interval_seconds]').value` is `"30"` and `EXPLORER_DEFAULT.sources` is `["mine","stargazer"]`.
@@ -66,5 +66,5 @@ Preconditions: the `verify-stargazer` Union tenant preconditions; the built-in b
 
 ## Outcome
 
-Shipped in PR #101 (merge `336601c`). Each dashboard setting is its own `settings:<name>` row in the owner's state table: a save writes its row alone, Reset deletes the filter's row, and a missing row reads as its default. The settings code is gone from the workspace store. Verified by the unit tier (575 passed). The new concurrent-save test failed before the change. On Union, the test account `u-pryce` at `755aaba` passed the recipe above. Saved settings weren't carried over, so every user starts on the defaults after the next `upgrade`, and the old `settings.json` objects stay in the bucket, unread. No review comments. Ticket `workspace-root-required` is unblocked.
+Shipped in PR #101 (merge `336601c`). Each dashboard setting is its own `settings:<name>` row in the owner's state table: a save writes its row alone, Reset deletes the filter's row, and a missing row reads as its default. The settings code is gone from the workspace store. Verified by the unit tier (575 passed). The new concurrent-save test failed before the change. On Union, the test account `u-pryce` at `755aaba` passed the recipe above. Saved settings weren't carried over, so every user starts on the defaults after the next `upgrade`, and the old `settings.json` objects stay in the bucket, unread. No review comments. Ticket [[workspace-root-required]] is unblocked.
 

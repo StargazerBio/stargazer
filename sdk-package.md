@@ -9,9 +9,9 @@ Make the SDK (`src/stargazer`: assets, tasks, workflows, utils, config, the
 MCP server) installable and usable on its own, from this repo, without the app
 tier and without a source checkout. Today the one `stargazer` distribution
 ships `app/` too, and the task images only build from a checkout. This is the
-groundwork for publishing (ticket `pypi-release`) and for notebook images
+groundwork for publishing (ticket [[pypi-release]]) and for notebook images
 that change base only when the SDK version does (see ticket
-`notebook-declared-image`, Deferred).
+[[notebook-declared-image]], Deferred).
 
 ## Shelved (2026-10-27)
 
@@ -64,7 +64,7 @@ a clean venv outside any checkout:
       the package for now, so the tutorials keep importing each other as
       `stargazer.notebooks.tutorials.*`. Moving the scRNA notebook to a
       top-level `notebooks/` folder and the seeds to `app/` is shelved (ticket
-      `top-level-notebooks`). Snapshots go (ticket `save-whole-workspace`).
+      `top-level-notebooks`). Snapshots go (ticket [[save-whole-workspace]]).
 - [x] **No published task images.** Decided 2026-10-27: Stargazer never
       publishes task images. Images build from their recipe when a run asks
       for them, and published ones would multiply per release. PR #92
@@ -87,7 +87,7 @@ a clean venv outside any checkout:
       pinned version) instead of copying `src/` and `app/` into `/stargazer`.
       The base then changes only when the SDK version or the pod
       infrastructure does, not on every commit. This also gives
-      `bit-for-bit-snapshots` an SDK version to record.
+      [[bit-for-bit-snapshots]] an SDK version to record.
 - [x] **Clean the seam.** Remove `app/`'s import of the private
       `stargazer.assets.asset._BASE_FIELDS`. Write the runtime contracts down
       in one architecture doc, since they become the SDK/app API: the asset
@@ -122,7 +122,7 @@ a clean venv outside any checkout:
 
 ## Outcome
 
-Delivered by ticket `split-app-repo` (StargazerBio/stargazer#102): the
+Delivered by ticket [[split-app-repo]] (StargazerBio/stargazer#102): the
 package is the SDK alone, `stargazer-bio`, with the app tier moved to infra
 and the runtime kept out of the package in `runtime/`. Publishing it is
-ticket `pypi-release`.
+ticket [[pypi-release]].

@@ -6,7 +6,7 @@ created: 2026-10-21
 pr: 70
 ---
 
-`ghcr.io/stargazerbio/stargazer:latest` is what the README and Getting Started `docker run`, and nothing publishes it: it's pushed by hand (ticket `republish-stargazer-image`). So it lags `main` after every change to the image. Measured 2026-10-21: both platforms were built 2026-10-20 ~19:37 UTC on Python 3.13.16, before #65 moved the `Dockerfile` to 3.14. #63 (the Assets landing page, `/workspace/AGENTS.md`, Claude Code 2.1.304) widens the gap once it merges.
+`ghcr.io/stargazerbio/stargazer:latest` is what the README and Getting Started `docker run`, and nothing publishes it: it's pushed by hand (ticket [[republish-stargazer-image]]). So it lags `main` after every change to the image. Measured 2026-10-21: both platforms were built 2026-10-20 ~19:37 UTC on Python 3.13.16, before #65 moved the `Dockerfile` to 3.14. #63 (the Assets landing page, `/workspace/AGENTS.md`, Claude Code 2.1.304) widens the gap once it merges.
 
 Don't rebuild on every merge. A GitHub Actions workflow on pushes to `main`, filtered by `paths:`, builds both platforms and pushes `:latest` only when the image's own files change, plus `workflow_dispatch` to republish by hand (for example, to pick up SDK or notebook changes, which the filter leaves out).
 
@@ -67,4 +67,4 @@ jobs:
 
 Shipped in PR #70 (merge `717dabe`): `.github/workflows/stargazer-image.yml` builds both platforms on pushes to `main` that touch the image's files, and on `workflow_dispatch`; the docs say so. Linted with `actionlint`.
 
-The first run, on the merge (run `39662998285`), built both platforms in 11m38s and failed at the push: `denied: permission_denied: write_package`. The package's Actions access was never granted (`gh api /orgs/StargazerBio/packages/container/stargazer` still reads `"repository": null`), and `:latest` is still the 2026-10-20 19:38 UTC build. That grant, the re-run and the image check are ticket `stargazer-image-actions-access`. No comments on the PR.
+The first run, on the merge (run `39662998285`), built both platforms in 11m38s and failed at the push: `denied: permission_denied: write_package`. The package's Actions access was never granted (`gh api /orgs/StargazerBio/packages/container/stargazer` still reads `"repository": null`), and `:latest` is still the 2026-10-20 19:38 UTC build. That grant, the re-run and the image check are ticket [[stargazer-image-actions-access]]. No comments on the PR.

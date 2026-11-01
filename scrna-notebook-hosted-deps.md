@@ -32,7 +32,7 @@ With **Run** on its default, **On this machine**, the scRNA notebook runs `prepr
 
 ### Driving it
 
-Preconditions: the `verify-stargazer` local-notebook block has run and the scRNA samples are seeded (recipe `normalize-counts-layer`'s seed script); uv is 0.7.21 or newer, which `marimo --sandbox` needs.
+Preconditions: the `verify-stargazer` local-notebook block has run and the scRNA samples are seeded (recipe [[normalize-counts-layer]]'s seed script); uv is 0.7.21 or newer, which `marimo --sandbox` needs.
 
 - **Sandbox export (`sandbox-deps`).** The header's source path points at `/stargazer`, so copy the notebook with it pointed at the checkout, then export in sandbox mode:
 

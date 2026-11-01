@@ -10,3 +10,5 @@ created: 2026-05-19
       opens one per run (seen 2026-10-14).
 - [ ] Stop flushing to stdout/err to keep context windows clean.
 - [ ] Env vars for log level and a bool to include actual tool-call output.
+
+Related: [[board]].

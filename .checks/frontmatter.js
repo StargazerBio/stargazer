@@ -1,7 +1,8 @@
 // Check each ticket's frontmatter: the required fields with known values, and
 // byte-identical after Obsidian's own parse and rewrite (yaml.stringify with
 // the options processFrontMatter passes), so a card drag changes only the
-// line it means to.
+// line it means to. And check its body links something in the vault's graph:
+// a ticket it depends on or came from, a wiki page, or [[board]].
 const fs = require("fs");
 const path = require("path");
 const YAML = require("yaml");
@@ -30,6 +31,8 @@ for (const file of process.argv.slice(2)) {
   if (!STATUSES.includes(fm.status)) problems.push(`${file}: status must be one of ${STATUSES.join(", ")}`);
   if (!PRIORITIES.includes(fm.priority)) problems.push(`${file}: priority must be one of ${PRIORITIES.join(", ")}`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fm.created)) problems.push(`${file}: created must be YYYY-MM-DD`);
+  const body = text.slice(m[0].length).replace(/^```[\s\S]*?^```/gm, "").replace(/`[^`\n]*`/g, "");
+  if (!/\[\[[^\]]+\]\]/.test(body)) problems.push(`${file}: links nothing: link a related ticket, a wiki page, or [[board]]`);
   for (const slug of fm.blocked_by ?? []) {
     if (!fs.existsSync(path.join(path.dirname(file), `${slug}.md`))) problems.push(`${file}: blocked_by names no ticket ${slug}`);
   }

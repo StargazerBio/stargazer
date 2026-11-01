@@ -8,7 +8,7 @@ pr: 41
 
 Each user has one workspace, a folder, and every file in it is saved, with
 notebooks treated like any other file. Snapshots go. A notebook becomes an
-asset only when it's published (ticket `public-notebooks`). To the user, the
+asset only when it's published (ticket [[public-notebooks]]). To the user, the
 workspace looks as it does now. Workflows and tasks belong in the SDK, and
 ideas from notebooks, popular ones especially, move into it by hand in the
 repo, as they come up.
@@ -21,7 +21,7 @@ freeze, copy to workspace, published versus own snapshots, and a run-only
 mode. Most of that is promotion machinery, and it goes. A notebook is either
 a file in someone's workspace or, once published, an asset like any other.
 Keeping work in progress out of the asset system means no new CID and index
-row on every save. It's the same split as ticket `sdk-package`: notebooks and
+row on every save. It's the same split as ticket [[sdk-package]]: notebooks and
 the app on one side, tasks and workflows in the SDK on the other.
 
 ## Decided
@@ -32,9 +32,9 @@ the app on one side, tasks and workflows in the SDK on the other.
 - **No migration.** There are no real users yet. The old `snapshots/` prefix
   stays in the bucket, and nothing reads it.
 - **Image and resources stay in the notebook.** This ticket leaves both as
-  they are. Making them one declaration is ticket `notebook-environment`.
+  they are. Making them one declaration is ticket [[notebook-environment]].
 - **The tutorials and the scRNA notebook leave the SDK and become public
-  notebooks**, in ticket `public-notebooks`, which also removes the Tutorials
+  notebooks**, in ticket [[public-notebooks]], which also removes the Tutorials
   and Workflows sections. Until then they ship as they do now. (Changed
   2026-10-17, below.)
 - **Promotion happens outside the dashboard.** Ideas move from notebooks into
@@ -60,7 +60,7 @@ the app on one side, tasks and workflows in the SDK on the other.
 2026-10-18:
 
 - **The deployment setting comes out before merge.** The interval becomes a
-  per-user setting on the dashboard (ticket `dashboard-settings`), so
+  per-user setting on the dashboard (ticket [[dashboard-settings]]), so
   `STARGAZER_SAVE_INTERVAL_SECONDS` isn't shipped only to be removed. Pods
   still read `SG_SAVE_INTERVAL_SECONDS`, 5 s when unset, and nothing sets it
   until then.
@@ -77,7 +77,7 @@ from there. Neither result has been checked in a pod.
   in `/snapshots` don't appear at the top level.
 - **Another notebook in the folder opens and runs in the same server.** A
   session for `beta.py`, opened in a server launched on `alpha.py`, came up
-  with beta's source. Ticket `notebook-environment` decides what to do about
+  with beta's source. Ticket [[notebook-environment]] decides what to do about
   it.
 
 ## Design
@@ -139,7 +139,7 @@ its path under `/workspace`. `/snapshots` goes.
 **When it saves.** On an interval, and once more at scale-down. The interval
 is `SG_SAVE_INTERVAL_SECONDS` on the pod, 5 s when unset, as now, and 0
 turns the interval off, so the pod saves only at scale-down. Nothing sets it
-in this ticket (decided 2026-10-18); ticket `dashboard-settings` sets it per
+in this ticket (decided 2026-10-18); ticket [[dashboard-settings]] sets it per
 user. A pass writes only the files that
 changed.
 
@@ -299,7 +299,7 @@ Rechecked at `d83b9b0`, after the deploy setting came out, deployed with
 `SG_SAVE_INTERVAL_SECONDS`, saved files within 10 s, skipped `.env`,
 `__marimo__/` and a 150 MB file, restored everything at its path after Stop
 and a relaunch, and passed deletes to the store within 10 s. A long probe
-name never launched, a separate bug (ticket `long-notebook-names`).
+name never launched, a separate bug (ticket [[long-notebook-names]]).
 
 ## Open questions
 
@@ -309,25 +309,25 @@ name never launched, a separate bug (ticket `long-notebook-names`).
       since the last pass, so the longer the interval, the more the first
       piece's proof of the scale-down save matters. On 2026-10-18 the
       setting moved from the deployment to the user (ticket
-      `dashboard-settings`).
+      [[dashboard-settings]]).
 
 ## Related tickets
 
-- `public-notebooks`: Publish, which turns a workspace notebook into an asset,
+- [[public-notebooks]]: Publish, which turns a workspace notebook into an asset,
   and the public listing.
 - `top-level-notebooks`: the scRNA notebook moves to a top-level `notebooks/`
   folder, and the seeds to `app/`.
-- `asset-manager-on-index` and `assets-on-dashboard-home`: the dashboard as
+- [[asset-manager-on-index]] and [[assets-on-dashboard-home]]: the dashboard as
   asset explorer and notebook launcher.
-- `tus-browser-uploads`: uploads from the user's machine up to 10 GB, through
+- [[tus-browser-uploads]]: uploads from the user's machine up to 10 GB, through
   the dashboard. Not needed for files already in the workspace.
-- `notebook-environment`: notebooks declare their own app environment.
-- `dashboard-settings`: the save interval moves from
+- [[notebook-environment]]: notebooks declare their own app environment.
+- [[dashboard-settings]]: the save interval moves from
   `STARGAZER_SAVE_INTERVAL_SECONDS` to a per-user setting in a new Settings
   section on the dashboard.
-- `bit-for-bit-snapshots`: superseded. Close it as `done`, with an Outcome
+- [[bit-for-bit-snapshots]]: superseded. Close it as `done`, with an Outcome
   saying so, when this ticket merges.
-- `sdk-package`: its step "Decide where the notebooks live" is settled. User
+- [[sdk-package]]: its step "Decide where the notebooks live" is settled. User
   notebooks live in the workspace, the tutorials stay in the package, and the
   scRNA notebook moves to `notebooks/`.
 - `promote-task-cli`: unchanged.
@@ -341,7 +341,7 @@ A file deleted in the pod is deleted from the store, but only if that pod
 had it. A banner in the notebook names each file too big to save, with the
 cell that stores it as an asset. Pods save every 5 s and at SIGTERM. The
 proxy reads `SG_SAVE_INTERVAL_SECONDS`, which nothing sets until ticket
-`dashboard-settings`. Snapshots are gone, routes now 404, and the store
+[[dashboard-settings]]. Snapshots are gone, routes now 404, and the store
 prefix moved from `notebooks/` to `workspace/`, with no migration.
 
 Verified: the unit tier (456), and on Union with the test account: the save
@@ -351,7 +351,7 @@ section. The pods' grace period was measured afterwards: 300 s, with about
 30 s of Knative drain first (under What's known).
 
 Left: `assemble()` from a task pod on a banner-stored asset wasn't run. The
-save at SIGTERM can be rechecked on its own once `dashboard-settings` can set
+save at SIGTERM can be rechecked on its own once [[dashboard-settings]] can set
 the interval to 0. A long notebook name never launches (ticket
-`long-notebook-names`). The verify feature file and its driver were dropped
+[[long-notebook-names]]). The verify feature file and its driver were dropped
 in review; the unit tests cover what they drove.

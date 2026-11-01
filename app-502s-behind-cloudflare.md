@@ -46,7 +46,7 @@ Send these as a status Cloudflare passes through. 500 is the natural one
 for "the store or control plane failed", but whether Cloudflare passes a 500's
 body through is unmeasured: check it on the tenant first, and fall back to
 503 if it doesn't. `/launch`'s refused deploy already went to 422 (ticket
-`long-notebook-names`).
+[[long-notebook-names]]).
 
 ## Verification (2026-10-20, PR #57)
 

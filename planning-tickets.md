@@ -22,3 +22,5 @@ an inline list and a dangling `blocked_by`; the first lifecycle edit (these two 
 `review`) went through it.
 
 Left: the board hasn't been opened in Obsidian yet, so a real card drag is unchecked.
+
+Related: [[board]], [[worktree-workflow]], [[agent-wiki]].

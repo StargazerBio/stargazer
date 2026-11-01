@@ -17,3 +17,5 @@ For the store check, run it twice on spare ports with both `proxy.py` (over `/us
 ## Outcome
 
 Shipped in PR #116 (merge `1a2af3c`). The save banner polls `/__sg__/save-status` every 30 s instead of 10, and the proxy leaves it out of the page when the pod has no store (a local `docker run`); the agent redirect is still added everywhere. Verified with the recipe above: polls at 30 s intervals with the tab visible, no banner and no polls without a store, the banner with one, and a proxy test that failed before the change. Left: marimo's own `/api/usage` resource-meter poll still logs every 10 s; it's marimo's, so no ticket. No review comments.
+
+Related: [[unhydrated-notebook-banner]], [[quickstart-save-banner]].

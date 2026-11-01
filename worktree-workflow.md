@@ -20,3 +20,5 @@ ignore now matches a worktree's symlink, which had shown as untracked.
 
 Verified: a worktree made with the documented command read the linked `.flyte/config.yaml`, and
 a read-only pinata test passed through the linked secrets.
+
+Related: [[planning-tickets]].

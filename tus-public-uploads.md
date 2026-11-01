@@ -6,7 +6,7 @@ created: 2026-10-21
 pr: 80
 ---
 
-The Pinata half of ticket `tus-browser-uploads`, split out when its store
+The Pinata half of ticket [[tus-browser-uploads]], split out when its store
 half went to review as PR #72. Public uploads from the asset page still use a
 Pinata signed URL, capped at 100 MB.
 

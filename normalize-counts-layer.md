@@ -90,3 +90,5 @@ Steps:
 - `scrna-fetch` hits public IPFS gateways, which rate-limit with HTTP `429` after a few full downloads. Drive it at most once per run, and only when the change touches fetching.
 - With a real `PINATA_JWT` in the environment, `assemble()` also searches Pinata's public index, so a drive can pick up public records that aren't part of the run.
 - `init_flyte()` in the first cell reads `.flyte/config.yaml` but does not need the devbox. Tasks called directly from cells run in-process.
+
+Related: [[scrna-demo-organism]].

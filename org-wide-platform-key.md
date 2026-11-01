@@ -17,7 +17,7 @@ with no ETA yet. Meanwhile we're testing the interim route ourselves:
 delete the org key and hand each user's pods a key scoped to their
 project.
 
-It also limits the per-user index isolation in ticket `dsql-asset-index`:
+It also limits the per-user index isolation in ticket [[dsql-asset-index]]:
 a pod can start a run in another user's project, and that run's pods carry
 that project's service-account token, which is what the user's index role
 trusts.
@@ -44,7 +44,7 @@ the dashboard's login gate.
   calls as it: `User.get()` returns `393067446845621194`.
 - Notebook pods carry it too, as `_UNION_EAGER_API_KEY` in the marimo
   process's env, so a notebook cell can read it (measured 2026-10-18 in
-  `nb-key-probe-edit`, ticket `notebook-pinata-key`). The terminal's env
+  `nb-key-probe-edit`, ticket [[notebook-pinata-key]]). The terminal's env
   scrub drops it by its `_KEY` suffix; that's tidiness, not a boundary.
 - The dashboard launches notebooks as this key. `creator` is application
   `393067446845621194` on all five `nb-*` apps in `u-pryce`. The dashboard
@@ -90,13 +90,13 @@ below). Parked until the user confirms Union has turned the org key off.
 
 The branch holds the per-project key code, unpushed in its worktree, last
 rebased onto `main` at `2b96e0e` on 2026-10-20 (unit tier 508 passed); it
-needs rebasing onto today's `main` before its PR. It also carries a rider from ticket `quickstart-save-banner`, which
+needs rebasing onto today's `main` before its PR. It also carries a rider from ticket [[quickstart-save-banner]], which
 its PR lists under its own heading: "Stage the image's notebooks as
 /opt/notebooks and copy the folder itself" (`Dockerfile` only; the image's
 `/workspace/notebooks/` comes out the same, verified on its original
 commit `41c03a4`). It's harmless while the org secret exists, since that one wins.
 Its `app/onboard.py` changes predate onboarding's move to infra (ticket
-`onboarding-to-infra`): when it's unparked, the key creation goes into infra's
+[[onboarding-to-infra]]): when it's unparked, the key creation goes into infra's
 `stargazer_users/onboard.py`, and only what's left of the branch stays in
 stargazer.
 
@@ -274,5 +274,5 @@ Union: `onboard` for a new user and `offboard`, which create and archive
 projects that can't be deleted.
 
 Left: deleting the org key and the injection era's other keys and secrets
-(ticket `retire-org-key`), and `pause` / `resume` (ticket
-`pause-resume-users`).
+(ticket [[retire-org-key]]), and `pause` / `resume` (ticket
+[[pause-resume-users]]).

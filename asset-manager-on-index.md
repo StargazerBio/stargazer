@@ -11,7 +11,7 @@ Afterwards it lists, uploads, downloads and edits the same assets the user's
 tasks write, on every dashboard. This is the first step of making the
 dashboard an asset explorer and notebook launcher (decided 2026-10-16); the
 second, moving the browser onto the dashboard's home page, is ticket
-`assets-on-dashboard-home`.
+[[assets-on-dashboard-home]].
 
 Point the asset-manager page at the user's index instead of Pinata. A follow-up from [plan 27](archive/27_asset_storage_index.md),
 which moved task outputs onto the object store and the asset index into each user's dashboard.
@@ -24,8 +24,8 @@ and it works on hosted dashboards, which carry no Pinata key.
 **A bucket per user is out of scope** (decided 2026-10-08). Every user's data
 lives under `users/<subject>/` in the shared tenant bucket, and the dashboard
 and upload form tell users not to upload sensitive data
-([alpha-notice](alpha-notice.md)). Hardening that is
-[per-user-storage-isolation](per-user-storage-isolation.md).
+([[alpha-notice]]). Hardening that is
+[[per-user-storage-isolation]].
 
 ## Why
 
@@ -49,7 +49,7 @@ and upload form tell users not to upload sensitive data
 | Private upload | Browser → Pinata through a signed URL, 100 MB cap | Browser → dashboard → the user's store |
 | Private download | Pinata signed URL | A presigned store URL, or the file itself when run locally |
 | Metadata edits | Pinata | The index (`merge`) |
-| Private tab | None: the page is public-only (ticket `dashboard-pinata-key`) | On, on every dashboard |
+| Private tab | None: the page is public-only (ticket [[dashboard-pinata-key]]) | On, on every dashboard |
 | Pinata's private network | Used by the Private tab | Unused; `PinataClient` loses `network` |
 
 ## Verified (2026-10-07)
@@ -73,7 +73,7 @@ Measured unless marked otherwise.
 - [ ] **Q1. Upload size through the dashboard.** Uploads stream to the pod's
       ephemeral disk. Start at the current 100 MB cap and confirm the pod's
       ephemeral-storage limit before raising it. Ticket
-      `tus-browser-uploads` takes private uploads past 100 MB, up to 10 GB,
+      [[tus-browser-uploads]] takes private uploads past 100 MB, up to 10 GB,
       without the disk.
 
 ## The Private tab on the index and store
@@ -150,7 +150,7 @@ Branch `feat/asset-manager-on-index`.
 ## Follow-ups (not in this ticket)
 
 - Private uploads up to 10 GB, resumable, passed through the dashboard to
-  the store in chunks: ticket `tus-browser-uploads`. It replaces the earlier
+  the store in chunks: ticket [[tus-browser-uploads]]. It replaces the earlier
   idea of a presigned `PUT` straight from the browser, which needed a CORS
   rule on the bucket.
 
@@ -171,5 +171,5 @@ Chrome. A task pod found the uploaded file through `assemble()`. Pinata tier
 12 of 12.
 
 Left: private uploads stay capped at 100 MB until ticket
-`tus-browser-uploads` (Q1 here). The dashboard's home page as an asset
-explorer is ticket `assets-on-dashboard-home`.
+[[tus-browser-uploads]] (Q1 here). The dashboard's home page as an asset
+explorer is ticket [[assets-on-dashboard-home]].

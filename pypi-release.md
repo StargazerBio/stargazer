@@ -6,7 +6,7 @@ created: 2026-05-20
 pr: 5
 ---
 
-Cut Stargazer's first release. The split (ticket `split-app-repo`) made the
+Cut Stargazer's first release. The split (ticket [[split-app-repo]]) made the
 package `stargazer-bio`, calendar-versioned, and added
 `.github/workflows/release.yml`: a `v<version>` tag that matches
 `pyproject.toml` publishes the package to PyPI by trusted publishing (GitHub

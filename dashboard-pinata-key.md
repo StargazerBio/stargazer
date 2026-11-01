@@ -52,7 +52,7 @@ Branch `feat/dashboard-pinata-key`.
       keep nothing private between users. The Private tab and the network
       choice in the upload form go, and every route answers a network other
       than public with a 400. Private assets come back on the user's own
-      store in `asset-manager-on-index`, which also drops the client's
+      store in [[asset-manager-on-index]], which also drops the client's
       `network` parameter. Tests in `tests/unit/test_assets_routes.py`:
       private list, sign, update and download → 400 with nothing sent to
       Pinata; signing defaults to public; the signed-in page has the upload
@@ -90,11 +90,11 @@ secrets, so the asset routes 503.
 
 ## Related tickets
 
-- `public-notebooks`: reading the public tier on hosted dashboards was its
+- [[public-notebooks]]: reading the public tier on hosted dashboards was its
   open problem. This solves it.
-- `asset-manager-on-index`: the Public tab works on hosted dashboards.
-- `tus-browser-uploads`: public uploads go through the dashboard too.
-- `publish-asset`: Publish can run on the dashboard.
+- [[asset-manager-on-index]]: the Public tab works on hosted dashboards.
+- [[tus-browser-uploads]]: public uploads go through the dashboard too.
+- [[publish-asset]]: Publish can run on the dashboard.
 
 ## Outcome
 
@@ -107,4 +107,4 @@ the owner's code was justified: its one secret is the org key the owner can
 already read from any task. Verified on the test account's dashboard (above).
 
 Left: `PinataClient`'s unused `network` parameter and `_get_signed_url`, and
-a Private tab on the user's own store, both in `asset-manager-on-index`.
+a Private tab on the user's own store, both in [[asset-manager-on-index]].

@@ -16,3 +16,5 @@ A running list of rough edges found while using Stargazer the way a user would: 
 ## Docs
 - switch Architecture and Guides in the nav
 - 
+
+Related: [[board]].

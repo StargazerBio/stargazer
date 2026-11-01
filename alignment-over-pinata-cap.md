@@ -23,7 +23,7 @@ That `Alignment` is 9 keys before `_owner` is counted from the registry. On
 - `PinataClient.upload()` with `STARGAZER_OWNER` set: `400 Bad Request`, the
   body (Pinata's "maximum of 9 key values") dropped by `raise_for_status()`.
 
-Once ticket `open-asset-keyvalues` merges, both paths raise first with "Public
+Once ticket [[open-asset-keyvalues]] merges, both paths raise first with "Public
 assets can carry at most 9 metadata fields, counting the asset type and owner;
 this one has 10." The message is clearer, but the upload still can't happen.
 

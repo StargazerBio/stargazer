@@ -191,7 +191,7 @@ image is found org-wide, so a declaration builds once per release for
 everyone. The verify-stargazer map has the recipe (`union-main-img`).
 
 Left: a declared image rebuilds once per release because the notebook image
-bakes `src/` and `app/` (ticket `sdk-package` covers moving the notebook
+bakes `src/` and `app/` (ticket [[sdk-package]] covers moving the notebook
 image onto a released SDK); a long bioconda build against the dashboard's
 request timeout is unmeasured; snapshot image pinning, `main_img` for tasks
 defined in the notebook, and `main_resources` remain open.

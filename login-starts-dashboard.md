@@ -37,3 +37,5 @@ All on the tenant, as the test account, through a `login-test` copy that has sin
 Shipped in StargazerBio/infra#28 (merged 2026-10-31). The login app reads the visitor's dashboard record with their `flyte_*` session cookies and starts a stopped dashboard, waiting on a starting page. For a paused user it shows a "Workspace paused" page with pryce@stargazer.bio. It was verified on the tenant through a `login-test` copy (above).
 
 Left: the live login app runs this only once it's redeployed from `main` (`deploy_login`, or a bare `stargazer-users upgrade`). A bookmarked dashboard address still gets Union's 404.
+
+Related: [[launch-wait-route]], [[login-redirect]], [[flyte-apps]].
