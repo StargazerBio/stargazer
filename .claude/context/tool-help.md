@@ -1,7 +1,7 @@
 ---
 sources:
-  - .claude/wiki/raw/tool-help/generate_help_docs.sh
-  - .claude/wiki/raw/tool-help/commands.example.txt
+  - .claude/context/raw/tool-help/generate_help_docs.sh
+  - .claude/context/raw/tool-help/commands.example.txt
   - src/stargazer/config.py
 ---
 

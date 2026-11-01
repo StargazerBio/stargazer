@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-Lint the agent wiki in `.claude/wiki/`, the mechanical half of the `wiki` skill's lint.
+Lint the agent wiki in `.claude/context/`, the mechanical half of the `wiki` skill's lint.
 
 Checks that every [[wikilink]] (and its #heading) resolves the way Obsidian
 would resolve it, every page is in index.md, every raw source is cited by some
 page, every code path a page lists in `sources` exists, no two files share a
-name, and no page has the `status` property the ticket board groups on.
-Raw sources are captured verbatim, so their own links aren't checked.
+name (the tickets in `planning/` included, since they share the vault), and
+no page has the `status` property the ticket board groups on. Raw sources are
+captured verbatim, so their own links aren't checked, and tickets aren't
+pages, so only their names are.
 
 It also warns, without failing, about pages that may have gone stale: a page
 whose `sources` name a file this branch changes (against its merge base with
@@ -62,16 +64,20 @@ def _sources(frontmatter: str) -> list[str]:
 def lint(wiki: Path, repo: Path) -> list[str]:
     """Return the wiki's problems, one line each."""
     problems = []
-    files = sorted(wiki.rglob("*.md"), key=lambda p: str(p.relative_to(wiki)))
-    by_name: dict[str, Path] = {}
-    for path in files:
-        if path.stem in by_name:
+    every = sorted(wiki.rglob("*.md"), key=lambda p: str(p.relative_to(wiki)))
+    seen: dict[str, Path] = {}
+    for path in every:
+        if path.stem in seen:
             problems.append(
                 f"{path.relative_to(wiki)}: shares its name with "
-                f"{by_name[path.stem].relative_to(wiki)}"
+                f"{seen[path.stem].relative_to(wiki)}"
             )
         else:
-            by_name[path.stem] = path
+            seen[path.stem] = path
+    # The tickets share the vault, so their names must be unique too, but
+    # they're the planning branch's, and a page never links one.
+    files = [p for p in every if p.relative_to(wiki).parts[0] != "planning"]
+    by_name = {p.stem: p for p in reversed(files)}
 
     linked: set[str] = set()
     for path in files:
@@ -156,7 +162,7 @@ def _changed(repo: Path) -> set[str] | None:
 def main() -> int:
     """Lint the repo's wiki, print its problems, and warn of stale pages."""
     repo = Path(__file__).resolve().parents[1]
-    wiki = repo / ".claude" / "wiki"
+    wiki = repo / ".claude" / "context"
     problems = lint(wiki, repo)
     for problem in problems:
         print(problem)

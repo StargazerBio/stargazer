@@ -132,3 +132,16 @@ def test_directory_source_covers_the_files_in_it(wiki):
 
 def test_unrelated_change_makes_nothing_stale(wiki):
     assert stale(wiki, wiki.parent, {"README.md"}) == []
+
+
+def test_tickets_in_planning_are_not_pages(wiki):
+    (wiki / "planning" / "archive").mkdir(parents=True)
+    _write(wiki / "planning", "a-ticket.md", "---\nstatus: next\n---\n\n[[nowhere]]\n")
+    _write(wiki / "planning" / "archive", "old.md", "# Old\n")
+    assert lint(wiki, wiki.parent) == []
+
+
+def test_ticket_sharing_a_page_name(wiki):
+    (wiki / "planning").mkdir()
+    _write(wiki / "planning", "page.md", "---\nstatus: next\n---\n")
+    assert lint(wiki, wiki.parent) == ["planning/page.md: shares its name with page.md"]

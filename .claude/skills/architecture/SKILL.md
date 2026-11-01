@@ -22,7 +22,7 @@ Design a feature as a ticket, and keep the architecture docs in sync with the co
 
 ## Tickets
 
-A feature's plan is the body of its ticket, `$MAIN/planning/<slug>.md` on the `planning` branch, and describes HOW to implement it. The frontmatter, lifecycle and committing conventions are in AGENTS.md → `planning/`.
+A feature's plan is the body of its ticket, `$MAIN/.claude/context/planning/<slug>.md` on the `planning` branch, and describes HOW to implement it. The frontmatter, lifecycle and committing conventions are in AGENTS.md → `planning/`.
 
 ### Plan Structure
 

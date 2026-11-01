@@ -1,11 +1,11 @@
 ---
 name: wiki
-description: "Read, add to and check the agent wiki in .claude/wiki/: what Stargazer builds on (Flyte, marimo and the bioinformatics tools tasks wrap), as interlinked pages synthesized from raw sources. Use when you need reference on any of those, when the wiki lint warns that a page cites a file you changed, or when adding a new source such as a tool's help or a framework's docs."
+description: "Read, add to and check the agent wiki in .claude/context/: what Stargazer builds on (Flyte, marimo and the bioinformatics tools tasks wrap), as interlinked pages synthesized from raw sources. Use when you need reference on any of those, when the wiki lint warns that a page cites a file you changed, or when adding a new source such as a tool's help or a framework's docs."
 ---
 
 # The agent wiki
 
-`.claude/wiki/` is the agents' knowledge of what Stargazer builds on, kept the way Karpathy's LLM wiki is: raw sources that are never edited, and pages synthesized from them, which agents write and keep current. It's plain markdown with Obsidian `[[wikilinks]]`, tracked on `main`. The `planning` branch carries a `wiki` symlink to it, so the Obsidian vault at `$MAIN/planning` shows the wiki beside the ticket board.
+`.claude/context/` is the agents' knowledge of what Stargazer builds on, kept the way Karpathy's LLM wiki is: raw sources that are never edited, and pages synthesized from them, which agents write and keep current. It's plain markdown with Obsidian `[[wikilinks]]`, tracked on `main`. The `planning` branch's worktree sits inside it at `planning/` (gitignored), so opening `.claude/context` as an Obsidian vault shows the wiki and the ticket board together.
 
 ## What goes where
 
@@ -17,6 +17,7 @@ description: "Read, add to and check the agent wiki in .claude/wiki/: what Starg
 
 - **`index.md`** lists every page with a one-line summary, by topic. Start every lookup there.
 - **Pages** sit flat at the top: a framework concept or a tool.
+- **`planning/`** is the ticket board's worktree, not part of the wiki: a page never links a ticket, though a ticket may link a page.
 - **`raw/`** holds the sources exactly as captured: framework docs, tool help (`raw/tool-help/`, with the script that captures it). Read them for detail and examples; never edit their content.
 
 ## Page conventions
