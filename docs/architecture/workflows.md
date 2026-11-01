@@ -1,6 +1,6 @@
 # Workflow Model
 
-Workflows are tasks that compose other tasks into end-to-end pipelines. In Flyte v2, there is no separate `@workflow` decorator — workflows are regular tasks that call other tasks. A workflow accepts scalar parameters, assembles its typed inputs via `assemble()`, and chains tasks against them. For the full pattern with code, see [Writing a Workflow](../guides/writing-a-workflow.md).
+Workflows are tasks that compose other tasks into end-to-end pipelines. In Flyte v2, there is no separate `@workflow` decorator — workflows are regular tasks that call other tasks. A workflow accepts scalar parameters, queries the asset graph for its typed inputs via `assemble()`, and chains tasks against them. Because its inputs are metadata rather than files, it runs on any data that carries that metadata: the user's own, a bundle's or another user's published assets. For the full pattern with code, see [Writing a Workflow](../guides/writing-a-workflow.md).
 
 ## Conventions
 

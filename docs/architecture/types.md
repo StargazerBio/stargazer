@@ -1,6 +1,6 @@
 # Types and Asset System
 
-Every file in Stargazer carries structured keyvalue metadata describing its role. That gives tools one metadata contract, lets new asset types be added without breaking old code, and lets files be found by metadata instead of path conventions.
+Every file in Stargazer carries structured keyvalue metadata describing its role, and links by CID to the files it relates to. Those assets and links are the **asset graph** ([The Asset Graph](../asset-graph.md) introduces it). The metadata gives tools one contract, lets new asset types be added without breaking old code, and lets files be found by metadata instead of path conventions.
 
 ```mermaid
 flowchart TD
@@ -47,13 +47,15 @@ See the [Catalog](../reference/catalog.md#asset-types) for every registered asse
 
 ## Companions
 
+Assets link in two ways, and they're the edges of the asset graph: `companion_of` (belongs beside) and `<asset>_cid` fields (made from).
+
 A companion is a file a tool expects beside another, such as an index or a sequence dictionary. It records its primary file's CID in `companion_of`, and `fetch()` downloads it into the same directory so tools find an index next to its file. `Reference(cid="bafk…").fetch()` also brings every `ReferenceIndex`, `SequenceDict` and `AlignerIndex` with `companion_of="bafk…"`; any asset with `companion_of` set is one. Where companions are looked for is in [Configuration](configuration.md#writing-and-reading).
 
 `companion_of` is the only link `fetch()` follows. Fields like `reference_cid` and `source_cid` are provenance: `assemble(reference_cid=…)` finds every alignment made against a reference, and `fetch()` leaves them behind.
 
 ## Assembly
 
-`assemble(**filters)` queries storage by keyvalue, deduplicates by CID, and returns a flat `list[Asset]` of specialized subclass instances. Every filter must match exactly; a list value matches any of its entries. Workflows filter the result with `isinstance` to pick out the types they need ([Writing a Workflow](../guides/writing-a-workflow.md)).
+`assemble(**filters)` queries the asset graph by keyvalue, deduplicates by CID, and returns a flat `list[Asset]` of specialized subclass instances. Every filter must match exactly; a list value matches any of its entries. Workflows filter the result with `isinstance` to pick out the types they need ([Writing a Workflow](../guides/writing-a-workflow.md)).
 
 Records come back through `specialize(record)`, which is graceful at query time: an unregistered key, or a record whose values don't parse against its class, falls back to a bare `Asset` instead of raising, so one malformed record can't crash an `assemble()`.
 

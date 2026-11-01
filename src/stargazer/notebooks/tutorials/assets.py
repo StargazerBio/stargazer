@@ -40,11 +40,17 @@ def _():
         """
         # Stargazer Asset System
 
-        A walkthrough of *why* Stargazer wraps every file in a typed
-        `Asset`, what an Asset actually is, and how to add a new one to
-        the system. By the end of this notebook you'll have defined a
-        `SampleSheet` asset, uploaded a real CSV through it, and
-        rediscovered it via a metadata query.
+        In Stargazer, data knows what it is. Every file is a typed
+        `Asset` that carries its identity, its metadata and its links to
+        other assets, and together they form the **asset graph**: tasks
+        write into it, workflows query it, and anyone who publishes to it
+        extends everyone else's.
+
+        This notebook covers what an Asset is, how to add a new kind to
+        the graph, and why the graph is worth having. By the end you'll
+        have defined a `SampleSheet` asset, uploaded a real CSV through
+        it, extended it with a key of your own, and found it again with
+        metadata queries.
 
         The `SampleSheet` you define here is importable — the next three
         tutorials reuse this very class.
@@ -79,9 +85,10 @@ def _():
 
         Stargazer's answer: every file is an `Asset` — a small
         dataclass that carries (a) the content's identity, (b) where
-        the stored file lives, and (c) typed metadata fields. Tasks
-        accept and return Assets, not strings. Metadata travels with
-        the file in storage and the storage layer is queryable.
+        the stored file lives, and (c) typed metadata fields, including
+        links to related assets. Tasks accept and return Assets, not
+        strings. Metadata travels with the file, and the asset graph it
+        builds is queryable.
         """
     )
 
@@ -489,46 +496,121 @@ def _():
         `CohortSummary` in the next tutorial records its `SampleSheet`
         that way. It's an output, not a file a tool needs beside the
         sheet, so `sheet.fetch()` leaves it behind.
+
+        These two links are the edges of the asset graph: `companion_of`
+        means *belongs beside*, and `<parent>_cid` means *made from*.
         """
     )
 
 
 @app.cell
 def _():
-    """Section 7 — why the indirection is worth it."""
+    """Section 7 — extend the graph with your own keys."""
     mo.md(
         """
-        ## 7. "Isn't this overkill for a local filesystem?"
+        ## 7. Extend the graph
 
-        Honest question. Locally, with a fixed directory, you
-        could glob the right folder and read the file. The machinery
-        earns its keep the moment compute stops being local and
-        persistent — which is exactly what Flyte does to every task.
+        The graph grows with your work. Any asset can carry keys its
+        type doesn't declare, its *extras*, and they're queryable like
+        declared fields. `SampleSheet` has no `lab` field, but a sheet
+        can still be tagged with one:
 
-        Each task runs in its own Docker container, and those containers
-        are scattered **geographically** (no shared filesystem with the
-        task that produced their inputs) and **temporally** (a retry, a
-        re-run a year later, or a parameter sweep all land on fresh
-        containers with empty disks). There *is* no shared path. The
-        only way a container finds its inputs is to ask the storage
-        layer "give me the asset with these properties" — `assemble()` —
-        and the only way the BAI lands next to the BAM everywhere is the
-        companion convention.
+        ```python
+        sheet = SampleSheet()
+        sheet.keyvalues["lab"] = "tutorial_lab"
+        await sheet.update(path, cohort_id="extras_demo", ...)
 
-        Locally, storage is a folder and an index file on this machine;
-        on a hosted deploy it's a cloud bucket and your dashboard. Same
-        API either way. It looks like ceremony when you're working
-        alone and locally, but the **Execution** tutorial
-        shows it pay off:
-        the identical code running on a remote cluster, inputs resolved
-        by CID with no path coordination at all.
+        await assemble(asset="sample_sheet", lab="tutorial_lab")
+        ```
+
+        A typo in a *declared* field still fails loudly
+        (`sheet.cohrt_id = ...` raises `AttributeError`), so extras add
+        flexibility without giving up the typed fields.
+        """
+    )
+
+
+@app.cell
+async def _():
+    """Tag a new SampleSheet with an extra key and query on it."""
+    import tempfile as _tempfile
+    from pathlib import Path as _Path
+
+    from stargazer.assets.asset import assemble as _assemble
+
+    _csv = _Path(_tempfile.mkdtemp(prefix="stargazer_extras_")) / "extras.csv"
+    _csv.write_text("sample_id,organism,tissue\ns2d1,mouse,liver\n")
+
+    tagged_sheet = SampleSheet()
+    tagged_sheet.keyvalues["lab"] = "tutorial_lab"
+    await tagged_sheet.update(
+        path=_csv, cohort_id="extras_demo", n_samples=1, organism="mouse"
+    )
+
+    _found = await _assemble(asset="sample_sheet", lab="tutorial_lab")
+    _hit = next((_a for _a in _found if _a.cid == tagged_sheet.cid), None)
+
+    mo.md(
+        f"""
+        - `tagged_sheet.keyvalues` → `{tagged_sheet.keyvalues}`
+        - `assemble(asset="sample_sheet", lab="tutorial_lab")` found it →
+          **{_hit is not None}**, still a
+          `{type(_hit).__name__ if _hit else "—"}`, with
+          `cohort_id` `{_hit.cohort_id if _hit else "—"!r}` and
+          `lab` `{_hit.keyvalues.get("lab") if _hit else "—"!r}`
+
+        Two more ways the graph stays open:
+
+        - **Files no type describes yet.** A bare `Asset` holds
+          free-form metadata. Define a matching type later and those
+          records come back as that type on the next query.
+        - **Types that change.** Every field has a default, so records
+          written before a field existed still load.
+        """
+    )
+    return (tagged_sheet,)
+
+
+@app.cell
+def _():
+    """Section 8 — why the asset graph pays off."""
+    mo.md(
+        """
+        ## 8. Why the asset graph pays off
+
+        Working alone on one machine, you could glob a folder and read
+        the file. The asset graph earns its keep in two places where
+        that stops working: compute that moves, and work that's shared.
+
+        **Compute that moves.** Flyte runs each task in its own
+        container, scattered **geographically** (no shared filesystem
+        with the task that made its inputs) and **temporally** (a retry,
+        a re-run a year later or a parameter sweep all land on fresh
+        containers with empty disks). There *is* no shared path. A
+        container finds its inputs by asking the graph for "the asset
+        with these properties" with `assemble()`, and the BAI lands next
+        to the BAM everywhere because of `companion_of`. The
+        **Execution** tutorial runs identical code on a remote cluster,
+        with inputs resolved by CID and no paths to line up.
+
+        **Work that's shared.** The same property lets people build on
+        each other's work. A workflow asks the graph for
+        `build="GRCh38"`, and any reference published with that metadata
+        answers it, whoever uploaded it and wherever its bytes sit.
+        Their outputs link back to it by CID, and your name stays on it
+        as its owner. Nobody agrees on folder layouts, file names or a
+        hand-off first: that's **collaboration without coordination**.
+
+        Locally the graph is a folder and an index file on this
+        machine; on a hosted deploy it's a cloud bucket and your
+        dashboard's asset explorer, which draws it. Same API either way.
         """
     )
 
 
 @app.cell
 def _():
-    """Section 8 — recap."""
+    """Section 9 — recap."""
     mo.md(
         """
         ## Recap
@@ -540,9 +622,10 @@ def _():
         | `to_keyvalues()` / `from_keyvalues()` | Round-trip across a flat-string storage boundary |
         | `update(path, **kwargs)` | Single call: set fields, upload, get a CID |
         | `assemble(**filters)` | Discovery by metadata, not folders |
-        | Companion pattern via `companion_of` | Index/data pairs travel together |
+        | `companion_of` and `<parent>_cid` | The asset graph's edges: belongs beside, made from |
+        | Extras in `keyvalues` | Your own queryable keys on any asset |
 
-        That's the whole system.
+        That's the whole asset graph.
 
         ### → Next: `tasks.py`
 

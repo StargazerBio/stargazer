@@ -10,6 +10,7 @@ extra_javascript = ["javascripts/home-link.js"]
 
 nav = [
   { "Home" = "index.md" },
+  { "The Asset Graph" = "asset-graph.md" },
   { "Getting Started" = "getting-started.md" },
   { "Architecture" = [
     { "Overview" = "architecture/overview.md" },
