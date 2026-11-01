@@ -7,30 +7,30 @@ flowchart TD
     MCP("MCP Server\ninterface — tools and resources")
     WF("Workflows\ncomposition — tasks orchestrated into pipelines")
     T("Tasks\nexecution — atomic bioinformatics operations")
-    A[("Asset / Storage\ntyped metadata + content-addressed files")]
+    A[("Asset graph\ntyped metadata + content-addressed files")]
 
     MCP --> WF --> T --> A
 ```
 
 The layers are enforced on imports: a module imports from its own layer or the ones below it, never above, and the lint run on every commit rejects an import that breaks this. In code, bottom up: storage (`assets`, `utils`), `tasks`, `workflows`, then the surfaces over them (the MCP server with its `registry`, and the notebooks).
 
-## Asset System
+## The Asset Graph
 
 Every file is an `Asset` — a dataclass with a content identifier, where its stored bytes live (a `flyte.io.File`), and typed metadata stored as flat keyvalues. Subclasses like `Reference`, `Alignment`, and `Variants` add typed fields with automatic coercion to/from the string-valued keyvalue store.
 
-Assets link to related files by CID: an output records the input it came from in an `{asset_key}_cid` keyvalue, and a companion, such as an index, records its primary file in `companion_of`. Calling `fetch()` on an asset downloads it and its companions.
+Assets link to related files by CID: an output records the input it came from in an `{asset_key}_cid` keyvalue, and a companion, such as an index, records its primary file in `companion_of`. Calling `fetch()` on an asset downloads it and its companions. Assets and their links make up the **asset graph**.
 
-See [Types](types.md) for the full asset catalog.
+**The asset graph is what the other layers have in common.** Tasks write into it and never see a path they didn't fetch; workflows query it with scalar parameters and never take a file; the public tier extends it across users. So a workflow runs on anyone's data that carries the metadata it asks for, which is what lets people build on each other's work without coordinating first. [The Asset Graph](../asset-graph.md) walks through it, and [Types](types.md) holds the contract and the full asset catalog.
 
 ## Tasks
 
-Tasks are async Flyte v2 functions that receive typed assets, fetch them, run tools, and produce new assets. Each task does one thing — align reads, sort a BAM, mark duplicates.
+Tasks are async Flyte v2 functions that receive typed assets, fetch them, run tools, and write new assets into the asset graph. Each task does one thing — align reads, sort a BAM, mark duplicates.
 
 See [Tasks](tasks.md) for the task model.
 
 ## Workflows
 
-Workflows are tasks that call other tasks. They accept scalar parameters, call `assemble()` to query for assets, and orchestrate the pipeline. Parallel execution uses `asyncio.gather`.
+Workflows are tasks that call other tasks. They accept scalar parameters, call `assemble()` to query the asset graph for their inputs, and orchestrate the pipeline. Parallel execution uses `asyncio.gather`.
 
 See [Workflows](workflows.md) for the workflow model.
 
