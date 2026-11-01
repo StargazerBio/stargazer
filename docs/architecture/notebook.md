@@ -69,4 +69,4 @@ The setup block also declares the dashboard tile's `main_name` and `main_descrip
 
 Claude Code and OpenCode ride along in the notebook editor, in marimo's agent panel: each works in the open notebook's folder in `/workspace`, with a condensed context file (`runtime/notebook_agent.md`) as `AGENTS.md`, and the editor watches the open notebook's file, so an agent's edits show up in it. marimo's terminal (Ctrl+`) has `claude` and `opencode` on its path for signing in, and a hosted pod keeps each sign-in for the user's next session. The panel and the terminal are part of the editor, not run mode. The panel's agents have the stargazer MCP server's tools (`list_tasks`, `run_task`, `query_files` and the rest of the catalog) against the user's own storage and project, and the same server serves agent users through external coding tools.
 
-For the mechanics behind this page, see the agent wiki's `.claude/wiki/notebooks.md`.
+The mechanics behind this page are in the docstrings of `src/stargazer/notebooks/__init__.py` (`main_env`) and `src/stargazer/notebooks/ui.py` (dispatch).

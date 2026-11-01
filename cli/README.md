@@ -128,8 +128,10 @@ Checks the agent wiki in `.claude/wiki/` (see the `wiki` skill) and prints one
 line per problem: a `[[wikilink]]` or `#heading` that doesn't resolve, a page
 missing from `index.md`, a raw source no page cites, a path in a page's
 `sources` that doesn't exist, two files with the same name, or a page with a
-`status` property, which would put it on the ticket board. Pre-commit runs it
-on every commit.
+`status` property, which would put it on the ticket board. It also warns,
+without failing, about each page whose `sources` name a file the branch
+changes (against its merge base with `origin/main`) while leaving the page
+alone. Pre-commit runs it on every commit.
 
 ```bash
 uv run python cli/wiki_lint.py

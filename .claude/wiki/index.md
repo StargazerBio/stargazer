@@ -1,20 +1,13 @@
 # Stargazer wiki
 
-The agents' knowledge base: how Stargazer's subsystems work beneath `docs/architecture/`, and the frameworks and tools it builds on. Pages are synthesized from the raw sources in `raw/` and from the code, and link each other with `[[wikilinks]]`. The `wiki` skill says how to read, add to and check it.
-
-## Stargazer
-
-- [[runtime]]: the notebook pod beneath `docs/architecture/runtime.md`: `fserve`, a pod that hydrates and saves itself, the release image
-- [[notebooks]]: dispatch, packaging, `main_env` and workspace copies, beneath `docs/architecture/notebook.md`
-- [[storage]]: `_owner` stamping and the public tier, beneath `docs/architecture/configuration.md`
-- [[provenance]]: the fields that tie an asset to the inputs it came from
-- [[images]]: every image Stargazer runs on, and how Flyte builds them
+The agents' knowledge of what Stargazer builds on: Flyte, marimo and the bioinformatics tools its tasks wrap. Pages are synthesized from the raw sources in `raw/`, link each other with `[[wikilinks]]`, and point into Stargazer's code under "In Stargazer". Stargazer's own internals aren't here: they're in the docstrings and comments of the code they describe, and `docs/architecture/`. The `wiki` skill says how to read, add to and check it.
 
 ## Flyte v2
 
 - [[flyte]]: the v2 model (workflows are tasks calling tasks), running tasks, and the features Stargazer doesn't use yet
-- [[flyte-config]]: the config file, its search order, and Stargazer's two configs and one init
-- [[flyte-task-environments]]: the three configuration levels, resources, and `gatk_env` and `scrna_env`
+- [[flyte-config]]: the config file and its search order
+- [[flyte-task-environments]]: the three configuration levels, resources, environments that depend on each other
+- [[flyte-images]]: how a `flyte.Image` is declared and built
 - [[flyte-concurrency]]: parallel task calls with `asyncio.gather`
 - [[flyte-io]]: what crosses a task boundary by value and what by reference
 - [[flyte-caching]]: cache behaviors, versions and overwrites

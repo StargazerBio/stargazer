@@ -10,16 +10,17 @@ import pytest
 REPO = Path(__file__).resolve().parents[2]
 
 
-def _load_lint():
+def _load():
     spec = importlib.util.spec_from_file_location(
         "wiki_lint", REPO / "cli" / "wiki_lint.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.lint
+    return module
 
 
-lint = _load_lint()
+lint = _load().lint
+stale = _load().stale
 
 
 @pytest.fixture
@@ -104,3 +105,30 @@ def test_duplicate_basenames(wiki):
     _write(wiki / "raw" / "sub", "page.md", "# Shadow\n")
     _write(wiki, "index.md", "# Index\n\n- [[page]]\n- [[source-doc]]\n")
     assert "raw/sub/page.md: shares its name with page.md" in lint(wiki, wiki.parent)
+
+
+def test_page_citing_a_changed_file_is_stale(wiki):
+    assert stale(wiki, wiki.parent, {"src/mod.py"}) == [
+        "page.md cites src/mod.py, which this branch changes"
+    ]
+
+
+def test_page_changed_alongside_its_source_is_not_stale(wiki):
+    assert stale(wiki, wiki.parent, {"src/mod.py", "wiki/page.md"}) == []
+
+
+def test_changed_raw_source_makes_its_pages_stale(wiki):
+    assert stale(wiki, wiki.parent, {"wiki/raw/source-doc.md"}) == [
+        "page.md cites wiki/raw/source-doc.md, which this branch changes"
+    ]
+
+
+def test_directory_source_covers_the_files_in_it(wiki):
+    _write(wiki, "page.md", "---\nsources:\n  - src\n---\n\n[[source-doc]]\n")
+    assert stale(wiki, wiki.parent, {"src/mod.py"}) == [
+        "page.md cites src, which this branch changes (src/mod.py)"
+    ]
+
+
+def test_unrelated_change_makes_nothing_stale(wiki):
+    assert stale(wiki, wiki.parent, {"README.md"}) == []

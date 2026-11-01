@@ -35,7 +35,7 @@ The orchestrator every Stargazer task and workflow runs on. The raw sources are 
 - [[flyte-caching]]: cache behaviors and versions
 - [[flyte-errors]]: retries, timeouts and catching task failures
 - [[flyte-apps]]: long-running services
-- [[images]]: how a `flyte.Image` is declared and built
+- [[flyte-images]]: how a `flyte.Image` is declared and built
 
 ## Features Stargazer doesn't use yet
 

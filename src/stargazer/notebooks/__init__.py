@@ -25,7 +25,15 @@ declared there too:
         )
 
 At launch the dashboard serves the notebook on `main_env`'s image, resources
-and env vars, under its own name, launch command and access control.
+and env vars, under its own name, launch command and access control; the env
+vars of whoever launches it win over the notebook's. A declared image is built
+by Union's remote builder, in the owner's project, on the pod's own image
+(`STARGAZER_NOTEBOOK_IMAGE`). The dashboard reads the setup block without
+running the notebook: `main_name` and `main_description` must be plain
+strings, and the `main_env` line is evaluated on its own, so it can use only
+`flyte`, `notebook_base` and `notebook_env`. A notebook opened inside a
+running pod, from marimo's file explorer, runs in the environment of the
+notebook the pod was launched for, not its own `main_env`.
 
 Navigation between notebooks lives on the dashboard; notebooks themselves
 carry no nav chrome.

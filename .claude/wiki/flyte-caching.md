@@ -2,8 +2,7 @@
 sources:
   - "[[flyte-v2-docs]]"
   - "[[flyte-sdk-examples]]"
-  - src/stargazer/workflows/germline_short_variant_discovery.py
-  - src/stargazer/workflows/scrna_clustering.py
+  - src/stargazer/workflows
 ---
 
 # Flyte caching
@@ -20,4 +19,4 @@ Whether a task call reuses an earlier result. Source: [[flyte-sdk-examples#7. Ca
 
 ## In Stargazer
 
-- **Both workflows are `cache="disable"`**: `germline_short_variant_discovery` and `scrna_clustering`. Their tasks keep the environment's default.
+- The `cache=` on each workflow's decorator in `src/stargazer/workflows/`.

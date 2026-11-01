@@ -1,8 +1,3 @@
----
-sources:
-  - src/stargazer/config.py
----
-
 # Parabricks
 
 NVIDIA Parabricks: GPU-accelerated versions of alignment, preprocessing and variant-calling tools, run as `pbrun <tool>` in NVIDIA's container. **No Stargazer task wraps it and no Stargazer image carries it**; its docs are captured as the reference for a GPU path alongside [[gatk]]. Each page is NVIDIA's documentation for the tool, quick start and options included, rather than `--help` output.

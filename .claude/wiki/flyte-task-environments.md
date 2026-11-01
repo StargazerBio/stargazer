@@ -3,7 +3,6 @@ sources:
   - "[[flyte-v2-docs]]"
   - "[[flyte-sdk-examples]]"
   - src/stargazer/config.py
-  - devbox/setup.sh
 ---
 
 # Flyte task environments
@@ -28,15 +27,12 @@ From most general to most specific, and the more specific wins:
 ## Between environments
 
 - **`depends_on=[other_env]`** declares an environment this one's tasks call into, so its image is built first. An app environment can be one, so a task can call the app ([[flyte-apps]]).
-- **`env.clone_with(name=..., ...)`** copies an environment with changes. A notebook's `main_env` is a `clone_with` of `notebook_env` ([[notebooks#main_env]]).
+- **`env.clone_with(name=..., ...)`** copies an environment with changes. A notebook's `main_env` is a `clone_with` of `notebook_env`.
 - **`reusable=flyte.ReusePolicy(...)`** keeps containers warm between calls; see [[flyte-sdk-examples#10. Reusable Tasks (Actors)]].
 
 ## In Stargazer
 
-- **Two task environments, in `config.py`**: `gatk_env` (GATK, BWA, samtools) and `scrna_env` (scanpy). Every task is decorated with one of them. Their images are on [[images#The task images]].
-- **Resources are set on the environment**, shared by every task on it, as a request and limit. They're sized for the devbox: its node has about 7.75 GiB allocatable and a workflow's pods must fit together in about 6 GiB (the header of `devbox/setup.sh`). `gatk_env` requests 1Gi because the germline workflow holds three of its pods at once.
-- **Every environment forwards `STARGAZER_ENV_VARS` and declares `STARGAZER_SECRETS`.**
-- **A workflow is a task on one of the same environments**, often with `cache="disable"` ([[flyte-caching]]).
+- **The environments are in `config.py`** (`gatk_env`, `scrna_env`), with comments on how each is sized and built ([[flyte-images]]). The rules for adding one, and the devbox's memory budget, are in `AGENTS.md`.
 
 ## Related
 

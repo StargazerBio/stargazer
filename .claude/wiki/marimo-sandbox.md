@@ -1,8 +1,8 @@
 ---
 sources:
   - "[[marimo-inlining-dependencies]]"
-  - src/stargazer/notebooks/tutorials/assets.py
   - docs/architecture/runtime.md
+  - runtime/Dockerfile
 ---
 
 # marimo sandbox
@@ -17,6 +17,4 @@ How a marimo notebook carries its own dependencies and gets a venv of its own. S
 
 ## In Stargazer
 
-- **Every notebook's header names `stargazer-bio`** and points it at `/stargazer` with `[tool.uv.sources]`, editable. In the notebook image that's the SDK's source, so the sandbox installs the SDK the image was built with ([[notebooks#Packaging]]).
-- **The image pins the launcher marimo and puts it into every sandbox**, so the kernel and the launcher are the same build (`docs/architecture/runtime.md`).
-- **marimo builds a notebook's venv when the notebook opens**, from its header. See [[runtime]].
+- **Every notebook's header points `stargazer-bio` at `/stargazer`** through `[tool.uv.sources]`, so a sandbox installs the SDK the image was built with. How the image sets that up is in `docs/architecture/runtime.md` and `runtime/Dockerfile`.

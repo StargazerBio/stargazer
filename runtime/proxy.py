@@ -23,10 +23,13 @@ request.
 **Workspace.** Every file in the user's workspace lives in the workspace store,
 one object per file at its path, under
 `<STARGAZER_WORKSPACE_ROOT>/users/<subject>/workspace/`, a layout the dashboard
-reads and writes too (the pod contract in the runtime doc). At launch, `hydrate()` copies the owner's whole workspace into
-`/workspace`. While the pod runs, a background loop saves every file whose size
+reads and writes too (the pod contract in the runtime doc). The pod does
+both ends of hydrate and save itself, because the pod manager never calls a
+pod: one behind the platform login is unreachable server to server. At
+launch, `hydrate()` copies the owner's whole workspace into `/workspace`. While the pod runs, a background loop saves every file whose size
 or modification time changed, every `SG_SAVE_INTERVAL_SECONDS` (30 by default,
-0 for none), and deletes from the store the files deleted from `/workspace`.
+0 for none; the pod manager sets it at launch, so a running pod keeps the
+interval it started with), and deletes from the store the files deleted from `/workspace`.
 A file it holds that's gone from the store was deleted there, by the
 dashboard, and isn't put back, and nor is the blank marimo opens for a
 notebook that didn't hydrate (`SG_UNSAVED_NOTEBOOK`).

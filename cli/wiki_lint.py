@@ -8,10 +8,16 @@ page, every code path a page lists in `sources` exists, no two files share a
 name, and no page has the `status` property the ticket board groups on.
 Raw sources are captured verbatim, so their own links aren't checked.
 
+It also warns, without failing, about pages that may have gone stale: a page
+whose `sources` name a file this branch changes (against its merge base with
+`origin/main`, uncommitted changes included) when the branch leaves the page
+itself alone. The page may well still hold; the warning says to reread it.
+
 Usage: uv run python cli/wiki_lint.py
 """
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -104,12 +110,61 @@ def lint(wiki: Path, repo: Path) -> list[str]:
     return problems
 
 
+def stale(wiki: Path, repo: Path, changed: set[str]) -> list[str]:
+    """Pages citing a file in `changed` (repo-relative paths) that aren't in it.
+
+    A source that's a directory covers every file under it.
+    """
+    files = {p.stem: p for p in wiki.rglob("*.md")}
+    warnings = []
+    for path in sorted(wiki.glob("*.md")):
+        if str(path.relative_to(repo)) in changed:
+            continue
+        for source in _sources(_split(path.read_text())[0]):
+            if m := LINK.fullmatch(source):
+                target = files.get(Path(m.group(1).strip()).name)
+                if target is None:
+                    continue
+                source = str(target.relative_to(repo))
+            if source in changed:
+                warnings.append(
+                    f"{path.name} cites {source}, which this branch changes"
+                )
+            elif inside := sorted(c for c in changed if c.startswith(source + "/")):
+                warnings.append(
+                    f"{path.name} cites {source}, which this branch changes "
+                    f"({', '.join(inside)})"
+                )
+    return warnings
+
+
+def _changed(repo: Path) -> set[str] | None:
+    """Files this branch changes against `origin/main`, or None without one."""
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
+        ).stdout
+
+    try:
+        base = git("merge-base", "HEAD", "origin/main").strip()
+        return set(git("diff", "--name-only", base).split())
+    except subprocess.CalledProcessError:
+        return None
+
+
 def main() -> int:
-    """Lint the repo's wiki and print its problems."""
+    """Lint the repo's wiki, print its problems, and warn of stale pages."""
     repo = Path(__file__).resolve().parents[1]
-    problems = lint(repo / ".claude" / "wiki", repo)
+    wiki = repo / ".claude" / "wiki"
+    problems = lint(wiki, repo)
     for problem in problems:
         print(problem)
+    changed = _changed(repo)
+    if warnings := stale(wiki, repo, changed or set()):
+        print("Reread these pages: each cites a file this branch changes.")
+        for warning in warnings:
+            print(f"  {warning}")
     return 1 if problems else 0
 
 

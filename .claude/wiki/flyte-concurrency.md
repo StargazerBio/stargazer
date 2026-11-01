@@ -18,8 +18,7 @@ Parallelism in Flyte v2 is Python's own. Source: [[flyte-sdk-examples#6. Concurr
 
 ## In Stargazer
 
-- **Workflows gather per-sample and per-step calls.** `germline_short_variant_discovery` gathers each sample's preprocessing, then each sample's `haplotype_caller`, before joint calling. Read it for the house pattern before writing a workflow.
-- **Every task is `async def`**, so `asyncio.gather` is the one form used; `flyte.map` appears nowhere.
+- **The house pattern** is `germline_short_variant_discovery` in `src/stargazer/workflows/`: read it before writing a workflow.
 
 ## Related
 

@@ -16,6 +16,6 @@ Long-running services on Flyte: an app holds a pod and serves a port, where a ta
 
 ## In Stargazer
 
-- **Every notebook pod is an app.** `notebook_env` is an `AppEnvironment`, and a notebook's `main_env` clones it. The dashboard deploys it at launch, setting the name, the launch command, the port, access and scaling ([[notebooks#main_env]]). On the cluster it runs under Flyte's `fserve` ([[runtime#Cross-cutting facts]]).
-- **The dashboard's own apps are in the infra repo**, as is every other hosted service's `AppEnvironment`.
-- **An idle app holds its pod and node** until its `scaledown_after` passes, so an app started for a test is deactivated when the test is done (the teardown rule in `AGENTS.md`).
+- **Every notebook pod is an app**: `notebook_env` and `main_env` in `src/stargazer/notebooks/__init__.py`, launched under `fserve` as `runtime/launch-notebook.sh` describes.
+- **The dashboard's apps, and every other hosted service's, are in the infra repo.**
+- **Tearing down a test's apps** is a rule in `AGENTS.md`.

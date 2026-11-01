@@ -2,7 +2,7 @@
 
 What runs in a notebook pod: one image holding the SDK, marimo, the bioinformatics tools and the agents (Claude Code and OpenCode), with a small proxy in front of marimo. The same image runs everywhere a notebook does. Locally `docker run` starts it on the notebooks it ships with; on a cluster a pod manager launches it once per notebook, signed in and saving to object storage. Stargazer's own pod manager is the hosted dashboard, kept in the infra repository; anything that keeps to [the pod contract](#the-pod-contract) can launch it.
 
-For what the notebooks themselves are, see [Notebooks](notebook.md). The launch, signal and save protocols are in the agent wiki's `.claude/wiki/runtime.md`.
+For what the notebooks themselves are, see [Notebooks](notebook.md). The launch, signal and save protocols are documented where they're implemented: hydrate, saving and the `/__sg__/*` endpoints in `runtime/proxy.py`, the signal chain in `runtime/launch-notebook.sh`, the working directory and `AGENTS.md` seeding in `runtime/Dockerfile`.
 
 ## The Image
 

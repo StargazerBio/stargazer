@@ -24,5 +24,5 @@ What crosses a task boundary by value and what by reference. Sources: [[flyte-sd
 
 ## In Stargazer
 
-- **An asset is a dataclass whose bytes travel as a `File`.** `Asset.path` is a `flyte.io.File` naming where the stored bytes live, so an asset's keyvalues pass by value and its file by reference. See [[provenance]] and `docs/architecture/types.md`.
-- **`File.download()` can't read an `https://` path**, so gateway downloads use aiohttp directly. See [[storage#Tiers]].
+- **An asset is a dataclass whose file is a `File`**: `Asset` in `src/stargazer/assets/asset.py`, and `docs/architecture/types.md`.
+- **Gateway downloads bypass `File`**, for the reason in the comment on the download in `src/stargazer/utils/storage.py`.

@@ -14,7 +14,7 @@ The help text and manuals of the command-line tools Stargazer's tasks wrap, capt
 - [[gatk]]: GATK tools, with the task that wraps each
 - [[parabricks]]: NVIDIA Parabricks, the GPU equivalents, which no task wraps
 
-The aligners and samtools, also in `gatk_env`'s image ([[images#The task images]]):
+The aligners and samtools, also in `gatk_env`'s image:
 
 | Tool | Help | Stargazer tasks |
 |------|------|-----------------|
@@ -29,5 +29,5 @@ Their tasks are in `src/stargazer/tasks/general/`. The bwa and samtools pages ar
 - **`raw/tool-help/generate_help_docs.sh`** runs `<command> --help` for each command it's given, as arguments or a commands file (one per line, `#` comments; `raw/tool-help/commands.example.txt` is one), and saves each as markdown.
 - **It names each file `<tool>/<tool>-<subcommand>.md`**, lowercased, so every basename is unique across tools and a `[[wikilink]]` to it resolves. A command with no subcommand is `<tool>/<tool>.md`.
 - **It strips HTML** from the help (paragraphs, bold, links, entities) and wraps the result in a code fence.
-- **Run it where the tool is.** The tools aren't on the dev machine's path; they're in their task environment's image ([[images#The task images]]), so the script runs inside that image (`docker run --platform linux/amd64 <image> ...`, with the script and an output directory mounted).
+- **Run it where the tool is.** The tools aren't on the dev machine's path; they're in their task environment's image ([[flyte-images]]), so the script runs inside that image (`docker run --platform linux/amd64 <image> ...`, with the script and an output directory mounted).
 - **After capturing**, link the new file from its tool's page and name the task that wraps it.

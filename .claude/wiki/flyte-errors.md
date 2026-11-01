@@ -23,7 +23,7 @@ Retries, timeouts, and handling a failed task call in its caller. Sources: [[fly
 
 ## In Stargazer
 
-- **No task sets `retries` or `timeout`.** A task that's missing an input raises, naming the input and the task that produces it, rather than retrying or doing that task's work.
+- **A task missing an input raises** rather than retrying or doing another task's work, a rule in `AGENTS.md`.
 
 ## Related
 
