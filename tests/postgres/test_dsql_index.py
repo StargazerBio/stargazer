@@ -1,4 +1,4 @@
-"""The index tests in tests/utils/test_index.py, run as a DSQL user's login.
+"""The index contract (tests/utils/test_index.py), run as a DSQL user's login.
 
 DSQL itself only runs on the tenant, so these run `DsqlIndex`'s SQL on
 Postgres the way DSQL is set up: the table already exists in the shared
@@ -9,18 +9,7 @@ Its connection is swapped for a password login as that role.
 
 import psycopg
 import pytest
-from utils.test_index import (  # noqa: F401 — pytest collects the imported tests
-    test_companion_lookup,
-    test_concurrent_merges_keep_every_key,
-    test_delete_is_idempotent,
-    test_exact_match,
-    test_list_filter_matches_any,
-    test_merge_missing_row_raises,
-    test_new_metadata_replaces_and_warns,
-    test_round_trip,
-    test_same_row_twice_is_one_row_without_warning,
-    warnings,
-)
+from utils.test_index import TestIndexContract  # noqa: F401 — pytest collects it
 
 from stargazer.utils.index import DsqlIndex, PostgresIndex
 
