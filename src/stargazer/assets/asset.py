@@ -10,6 +10,10 @@ its path. A companion is any asset whose `companion_of` keyvalue holds
 another asset's CID: an index or a sequence dictionary that tools expect
 beside the file it names.
 
+Keyvalues a type doesn't declare ride along as `keyvalues`, its extras. A
+task that builds a new asset from an input copies only the fields it sets, so
+an input's extras don't pass to its output.
+
 spec: [docs/architecture/types.md](../architecture/types.md)
 """
 

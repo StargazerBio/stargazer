@@ -175,7 +175,7 @@ Thumbs.db
 !.claude/settings.json
 !.claude/skills/
 !.claude/agents/
-!.claude/reference/
+!.claude/context/
 *.local.*
 
 # Test secrets (JWT tokens, API keys). No trailing slash, so a worktree's
@@ -186,8 +186,11 @@ tests/.secrets
 src/stargazer/notebooks/**/__marimo__/
 .codex/config.toml
 
-# The planning branch's worktree: tickets live there, never on main.
-/planning/
+# The planning branch's worktree, inside the wiki so one Obsidian vault holds
+# both: tickets live there, never on main. Obsidian's settings for that vault
+# are each user's own.
+/.claude/context/planning/
+/.claude/context/.obsidian/
 
 # Import graphs drawn on demand by cli/diagrams.sh. Redraw them, don't commit them.
 /diagrams/

@@ -9,8 +9,7 @@ A task wraps one bioinformatics tool and does one thing. A workflow composes tas
 
 ## Before writing
 
-- `.claude/reference/tool_refs/` has the help text of the tools tasks wrap, the source of truth for their parameters
-- `.claude/reference/flyte_v2_docs.md` and `.claude/reference/sdk_examples_concise.md` cover the Flyte v2 SDK
+- The agent wiki (`.claude/context/`, the `wiki` skill) has the help text of the tools tasks wrap, the source of truth for their parameters (its `tool-help` and `gatk` pages), and the Flyte v2 SDK (its `flyte` page and the pages it links)
 - Tests come first, with the `write-tests` skill
 
 ## Both

@@ -11,7 +11,9 @@ Stargazer uses Pinata's public network only: shared data lives there,
 readable by everyone and attributed by `_owner`. Every public write needs an
 `_owner`, and reads skip a file without one. Private data lives in each
 user's own store (`stargazer.utils.storage`), never on Pinata's private
-network.
+network. `_owner` records who made a record and decides which public
+companions a fetch takes; it grants nothing, since anyone with the key can
+edit or delete any public record.
 
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """

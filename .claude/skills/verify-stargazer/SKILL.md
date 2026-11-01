@@ -19,7 +19,7 @@ A change's own verification is a recipe in its ticket, under `## Verification re
 
 ```bash
 MAIN=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
-grep -n '^## Verification recipe' "$MAIN"/planning/*.md
+grep -n '^## Verification recipe' "$MAIN"/.claude/context/planning/*.md
 ```
 
 Write the change's recipe into its ticket before driving it, in this shape (pstack's feature entry):
