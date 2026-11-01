@@ -35,13 +35,11 @@ def make_gvcf(sample_id: str) -> Variants:
 
 
 @pytest.mark.asyncio
-async def test_combine_gvcfs_merges_samples(fixtures_db):
+async def test_combine_gvcfs_merges_samples():
     """Test that combine_gvcfs merges multiple GVCFs."""
     sample_ids = ["NA12829", "NA12891", "NA12892"]
     gvcfs = [make_gvcf(sid) for sid in sample_ids]
     ref = make_ref()
-
-    fixtures_db()  # checkout: switch to isolated work dir
 
     result = await combine_gvcfs(gvcfs=gvcfs, ref=ref, cohort_id="test_family")
 
@@ -78,13 +76,11 @@ async def test_combine_gvcfs_rejects_vcf_input():
 
 
 @pytest.mark.asyncio
-async def test_combine_gvcfs_single_sample(fixtures_db):
+async def test_combine_gvcfs_single_sample():
     """Test that combine_gvcfs works with a single sample (edge case)."""
     sample_id = "NA12829"
     gvcf = make_gvcf(sample_id)
     ref = make_ref()
-
-    fixtures_db()  # checkout
 
     result = await combine_gvcfs(
         gvcfs=[gvcf], ref=ref, cohort_id="single_sample_cohort"
@@ -94,20 +90,3 @@ async def test_combine_gvcfs_single_sample(fixtures_db):
     assert result.variant_type == "gvcf"
     assert result.sample_count == 1
     assert result.source_samples == [sample_id]
-
-
-@pytest.mark.asyncio
-async def test_combine_gvcfs_task_is_callable():
-    """Test that combine_gvcfs is a callable task."""
-    assert callable(combine_gvcfs)
-    assert "combine_gvcfs" in str(combine_gvcfs)
-
-
-class TestCombineGvcfsExports:
-    """Test that combine_gvcfs is properly exported."""
-
-    def test_combine_gvcfs_exported_from_package(self):
-        """Test that combine_gvcfs is accessible from stargazer.tasks."""
-        from stargazer.tasks import combine_gvcfs
-
-        assert callable(combine_gvcfs)

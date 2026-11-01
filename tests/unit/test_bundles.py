@@ -1,16 +1,16 @@
 """Tests for the resource bundle system."""
 
 import textwrap
-from unittest.mock import patch
 
 import pytest
 
+import stargazer.bundles as bundles_mod
 from stargazer.assets.asset import assemble
 from stargazer.bundles import _load_manifest, fetch_bundle, list_bundles
 
 
 @pytest.fixture
-def bundle_dir(tmp_path):
+def bundle_dir(tmp_path, monkeypatch):
     """Create a temp bundle directory with a test YAML."""
     bundle_yaml = tmp_path / "test_demo.yaml"
     bundle_yaml.write_text(
@@ -36,8 +36,8 @@ def bundle_dir(tmp_path):
               organism: mouse
         """)
     )
-    with patch("stargazer.bundles._BUNDLE_DIR", tmp_path):
-        yield tmp_path
+    monkeypatch.setattr(bundles_mod, "_BUNDLE_DIR", tmp_path)
+    return tmp_path
 
 
 @pytest.fixture
@@ -61,10 +61,10 @@ class TestListBundles:
         assert bundles[0]["description"] == "Test bundle for unit tests"
         assert bundles[0]["file_count"] == 2
 
-    def test_empty_directory(self, tmp_path):
+    def test_empty_directory(self, tmp_path, monkeypatch):
         """list_bundles returns empty list when no YAML files exist."""
-        with patch("stargazer.bundles._BUNDLE_DIR", tmp_path):
-            assert list_bundles() == []
+        monkeypatch.setattr(bundles_mod, "_BUNDLE_DIR", tmp_path)
+        assert list_bundles() == []
 
 
 class TestLoadManifest:

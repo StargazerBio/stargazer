@@ -11,10 +11,8 @@ the public tier; the pinata tier's conftest sets it back for its own tests.
 
 Every test runs against its own empty store, index and cache under tmp_path
 (`isolated_storage`, autouse), so nothing reads or writes ~/.stargazer.
-`fixtures_db` swaps in a store seeded once per session with the fixture files.
 """
 
-import asyncio
 import importlib.util
 import os
 import sys
@@ -25,16 +23,16 @@ os.environ.pop("PINATA_JWT", None)
 
 import pytest
 
+import stargazer.assets as _assets_mod
 import stargazer.utils.storage as _storage_mod
+from stargazer.assets.asset import Asset
 from stargazer.config import init_flyte
 from stargazer.utils.cid import compute_cid
 from stargazer.utils.index import SqliteIndex
 from stargazer.utils.storage import StorageClient
 
-# Add tests directory to Python path for config and fixture imports
+# Lets tier directories import shared test modules (`from utils.test_index import ...`).
 sys.path.insert(0, str(Path(__file__).parent))
-
-from fixtures.seed import seed
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 GENERAL_FIXTURES_DIR = FIXTURES_DIR / "general"
@@ -42,6 +40,18 @@ GATK_FIXTURES_DIR = FIXTURES_DIR / "gatk"
 SCRNA_FIXTURES_DIR = FIXTURES_DIR / "scrna"
 SECRETS_DIR = Path(__file__).parent / ".secrets"
 TESTS_DIR = Path(__file__).parent
+
+# Every asset type the SDK exports, ordered by its key.
+SDK_TYPES = sorted(
+    (
+        obj
+        for name in _assets_mod.__all__
+        if isinstance(obj := getattr(_assets_mod, name), type)
+        and issubclass(obj, Asset)
+        and obj._asset_key
+    ),
+    key=lambda cls: cls._asset_key,
+)
 
 # The tier each top-level directory under tests/ belongs to. Its name is the
 # marker that selects it.
@@ -150,35 +160,6 @@ def isolated_storage(tmp_path, monkeypatch):
     client = make_client(tmp_path / "storage")
     monkeypatch.setattr(_storage_mod, "default_client", client)
     return client
-
-
-@pytest.fixture(scope="session")
-def seeded_client(tmp_path_factory) -> StorageClient:
-    """A store and index holding every fixture file, built once per session."""
-    client = make_client(tmp_path_factory.mktemp("fixtures_store"))
-    asyncio.run(seed(client))
-    return client
-
-
-@pytest.fixture
-def fixtures_db(seeded_client, tmp_path, monkeypatch):
-    """Two-phase fixture: query inputs from the seeded store, run tasks in a clean one.
-
-    Phase 1 (before calling checkout): the default client is the seeded
-    fixtures store, so tests can query it and build assets with real CIDs.
-
-    Phase 2 (after calling checkout()): the default client switches to an
-    empty per-test store, so task outputs are isolated per test.
-    """
-    monkeypatch.setattr(_storage_mod, "default_client", seeded_client)
-
-    def checkout():
-        """Switch the default client to an empty store for task outputs."""
-        monkeypatch.setattr(
-            _storage_mod, "default_client", make_client(tmp_path / "work")
-        )
-
-    return checkout
 
 
 def load_proxy():

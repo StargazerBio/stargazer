@@ -1,5 +1,9 @@
-"""Tests for the asset index: SQLite here; tests/postgres/ reruns them on
-Postgres and as a DSQL login."""
+"""Tests for the asset index.
+
+`TestIndexContract` is what every backend must do. It runs on SQLite here;
+tests/postgres/ and tests/dsql/ import the class and run it on Postgres, as a
+DSQL login, and on the real DSQL cluster, each with its own `index` fixture.
+"""
 
 import asyncio
 import sqlite3
@@ -26,123 +30,120 @@ def index(tmp_path):
     return SqliteIndex(tmp_path / "index.db")
 
 
-@pytest.fixture
-def warnings():
-    """Collect WARNING-and-above log messages."""
-    messages: list[str] = []
-    sink = logger.add(lambda m: messages.append(m.record["message"]), level="WARNING")
-    yield messages
-    logger.remove(sink)
+class TestIndexContract:
+    """What every index backend does."""
 
+    @pytest.fixture
+    def warnings(self):
+        """Collect WARNING-and-above log messages."""
+        messages: list[str] = []
+        sink = logger.add(
+            lambda m: messages.append(m.record["message"]), level="WARNING"
+        )
+        yield messages
+        logger.remove(sink)
 
-@pytest.mark.asyncio
-async def test_round_trip(index):
-    """An upserted row comes back from a query on its keyvalues."""
-    await index.upsert(_record("bafyA", asset="alignment", sample_id="S1"))
+    async def test_round_trip(self, index):
+        """An upserted row comes back from a query on its keyvalues."""
+        await index.upsert(_record("bafyA", asset="alignment", sample_id="S1"))
 
-    [row] = await index.query({"asset": "alignment", "sample_id": "S1"})
+        [row] = await index.query({"asset": "alignment", "sample_id": "S1"})
 
-    assert row["cid"] == "bafyA"
-    assert row["uri"] == "/store/users/local/assets/bafyA/bafyA.bin"
-    assert row["name"] == "bafyA.bin"
-    assert row["keyvalues"] == {"asset": "alignment", "sample_id": "S1"}
+        assert row["cid"] == "bafyA"
+        assert row["uri"] == "/store/users/local/assets/bafyA/bafyA.bin"
+        assert row["name"] == "bafyA.bin"
+        assert row["keyvalues"] == {"asset": "alignment", "sample_id": "S1"}
 
+    async def test_exact_match(self, index):
+        """A row missing a filter key, or holding another value, doesn't match."""
+        await index.upsert(_record("bafyA", asset="alignment", sample_id="S1"))
+        await index.upsert(_record("bafyB", asset="alignment", sample_id="S2"))
+        await index.upsert(_record("bafyC", asset="alignment"))
 
-@pytest.mark.asyncio
-async def test_exact_match(index):
-    """A row missing a filter key, or holding another value, doesn't match."""
-    await index.upsert(_record("bafyA", asset="alignment", sample_id="S1"))
-    await index.upsert(_record("bafyB", asset="alignment", sample_id="S2"))
-    await index.upsert(_record("bafyC", asset="alignment"))
+        rows = await index.query({"asset": "alignment", "sample_id": "S1"})
 
-    rows = await index.query({"asset": "alignment", "sample_id": "S1"})
+        assert [r["cid"] for r in rows] == ["bafyA"]
 
-    assert [r["cid"] for r in rows] == ["bafyA"]
+    async def test_list_filter_matches_any(self, index):
+        """A list value matches any of its entries, in one call."""
+        for cid, sample in (("bafyA", "S1"), ("bafyB", "S2"), ("bafyC", "S3")):
+            await index.upsert(_record(cid, asset="r1", sample_id=sample))
 
+        rows = await index.query({"asset": "r1", "sample_id": ["S1", "S3"]})
 
-@pytest.mark.asyncio
-async def test_list_filter_matches_any(index):
-    """A list value matches any of its entries, in one call."""
-    for cid, sample in (("bafyA", "S1"), ("bafyB", "S2"), ("bafyC", "S3")):
-        await index.upsert(_record(cid, asset="r1", sample_id=sample))
+        assert sorted(r["cid"] for r in rows) == ["bafyA", "bafyC"]
 
-    rows = await index.query({"asset": "r1", "sample_id": ["S1", "S3"]})
+    async def test_companion_lookup(self, index):
+        """A `companion_of` filter returns only that parent's companions."""
+        await index.upsert(_record("bafyBam", asset="alignment"))
+        await index.upsert(
+            _record("bafyBai", asset="alignment_index", companion_of="bafyBam")
+        )
+        await index.upsert(
+            _record("bafyOther", asset="alignment_index", companion_of="bafyX")
+        )
 
-    assert sorted(r["cid"] for r in rows) == ["bafyA", "bafyC"]
+        rows = await index.query({"companion_of": "bafyBam"})
 
+        assert [r["cid"] for r in rows] == ["bafyBai"]
 
-@pytest.mark.asyncio
-async def test_companion_lookup(index):
-    """A `companion_of` filter returns only that parent's companions."""
-    await index.upsert(_record("bafyBam", asset="alignment"))
-    await index.upsert(
-        _record("bafyBai", asset="alignment_index", companion_of="bafyBam")
-    )
-    await index.upsert(
-        _record("bafyOther", asset="alignment_index", companion_of="bafyX")
-    )
+    async def test_same_row_twice_is_one_row_without_warning(self, index, warnings):
+        """Re-upserting identical metadata keeps one row and stays quiet."""
+        await index.upsert(_record("bafyA", asset="alignment", sample_id="S1"))
+        await index.upsert(_record("bafyA", asset="alignment", sample_id="S1"))
 
-    rows = await index.query({"companion_of": "bafyBam"})
+        rows = await index.query({})
 
-    assert [r["cid"] for r in rows] == ["bafyBai"]
+        assert len(rows) == 1
+        assert warnings == []
 
+    async def test_new_metadata_replaces_and_warns(self, index, warnings):
+        """Same CID, different keyvalues: the new ones win and a WARNING names what changed."""
+        await index.upsert(
+            _record("bafyA", asset="alignment", sample_id="S1", tool="bwa")
+        )
+        await index.upsert(
+            _record("bafyA", asset="alignment", sample_id="S2", tool="bwa")
+        )
 
-@pytest.mark.asyncio
-async def test_same_row_twice_is_one_row_without_warning(index, warnings):
-    """Re-upserting identical metadata keeps one row and stays quiet."""
-    await index.upsert(_record("bafyA", asset="alignment", sample_id="S1"))
-    await index.upsert(_record("bafyA", asset="alignment", sample_id="S1"))
+        [row] = await index.query({})
 
-    rows = await index.query({})
+        assert row["keyvalues"] == {
+            "asset": "alignment",
+            "sample_id": "S2",
+            "tool": "bwa",
+        }
+        assert len(warnings) == 1
+        assert "bafyA" in warnings[0]
+        assert "sample_id" in warnings[0]
+        assert "tool" not in warnings[0]
 
-    assert len(rows) == 1
-    assert warnings == []
+    async def test_concurrent_merges_keep_every_key(self, index):
+        """Twenty merges on one row at once each land."""
+        await index.upsert(_record("bafyA", asset="alignment"))
 
+        await asyncio.gather(
+            *(index.merge("bafyA", {f"k{i}": str(i)}) for i in range(20))
+        )
 
-@pytest.mark.asyncio
-async def test_new_metadata_replaces_and_warns(index, warnings):
-    """Same CID, different keyvalues: the new ones win and a WARNING names what changed."""
-    await index.upsert(_record("bafyA", asset="alignment", sample_id="S1", tool="bwa"))
-    await index.upsert(_record("bafyA", asset="alignment", sample_id="S2", tool="bwa"))
+        [row] = await index.query({})
+        assert {f"k{i}": str(i) for i in range(20)}.items() <= row["keyvalues"].items()
+        assert row["keyvalues"]["asset"] == "alignment"
 
-    [row] = await index.query({})
+    async def test_merge_missing_row_raises(self, index):
+        """Merging onto a CID with no row is an error, not a silent insert."""
+        with pytest.raises(ValueError, match="bafyNope"):
+            await index.merge("bafyNope", {"asset": "alignment"})
 
-    assert row["keyvalues"] == {"asset": "alignment", "sample_id": "S2", "tool": "bwa"}
-    assert len(warnings) == 1
-    assert "bafyA" in warnings[0]
-    assert "sample_id" in warnings[0]
-    assert "tool" not in warnings[0]
+    async def test_delete_is_idempotent(self, index):
+        """Deleting removes the row; deleting again is a no-op."""
+        await index.upsert(_record("bafyA", asset="alignment"))
 
+        await index.delete("bafyA")
+        await index.delete("bafyA")
 
-@pytest.mark.asyncio
-async def test_concurrent_merges_keep_every_key(index):
-    """Twenty merges on one row at once each land."""
-    await index.upsert(_record("bafyA", asset="alignment"))
-
-    await asyncio.gather(*(index.merge("bafyA", {f"k{i}": str(i)}) for i in range(20)))
-
-    [row] = await index.query({})
-    assert {f"k{i}": str(i) for i in range(20)}.items() <= row["keyvalues"].items()
-    assert row["keyvalues"]["asset"] == "alignment"
-
-
-@pytest.mark.asyncio
-async def test_merge_missing_row_raises(index):
-    """Merging onto a CID with no row is an error, not a silent insert."""
-    with pytest.raises(ValueError, match="bafyNope"):
-        await index.merge("bafyNope", {"asset": "alignment"})
-
-
-@pytest.mark.asyncio
-async def test_delete_is_idempotent(index):
-    """Deleting removes the row; deleting again is a no-op."""
-    await index.upsert(_record("bafyA", asset="alignment"))
-
-    await index.delete("bafyA")
-    await index.delete("bafyA")
-
-    assert await index.query({}) == []
-    assert await index.get("bafyA") is None
+        assert await index.query({}) == []
+        assert await index.get("bafyA") is None
 
 
 @pytest.mark.asyncio

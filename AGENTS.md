@@ -139,13 +139,13 @@ The project follows this structure:
   - `utils/` - Utility functions (subprocess, pinata, storage, index, cid, query)
   - `bundles/` - Predefined workflow input bundles (YAML configs)
 - `tests/` - Test directory
-  - `conftest.py` - Pytest configuration (Flyte init, fixture paths, an isolated store/index/cache per test, the seeded fixture store; `PINATA_JWT` is stripped, and the pinata tier's own conftest sets it)
-  - `fixtures/` - Test data organized by domain (`gatk/`, `general/`, `scrna/`), plus `seed.py`, which loads it into a test store
-  - `assets/` - Tests for `src/stargazer/assets/` (asset types, `assemble()`)
+  - `conftest.py` - Pytest configuration (Flyte init, fixture paths, an isolated store/index/cache per test; `PINATA_JWT` is stripped, and the pinata tier's own conftest sets it)
+  - `fixtures/` - Test data organized by domain (`gatk/`, `general/`, `scrna/`)
+  - `assets/` - Tests for `src/stargazer/assets/` (`Asset` itself, `specialize()`, `assemble()`, asset types)
   - `tasks/` - Task-level tests mirroring `src/stargazer/tasks/` structure
   - `utils/` - Tests for `src/stargazer/utils/` (storage, index, CID, Pinata, query, subprocess)
   - `notebooks/` - Smoke tests that every notebook in `src/stargazer/notebooks/` imports and parses
-  - `unit/` - Unit tests for the rest: the notebook proxy (`runtime/`), registry, MCP marshalling, bundles, `Asset` itself
+  - `unit/` - Unit tests for the rest: the notebook proxy (`runtime/`), registry, MCP marshalling, bundles
   - `devbox/` - The devbox tier: asset storage across pods, the germline workflow. `pod_tasks.py` holds what runs in their pods
   - `pinata/` - The pinata tier: the Pinata client against the real API
   - `postgres/` - The postgres tier: the index tests against a throwaway Postgres container

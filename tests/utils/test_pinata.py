@@ -8,25 +8,14 @@ import base64
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
+from conftest import SDK_TYPES
 
-import stargazer.assets as assets_mod
 from stargazer.assets.asset import Asset
 from stargazer.utils.pinata import (
     PinataClient,
     _check_keyvalue_count,
     _check_keyvalue_lengths,
     _tus_metadata,
-)
-
-SDK_TYPES = sorted(
-    (
-        obj
-        for name in assets_mod.__all__
-        if isinstance(obj := getattr(assets_mod, name), type)
-        and issubclass(obj, Asset)
-        and obj._asset_key
-    ),
-    key=lambda cls: cls._asset_key,
 )
 
 

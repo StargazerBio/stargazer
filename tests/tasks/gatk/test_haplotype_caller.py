@@ -10,7 +10,7 @@ from stargazer.tasks.gatk.haplotype_caller import haplotype_caller
 
 
 @pytest.mark.asyncio
-async def test_haplotype_caller_lists_its_sample(fixtures_db):
+async def test_haplotype_caller_lists_its_sample():
     """The GVCF names its one sample in a list, before and after storage."""
     sample_id = "NA12829_TP53"
 
@@ -27,8 +27,6 @@ async def test_haplotype_caller_lists_its_sample(fixtures_db):
         path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa",
         build="GRCh38",
     )
-
-    fixtures_db()  # checkout: switch to isolated work dir
 
     gvcf = await haplotype_caller(alignment=alignment, ref=ref)
 

@@ -1,15 +1,11 @@
 """Tests for normalize task."""
 
 import numpy as np
-import pytest
 import scanpy as sc
 import scipy.sparse as sp
 from conftest import SCRNA_FIXTURES_DIR
 
-from stargazer.assets.scrna import AnnData
 from stargazer.tasks.scrna.normalize import normalize
-
-QC_FILTERED_FIXTURE = SCRNA_FIXTURES_DIR / "qc_filtered.h5ad"
 
 
 def _dense(matrix):
@@ -17,27 +13,12 @@ def _dense(matrix):
     return matrix.toarray() if sp.issparse(matrix) else matrix
 
 
-@pytest.mark.asyncio
-async def test_normalize_layers(fixtures_db):
+async def test_normalize_layers(scrna_input):
     """normalize keeps the input's raw counts in .layers['counts'] and applies log1p."""
-    adata = AnnData(
-        path=QC_FILTERED_FIXTURE,
-        sample_id="test_sample",
-        organism="human",
-        stage="qc_filtered",
-        n_obs=59,
-        n_vars=500,
-    )
-
-    fixtures_db()
-
-    result = await normalize(adata=adata)
+    result = await normalize(adata=scrna_input("qc_filtered.h5ad"))
 
     assert result.stage == "normalized"
-    assert result.path is not None and (await result.fetch()).exists()
-
     ad = sc.read_h5ad(await result.fetch())
-    raw = sc.read_h5ad(QC_FILTERED_FIXTURE)
+    raw = sc.read_h5ad(SCRNA_FIXTURES_DIR / "qc_filtered.h5ad")
     np.testing.assert_array_equal(_dense(ad.layers["counts"]), _dense(raw.X))
-    # log1p values should be >= 0
     assert float(ad.X.min()) >= 0.0

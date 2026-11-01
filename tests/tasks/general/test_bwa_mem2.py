@@ -10,11 +10,9 @@ from stargazer.tasks.general.bwa_mem2 import bwa_mem2_index
 
 
 @pytest.mark.asyncio
-async def test_bwa_mem2_index(fixtures_db):
+async def test_bwa_mem2_index():
     """bwa-mem2 index writes its five index files, stored as assets."""
     ref = Reference(path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
-
-    fixtures_db()  # checkout: switch to isolated work dir
 
     result = await bwa_mem2_index(ref)
 

@@ -10,7 +10,7 @@ from stargazer.tasks.gatk.merge_bam_alignment import merge_bam_alignment
 
 
 @pytest.mark.asyncio
-async def test_merge_bam_alignment_merges_bams(fixtures_db):
+async def test_merge_bam_alignment_merges_bams():
     """Test that merge_bam_alignment creates a merged BAM."""
     sample_id = "NA12829_TP53_merge"
 
@@ -32,8 +32,6 @@ async def test_merge_bam_alignment_merges_bams(fixtures_db):
         build="GRCh38",
     )
 
-    fixtures_db()  # checkout: switch to isolated work dir
-
     merged = await merge_bam_alignment(
         aligned_bam=aligned_bam,
         unmapped_bam=unmapped_bam,
@@ -49,20 +47,3 @@ async def test_merge_bam_alignment_merges_bams(fixtures_db):
     assert bam.exists()
     # Downstream tools read the index from beside the BAM.
     assert (bam.parent / "NA12829_TP53_merge_merged.bai").exists()
-
-
-@pytest.mark.asyncio
-async def test_merge_bam_alignment_task_is_callable():
-    """Test that merge_bam_alignment is a callable task."""
-    assert callable(merge_bam_alignment)
-    assert "merge_bam_alignment" in str(merge_bam_alignment)
-
-
-class TestMergeBamAlignmentExports:
-    """Test that merge_bam_alignment task is properly exported."""
-
-    def test_merge_bam_alignment_exported_from_package(self):
-        """Test that merge_bam_alignment is accessible from stargazer.tasks."""
-        from stargazer.tasks import merge_bam_alignment
-
-        assert callable(merge_bam_alignment)

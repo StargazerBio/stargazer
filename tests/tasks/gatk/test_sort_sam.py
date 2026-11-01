@@ -10,7 +10,7 @@ from stargazer.tasks.gatk.sort_sam import sort_sam
 
 
 @pytest.mark.asyncio
-async def test_sort_sam_sorts_bam(fixtures_db):
+async def test_sort_sam_sorts_bam():
     """Test that sort_sam creates a sorted BAM."""
     sample_id = "NA12829_TP53_merged"
 
@@ -19,8 +19,6 @@ async def test_sort_sam_sorts_bam(fixtures_db):
         sample_id=sample_id,
         tool="bwa_mem",
     )
-
-    fixtures_db()  # checkout: switch to isolated work dir
 
     sorted_bam = await sort_sam(alignment=alignment, sort_order="coordinate")
 
@@ -42,20 +40,3 @@ async def test_sort_sam_validates_sort_order():
 
     with pytest.raises(ValueError, match="Invalid sort_order"):
         await sort_sam(alignment=alignment, sort_order="invalid_order")
-
-
-@pytest.mark.asyncio
-async def test_sort_sam_task_is_callable():
-    """Test that sort_sam is a callable task."""
-    assert callable(sort_sam)
-    assert "sort_sam" in str(sort_sam)
-
-
-class TestSortSamExports:
-    """Test that sort_sam task is properly exported."""
-
-    def test_sort_sam_exported_from_package(self):
-        """Test that sort_sam is accessible from stargazer.tasks."""
-        from stargazer.tasks import sort_sam
-
-        assert callable(sort_sam)
