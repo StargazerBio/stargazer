@@ -1,6 +1,6 @@
 ---
 name: write-tests
-description: "Write Stargazer tests: the six test tiers and where each runs, per-test store isolation, the fixtures_db seeded store, task and workflow test templates, and generating test assets in a task's image. Use before implementing any change, and whenever adding, running or fixing tests."
+description: "Write Stargazer tests: the six test tiers and where each runs, per-test store isolation, task and workflow test templates, and generating test assets in a task's image. Use before implementing any change, and whenever adding, running or fixing tests."
 ---
 
 # Write tests
@@ -45,8 +45,8 @@ Every top-level directory under `tests/` belongs to exactly one tier, and its te
 - **Tasks:** every test of a task, in the image that task runs in. `tests/tasks/<domain>` runs in the image of its domain's `TaskEnvironment` (`IMAGES` in `cli/docker_task_tests.py` maps each). So a task test checks what a pod gets, and no one installs the tools. The runner builds each image as a task pod gets it, with the project installed, and mounts only `tests/` and `pyproject.toml`, so a source change builds the images again before the tests run. x86_64 like Union, emulated on Apple silicon.
 - **Devbox:** anything that needs a cluster: running workflows across pods, the devbox's object store and its Postgres index. The session passes the devbox storage settings to each run and reads the index from this machine through a port-forward (`index_query`). It needs the devbox up, with `devbox/setup.sh` applied, and `FLYTE_IMAGE_REGISTRY=localhost:30000` exported. Pod-side tasks live in `tests/devbox/pod_tasks.py`, which imports only what the task image carries.
 - **Pinata:** calls the real API with the key in `tests/.secrets/pinata_jwt` (`tests/pinata/conftest.py`), and fails without it. Pinata-client tests that don't call the API are in `tests/utils/`.
-- **Postgres:** the unit tier's index tests, imported into `tests/postgres/` and run against a throwaway Postgres container that `tests/postgres/conftest.py` starts once per session and removes. Its `index` fixture overrides the SQLite one, and each test starts from a dropped table. A test that depends on SQLite's own behaviour stays out of the import list. Fails without Docker.
-- **DSQL:** the same index tests, imported into `tests/dsql/` and run against the cluster `STARGAZER_DSQL_CLUSTER_ARN` names (infra's `tenant.env`), through `DsqlIndex` as the cluster's `admin` with your AWS session. It's the only tier that runs `DsqlIndex`'s own auth, TLS and IPv4, and its write retry under DSQL's real conflicts. Each session makes its own schema and drops it afterwards, so it never touches a user's table. Fails without the cluster ARN or an AWS session (`aws sso login`).
+- **Postgres:** `TestIndexContract`, the index tests every backend must pass (`tests/utils/test_index.py`), imported into `tests/postgres/` and run against a throwaway Postgres container that `tests/postgres/conftest.py` starts once per session and removes. Its `index` fixture overrides the SQLite one, and each test starts from a dropped table. A new index test goes in the class, and every backend runs it; one that depends on SQLite's own behaviour goes outside it. Fails without Docker.
+- **DSQL:** the same `TestIndexContract`, imported into `tests/dsql/` and run against the cluster `STARGAZER_DSQL_CLUSTER_ARN` names (infra's `tenant.env`), through `DsqlIndex` as the cluster's `admin` with your AWS session. It's the only tier that runs `DsqlIndex`'s own auth, TLS and IPv4, and its write retry under DSQL's real conflicts. Each session makes its own schema and drops it afterwards, so it never touches a user's table. Fails without the cluster ARN or an AWS session (`aws sso login`).
 
 A test never skips for a missing tool or service. Outside its tier it's deselected; inside it, a missing tool or an unreachable devbox fails the test, so a run can't pass by testing nothing. Running a workflow locally, outside the tests, needs its tools on your own PATH; nothing here requires them.
 
@@ -54,17 +54,17 @@ A test never skips for a missing tool or service. Outside its tier it's deselect
 
 ```
 tests/
-├── conftest.py      # Flyte init, no PINATA_JWT, an empty store per test, the seeded fixture store
-├── fixtures/        # Test data by domain, plus seed.py
-├── assets/          # unit: asset types, assemble()
+├── conftest.py      # Flyte init, no PINATA_JWT, an empty store per test
+├── fixtures/        # Test data by domain
+├── assets/          # unit: Asset, specialize(), assemble(), asset types
 ├── notebooks/       # unit: every notebook imports and parses
 ├── unit/            # unit: everything else that runs on Python alone
 ├── utils/           # unit: src/stargazer/utils/, no external API calls
 ├── tasks/           # tasks: one directory per task domain, run in the task's image
 ├── devbox/          # devbox: anything that needs a cluster
 ├── pinata/          # pinata: the real Pinata API
-├── postgres/        # postgres: the index tests against a Postgres container
-└── dsql/            # dsql: the index tests against the real DSQL cluster
+├── postgres/        # postgres: the index contract against a Postgres container
+└── dsql/            # dsql: the index contract against the real DSQL cluster
 ```
 
 ## Isolation (`tests/conftest.py`)
@@ -91,11 +91,9 @@ from stargazer.tasks.{domain}.{tool} import {task_name}
 
 
 @pytest.mark.asyncio
-async def test_{task_name}_stores_its_output(fixtures_db):
+async def test_{task_name}_stores_its_output():
     """{task_name} stores a {OutputType} linked to its input."""
     input_asset = {InputType}(path=GENERAL_FIXTURES_DIR / "{fixture_file}", sample_id="S1")
-
-    fixtures_db()  # outputs go to an empty per-test store
 
     result = await {task_name}(input_asset)
 
@@ -114,7 +112,8 @@ async def test_{task_name}_missing_input_fails():
 A task test calls the task directly and awaits it, which runs the function in this process and returns its value.
 
 - **Inputs come from fixture files.** An asset built with a local `path` and no CID is used in place by `fetch()`, so the fixture never has to be stored first. The fixture directories are `GENERAL_FIXTURES_DIR`, `GATK_FIXTURES_DIR` and `SCRNA_FIXTURES_DIR` in `conftest.py`.
-- **Outputs go through real storage.** `update()` stores them in the test's store and index, so a test can `fetch()` them back, or `assemble()` for them.
+- **Outputs go through real storage.** `update()` stores them in the test's own empty store and index, so a test can `fetch()` them back, or `assemble()` for them.
+- **Stored inputs are stored by the test.** An input that has to be a stored record, with a real CID and companions that come along on `fetch()`, is stored with `update()` in the test's own store first, as `tests/assets/test_asset.py`'s `TestFetch` does.
 - **`asyncio_mode = "auto"`** is set in `pyproject.toml`; the `@pytest.mark.asyncio` marker is optional.
 
 Task tests run in the task's image:
@@ -122,12 +121,6 @@ Task tests run in the task's image:
 ```bash
 uv run --all-extras python cli/docker_task_tests.py tests/tasks/{domain}/test_{tool}.py
 ```
-
-## The Seeded Fixture Store (`fixtures_db`)
-
-Some tests need inputs as stored records with real CIDs and companion links: an alignment whose index comes along on `fetch()`, a reference found by `assemble()`. `seeded_client` loads every fixture file into one store once per session (`tests/fixtures/seed.py`, with the metadata and `*_cid` links the task tests query for).
-
-`fixtures_db` is two-phase. Requesting it points the default client at the seeded store, so the test can query it and build its inputs. Calling the function it returns (the checkout) switches to an empty per-test store, so the task's outputs never land in the shared seeded one. Always call the checkout before the task.
 
 ## Running Through Flyte
 
@@ -150,7 +143,7 @@ docker run --rm --platform linux/amd64 -v "$PWD/tests/fixtures/<domain>:/data" <
   <tool> <args> /data/<file>
 ```
 
-`uv run --all-extras python cli/docker_task_tests.py` prints the image it builds. Add a stored copy, with its metadata and `*_cid` links, to `tests/fixtures/seed.py` when tests need to query for it.
+`uv run --all-extras python cli/docker_task_tests.py` prints the image it builds.
 
 ## Pytest Configuration
 
@@ -182,6 +175,9 @@ docker run --rm --platform linux/amd64 -v "$PWD/tests/fixtures/<domain>:/data" <
 
 - ❌ Implementation details of external tools
 - ❌ Flyte framework internals
+- ❌ That a task is callable or exported: `tests/unit/test_registry.py` checks every task and workflow defined is registered
+- ❌ Chosen values: a field's default, an asset's key string, a type's field list. Test what they do (`specialize()` picking the class, a round trip through keyvalues)
+- ❌ The same behaviour for each asset type: one test parametrized over `SDK_TYPES` (`conftest.py`) covers every type, including the next one
 - ❌ Every possible edge case (focus on common scenarios)
 
 ## Running Tests

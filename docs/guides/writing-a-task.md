@@ -84,4 +84,4 @@ Write its tests in `tests/tasks/<domain>/` and run them in the task's own image,
 uv run --all-extras python cli/docker_task_tests.py tests/tasks/gatk/test_my_tool.py
 ```
 
-Build inputs from the fixture files and call the `fixtures_db` checkout before the task, so its outputs land in an empty per-test store. Assert on the output's fields and file, not just its type. The patterns are in [the `write-tests` skill](https://github.com/StargazerBio/stargazer/blob/main/.claude/skills/write-tests/SKILL.md).
+Build inputs from the fixture files; each test runs against its own empty store, so the task's outputs land there. Assert on the output's fields and file, not just its type. The patterns are in [the `write-tests` skill](https://github.com/StargazerBio/stargazer/blob/main/.claude/skills/write-tests/SKILL.md).
