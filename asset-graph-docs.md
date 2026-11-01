@@ -1,8 +1,9 @@
 ---
 title: asset-graph-docs
-status: doing
+status: review
 priority: normal
 created: 2026-11-01
+pr: 119
 ---
 
 Rewrite the docs people meet first around the asset graph: data that knows
@@ -16,9 +17,9 @@ Claims are held to what's true today. Three gaps found while planning are
 their own tickets: `publish-with-companions`,
 `reuse-reference-companions` and `provenance-on-every-output`.
 
-- [ ] `docs/index.md` rewritten to lead with the system
-- [ ] New `docs/asset-graph.md`, in nav after Home
-- [ ] "Asset graph" through the overview, types, tasks, workflows,
+- [x] `docs/index.md` rewritten to lead with the system
+- [x] New `docs/asset-graph.md`, in nav after Home
+- [x] "Asset graph" through the overview, types, tasks, workflows,
       notebook and getting-started docs
-- [ ] Assets tutorial: section 7 reframed as the payoff, a section on
+- [x] Assets tutorial: section 7 reframed as the payoff, a section on
       extending the graph with extra keys, run headless
