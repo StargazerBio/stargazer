@@ -1,8 +1,9 @@
 ---
 title: agent-wiki
-status: doing
+status: review
 priority: normal
 created: 2026-11-01
+pr: 118
 ---
 
 Turn the agent reference (`.claude/reference/`) into a wiki in the Karpathy LLM-wiki pattern, with Obsidian wikilinks, viewable in the same vault as this board.
