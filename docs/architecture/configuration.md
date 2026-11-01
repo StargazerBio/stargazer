@@ -83,4 +83,4 @@ To add a tool a task wraps, layer it onto the image of the `TaskEnvironment` the
 
 Bundles are curated sets of public files (reference genomes, demo datasets) defined as YAML manifests in `src/stargazer/bundles/`. A manifest carries a `name`, a `description`, and a `files` list of each file's `cid`, `name` and `keyvalues`. `fetch_resource_bundle(bundle_name)` downloads each file by CID from the IPFS gateway and registers it in the user's index, so it is findable with `assemble()` whether or not a Pinata key is set.
 
-For the mechanics behind all of this, see the agent reference `.claude/reference/architecture/storage_internals.md`.
+For the mechanics behind all of this, see the agent wiki's `.claude/wiki/storage.md`, `provenance.md` and `images.md`.

@@ -121,3 +121,16 @@ because pydeps given a subpackage draws the whole package around it. Arrows
 point from importer to imported. The options every diagram shares are under
 `[tool.pydeps]` in `pyproject.toml`. The standard set takes about a minute
 with every extra installed.
+
+## wiki_lint.py
+
+Checks the agent wiki in `.claude/wiki/` (see the `wiki` skill) and prints one
+line per problem: a `[[wikilink]]` or `#heading` that doesn't resolve, a page
+missing from `index.md`, a raw source no page cites, a path in a page's
+`sources` that doesn't exist, two files with the same name, or a page with a
+`status` property, which would put it on the ticket board. Pre-commit runs it
+on every commit.
+
+```bash
+uv run python cli/wiki_lint.py
+```

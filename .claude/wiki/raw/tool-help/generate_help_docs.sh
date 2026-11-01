@@ -6,18 +6,23 @@
 
 set -e
 
-# Function to convert command to filename
-# e.g., "gatk BaseRecalibrator" -> "gatk/base_recalibrator.md"
+# Function to convert command to filename. The tool prefixes the name so every
+# file's basename is unique across tools, which Obsidian's [[wikilinks]] need.
+# e.g., "gatk BaseRecalibrator" -> "gatk/gatk-baserecalibrator.md"
 command_to_filename() {
-    local cmd="$1"
+    local cmd=$(echo "$1" | xargs)
     local first_word=$(echo "$cmd" | awk '{print $1}')
     local rest=$(echo "$cmd" | cut -d' ' -f2- | tr '[:upper:]' '[:lower:]' | tr ' ' '_')
 
     # Create directory if it doesn't exist
     mkdir -p "$first_word"
 
-    # Return the full path
-    echo "${first_word}/${rest}.md"
+    # Return the full path; a command with no subcommand is named after the tool
+    if [ "$cmd" = "$first_word" ]; then
+        echo "${first_word}/${first_word}.md"
+    else
+        echo "${first_word}/${first_word}-${rest}.md"
+    fi
 }
 
 # Function to format output as markdown and clean HTML tags

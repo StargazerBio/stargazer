@@ -34,6 +34,14 @@ repos:
         language: system
         pass_filenames: false
         files: ^(docs/.*\.md|src/.*\.py|zensical\.toml|pyproject\.toml)$
+      # Runs on every commit, since a page's sources name code anywhere in the
+      # repo and a move there breaks it as surely as an edit to the wiki.
+      - id: wiki-lint
+        name: wiki lint (links, index, sources)
+        entry: uv run python cli/wiki_lint.py
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: mcp-server-import
         name: mcp server import check
         entry: uv run --extra mcp python -c "from stargazer.server import mcp"
