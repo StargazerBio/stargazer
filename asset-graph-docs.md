@@ -12,9 +12,9 @@ asset graph and how tasks and workflows read from and write into it, and
 possible. The term "asset graph" is used across the docs and the Assets
 tutorial.
 
-Claims are held to what's true today. Two gaps found while planning are
-their own tickets: `publish-with-companions` and
-`reuse-reference-companions`.
+Claims are held to what's true today. Three gaps found while planning are
+their own tickets: `publish-with-companions`,
+`reuse-reference-companions` and `provenance-on-every-output`.
 
 - [ ] `docs/index.md` rewritten to lead with the system
 - [ ] New `docs/asset-graph.md`, in nav after Home
