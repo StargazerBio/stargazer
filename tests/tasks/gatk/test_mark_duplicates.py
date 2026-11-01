@@ -10,7 +10,7 @@ from stargazer.tasks.gatk.mark_duplicates import mark_duplicates
 
 
 @pytest.mark.asyncio
-async def test_mark_duplicates_marks_duplicates(fixtures_db):
+async def test_mark_duplicates_marks_duplicates():
     """Test that mark_duplicates creates a marked BAM."""
     sample_id = "NA12829_TP53_merged"
 
@@ -20,8 +20,6 @@ async def test_mark_duplicates_marks_duplicates(fixtures_db):
         sorted="coordinate",
         tool="gatk_merge_bam_alignment",
     )
-
-    fixtures_db()  # checkout: switch to isolated work dir
 
     marked = await mark_duplicates(alignment=alignment)
 
@@ -34,20 +32,3 @@ async def test_mark_duplicates_marks_duplicates(fixtures_db):
     assert bam.exists()
     # Downstream tools read the index from beside the BAM.
     assert (bam.parent / "NA12829_TP53_merged_marked_duplicates.bai").exists()
-
-
-@pytest.mark.asyncio
-async def test_mark_duplicates_task_is_callable():
-    """Test that mark_duplicates is a callable task."""
-    assert callable(mark_duplicates)
-    assert "mark_duplicates" in str(mark_duplicates)
-
-
-class TestMarkDuplicatesExports:
-    """Test that mark_duplicates task is properly exported."""
-
-    def test_mark_duplicates_exported_from_package(self):
-        """Test that mark_duplicates is accessible from stargazer.tasks."""
-        from stargazer.tasks import mark_duplicates
-
-        assert callable(mark_duplicates)

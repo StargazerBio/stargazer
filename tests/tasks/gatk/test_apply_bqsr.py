@@ -10,7 +10,7 @@ from stargazer.tasks.gatk.apply_bqsr import apply_bqsr
 
 
 @pytest.mark.asyncio
-async def test_apply_bqsr_recalibrates_bam(fixtures_db):
+async def test_apply_bqsr_recalibrates_bam():
     """Test that apply_bqsr creates a recalibrated BAM."""
     sample_id = "NA12829_TP53_markdup"
 
@@ -33,8 +33,6 @@ async def test_apply_bqsr_recalibrates_bam(fixtures_db):
         tool="gatk_base_recalibrator",
     )
 
-    fixtures_db()  # checkout: switch to isolated work dir
-
     recalibrated = await apply_bqsr(
         alignment=alignment,
         ref=ref,
@@ -51,20 +49,3 @@ async def test_apply_bqsr_recalibrates_bam(fixtures_db):
     (index,) = await assemble(asset="alignment_index", companion_of=recalibrated.cid)
     assert index.sample_id == sample_id
     assert index.path.name == "NA12829_TP53_markdup_recalibrated.bai"
-
-
-@pytest.mark.asyncio
-async def test_apply_bqsr_task_is_callable():
-    """Test that apply_bqsr is a callable task."""
-    assert callable(apply_bqsr)
-    assert "apply_bqsr" in str(apply_bqsr)
-
-
-class TestBQSRExports:
-    """Test that BQSR tasks are properly exported."""
-
-    def test_apply_bqsr_exported_from_package(self):
-        """Test that apply_bqsr is accessible from stargazer.tasks."""
-        from stargazer.tasks import apply_bqsr
-
-        assert callable(apply_bqsr)

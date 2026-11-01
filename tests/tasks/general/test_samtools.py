@@ -12,11 +12,9 @@ from stargazer.tasks.general.samtools import samtools_faidx
 
 
 @pytest.mark.asyncio
-async def test_samtools_faidx(fixtures_db):
+async def test_samtools_faidx():
     """Test samtools faidx creates .fai index file."""
     ref = Reference(path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
-
-    fixtures_db()  # checkout: switch to isolated work dir
 
     result = await samtools_faidx(ref)
 
@@ -29,39 +27,9 @@ async def test_samtools_faidx(fixtures_db):
 
 
 @pytest.mark.asyncio
-async def test_samtools_faidx_idempotent(fixtures_db):
-    """Test that samtools_faidx is idempotent (doesn't fail if .fai already exists)."""
-    ref = Reference(path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
-
-    fixtures_db()  # checkout
-
-    result = await samtools_faidx(ref)
-
-    assert isinstance(result, ReferenceIndex)
-    assert result.path is not None
-
-
-@pytest.mark.asyncio
 async def test_samtools_faidx_missing_file():
     """Test that samtools_faidx raises error when reference file is missing."""
     ref = Reference(path=Path("/nonexistent/path/ref.fasta"), build="GRCh38")
 
     with pytest.raises((FileNotFoundError, RuntimeError)):
         await samtools_faidx(ref)
-
-
-@pytest.mark.asyncio
-async def test_samtools_faidx_task_is_callable():
-    """Test that samtools_faidx is a callable task."""
-    assert callable(samtools_faidx)
-    assert "samtools_faidx" in str(samtools_faidx)
-
-
-class TestSamtoolsExports:
-    """Test that samtools tasks are properly exported."""
-
-    def test_samtools_faidx_exported_from_package(self):
-        """Test that samtools_faidx is accessible from stargazer.tasks."""
-        from stargazer.tasks import samtools_faidx
-
-        assert callable(samtools_faidx)

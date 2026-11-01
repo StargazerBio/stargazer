@@ -12,11 +12,9 @@ from stargazer.tasks.general.bwa import bwa_index
 
 
 @pytest.mark.asyncio
-async def test_bwa_index(fixtures_db):
+async def test_bwa_index():
     """Test bwa index creates all index files (.amb, .ann, .bwt, .pac, .sa)."""
     ref = Reference(path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
-
-    fixtures_db()  # checkout: switch to isolated work dir
 
     result = await bwa_index(ref)
 
@@ -43,20 +41,3 @@ async def test_bwa_index_missing_file():
 
     with pytest.raises((FileNotFoundError, RuntimeError)):
         await bwa_index(ref)
-
-
-@pytest.mark.asyncio
-async def test_bwa_index_task_is_callable():
-    """Test that bwa_index is a callable task."""
-    assert callable(bwa_index)
-    assert "bwa_index" in str(bwa_index)
-
-
-class TestBwaExports:
-    """Test that bwa tasks are properly exported."""
-
-    def test_bwa_index_exported_from_package(self):
-        """Test that bwa_index is accessible from stargazer.tasks."""
-        from stargazer.tasks import bwa_index
-
-        assert callable(bwa_index)

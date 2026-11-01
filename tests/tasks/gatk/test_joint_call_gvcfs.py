@@ -10,7 +10,7 @@ from stargazer.tasks.gatk.joint_call_gvcfs import joint_call_gvcfs
 
 
 @pytest.mark.asyncio
-async def test_joint_call_gvcfs_defaults_to_every_contig(fixtures_db):
+async def test_joint_call_gvcfs_defaults_to_every_contig():
     """With no intervals, joint calling covers every contig in the reference."""
     gvcf = Variants(
         path=GATK_FIXTURES_DIR / "NA12829_TP53.g.vcf",
@@ -20,8 +20,6 @@ async def test_joint_call_gvcfs_defaults_to_every_contig(fixtures_db):
         build="GRCh38",
     )
     ref = Reference(path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
-
-    fixtures_db()  # checkout: switch to isolated work dir
 
     result = await joint_call_gvcfs(gvcfs=[gvcf], ref=ref, cohort_id="cohort")
 

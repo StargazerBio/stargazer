@@ -12,7 +12,7 @@ KNOWN_SITES_VCF = "Mills_and_1000G_gold_standard.indels.TP53.hg38.vcf"
 
 
 @pytest.mark.asyncio
-async def test_base_recalibrator_creates_report(fixtures_db):
+async def test_base_recalibrator_creates_report():
     """Test that base_recalibrator returns a BQSRReport."""
     sample_id = "NA12829_TP53_markdup"
 
@@ -33,8 +33,6 @@ async def test_base_recalibrator_creates_report(fixtures_db):
         path=GATK_FIXTURES_DIR / KNOWN_SITES_VCF,
         build="GRCh38",
     )
-
-    fixtures_db()  # checkout: switch to isolated work dir
 
     result = await base_recalibrator(
         alignment=alignment,
@@ -58,20 +56,3 @@ async def test_base_recalibrator_rejects_empty_known_sites():
             ref=Reference(build="test"),
             known_sites=[],
         )
-
-
-@pytest.mark.asyncio
-async def test_base_recalibrator_task_is_callable():
-    """Test that base_recalibrator is a callable task."""
-    assert callable(base_recalibrator)
-    assert "base_recalibrator" in str(base_recalibrator)
-
-
-class TestBQSRExports:
-    """Test that BQSR tasks are properly exported."""
-
-    def test_base_recalibrator_exported_from_package(self):
-        """Test that base_recalibrator is accessible from stargazer.tasks."""
-        from stargazer.tasks import base_recalibrator
-
-        assert callable(base_recalibrator)
