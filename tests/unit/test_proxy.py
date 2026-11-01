@@ -104,59 +104,32 @@ def on_union(monkeypatch, union_signer):
     return union_signer
 
 
-def test_on_union_forged_headers_without_a_token_never_reach_marimo(on_union, upstream):
-    """What a pod can send the in-cluster address: an owner's headers, no token."""
-    recorder = upstream(lambda req: httpx.Response(200, text="hello"))
-    client = TestClient(proxy.asgi_app, headers={"X-User-Subject": OWNER})
-
-    resp = client.get("/api/status")
-
-    assert resp.status_code == 401
-    assert recorder == {}
-
-
-def test_on_union_the_owners_token_reaches_marimo(on_union, upstream):
-    """The owner's browser, through the login, carries a signed token."""
-    upstream(lambda req: httpx.Response(200, text="hello"))
-    client = TestClient(
-        proxy.asgi_app, headers={"X-User-Token": f"IDToken {on_union(OWNER)}"}
-    )
-
-    resp = client.get("/api/status")
-
-    assert resp.status_code == 200
-    assert resp.text == "hello"
-
-
-def test_on_union_an_admins_token_reaches_marimo(on_union, upstream, monkeypatch):
-    """A listed admin gets in like the owner."""
+@pytest.mark.parametrize(
+    ("who", "scheme", "expires_in", "status"),
+    [
+        pytest.param(None, None, 3600, 401, id="forged-headers-no-token"),
+        pytest.param(OWNER, "IDToken", 3600, 200, id="owner"),
+        pytest.param(OTHER, "Bearer", 3600, 200, id="admin"),
+        pytest.param("333333333333333333", "IDToken", 3600, 403, id="stranger"),
+        pytest.param(OWNER, "IDToken", -3600, 401, id="expired-owner"),
+    ],
+)
+def test_on_union_only_a_valid_owner_or_admin_token_reaches_marimo(
+    on_union, upstream, monkeypatch, who, scheme, expires_in, status
+):
+    """The owner's or a listed admin's browser carries a signed token through the
+    login. A pod can reach the in-cluster address with an owner's headers but no
+    token; a stranger's or an expired token doesn't get in either."""
     monkeypatch.setenv("SG_ADMIN_SUBJECTS", f"222222222222222222,{OTHER}")
-    upstream(lambda req: httpx.Response(200, text="hello"))
-    client = TestClient(
-        proxy.asgi_app, headers={"X-User-Token": f"Bearer {on_union(OTHER)}"}
-    )
-
-    assert client.get("/api/status").status_code == 200
-
-
-def test_on_union_a_strangers_token_never_reaches_marimo(on_union, upstream):
-    """A valid token for someone who isn't the owner or an admin is a 403."""
     recorder = upstream(lambda req: httpx.Response(200, text="hello"))
-    client = TestClient(
-        proxy.asgi_app, headers={"X-User-Token": f"IDToken {on_union(OTHER)}"}
-    )
+    headers = {"X-User-Subject": OWNER}
+    if who:
+        headers["X-User-Token"] = f"{scheme} {on_union(who, expires_in=expires_in)}"
 
-    assert client.get("/api/status").status_code == 403
-    assert recorder == {}
+    resp = TestClient(proxy.asgi_app, headers=headers).get("/api/status")
 
-
-def test_on_union_an_expired_token_is_refused(on_union, upstream):
-    """An owner's token past its expiry no longer gets in."""
-    upstream(lambda req: httpx.Response(200, text="hello"))
-    token = on_union(OWNER, expires_in=-3600)
-    client = TestClient(proxy.asgi_app, headers={"X-User-Token": f"IDToken {token}"})
-
-    assert client.get("/api/status").status_code == 401
+    assert resp.status_code == status
+    assert (recorder != {}) == (status == 200)
 
 
 def test_on_union_the_agent_needs_a_token(on_union):

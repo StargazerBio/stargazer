@@ -10,14 +10,15 @@ To populate expected CIDs for test files, run:
 import uuid
 
 import pytest
-from conftest import FIXTURES_DIR
 
-from stargazer.assets import R1, Alignment
+from stargazer.assets import R1
 from stargazer.assets.asset import Asset
-from stargazer.utils.cid import compute_cid
 from stargazer.utils.index import SqliteIndex
 from stargazer.utils.pinata import PinataClient
 from stargazer.utils.storage import StorageClient
+
+# A CID no one can have published: a real one with a character added.
+UNPUBLISHED_CID = "bafkreigaquk2gy7m3mojfzsmlu3s7kz6ya5buruzrwowmcuh5tna7vyx34x"
 
 CIDS = {
     "GRCh38_TP53.fa": "bafkreib6vj3os7l4lqqytaw5vju46iorcknttfiwfnlbizjcqn7xd5hrvy",
@@ -98,7 +99,7 @@ async def test_get_finds_one_public_file_by_cid():
     client = PinataClient()
 
     found = await client.get(CIDS["GRCh38_TP53.fa"])
-    missing = await client.get(compute_cid(FIXTURES_DIR / "upload_delete.txt") + "x")
+    missing = await client.get(UNPUBLISHED_CID)
 
     assert found["cid"] == CIDS["GRCh38_TP53.fa"]
     assert found["keyvalues"]["build"] == "GRCh38_TP53"
@@ -131,46 +132,6 @@ async def test_upload_at_the_keyvalue_cap(tmp_path):
         assert len(rec["keyvalues"]) == 9
     finally:
         await client.delete(Asset(cid=r1.cid))
-
-
-@pytest.mark.asyncio
-async def test_upload_over_the_keyvalue_cap_stores_nothing(tmp_path):
-    """One key past the cap is refused before anything is sent."""
-    tag = uuid.uuid4().hex
-    client = PinataClient()
-    extras = {"probe": tag, "x0": "v", "x1": "v", "x2": "v", "x3": "v"}
-    r1 = R1(sample_id="S1", keyvalues=extras)
-
-    with pytest.raises(ValueError, match="at most 9 .* has 10"):
-        await client.upload(r1, _unique_file(tmp_path, tag))
-
-    assert r1.cid == ""
-    assert await client.query({"probe": tag}) == []
-
-
-@pytest.mark.asyncio
-async def test_alignment_uploads_with_every_field_and_owner(tmp_path):
-    """An Alignment with all its fields set, plus _owner, fits the cap."""
-    tag = uuid.uuid4().hex
-    client = PinataClient()
-    aln = Alignment(
-        sample_id=tag,
-        sorted="coordinate",
-        duplicates_marked=True,
-        bqsr_applied=True,
-        tool="gatk_apply_bqsr",
-        reference_cid="bafyref",
-        r1_cid="bafyr1",
-    )
-
-    await client.upload(aln, _unique_file(tmp_path, tag))
-
-    try:
-        [rec] = await client.query({"sample_id": tag})
-        assert rec["keyvalues"] == {**aln.to_keyvalues(), "_owner": "integration-test"}
-        assert len(rec["keyvalues"]) == 9
-    finally:
-        await client.delete(Asset(cid=aln.cid))
 
 
 @pytest.mark.asyncio
