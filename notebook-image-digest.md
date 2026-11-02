@@ -28,6 +28,9 @@ keeps its digest (inferred; check with `crane copy`).
   never changes the notebook's CID, even for a notebook baked into the
   image it names (the built-in notebooks).
 - **No asking authors to pin layers.** It won't stick.
+- **`image` is ordinary metadata.** Its owner can edit it like any other
+  keyvalue, as with every asset's CID links and provenance. Nothing guards
+  it specially.
 
 ## Why the recipe's tag isn't enough
 
@@ -64,10 +67,6 @@ overwrite a tag (ticket `shared-image-repository`).
 
 ## Open questions
 
-- Metadata isn't covered by the CID, and an owner can edit their public
-  records. The digest is the owner's statement, not a commitment the bytes
-  make. Good enough? An edit could be refused for `image` once published,
-  so a new digest means republishing.
 - A notebook published without ever being launched has no digest. Publish
   without `image` and show that, or ask for a launch first?
 - Edits made outside a pod (an upload over the workspace file) never ran
