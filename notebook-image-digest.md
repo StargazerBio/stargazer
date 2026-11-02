@@ -18,8 +18,10 @@ keeps its digest (inferred; check with `crane copy`).
 
 ## Decided (2026-11-02)
 
-- **A notebook always runs from its own `main_env`.** Its image can be
-  anything the author wants: a recipe, or a digest if they like.
+- **A notebook runs from its own `main_env` by default.** Its image can be
+  anything the author wants: a recipe, or a digest if they like. A
+  published notebook can also be launched on its recorded image (build or
+  pull, below).
 - **The digest goes in the record, not the file.** The recipe stays
   readable in the file, and the record carries what it built. Metadata
   isn't part of the notebook's bytes, so there's no loop: stamping a digest
@@ -51,13 +53,14 @@ overwrite a tag (ticket `shared-image-repository`).
    launch rows: the digest it last ran on.
 3. **Stamp it at publish.** The `Notebook` record gains `image`, the full
    `<repo>@sha256:<digest>` (about 140 characters, under the public tier's
-   250), and `image_tag`, the recipe's Flyte tag, which ties the digest to
-   the recipe that built it. The record goes from 5 keyvalues to 7 of 9.
-4. **Compare on launch.** Someone launching a published notebook runs its
-   `main_env` as always. When the digest their launch resolves differs from
-   the record's `image`, say so: same recipe, different image, so results
-   may differ. When the record's digest can be pulled (the same
-   deployment), offer to run on it.
+   250). The record goes from 5 keyvalues to 6 of 9.
+4. **Build or pull.** Launching a published notebook that has an `image`
+   offers both: **build** from its `main_env`, as any launch does, or
+   **pull** the recorded image by its digest. Pull is offered only where
+   that digest can be pulled (the same deployment); elsewhere the launch
+   builds and says why. A build whose resolved digest differs from the
+   record's says so: the image differs from the one it was published with,
+   so results may differ.
 
 ## Open questions
 
@@ -82,7 +85,7 @@ overwrite a tag (ticket `shared-image-repository`).
       `AppEnvironment` on `…@sha256:…` serves; `crane copy` to another
       registry keeps the digest.
 - [ ] Infra: resolve and serve on the digest at launch; remember it; stamp
-      `image` and `image_tag` at publish; compare on launch.
-- [ ] This repo: `image` and `image_tag` on `Notebook`
+      `image` at publish; build or pull when launching a published notebook.
+- [ ] This repo: `image` on `Notebook`
       (`src/stargazer/assets/notebook.py`), and
       `docs/architecture/notebook.md` on what a published notebook records.
