@@ -1,3 +1,10 @@
+---
+title: storage-consolidation
+status: done
+priority: normal
+created: 2026-03-11
+---
+
 # Storage Consolidation
 
 Merge `storage.py` into `local_storage.py` and consolidate config.
@@ -69,3 +76,7 @@ src/stargazer/
 2. Move `utils/config.py` → `config.py` + update imports → run tests
 3. Merge `storage.py` → `local_storage.py` + leave re-export shim → run tests
 4. `ruff --fix` after each step
+
+## Outcome
+
+Implemented 2026-03-11 (`b57c8b5`, then `f7ca72f` and `75b0c57`): the env var config consolidated into project config, and the mode variable from [[stargazer-mode-config]] removed. [[asset-storage-index]] later rebuilt the storage modules.

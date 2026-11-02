@@ -1,6 +1,13 @@
+---
+title: asset-manager-template
+status: done
+priority: normal
+created: 2026-06-11
+---
+
 # 21 — Asset Manager Template (graph + list + upload)
 
-Piece 3 of [plan 20](./20_asset_manager_page.md), expanded. The backend
+Piece 3 of [[asset-manager-page|plan 20]], expanded. The backend
 (Pieces 0–2) has landed: `/assets`, `/assets/schema`, `/assets/list`,
 `/assets/sign`, `/assets/download/{cid}` all exist in `app/assets.py`, and
 `GET /assets` already renders `assets.html` — **which does not exist yet**.
@@ -293,3 +300,7 @@ Against the devbox admin deploy (or a local run with `PINATA_JWT` set):
       node-drag (43 px), tap-select, dblclick-reset. Reverses the Piece 3b
       "dependency-free SVG" decision (see Status). The 31 route tests still
       pass; docs updated (app.md, app_internals, this plan).
+
+## Outcome
+
+Shipped 2026-06-16 ([[roadmap-complete]]) with [[asset-manager-page]]: the page's graph (vendored cytoscape.js), list and upload.

@@ -1,6 +1,13 @@
+---
+title: per-notebook-apps
+status: done
+priority: normal
+created: 2026-05-20
+---
+
 # Per-Notebook Apps + Marimo Sandbox Inline Deps
 
-Layer 2 of the **two-app** architecture. Layer 1 (admin login + dashboard) is in [`16_admin_app_with_dashboard.md`](./16_admin_app_with_dashboard.md). This plan assumes that plan has shipped — the admin app's `POST /launch?slug=…&mode=…` handler is the entry point here.
+Layer 2 of the **two-app** architecture. Layer 1 (admin login + dashboard) is in [[admin-app-with-dashboard]]. This plan assumes that plan has shipped — the admin app's `POST /launch?slug=…&mode=…` handler is the entry point here.
 
 ## Goal
 
@@ -190,3 +197,7 @@ All of the below has been built; this section is a record:
 - MCP / in-notebook LLM.
 - Local-vs-remote dispatch toggle inside cells (separate roadmap item; the per-cell `flyte.with_runcontext(mode="local").run` vs `flyte.run` story is independent of this app split).
 - Publishing stargazer to PyPI (separate roadmap item that, once shipped, lets notebook PEP 723 headers pin a version instead of pointing at the image path).
+
+## Outcome
+
+Shipped 2026-05-20 ([[roadmap-complete]]): Edit and Run spawn a per-notebook app from a shared image, with PEP 723 dependencies resolved into a sandbox venv at boot, and a proxy serving the workspace routes and a terminal overlay. Builds on [[admin-app-with-dashboard]].

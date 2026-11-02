@@ -1,3 +1,10 @@
+---
+title: constellations
+status: done
+priority: normal
+created: 2026-03-03
+---
+
 # Flatten BioTypes into Relational Components + Constellations
 
 ## Context
@@ -192,3 +199,7 @@ No longer needed — `Constellation` replaces it entirely.
 - [W3C PROV — Data Provenance in Biomedical Research (JMIR)](https://www.jmir.org/2023/1/e42289/) — entity/activity/agent provenance model
 - [SPADE — Digging into Big Provenance (CACM)](https://cacm.acm.org/practice/digging-into-big-provenance-with-spade/) — property graph provenance with content-based hashing
 - [Provenance in bioinformatics workflows (BMC Bioinformatics)](https://link.springer.com/article/10.1186/1471-2105-14-S11-S6)
+
+## Outcome
+
+Implemented 2026-03-03 to 2026-03-07: `cf1feab` rebuilt the types as `Asset` with one `_asset_key`, `5c7f19d` made tasks fetch their own inputs with their companions, and `d42c222` replaced the `Constellation` class with `assemble()`. Followed by [[annotation-fields]].

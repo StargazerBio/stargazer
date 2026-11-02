@@ -1,3 +1,10 @@
+---
+title: per-user-dashboard
+status: done
+priority: normal
+created: 2026-10-05
+---
+
 # 26 — Per-User Dashboards in Project-Isolated Projects
 
 Replace the one shared admin app with **one dashboard app per user, deployed
@@ -6,7 +13,7 @@ creates the user, their project, their access grant, and their dashboard in
 one pass. Nothing that runs on the tenant needs more than the access it
 already has.
 
-Builds on [plan 25](./25_workspace_state_object_storage.md): Union auth as
+Builds on [[workspace-state-object-storage|plan 25]]: Union auth as
 the only login, workspace notebooks on object storage, no GitHub in the app
 tier. Plan 25's admin work (identity from Union headers, the workspace store,
 the deletions) is the starting point; this plan turns that multi-user admin
@@ -259,3 +266,7 @@ images from Union's remote builder.
 - [x] Plan 24: mark the console-access grant as delivered by onboarding.
 - [x] ROADMAP: move to Complete; keep the Union questions and risks as
       entries.
+
+## Outcome
+
+Shipped 2026-10-06 ([[roadmap-complete]]): one dashboard per user in their own `u-<handle>` project, onboarded by an org admin with `stargazer-users`, replacing [[admin-app-with-dashboard]]'s shared app. The open question on an invited user's first sign-in became [[self-serve-onboarding]].

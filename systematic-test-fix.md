@@ -1,3 +1,10 @@
+---
+title: systematic-test-fix
+status: done
+priority: normal
+created: 2026-01-20
+---
+
 # Systematic Test Fix Plan: Component-Based API Migration
 
 ## Overview
@@ -359,3 +366,7 @@ pytest tests/ -v --cov=stargazer --cov-report=term-missing
 2. **Inconsistent patterns across tests**: Use helpers.py consistently
 3. **Missing keyvalue metadata**: Always include `type` and `component` in keyvalues
 4. **Test isolation failures**: Rely on `conftest.py` fixture for isolation (already good)
+
+## Outcome
+
+Implemented 2026-01-20 (`18b242f`): the remaining tests and tasks moved to the component API of [[keyvalue-components]] and the hydrate task, after [[fix-tests-local-mode]].

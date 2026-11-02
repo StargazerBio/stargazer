@@ -1,3 +1,10 @@
+---
+title: scrna-tutorial-rebuild
+status: done
+priority: normal
+created: 2026-05-19
+---
+
 # scRNA Preprocessing Tutorial Notebook Rebuild
 
 Replace `src/stargazer/notebooks/tutorials/scrna_tutorial.py` with a new file `src/stargazer/notebooks/tutorials/preprocessing_tutorial.py` — a progressive walkthrough that introduces Stargazer's primitives in the order a new user encounters them: **Asset → Task → Workflow → Local execution → Remote execution**. Scope is narrowed to **preprocessing only** (qc_filter → normalize → select_features → reduce_dimensions) so the local-vs-remote contrast is the headline lesson.
@@ -19,7 +26,7 @@ These are real selling points but each one is a separate concept; bundling them 
 ### Cell 1 — Imports + Flyte init
 
 - Imports: `marimo`, `flyte`, `matplotlib`, `numpy`, `scanpy`.
-- `flyte.init_in_cluster(project=os.environ["FLYTE_PROJECT"], domain=os.environ["FLYTE_DOMAIN"])` (not `init_from_config()` — the notebook is running in a pod; see [[flyte_docs_project_create_wrong]] for why this matters).
+- `flyte.init_in_cluster(project=os.environ["FLYTE_PROJECT"], domain=os.environ["FLYTE_DOMAIN"])` (not `init_from_config()` — the notebook is running in a pod; see [[flyte-config]] for why this matters).
 - Title + one-paragraph orientation: "this notebook builds a 4-stage scRNA-seq pipeline out of Stargazer primitives, then runs it both ways."
 
 ### Cell 2 — What is an Asset?
@@ -125,3 +132,7 @@ These are real selling points but each one is a separate concept; bundling them 
 - `src/stargazer/notebooks/tutorials/scrna_tutorial.py` — **deleted**.
 - `app/notebook_app.py` — update `_NOTEBOOK_PATH_IN_IMAGE` to point at the new file.
 - Notebook image rebuild required before the next admin deploy (`_build_and_push_notebook_image`).
+
+## Outcome
+
+Shipped before tickets: [[roadmap-complete]] records the scRNA preprocessing tutorial rebuilt as Asset, Task, Workflow, local, then remote. [[tighten-tutorial-story]] later gave the tutorials one arc.

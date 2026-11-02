@@ -1,3 +1,10 @@
+---
+title: app-tier-performance-audit
+status: done
+priority: normal
+created: 2026-08-07
+---
+
 # 22 — App-Tier Performance & Modernization Audit
 
 A full pass over the `app/` deployment tier (admin dashboard, asset manager,
@@ -124,3 +131,7 @@ passthrough for non-HTML responses.
   docstrings, `.opencode/reference/architecture/app_internals.md`, pyproject
   `landing` extra (drop aiohttp), ROADMAP Complete entry.
 - [x] 11. `ruff check --fix` + `ruff format`; full unit suite green.
+
+## Outcome
+
+Shipped 2026-07-06 ([[roadmap-complete]]): one pooled HTTP client per process, a streaming notebook proxy, `/launch/status` from a single deployment list, gzip on the admin app, and a single-flight public-asset cache.

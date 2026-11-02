@@ -1,3 +1,10 @@
+---
+title: scrna-clustering
+status: done
+priority: normal
+created: 2026-03-18
+---
+
 # scRNA-seq Clustering Pipeline
 
 Implement a scanpy-based scRNA-seq clustering workflow as Flyte v2 tasks in Stargazer, following the [scanpy clustering tutorial](https://scanpy.readthedocs.io/en/stable/tutorials/basics/clustering.html).
@@ -199,3 +206,7 @@ async def scrna_clustering_pipeline(
 2. `ruff check --fix src/stargazer/tasks/scrna/ src/stargazer/assets/scrna.py src/stargazer/workflows/scrna_clustering.py`
 3. `pytest tests/unit/test_scrna_tasks.py -v` — all unit tests pass
 4. `pytest tests/integration/test_scrna_workflow.py -v` — end-to-end pipeline completes
+
+## Outcome
+
+Implemented 2026-03-18 (`9b6bbaa`): the scanpy tasks and workflow, now `src/stargazer/tasks/scrna/` and `scrna_clustering`. Its tutorial is [[scrna-tutorial-rebuild]].

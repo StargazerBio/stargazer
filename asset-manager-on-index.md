@@ -13,7 +13,7 @@ dashboard an asset explorer and notebook launcher (decided 2026-10-16); the
 second, moving the browser onto the dashboard's home page, is ticket
 [[assets-on-dashboard-home]].
 
-Point the asset-manager page at the user's index instead of Pinata. A follow-up from [plan 27](archive/27_asset_storage_index.md),
+Point the asset-manager page at the user's index instead of Pinata. A follow-up from [[asset-storage-index|plan 27]],
 which moved task outputs onto the object store and the asset index into each user's dashboard.
 
 **The asset manager's Private tab moves onto the user's index and store.** It
@@ -36,7 +36,7 @@ and upload form tell users not to upload sensitive data
 - **Any pod can read every user's files, and that's accepted for now.** Every
   project on the tenant runs as one role,
   `union-us-west-2-stargazerbio-userflyterole`, which reaches the whole tenant
-  bucket (measured in [plan 25](archive/25_workspace_state_object_storage.md);
+  bucket (measured in [[workspace-state-object-storage|plan 25]];
   `.opencode/reference/architecture/app_internals.md` on `main`). The
   `users/<subject>/` prefixes are a convention, not a boundary. The alpha
   notice is what covers this until isolation is hardened.

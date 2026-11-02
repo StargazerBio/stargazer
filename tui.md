@@ -1,3 +1,10 @@
+---
+title: tui
+status: done
+priority: normal
+created: 2026-02-15
+---
+
 # TUI Implementation Plan — Superseded
 
 ## Status: Cancelled
@@ -23,3 +30,7 @@ The original plan called for:
 - 7 implementation phases
 
 None of this will be built. The MCP server plan (`mcp_server.md`) remains the active plan for CLI-facing work.
+
+## Outcome
+
+Cancelled before any work: the plan itself records the switch to bringing your own TUI, and nothing shipped. [[platform-architecture]] keeps that stance: Stargazer builds the notebook and the MCP server and links out for the rest.

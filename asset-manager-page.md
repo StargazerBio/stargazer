@@ -1,3 +1,10 @@
+---
+title: asset-manager-page
+status: done
+priority: normal
+created: 2026-06-10
+---
+
 # 20 — Asset Manager Dashboard Page
 
 ## Status / decisions
@@ -93,7 +100,7 @@ metadata.
 
 **v1 scope is upload + browse + download.** No page-level delete yet (the MCP
 `delete_file` tool remains the escape hatch). **Metadata edit landed**
-(2026-06-11, plan 21 follow-up): Pinata's `PUT` merges keyvalues in place
+(2026-06-11, [[asset-manager-template|plan 21]] follow-up): Pinata's `PUT` merges keyvalues in place
 without touching bytes/CID, so a mis-tagged record is fixed via the detail
 card's **Edit metadata** (owner-only, fail-closed) or the MCP `update_file`
 tool — no more delete-and-re-upload, and `*_cid` edges survive.
@@ -427,7 +434,7 @@ Confirm during implementation (none block starting):
       The page route renders `assets.html`, which lands in Piece 3 (no
       page-route test until then).
 - [x] **Piece 3 — template.** ✅ 2026-06-11. Built in its own plan:
-      [`21_asset_manager_template.md`](./21_asset_manager_template.md).
+      [[asset-manager-template]].
       `app/templates/assets.html` (in the dashboard box, untouched reactive
       background), dependency-free graph + list views with a Graph/List
       toggle, public/private tabs, hover-peek + click-to-pin detail card with
@@ -444,3 +451,7 @@ Confirm during implementation (none block starting):
       keyvalue-coercion section, drift predating this plan, fixed in
       passing). Module docstrings written with the code. Frontend docs ride
       with plan 21.
+
+## Outcome
+
+Shipped 2026-06-16 ([[roadmap-complete]]), with [[asset-manager-template]]: a graph, list and upload page for arbitrary assets on new `app/assets.py` routes, and `update_metadata` on every storage backend. The browser half of resumable uploads didn't land; that became [[tus-browser-uploads]].

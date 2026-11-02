@@ -1,3 +1,10 @@
+---
+title: fix-tests-local-mode
+status: done
+priority: normal
+created: 2026-01-20
+---
+
 # Fix Tests for Local Mode Plan
 
 ## Overview
@@ -493,3 +500,7 @@ async def test_baserecalibrator_creates_report():
 **Alternative Execution Path:**
 
 If time is limited, Phases 1-5 can be completed first to get tests passing. Phase 6 (hydrate refactor) is an enhancement that improves test quality but isn't strictly required for functionality.
+
+## Outcome
+
+Implemented 2026-01-20 (`b22493f` for its first phase, and `6bdb62f`, which laid `tests/` out to mirror `src/`). Followed the same day by [[systematic-test-fix]].

@@ -1,3 +1,10 @@
+---
+title: tighten-github-token-scope
+status: done
+priority: normal
+created: 2026-06-04
+---
+
 # Tighten GitHub Token Scope (OAuth App + GitHub App hybrid)
 
 Security hardening for the credential the admin app holds on behalf of each user. Today the app requests a broad, long-lived OAuth token and hands it to the notebook runtime; this plan narrows it to a fork-scoped, short-lived credential and keeps it out of the pod where user code runs.
@@ -141,3 +148,7 @@ The pod is injected a **signed capability** (`SG_POD_TOKEN`, `SESSION_SECRET`-si
 - [ ] Export `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_SLUG` before `python -m app.admin_app`.
 - [ ] Rebuild + push the notebook image (cookie format + clone path changed): `_build_and_push_notebook_image` runs in the deploy entrypoint.
 - [ ] Live-verify the four acceptance rows that need a running pod (expiry, revoke).
+
+## Outcome
+
+Shipped 2026-06-05 ([[roadmap-complete]]): the broad OAuth token is used once, to fork, and a GitHub App scoped to the fork mints short-lived tokens for the rest. Its deploy checklist was never run. [[workspace-state-object-storage]] later removed GitHub from the app tier.

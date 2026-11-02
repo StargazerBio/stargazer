@@ -10,7 +10,7 @@ Add a link from each user's dashboard to the Union console, deep-linked to
 their own project, so they can see their runs there (execution graphs, logs,
 retries, inputs and outputs) rather than our re-implementing them.
 
-Everything else this ticket covered has shipped, mostly through plan 26's
+Everything else this ticket covered has shipped, mostly through [[per-user-dashboard|plan 26]]'s
 onboarding. `stargazer-users onboard` creates each user's `u-<handle>`
 project, deploys their dashboard into it, and binds built-in `contributor` on
 it, and nothing else, to their Union subject. Verified 2026-10-06: the
