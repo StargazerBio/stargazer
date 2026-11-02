@@ -12,7 +12,7 @@ the SDK workflow `germline_short_variant_discovery`, the MCP's
 `run_workflow`, and `tests/devbox/test_germline.py`.
 
 The docs now use it as the headline example of the asset graph ("workflows
-take questions, not files", ticket `asset-graph-docs`), and a notebook
+take questions, not files", ticket [[asset-graph-docs]]), and a notebook
 makes that runnable: pick a build and samples, choose where it runs, and
 watch the outputs land in the graph linked back to the reference.
 
@@ -38,7 +38,7 @@ Modelled on `scrna_pipeline.py`, a thin parameterized UI over SDK calls:
    cohort VCF and its index, and per sample the alignments and GVCFs, each
    with its type, key fields and CID. Show the links that exist, e.g.
    `assemble(reference_cid=ref.cid)`. How far back the lineage reaches
-   depends on ticket `provenance-on-every-output`; show what's there, and
+   depends on ticket [[provenance-on-every-output]]; show what's there, and
    extend the view when that lands.
 5. **Look at the result.** A small summary of the VCF: variant counts by
    type, a table of the first records. Use the `dataviz` skill for any
@@ -49,10 +49,10 @@ register the tile wherever the shipped workflow notebooks are listed.
 
 ## Related
 
-- `reuse-reference-companions`: until it lands, every run rebuilds the
+- [[reuse-reference-companions]]: until it lands, every run rebuilds the
   reference's indices. On the TP53 slice that's small, so this doesn't
   wait on it; on a full genome it would dominate the run.
-- `provenance-on-every-output`: decides how far step 4 can walk back.
+- [[provenance-on-every-output]]: decides how far step 4 can walk back.
 
 ## Pieces
 
