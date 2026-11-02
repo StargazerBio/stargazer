@@ -59,11 +59,16 @@ it's listed through the community repo's catalog.
 
 ## Pieces
 
-- [ ] `germline/<slug>/notebook.py` in the community repo, importing only
-      public `stargazer` APIs, with the PEP 723 header the SDK tasks need,
-      naming the `variant_calling_demo` bundle as its demo inputs.
+- [x] `germline/short-variant-discovery/notebook.py` in the community
+      repo's first commit (bundle from PR 121's session), importing only
+      public `stargazer` APIs, naming `variant_calling_demo` in its
+      `meta.yaml`. The run waits on a button, or `--run` (CI). Step 3 has
+      no console link: `dispatch()` returns only the output.
+- [x] In `catalog.yaml`.
 - [ ] It passes the community repo's CI (runs headless on its demo
-      inputs), and goes in `catalog.yaml`.
+      inputs). Not run yet: the tools weren't available where it was
+      written. Parts verified there are in ticket [[notebooks-in-git]]'s
+      evidence.
 - [ ] Docs: the Asset Graph page can link to it as the runnable version of
       its germline example.
 
