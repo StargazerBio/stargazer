@@ -87,3 +87,5 @@ to a pod just ready, none came back. Left: infra#18 (the pin) to merge, then
 `stargazer-users upgrade` for live dashboards. Also left, as tickets:
 [[unhydrated-notebook-banner]] (say when a pod's notebook didn't hydrate) and
 [[conditional-workspace-writes]] (the in-flight-pass window). Neither PR had review comments.
+
+Related: [[board]].

@@ -123,3 +123,5 @@ tests needed.
 ## Outcome
 
 Shipped 2026-06-09 ([[roadmap-complete]]): the tutorials given one arc, after [[scrna-tutorial-rebuild]].
+
+Related: [[board]].

@@ -22,3 +22,5 @@ Found while closing ticket [[default-ipfs-gateway]].
 ## Outcome
 
 Moot. The chat image is gone: PR #47 folds it into the single `stargazer-note` image, so there is no `stargazer-chat` to rebuild. The one image bakes in the source too, so it still has to be built and pushed from `main` for the quickstart's bundle download to get the new gateway default, and the README quickstart still names `stargazer-chat`. Neither was verified here.
+
+Related: [[board]].

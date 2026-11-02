@@ -504,3 +504,5 @@ If time is limited, Phases 1-5 can be completed first to get tests passing. Phas
 ## Outcome
 
 Implemented 2026-01-20 (`b22493f` for its first phase, and `6bdb62f`, which laid `tests/` out to mirror `src/`). Followed the same day by [[systematic-test-fix]].
+
+Related: [[board]].

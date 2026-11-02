@@ -17,3 +17,5 @@ Both keys were deleted on 2026-10-24 with `ApiKey.delete` under the user's admin
 ## Outcome
 
 Closed 2026-10-26 without a PR: every step was an admin action on the tenant. Both injection-era keys are deleted and the project `EAGER_API_KEY` secrets are cleared. Injection is off. Union's job still recreates the org secret every four hours if it goes missing, so the secret stays in place, holding key `396584044785060272` with no policies. A task holding it as its key was refused viewing runs and launching children (run `u8ffcxw2r8lrq2db295g`, 2026-10-26). The org key can't act anywhere, so stopping the job no longer blocks anything. It's Union's to stop whenever they get to it.
+
+Related: [[board]].

@@ -23,3 +23,5 @@ What adopting the pool takes:
 - TLS and IPv4 stay ours: the connector passes `sslmode`, `sslrootcert`, `hostaddr` and `sslnegotiation` through to psycopg as given.
 - A new seam for tests: infra's and the postgres tier's tests replace `DsqlIndex._connect`.
 - The dsql test tier (ticket [[dsql-test-tier]]) runs before and after, with per-call latency measured in a pod.
+
+Related: [[board]].

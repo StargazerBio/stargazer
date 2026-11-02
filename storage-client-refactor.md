@@ -188,3 +188,5 @@ Update `.opencode/specs/filesystem_spec.md` to reflect the new storage abstracti
 ## Outcome
 
 Implemented 2026-02-16 in `3ced460`, beside [[stargazer-mode-config]]: `LocalStorageClient` split from the Pinata client. [[storage-consolidation]] and then [[asset-storage-index]] reshaped storage again.
+
+Related: [[board]].

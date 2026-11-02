@@ -13,3 +13,5 @@ Superseded (2026-10-18). Snapshots were removed in #41 (ticket
 [[save-whole-workspace]]). A notebook is either a file in a workspace or, once
 published, an asset (ticket [[public-notebooks]]), so reproducing a published
 notebook's run is that ticket's question now.
+
+Related: [[board]].

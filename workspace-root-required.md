@@ -27,4 +27,4 @@ In review as StargazerBio/infra#9. A bare local run's root is `~/.stargazer/stor
 
 Shipped in StargazerBio/infra#9 (merge `744d8fa`): `deploy_dashboard` refuses without a workspace root and bakes it into the dashboard, a bare local run keeps notebooks in `~/.stargazer/store`, and the 503 path, `_store_ready` and the template's not-configured state are gone, along with onboarding's own check. Verified with a bare local run before and after, on the devbox (create, launch, save) and on the tenant (the root in the app spec, create and delete). Nothing left; no follow-ups were left on the PR.
 
-Related: [[settings-in-state-table]].
+Related: [[settings-in-state-table]], [[board]].

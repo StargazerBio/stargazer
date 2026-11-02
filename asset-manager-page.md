@@ -455,3 +455,5 @@ Confirm during implementation (none block starting):
 ## Outcome
 
 Shipped 2026-06-16 ([[roadmap-complete]]), with [[asset-manager-template]]: a graph, list and upload page for arbitrary assets on new `app/assets.py` routes, and `update_metadata` on every storage backend. The browser half of resumable uploads didn't land; that became [[tus-browser-uploads]].
+
+Related: [[board]].

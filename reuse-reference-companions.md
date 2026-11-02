@@ -45,3 +45,5 @@ repeat, never use a publisher's index. Both can land; they don't overlap.
       shows no index tasks in the run's graph.
 - [ ] Docs: the workflow's docstring; `docs/architecture/workflows.md` if
       it grows a convention ("workflows skip work the graph already has").
+
+Related: [[board]].

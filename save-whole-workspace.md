@@ -355,3 +355,5 @@ save at SIGTERM can be rechecked on its own once [[dashboard-settings]] can set
 the interval to 0. A long notebook name never launches (ticket
 [[long-notebook-names]]). The verify feature file and its driver were dropped
 in review; the unit tests cover what they drove.
+
+Related: [[board]].

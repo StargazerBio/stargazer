@@ -42,3 +42,5 @@ the invite-only page with Continue to sign in and Request access (measured
 2026-10-31, curl). Left: the open checkbox above, what Union shows an
 uninvited account with a verified, public email. The PR had no review
 comments.
+
+Related: [[board]].

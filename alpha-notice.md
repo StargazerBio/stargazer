@@ -38,3 +38,5 @@ dashboard. The upload form's copy can't be seen on a deployed dashboard until
 the page leaves Pinata ([[asset-manager-on-index]]);
 hardening the isolation itself is
 [[per-user-storage-isolation]].
+
+Related: [[board]].

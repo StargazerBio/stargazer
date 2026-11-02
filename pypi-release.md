@@ -37,3 +37,5 @@ Release run's three jobs, the published files on both registries, and the test
 account's dashboard on Union showing `2026.10.28-1318008` and running the
 Assets tutorial on the release image. Left: notebook headers pinning a release
 (above), and releases stay manual, a tag per release.
+
+Related: [[board]].

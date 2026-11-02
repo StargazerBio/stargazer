@@ -41,4 +41,4 @@ Verified (measured): unit tier 519 passed, with the new tests failing first. On 
 
 Left: the sign-in redirect on a deep link wasn't exercised, since the browser was already signed in. No new tickets.
 
-Related: [[onboarding-to-infra]].
+Related: [[onboarding-to-infra]], [[board]].

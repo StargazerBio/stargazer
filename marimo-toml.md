@@ -19,3 +19,5 @@ Decided 2026-10-20: no marimo-config surface. `marimo.toml` held only the `[ai] 
 ## Outcome
 
 Shipped in PR #63 (merge `956ea36`): `marimo.toml` is deleted, and `app/notebook_agent.md` is the one condensed context, baked as `/workspace/AGENTS.md` (ticket [[production-context-files]]). Verified: nothing else in the repo read the file. Left: marimo's own AI chat panel gets no Stargazer rules when run from a checkout.
+
+Related: [[board]].

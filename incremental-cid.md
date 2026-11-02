@@ -51,3 +51,5 @@ Verified with the unit tier, the Pinata drift test against the real API
 
 Left: nothing uses the builder yet. Ticket [[tus-browser-uploads]] will, to
 work out an upload's CID as its chunks pass through the dashboard.
+
+Related: [[board]].

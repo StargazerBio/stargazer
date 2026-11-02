@@ -73,3 +73,5 @@ tier and against the real Pinata API (above).
 Left: the Publish buttons on the dashboard (ticket [[assets-on-dashboard-home]])
 and publishing a notebook (ticket [[public-notebooks]]). Companions aren't
 published with their asset.
+
+Related: [[board]].

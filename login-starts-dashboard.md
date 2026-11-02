@@ -38,4 +38,4 @@ Shipped in StargazerBio/infra#28 (merged 2026-10-31). The login app reads the vi
 
 Left: the live login app runs this only once it's redeployed from `main` (`deploy_login`, or a bare `stargazer-users upgrade`). A bookmarked dashboard address still gets Union's 404.
 
-Related: [[launch-wait-route]], [[login-redirect]], [[flyte-apps]].
+Related: [[launch-wait-route]], [[login-redirect]], [[flyte-apps]], [[board]].

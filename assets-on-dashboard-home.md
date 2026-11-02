@@ -66,3 +66,5 @@ matched, with notebook tiles still launching. The unit tier passed. Left:
 leaving `asset=notebook` rows out of the browser moves to ticket
 [[public-notebooks]]. Review added the `AGENTS.md` rule that durable docs
 describe the present, with no log of what changed.
+
+Related: [[board]].

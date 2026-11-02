@@ -60,3 +60,5 @@ its input `AnnData` and raises on an unlabeled or unsupported one; the
 pipeline no longer passes `organism=`. Verified as above. Its PR also
 carried the AGENTS.md rule to answer a merged PR's comments (`1140e8e`).
 No comments were left on it. Left: ticket [[registry-type-names-py314]].
+
+Related: [[board]].

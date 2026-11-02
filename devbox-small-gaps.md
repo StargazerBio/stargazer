@@ -40,4 +40,4 @@ tier, and the devbox germline workflow, all 11 of its pods at 1Gi/6Gi.
 Left: the germline workflow runs no BQSR without known sites, so the stored
 index is covered by the tasks-tier test only.
 
-Related: [[flyte-task-environments]], [[gatk]].
+Related: [[flyte-task-environments]], [[gatk]], [[board]].

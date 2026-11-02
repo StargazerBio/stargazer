@@ -38,3 +38,5 @@ Decide first:
 Shipped in PR #73 (merge `0f43b8b`). `STARGAZER_PUBLIC_ASSETS=off` in the deployer's shell turns the dashboard's public tier off: onboarding forwards it, the public routes answer 503, and the page hides the public upload option and shows the Public tab's notice. Tasks and notebooks keep the public tier.
 
 Verified with tests written first (unit tier 522 passed) and on Union with the test account's dashboard deployed from the branch: no public upload option, `?network=public` → 503 and `?network=private` → 200, with `PINATA_JWT` still in the pod's env. Torn down after. Nothing left; no comments on the PR.
+
+Related: [[board]].

@@ -49,3 +49,5 @@ Shipped in PR #62 (merge `40c329e`): `stargazer.notebooks.ui` with `run_location
 Verified: unit tests written first (failed on `NotImplementedError`), with a mutation check on the cluster path's `wait()`; unit tier 504 passed. The Execution tutorial driven headless against an isolated store: the control rendered with "On this machine" as its default, and section 6 returned 3 `CohortSummary` results with the same CIDs as section 3. "On the cluster" with no cluster configured raised at upload rather than running locally.
 
 Left: a real cluster run through the control was not verified (only a patched-runner unit test covers it). The scRNA notebook and the `basic` template move onto the control in ticket [[notebook-cluster-runs]]. `dispatch` handles one output only and shows no console link for a cluster run.
+
+Related: [[board]].

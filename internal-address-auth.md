@@ -75,3 +75,5 @@ owner and an admin get through. Left: `/index/*` is still open on the
 in-cluster address until ticket [[dsql-asset-index]] removes it, and code in any
 pod can still act in any project with the org key (ticket
 [[org-wide-platform-key]]).
+
+Related: [[board]].

@@ -15,3 +15,5 @@ In review as StargazerBio/infra#10: a run the control plane can't find (connectr
 ## Outcome
 
 Shipped in StargazerBio/infra#10 (merge `3236577`): a pending launch whose build run the control plane can't find (connectrpc's `NOT_FOUND`) fails with its own reason, and a launch treats a gone run as finished, so it builds again. Verified by a unit test and on the devbox with a seeded row, before and after; not on the tenant, whose state table can't be written from a workstation. No follow-ups were left on the PR.
+
+Related: [[board]].

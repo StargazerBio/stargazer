@@ -41,3 +41,5 @@ As the test account in a fresh browser session: open `stargazer.bio/login`, sign
 Shipped in infra #19 (merged 2026-10-30) and stargazer.bio #1. `app/login.py` serves `login.apps.stargazerbio.us-west-2.unionai.cloud` from the project `stargazer`, finds the visitor's dashboard by listing their projects with their own ID token, and shows a no-workspace page (a template, from review) to a user without one. Onboarding gives every user `stargazer-login` (viewer on `stargazer`); `upgrade` deploys the app and gives existing users that access. Verified on the tenant from the branch: the test account landed on its dashboard with no second sign-in, a signed-out request went to Union's sign-in and back, and a user with no project got the no-workspace page.
 
 Left: the app runs once `stargazer-users upgrade` deploys it from `main`; the whole path from `stargazer.bio/login` runs once Namecheap's DNS points the bare domain at GitHub Pages. Cold start is ticket [[login-cold-start]].
+
+Related: [[board]].

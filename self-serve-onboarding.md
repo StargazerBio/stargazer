@@ -12,4 +12,4 @@ arrives with; check with a real second address before onboarding anyone
 new. If Union adds self-serve sign-up, onboarding could run on first
 sign-in instead.
 
-Related: [[uninvited-sign-in]], [[reonboard-unarchive]], [[onboarding-to-infra]].
+Related: [[uninvited-sign-in]], [[reonboard-unarchive]], [[onboarding-to-infra]], [[board]].

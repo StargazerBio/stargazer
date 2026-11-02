@@ -80,3 +80,5 @@ src/stargazer/
 ## Outcome
 
 Implemented 2026-03-11 (`b57c8b5`, then `f7ca72f` and `75b0c57`): the env var config consolidated into project config, and the mode variable from [[stargazer-mode-config]] removed. [[asset-storage-index]] later rebuilt the storage modules.
+
+Related: [[board]].

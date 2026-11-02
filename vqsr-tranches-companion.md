@@ -32,4 +32,4 @@ a second storage client sharing only the store and index, and failed before
 the fix. Left: VQSR runs only in INDEL mode on the fixtures, since Mills
 holds no SNPs, so SNP mode isn't tested.
 
-Related: [[gatk]].
+Related: [[gatk]], [[board]].

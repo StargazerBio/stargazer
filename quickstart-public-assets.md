@@ -13,3 +13,5 @@ by CID since `61491a3` and `c633a73` (2026-03), and the account's dedicated
 gateway served them during [[asset-storage-index|plan 27]] (recorded in ticket [[default-ipfs-gateway]],
 not re-measured). Closed in the 2026-10-14 backlog sweep. Downloading them
 through the default gateway is ticket [[default-ipfs-gateway]].
+
+Related: [[board]].

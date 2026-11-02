@@ -25,3 +25,5 @@ Unit tier 551 passed; pinata tier 14 passed (7 failed before the fixture fix, 14
 ## Outcome
 
 Shipped in PR #75 (merge `0cdc32d`): every public record needs an `_owner` (unowned writes refused, unowned files skipped on read), `fetch()` takes the caller's public companions before the publisher's, and the pinata tier uploads as an owner. Verified with the unit tier (551 passed) and the pinata tier against the real API (14 passed); the tier's Pinata account held 6 public files, all owned. Not driven live: `fetch()` choosing between publishers, since the public tier holds no companions. No comments on the PR; nothing left.
+
+Related: [[board]].

@@ -42,3 +42,5 @@ PR #59 (`5bd1a96`, merged 2026-10-21). `test_discovery_finds_every_defined_workf
 walks the modules under `stargazer.workflows` with the task test's helper,
 and the registry no longer skips a workflow whose name is already
 registered. Verified as above. Nothing left.
+
+Related: [[board]].

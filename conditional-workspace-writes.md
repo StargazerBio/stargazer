@@ -18,3 +18,5 @@ pod last read or wrote (obstore's `PutMode` update), so an upload over a
 deleted or replaced object fails instead. `flyte.storage` doesn't expose that,
 so it means reaching past it to the store. Worth it only if the window shows
 up in practice.
+
+Related: [[board]].

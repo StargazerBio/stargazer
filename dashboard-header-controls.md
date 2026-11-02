@@ -126,3 +126,5 @@ built-in browser pane signed in to the console as the test account.
 ## Outcome
 
 Shipped in PR #94 (merge `632fb3f`). Settings is a header button opening a modal, and cleaning up stopped apps is a header button too; the Settings section and the footer broom are gone. Verified by the unit tier (531 passed) and on Union with the test account `u-pryce` at `76fafeb` (the recipe above). The phone-width overflow of the upload labels it noted was outside the header; #95's `974a177` rewrapped those labels (inferred from the commit, not measured at phone width). No review comments.
+
+Related: [[board]].

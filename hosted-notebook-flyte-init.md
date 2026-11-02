@@ -124,3 +124,5 @@ Teardown: `nb-workflows-edit`, `nb-execution-edit` and `dashboard` deactivated. 
 Shipped in PR #68 (merge `393a9c4`). `stargazer.config.init_flyte()` calls `flyte.init_in_cluster(...)` from the directory holding the `stargazer` package when run in a pod, and `flyte.init_from_config()` elsewhere; the notebooks, the MCP server and the tests call it. `tutorial_env` has its own image, and the notebook image bakes `uv.lock` so pod-built task images get stargazer's deps.
 
 Verified on Union with the test account: the Execution tutorial's section 4 run `umlbn8q8hw5lpnzxtxcd` and its section 6 "On the cluster" run `u9dd6c8bj8pb9tvgfvnz` both SUCCEEDED in `u-pryce`, with the user's store and index. Unit tier 520 passed. Left: runs are created by the platform key (ticket [[org-wide-platform-key]]); notebook-defined workflows and a workspace notebook's own tasks (ticket [[notebook-cluster-runs]]). No comments on the PR.
+
+Related: [[board]].

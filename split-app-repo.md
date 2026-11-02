@@ -251,3 +251,5 @@ above. The test account's stale notebooks were deleted; it was the only user.
 
 Left: the first release and infra's pin (ticket [[pypi-release]]). Neither PR
 had review comments.
+
+Related: [[board]].

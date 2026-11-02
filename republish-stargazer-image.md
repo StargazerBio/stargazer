@@ -50,4 +50,4 @@ it) on 2026-10-20. Then an anonymous token request and the `latest`
 manifest request both returned 200, with digest `sha256:c2958913…`, and the
 packages API reported `"visibility": "public"`. Nothing is left.
 
-Related: [[publish-stargazer-image]], [[quickstart-save-banner]].
+Related: [[publish-stargazer-image]], [[quickstart-save-banner]], [[board]].

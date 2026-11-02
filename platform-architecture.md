@@ -150,3 +150,5 @@ Users log in to the hosted version (Union) with GitHub OAuth. This gives us:
 ## Outcome
 
 Became the shape of Stargazer's surfaces: a hosted marimo notebook ([[per-notebook-apps]]) and the MCP server ([[mcp-server]]) are built; the Union console and GitHub are linked to. The marimo `[ai] rules` it describes are [[marimo-toml]], and the Union link-out is [[union-console-handoff]] (inferred from those tickets, not traced commit by commit).
+
+Related: [[board]].

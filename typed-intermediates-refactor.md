@@ -634,3 +634,5 @@ Each phase must leave all existing tests passing before the next phase starts.
 ## Outcome
 
 Implemented 2026-03-01 (`c2332d8`, `75b9fb6`): the GATK intermediates became typed components declared in their parent types, building on [[typed-file-components]].
+
+Related: [[board]].

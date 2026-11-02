@@ -200,3 +200,5 @@ On the dashboard, with Mine, Public and Stargazer entries loaded:
 ## Outcome
 
 Shipped in StargazerBio/infra#7 (merge `b60aad9`): the asset explorer is Preact components written with htm in `app/static/explorer.js`, on vendored Preact 10.29.8 and htm 3.1.1 with no build step, reading the server's values from one `#explorer-boot` JSON block. Verified on the tenant as the test account: filters, both views, the graph, upload and edit, launching, defaults, and markup in names and values rendered as literal text. Left: the devbox wasn't driven in a browser (the in-app browser blocks its local address past the first load), Preact 11 isn't adopted, and `launch.js` and the dashboard's own script stay vanilla. No follow-ups were left on the PR.
+
+Related: [[board]].

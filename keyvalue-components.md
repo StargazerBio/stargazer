@@ -492,3 +492,5 @@ subprocess.run(
 ## Outcome
 
 Implemented 2026-01-18 (`a5a4e59`): the types built from `update_<component>` methods, and a hydrate task. [[typed-file-components]] later gave each file a `ComponentFile` of its own, and [[constellations]] turned those into `Asset`.
+
+Related: [[board]].

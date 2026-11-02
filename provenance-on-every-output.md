@@ -50,3 +50,5 @@ it was made from.
 - [ ] Germline workflow on the devbox: from the cohort VCF, walk back to
       the reference by CID alone.
 - [ ] Docs: `docs/architecture/types.md` lists the link fields.
+
+Related: [[board]].

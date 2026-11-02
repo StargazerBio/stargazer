@@ -26,4 +26,4 @@ abort every run that testing starts on the Union tenant once its check is done, 
 Verified by checking each named command and flag against the locked `flyte` CLI's `--help`;
 nothing was run against the tenant. Nothing left.
 
-Related: [[flyte-apps]].
+Related: [[flyte-apps]], [[board]].

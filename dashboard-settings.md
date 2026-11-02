@@ -61,3 +61,5 @@ and work since the last save is lost if the notebook stops unexpectedly.
 Shipped in PR #71 (merge `43dc486`). Each user's settings live in `settings.json` beside their workspace; the dashboard's Settings section saves the interval (`POST /settings`, whole seconds, 0 or more), and `/launch` passes it to the pod as `SG_SAVE_INTERVAL_SECONDS`. From review, the default is 30 s, not 5, for less S3 chatter, in both the dashboard and the proxy's fallback.
 
 Verified with tests written first (unit tier 538 passed) and on Union with the test account at the 5 s default: a saved 60 reached the pod's env, survived a redeploy, and -1 was refused. The 30 s default was checked locally through the app's test client (a new user's field reads 30, their launch sets 30), not redeployed. The test account has a saved 5, so it keeps saving every 5 s until that's changed. Nothing else left.
+
+Related: [[board]].

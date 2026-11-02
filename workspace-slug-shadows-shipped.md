@@ -48,3 +48,5 @@ Dashboard → Workspace → New notebook tile → name → Create.
 ## Outcome
 
 Shipped in PR #93 (merge `68c8ac9`). Create and Open from GitHub refuse a built-in notebook's name (400 and 409, "is taken by a built-in notebook"), so a new workspace notebook can't share a built-in notebook's app. Its last commit renamed shipped notebooks to built-in notebooks throughout (`shipped_source` → `builtin_source`). Verified by the unit tier (539 passed, four new tests) and on Union with the test account's dashboard (the recipe above). Left: a workspace notebook already stored under a built-in name still shares that app until it's renamed, ticket [[stored-builtin-slug-notebooks]]. No review comments.
+
+Related: [[board]].

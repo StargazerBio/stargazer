@@ -62,3 +62,5 @@ no violations. Diagrams drew with no system Graphviz, and the unit tier passed
 (410) after the rebase onto `main`.
 
 Left: the root-module gap above, and ticket [[slim-image-dev-deps]].
+
+Related: [[board]].

@@ -334,3 +334,5 @@ cd /home/coder/stargazer && uv run pytest tests/ -v
 ## Outcome
 
 Implemented 2026-02-27 (`d15177c`, `bed788f`, `cfe23e7`): a `ComponentFile` base class with declared field types, and every task migrated to it. Followed by [[typed-intermediates-refactor]], and renamed `Asset` by [[constellations]].
+
+Related: [[board]].

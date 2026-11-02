@@ -45,3 +45,5 @@ curation keyvalue costs one of Pinata's 9 slots.
 PR #74 merged (merge `719d7f1`) with only its first commit: public companions count only when their `_owner` matches the `_owner` of the parent's public record. Two later commits, made in its worktree minutes before the merge but never pushed, didn't ship, though the PR's description covers them: every public record needs an `_owner` (`PinataClient` refuses unowned writes, and reads skip unowned files), and `fetch()` also takes the caller's own public companions. They're ticket [[public-companion-owners]].
 
 Verified on the merged commit with unit tests written first (fake public tier). Not driven live: the public tier holds no companions. No comments on the PR.
+
+Related: [[board]].

@@ -52,3 +52,5 @@ Shipped in #54 (merged 2026-10-20, `587e6bc`): `PostgresIndex` beside
 users see no change. Left: the devbox's index on a Postgres pod (ticket
 [[devbox-postgres-index]]), then the hosted index on DSQL (ticket
 [[dsql-asset-index]]).
+
+Related: [[board]].

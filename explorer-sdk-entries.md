@@ -10,3 +10,5 @@ Stargazer source (ticket [[unified-asset-explorer]]). The SDK's tasks and
 workflows could be Stargazer entries too, from the registry the MCP server
 lists them with, each detail card showing its signature. Left out of the
 explorer until someone wants them.
+
+Related: [[board]].

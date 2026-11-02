@@ -126,3 +126,5 @@ Delivered by ticket [[split-app-repo]] (StargazerBio/stargazer#102): the
 package is the SDK alone, `stargazer-bio`, with the app tier moved to infra
 and the runtime kept out of the package in `runtime/`. Publishing it is
 ticket [[pypi-release]].
+
+Related: [[board]].

@@ -59,3 +59,5 @@ Shipped in PR #108 (merge 94955cc). `/__sg__/save-status` returns the notebook t
 Verified with the recipe above on the branch's image run locally through the hosted launch script: NL-1, NL-2 and NL-3 passed. Unit tier 282 passed. Not driven on the Union tenant.
 
 Left: a pod whose notebook was deleted while it started shows the banner too until it's torn down, and there the line "Your saved notebook is unchanged" doesn't hold.
+
+Related: [[board]].

@@ -270,3 +270,5 @@ images from Union's remote builder.
 ## Outcome
 
 Shipped 2026-10-06 ([[roadmap-complete]]): one dashboard per user in their own `u-<handle>` project, onboarded by an org admin with `stargazer-users`, replacing [[admin-app-with-dashboard]]'s shared app. The open question on an invited user's first sign-in became [[self-serve-onboarding]].
+
+Related: [[board]].

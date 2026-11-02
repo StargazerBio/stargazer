@@ -14,3 +14,5 @@ Shipped in infra `d9c039c` (2026-10-25): `stargazer-users pause` and `resume`. P
 Verified on Union with the test account. After `pause`, all three bindings were `viewer` and every `u-pryce` app was inactive; a `u-pryce` task holding the project key listed runs, but its child launch was refused, `PERMISSION_DENIED` on `ACTION_CREATE_FLYTE_EXECUTIONS` (run `ucq22nk5qvczkrllx9bv`). After `resume`, all three were `contributor`, the dashboard answered with its login redirect, and the same probe's child ran (run `usmczs59hvkm9nvb6kzl`). The dashboard was stopped afterwards. Not checked: the paused user's own view of the Union console.
 
 Left: pause doesn't stop runs already going. Their child launches are refused, and Flyte retries each one up to 100 times with backoff instead of failing.
+
+Related: [[board]].

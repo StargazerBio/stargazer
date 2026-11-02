@@ -107,3 +107,5 @@ Left:
 - The README names opencode, which the image doesn't install.
 - Ticket `top-level-notebooks` still plans moving the seeds to `app/` from
   `notebooks/workspace/`; left as is for now (2026-10-20).
+
+Related: [[board]].

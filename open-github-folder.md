@@ -12,3 +12,5 @@ avoids: where the sibling files land in the workspace, since the dashboard
 shows only top-level `.py` files as notebooks and a sibling `.py` would show
 up as one; what happens when two imported folders have files with the same
 name; and how big a folder is allowed to be. Wait until someone needs it.
+
+Related: [[board]].

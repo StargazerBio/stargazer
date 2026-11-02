@@ -68,3 +68,5 @@ jobs:
 Shipped in PR #70 (merge `717dabe`): `.github/workflows/stargazer-image.yml` builds both platforms on pushes to `main` that touch the image's files, and on `workflow_dispatch`; the docs say so. Linted with `actionlint`.
 
 The first run, on the merge (run `39662998285`), built both platforms in 11m38s and failed at the push: `denied: permission_denied: write_package`. The package's Actions access was never granted (`gh api /orgs/StargazerBio/packages/container/stargazer` still reads `"repository": null`), and `:latest` is still the 2026-10-20 19:38 UTC build. That grant, the re-run and the image check are ticket [[stargazer-image-actions-access]]. No comments on the PR.
+
+Related: [[board]].

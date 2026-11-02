@@ -11,3 +11,5 @@ Before deciding, ask Union:
 
 - whether always-on apps can run on a smaller pool;
 - whether new nodes can have Knative's queue-proxy image cached (16 s of every new node's first app).
+
+Related: [[board]].
