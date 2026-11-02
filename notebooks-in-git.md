@@ -13,10 +13,13 @@ diffs, change messages, review or forks, under a 9-keyvalue cap. Git has
 all of that. Replace public notebooks with publishing to a git repo, then
 retire them.
 
-**Decided (2026-11-02):** code in git, data in IPFS. Tutorials and
-Stargazer's workflow notebooks stay in this repo, baked into the image and
-pinned by release. A notebook in any GitHub repo already opens into a
-workspace (ticket `open-from-github`).
+**Decided (2026-11-02):** code in git, data in IPFS. The tutorials stay
+in this repo, baked into the image and pinned by release. Workflow
+notebooks move to the community repo, Stargazer's own included: the scRNA
+pipeline (`src/stargazer/notebooks/workflows/scrna_pipeline.py`) and the
+germline notebook (ticket `germline-notebook`), as its first entries and
+the examples of what a published notebook looks like. A notebook in any
+GitHub repo already opens into a workspace (ticket `open-from-github`).
 
 ## Publishing from the dashboard
 
@@ -64,6 +67,11 @@ proposes notebooks to one Stargazer-owned repository for them.
   the check in the Stargazer image.
 - **Licence.** The repo's licence applies to what's published; the dialog
   says which.
+- **SDK drift.** In this repo a notebook is tested against the SDK at the
+  same commit, so a change that breaks it fails here. In the community repo
+  it's tested against a release. Run the community repo's CI against each
+  new release (and optionally `main`), so a break shows up as a failing
+  notebook there before or as the release ships.
 
 ## Retire public notebooks
 
@@ -84,5 +92,12 @@ After publishing to git ships:
       branch protection with auto-merge, `catalog.yaml`.
 - [ ] Infra: Publish, Republish, Unpublish and Copy as PRs against it.
 - [ ] Infra: the explorer lists it, the catalog first.
+- [ ] Move the scRNA pipeline notebook there (`scrna/`), with its demo
+      bundle named, in the catalog. Remove `notebooks/workflows/` from
+      this repo and the image, and its smoke test entries; the dashboard
+      lists it from the catalog, not as a built-in.
+- [ ] Docs here: `docs/architecture/notebook.md` (the Workflows notebook
+      type, Workflow graduation, Copy to workspace) and
+      `docs/getting-started.md` (the image's `workflows/` folder).
 - [ ] Migrate existing public notebooks, then retire the public-tier path.
 - [ ] Docs: `docs/architecture/notebook.md` gains how notebooks are shared.
