@@ -3,10 +3,13 @@ title: germline-notebook
 status: backlog
 priority: normal
 created: 2026-11-02
+blocked_by:
+  - notebooks-in-git
 ---
 
-A workflow notebook for germline short variant discovery, beside the scRNA
-pipeline in `src/stargazer/notebooks/workflows/`. There has never been one
+A workflow notebook for germline short variant discovery, in the
+`StargazerBio/community-notebooks` repo beside the scRNA pipeline (both
+move there in ticket [[notebooks-in-git]]), under `germline/`. There has never been one
 (searched the full history of `main`): the germline pipeline exists only as
 the SDK workflow `germline_short_variant_discovery`, the MCP's
 `run_workflow`, and `tests/devbox/test_germline.py`.
@@ -45,7 +48,7 @@ Modelled on `scrna_pipeline.py`, a thin parameterized UI over SDK calls:
    chart.
 
 The setup block's `main_name`/`main_description` give the dashboard tile;
-register the tile wherever the shipped workflow notebooks are listed.
+it's listed through the community repo's catalog.
 
 ## Related
 
@@ -56,18 +59,19 @@ register the tile wherever the shipped workflow notebooks are listed.
 
 ## Pieces
 
-- [ ] `src/stargazer/notebooks/workflows/germline_pipeline.py`, importing
-      only public `stargazer` APIs, with the PEP 723 header the SDK
-      tasks need.
-- [ ] It passes the notebook smoke tests (`tests/notebooks/`).
-- [ ] Docs: the Workflows row in `docs/architecture/notebook.md` names it
-      beside the scRNA pipeline; the Asset Graph page can point to it as
-      the runnable version of its germline example.
+- [ ] `germline/<slug>/notebook.py` in the community repo, importing only
+      public `stargazer` APIs, with the PEP 723 header the SDK tasks need,
+      naming the `variant_calling_demo` bundle as its demo inputs.
+- [ ] It passes the community repo's CI (runs headless on its demo
+      inputs), and goes in `catalog.yaml`.
+- [ ] Docs: the Asset Graph page can link to it as the runnable version of
+      its germline example.
 
 ## Verification recipe
 
-- Local image, `amd64`: `docker run` the image built from the branch,
-  open the notebook in run mode, fetch the bundle, run *On this machine*
+- Local image, `amd64`: `docker run` the release image, open the notebook
+  from the community repo (Open from GitHub, or a mounted checkout) in run
+  mode, fetch the bundle, run *On this machine*
   with NA12829 on `GRCh38_TP53`; the cohort VCF appears in step 4 and its
   summary in step 5.
 - Devbox: the same with *On the cluster*; the run's graph shows the
