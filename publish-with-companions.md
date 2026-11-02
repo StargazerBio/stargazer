@@ -41,14 +41,15 @@ the asset graph and "collaboration without coordination".
 
 ## Pieces
 
-- [ ] Unit tests in `tests/utils/test_storage.py` against the fake public
+- [x] Unit tests in `tests/utils/test_storage.py` against the fake public
       tier: a parent with two companions publishes three records, same
       CIDs; a companion over the keyvalue limit refuses the whole set with
       nothing sent; an already-public companion isn't sent again.
-- [ ] `StorageClient.publish` and MCP `publish_file`.
-- [ ] Pinata tier: publish a small parent and companion, `fetch()` the
+- [x] `StorageClient.publish` and MCP `publish_file`.
+- [ ] Pinata tier (written in `tests/pinata/test_client.py`, not yet run: no key
+      where it was made): publish a small parent and companion, `fetch()` the
       parent from an isolated store with no companions of its own and see
       the public companion land beside it, then delete both from Pinata.
-- [ ] Docs: the public tier in `docs/architecture/configuration.md`.
+- [x] Docs: the public tier in `docs/architecture/configuration.md`.
 
 Related: [[board]].
