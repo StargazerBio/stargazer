@@ -1,6 +1,6 @@
 ---
 title: germline-notebook
-status: backlog
+status: doing
 priority: normal
 created: 2026-11-02
 blocked_by:
