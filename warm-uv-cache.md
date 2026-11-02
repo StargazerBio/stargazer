@@ -39,3 +39,5 @@ So within one container the second notebook is already mostly local. The cost is
 ## Verification recipe
 
 The fresh-container cold start, before and after, locally and hosted. Locally: build the image, `docker run` it with nothing cached, and time from start to the Assets tutorial's first cell output, counting the downloads in marimo's sync output. Hosted: open a tutorial in edit mode as the test account and read the pod log's install lines and timings. Then deactivate the app.
+
+Related: [[board]].

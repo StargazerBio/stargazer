@@ -83,3 +83,5 @@ PYTHONPATH="$W:$W/src" uv run -q --project . --env-file tenant.env python -c "fr
 ## Outcome
 
 Shipped in PR #99 (merge `af99f11`): a per-user state table beside each index table (`app/user_state.py` on `SqlIndex.read`/`write`), and a pending launch is a row in it that `/launch/status` settles by its build run's phase, so a launch whose image is building survives a dashboard restart. Verified by the unit tier (578 passed), the postgres tier (36 passed, including a DSQL-style row-privileges login), infra's tests against the branch with its stashed change, and on Union with the test account's dashboard at `b0fdbc5` (the recipe above): a successful build across a restart served both modes with no second build, and a failing build across a restart reached the watching tab. The infra change is committed on infra's `main` (`5d50d9c`). Left: a failed build with no page open isn't shown on the next visit, ticket [[launch-failure-on-load]]; a row whose build run can't be found stays building, ticket [[launch-row-unresolvable-run]]. No review comments.
+
+Related: [[board]].

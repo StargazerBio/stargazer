@@ -2,7 +2,7 @@ repos:
   - repo: local
     hooks:
       - id: ticket-frontmatter
-        name: ticket frontmatter survives an Obsidian drag, and the ticket links something
+        name: ticket frontmatter survives an Obsidian drag, and the ticket links [[board]]
         language: node
         additional_dependencies: ["yaml@2.9.1"]
         entry: node .checks/frontmatter.js

@@ -514,3 +514,5 @@ New file `tests/unit/test_annotation_fields.py`. Write before implementing.
 ## Outcome
 
 Implemented 2026-03-09 (`df324fd`): plain typed annotations replaced the `_field_types` and `_field_defaults` dicts on every asset type from [[constellations]].
+
+Related: [[board]].

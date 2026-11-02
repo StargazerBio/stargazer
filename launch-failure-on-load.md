@@ -15,3 +15,5 @@ Done in the infra repo, StargazerBio/infra#8: the tile shows the reason on load 
 ## Outcome
 
 Shipped in StargazerBio/infra#8 (merge `15f9195`): a failed launch shows its reason on its tile or card, on page load and when a watched build fails, clamped and opened on click, and clears when that mode is launched again. Verified locally with seeded rows and on the tenant with a build that failed while no page was open. Left: ticket [[launch-row-on-delete]], a deleted notebook's launch rows staying in the state table. No follow-ups were left on the PR.
+
+Related: [[board]].

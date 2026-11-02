@@ -130,4 +130,4 @@ so `fetch()` leaves them behind until their indexing step runs again (10
 The dashboard graph's "companion of" edge was checked in node, not seen in a
 browser. Making `fetch()` cheaper than `main` was weighed and left out.
 
-Related: [[fetch-public-companions]], [[stale-companion-cache]].
+Related: [[fetch-public-companions]], [[stale-companion-cache]], [[board]].

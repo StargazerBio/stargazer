@@ -210,3 +210,5 @@ async def scrna_clustering_pipeline(
 ## Outcome
 
 Implemented 2026-03-18 (`9b6bbaa`): the scanpy tasks and workflow, now `src/stargazer/tasks/scrna/` and `scrna_clustering`. Its tutorial is [[scrna-tutorial-rebuild]].
+
+Related: [[board]].

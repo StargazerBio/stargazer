@@ -84,3 +84,5 @@ instead of "still starting". Verified on Union before the rebase onto #53
 repeated. Left: the create box still accepts 60 characters as you type, and
 a 502's body is still replaced by Cloudflare's (ticket
 [[app-502s-behind-cloudflare]]).
+
+Related: [[board]].

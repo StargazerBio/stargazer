@@ -293,3 +293,5 @@ and the asset page in Chrome. Details are under Verification below.
 - ~~What Pinata does past 10 keyvalues.~~ Answered 2026-10-13 by sending
   files straight to the API: the cap is 9, and past it a new file is refused
   (see Decisions). Nothing is truncated.
+
+Related: [[board]].

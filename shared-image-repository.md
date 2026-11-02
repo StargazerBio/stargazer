@@ -19,3 +19,5 @@ repository (its target is the org's `union/<org>` repository), whether ECR
 tag immutability on the shared repository would stop the overwrite without
 breaking rebuilds, and whether pods need push at all if images are built
 only by the dashboard's deploys.
+
+Related: [[board]].

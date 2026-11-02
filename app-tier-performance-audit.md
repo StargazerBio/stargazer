@@ -135,3 +135,5 @@ passthrough for non-HTML responses.
 ## Outcome
 
 Shipped 2026-07-06 ([[roadmap-complete]]): one pooled HTTP client per process, a streaming notebook proxy, `/launch/status` from a single deployment list, gzip on the admin app, and a single-flight public-asset cache.
+
+Related: [[board]].

@@ -34,3 +34,5 @@ None of this will be built. The MCP server plan (`mcp_server.md`) remains the ac
 ## Outcome
 
 Cancelled before any work: the plan itself records the switch to bringing your own TUI, and nothing shipped. [[platform-architecture]] keeps that stance: Stargazer builds the notebook and the MCP server and links out for the rest.
+
+Related: [[board]].

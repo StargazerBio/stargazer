@@ -68,3 +68,4 @@ Preconditions: the `verify-stargazer` Union tenant preconditions; the built-in b
 
 Shipped in PR #101 (merge `336601c`). Each dashboard setting is its own `settings:<name>` row in the owner's state table: a save writes its row alone, Reset deletes the filter's row, and a missing row reads as its default. The settings code is gone from the workspace store. Verified by the unit tier (575 passed). The new concurrent-save test failed before the change. On Union, the test account `u-pryce` at `755aaba` passed the recipe above. Saved settings weren't carried over, so every user starts on the defaults after the next `upgrade`, and the old `settings.json` objects stay in the bucket, unread. No review comments. Ticket [[workspace-root-required]] is unblocked.
 
+Related: [[board]].

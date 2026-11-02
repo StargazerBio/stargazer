@@ -56,4 +56,4 @@ links the newest of the user's companions of one name, and skips a companion nam
 its asset. Verified in the unit tier (the reproducing test failed on `main`; 279 passed).
 Nothing left. The PR had no review comments.
 
-Related: [[fetch-public-companions]], [[data-aware-caching]].
+Related: [[fetch-public-companions]], [[data-aware-caching]], [[board]].

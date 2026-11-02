@@ -178,3 +178,5 @@ def setup_local_mode(tmp_path, monkeypatch):
 ## Outcome
 
 Implemented 2026-02-16 (`3ced460`, merged as `f520bff` from `wt/stargazer-mode-config`). [[storage-consolidation]] dropped the mode variable (`b57c8b5`), and [[asset-storage-index]] the storage modes behind it.
+
+Related: [[board]].

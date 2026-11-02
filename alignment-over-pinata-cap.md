@@ -63,3 +63,5 @@ set, reads back exactly 9 keys, and deletes it.
 Left: `variants` and `known_sites` are also at exactly 9, so neither can gain
 a declared field without losing one. Dropping `format` broke #31's new test on
 `main` until #35.
+
+Related: [[board]].

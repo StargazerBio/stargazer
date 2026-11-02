@@ -56,3 +56,5 @@ keeps 6,307 cells (0 and 8,506 on `main`); the scRNA pipeline notebook
 exports with exit 0 and all 14 checks `ok`.
 
 Left: ticket [[qc-filter-organism-from-asset]].
+
+Related: [[board]].

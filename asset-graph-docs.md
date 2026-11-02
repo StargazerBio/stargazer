@@ -23,3 +23,5 @@ their own tickets: [[publish-with-companions]],
       notebook and getting-started docs
 - [x] Assets tutorial: section 7 reframed as the payoff, a section on
       extending the graph with extra keys, run headless
+
+Related: [[board]].

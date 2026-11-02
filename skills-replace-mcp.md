@@ -55,3 +55,5 @@ tools, so the first two points below no longer hold.
   skills are about changing Stargazer, user skills about using it.
 - Where user skills live in the repo, so the image and a checkout share one
   copy.
+
+Related: [[board]].

@@ -28,3 +28,5 @@ The per-user DSQL setup from ticket [[dsql-asset-index]] lands in infra after th
 ## Outcome
 
 Shipped in PR #76 (merge `d92ce15`): stargazer keeps `app/deploy.py`, and onboarding (`stargazer-users`) lives in infra's `stargazer_users/`, merged into infra's local `main` (`515c82b`), depending on `../stargazer` editable. Verified as above, and again after the merge: infra imports `app.deploy` from stargazer's `main` with no override, its 20 tests pass, and `stargazer-users --help` lists `onboard`, `upgrade` and `offboard`. No comments on the PR. Next: the per-user DSQL setup lands in infra, on ticket [[dsql-asset-index]].
+
+Related: [[board]].

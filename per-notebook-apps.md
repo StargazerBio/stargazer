@@ -201,3 +201,5 @@ All of the below has been built; this section is a record:
 ## Outcome
 
 Shipped 2026-05-20 ([[roadmap-complete]]): Edit and Run spawn a per-notebook app from a shared image, with PEP 723 dependencies resolved into a sandbox venv at boot, and a proxy serving the workspace routes and a terminal overlay. Builds on [[admin-app-with-dashboard]].
+
+Related: [[board]].

@@ -277,3 +277,5 @@ def joint_genotype(sample_ids: str, ref_build: str, cohort_id: str = "cohort") -
 ## Outcome
 
 Implemented 2026-02-17 (`ec0a387`, the merge of `wt/mcp-server`), then simplified 2026-02-19 (`5d94eeb`) to discover and register tasks and workflows itself. Since then, [[agent-mcp]] gives the notebook's agents its tools, and [[skills-replace-mcp]] weighs replacing it.
+
+Related: [[board]].

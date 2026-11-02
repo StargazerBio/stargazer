@@ -186,3 +186,5 @@ The built-in browser pane runs no animation frames while it's hidden, so the sim
 ## Outcome
 
 Shipped in PR #97 (merge `5ba6985`): the explorer's graph redrawn as a constellation on force-graph 1.52.0 in place of Cytoscape. Stars hued by type from `TYPE_HUES` (shared with the type chips), brightness by ownership, notebook glyphs, labels fading with zoom, live physics with type anchors and grid collision, hover focus, fly-to on click, list↔graph selection, filter changes that pin the stars that stay, search pulse, particles on the focused star's links, no frames once idle, reduced motion and touch; `NODE_CAP` 1,000. Verified by the unit tier (560 passed), locally in the built-in browser at 150–1,000 stars, and on Union with the test account's dashboard at `e736465` and `bf60831` (the recipe above); frame rate and drag weren't rerun after the review fixes at `2638fe5`. Left: the aligner-index files around a reference crowd slightly at zoom 2.5; the camera doesn't move on a filter change; under reduced motion at 1,000 stars a keystroke still blocks for up to about half a second. No review comments.
+
+Related: [[board]].

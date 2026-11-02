@@ -50,3 +50,5 @@ the asset graph and "collaboration without coordination".
       parent from an isolated store with no companions of its own and see
       the public companion land beside it, then delete both from Pinata.
 - [ ] Docs: the public tier in `docs/architecture/configuration.md`.
+
+Related: [[board]].

@@ -19,3 +19,5 @@ Verify by opening the Execution tutorial in Edit from the dashboard and leaving 
 Shipped in PR #67 (merge `0bf9a2c`). Every notebook pod gets a 20Gi disk, and a notebook that declares no resources gets one CPU and a `("2Gi", "6Gi")` memory request/limit. Workspace notebooks declare `main_name`, `main_description` and `main_resources` in their setup block, edited from the tile's gear, and `/launch` sizes the pod from them.
 
 Verified on Union with the test account: the Execution tutorial's edit pod had `ephemeral-storage: 20Gi`, used 1110 MiB (over the old 1Gi) and ran 6+ minutes without eviction; a template notebook's declared resources reached its run pod's spec. Unit tier 527 passed. Left: the dashboard pod's own 1Gi disk (ticket [[dsql-asset-index]] takes the index off it); tutorials and workflows always run on the defaults. No comments on the PR.
+
+Related: [[board]].

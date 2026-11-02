@@ -218,3 +218,5 @@ Shipped in PR #72 (merge `f106f42`). Private uploads from the asset page go over
 Verified with tests written first (unit tier 527 passed, 536 after the rebase onto #73) and on Union with the test account in Chrome: 150 MB in about 8 s with the CID matching `compute_cid`; the same file again kept one row and one object; 1 GB reloaded at ~30% resumed on the same upload ID and finished with the matching CID; no unfinished multipart uploads afterwards; the dashboard used 269 Mi. Not driven: the offline wait (no network toggle in the extension). The probe files (1.15 GB, asset `tus_probe`) stay in the test account's store.
 
 Left: public uploads over TUS (ticket [[tus-public-uploads]]). The bucket's abort rule isn't in Union's Terraform, so a re-apply could drop it; accepted on 2026-10-26, to be dealt with if it happens. No comments on the PR.
+
+Related: [[board]].

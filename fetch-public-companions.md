@@ -93,3 +93,5 @@ when the user has none. Verified as above. Left over:
   popular public asset can collect companions from many publishers; and
   ticket [[turn-off-public-assets]], a config that turns the public tier off
   in the dashboard.
+
+Related: [[board]].

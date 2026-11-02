@@ -136,3 +136,5 @@ These are real selling points but each one is a separate concept; bundling them 
 ## Outcome
 
 Shipped before tickets: [[roadmap-complete]] records the scRNA preprocessing tutorial rebuilt as Asset, Task, Workflow, local, then remote. [[tighten-tutorial-story]] later gave the tutorials one arc.
+
+Related: [[board]].

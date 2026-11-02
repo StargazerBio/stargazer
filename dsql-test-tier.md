@@ -23,3 +23,5 @@ Swapping in AWS's connector was weighed and set aside: without its pool it makes
 ## Outcome
 
 Shipped in PR #100 (merge `356e514`): a `dsql` test tier (`tests/dsql/`) that runs the index and `app.user_state` tests through `DsqlIndex` against the real cluster, as its `admin`, in a schema each session makes and drops; an `admin` URL needs no `role_arn` and signs with the caller's own AWS credentials. Verified by the tier itself (17 passed on the cluster; a probe saw 20 concurrent merges of one row meet 47 `40001` conflicts, all retried), the unit (578), postgres (36) and infra (37) tests, and on Union with the test account's dashboard at `58e23ed` reading the user's index and state table through their role. Left: pooling the connection through AWS's connector, ticket [[dsql-connection-pool]] (`maybe`). No review comments.
+
+Related: [[board]].

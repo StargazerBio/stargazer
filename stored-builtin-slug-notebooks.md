@@ -12,3 +12,5 @@ before that, such as `assets.py`, keeps it. Its pod is still
 replaces the other. The user can download it, delete it and create it again
 under another name; nothing renames it for them. Only worth doing if a real
 workspace turns out to hold one.
+
+Related: [[board]].

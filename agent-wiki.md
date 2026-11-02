@@ -29,3 +29,5 @@ No `log.md`: AGENTS.md keeps history out of durable docs, and git has it.
 ## Outcome
 
 Shipped in PR #118 (merge `926129e`). `.claude/reference/` is `.claude/context/`: a wiki of what Stargazer builds on (Flyte, marimo, the tools tasks wrap), raw sources in `raw/`, pages listed in [[index]], its conventions in the `wiki` skill. This branch's worktree sits inside it at `.claude/context/planning/`, so `.claude/context` is one Obsidian vault for the wiki and the board. Stargazer's own internals stay in docstrings and comments, where five facts the old internals files held alone moved. `cli/wiki_lint.py` checks links, the index, sources and names in pre-commit, and warns about pages whose sources a branch changes. Verified by 17 unit tests, the lint on the real vault with 126 tickets inside it, and the full pre-commit suite. Left: opening the vault in Obsidian (the unchecked item above), and the uncaptured tool help in [[capture-tool-help]]. No review comments.
+
+Related: [[board]].

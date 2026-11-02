@@ -138,3 +138,5 @@ Steps:
 - The tests bundle code from the repo root, as SDK code does by default. Their pods import `tests.devbox.pod_tasks` from the bundle and `stargazer` from the image.
 - `devbox/setup.sh` clears Flyte's local cache, so run it after the devbox is recreated, before the first run. Each session seeds again, so the store and index needn't survive.
 - A run with no `PINATA_JWT` secret on the devbox fails before any pod starts, with `none of the secret managers injected secret`. `devbox/setup.sh` creates it.
+
+Related: [[board]].

@@ -53,3 +53,5 @@ uv run python "$RUN_DIR/check_anndata.py"
 ## Outcome
 
 Shipped in PR #86 (merge `72dd7db`). The scRNA notebook's PEP 723 header depends on `stargazer[bio]`, so its sandbox environment has `scikit-image` and `igraph`; `docs/architecture/notebook.md` and the notebook agent's context say a notebook running the scRNA tasks in its own process needs that extra. Verified by a local `marimo export html --sandbox` before (the scikit-image error) and after (every stage `ok`), and by a hosted Run-mode drive on the test account that finished on the notebook's own machine (Verification above). Nothing left. No review comments.
+
+Related: [[board]].

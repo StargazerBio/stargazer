@@ -91,4 +91,4 @@ Steps:
 - With a real `PINATA_JWT` in the environment, `assemble()` also searches Pinata's public index, so a drive can pick up public records that aren't part of the run.
 - `init_flyte()` in the first cell reads `.flyte/config.yaml` but does not need the devbox. Tasks called directly from cells run in-process.
 
-Related: [[scrna-demo-organism]].
+Related: [[scrna-demo-organism]], [[board]].

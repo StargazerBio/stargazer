@@ -286,3 +286,5 @@ Track the simplification. If something here survives, the design drifted.
 ## Outcome
 
 Shipped 2026-10-06 ([[roadmap-complete]]): Union's GitHub sign-in is the only login, and workspace notebooks live on object storage keyed by the Union subject, hydrated at launch and saved while the pod runs. Replaced the GitHub flow of [[tighten-github-token-scope]]; project creation moved to [[per-user-dashboard]]'s onboarding.
+
+Related: [[board]].

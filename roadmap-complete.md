@@ -36,3 +36,5 @@ is a ticket with `status: done`.
 ## Outcome
 
 Frozen when the roadmap and numbered plans became tickets ([[planning-tickets]]). Each numbered plan it names is now a done ticket, linked from its entry.
+
+Related: [[board]].

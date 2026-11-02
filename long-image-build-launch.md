@@ -118,3 +118,5 @@ Not driven on Union: a failed build (covered by `test_a_failed_build_is_reported
 ## Outcome
 
 Shipped in PR #89 (merge `21f39e8`). `/launch` serves at once when the declared image is built and otherwise answers 202 with the build run's URL, a dashboard task serves the notebook when the build finishes, and `/launch/status` reports building and failed launches to the tile. Verified by the unit tier and on Union (Evidence above). Left: a failed build wasn't driven on Union (unit-tested only), and a dashboard restart mid-build drops the background task, so the notebook is served on the next launch. No review comments.
+
+Related: [[board]].

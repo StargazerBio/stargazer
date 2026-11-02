@@ -49,3 +49,5 @@ Shipped in PR #78 (merge `391df03`) with infra `1000dee` and `095066f`: every da
 Verified on the tenant with the test account: the migrated rows listed in the dashboard, a TUS upload landing in DSQL, the germline workflow end to end on DSQL, and every action storing its outputs while the dashboard was down for a redeploy. Unit tier 518, postgres tier 20, infra 20. No comments on the PR.
 
 Left: nothing.
+
+Related: [[board]].

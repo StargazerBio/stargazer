@@ -273,3 +273,5 @@ Steps:
 - Clicking tile buttons by element reference (`ref_…`) can fail to submit; click by coordinates from a screenshot.
 - A failed launch raises a browser alert, which blocks Claude in Chrome. Cover the failure cases with `tests/unit/test_notebook_environment.py` and `tests/unit/test_app.py`, or call `/launch` with `fetch` from the dashboard page and read the JSON.
 - A workspace notebook is a copy of the template at creation, so a template change needs a newly created notebook to show up.
+
+Related: [[board]].

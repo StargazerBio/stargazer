@@ -370,3 +370,5 @@ pytest tests/ -v --cov=stargazer --cov-report=term-missing
 ## Outcome
 
 Implemented 2026-01-20 (`18b242f`): the remaining tests and tasks moved to the component API of [[keyvalue-components]] and the hydrate task, after [[fix-tests-local-mode]].
+
+Related: [[board]].

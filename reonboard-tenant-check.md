@@ -54,3 +54,5 @@ on the tenant with the test account: offboard then onboard from the branch
 brought back the same 80 assets and stored a keyvalue edit; 332 tests pass.
 Left: nothing. `u-387300641116005877` stays archived with only a
 `retired-stargazer-subject` label.
+
+Related: [[board]].

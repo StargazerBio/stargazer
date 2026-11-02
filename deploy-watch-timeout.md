@@ -67,3 +67,5 @@ a silent stream (it hung before the fix), and on the devbox with the bound cut t
 (the deploy returned the endpoint at 32.5 s). Left: a stream that goes quiet on its own,
 as Union's did, wasn't reproduced; it now fails clearly after about 7 minutes. The PR had
 no review comments.
+
+Related: [[board]].

@@ -78,3 +78,5 @@ signed in (built-in browser), `STARGAZER_TARGET=union` and infra's
 ## Outcome
 
 Shipped in PR #88 (merge `ea06dba`). `POST /workspace/setup` answers 409 while the notebook's `nb-<slug>-edit` or `nb-<slug>-run` app is active, and the gear's modal says to stop the notebook or edit the setup block in the notebook itself. Verified by the unit tier (both modes refused, a stopped app lets the save through) and on Union in run mode (`gear-409`, `gear-after-stop`, Progress above). Left: nothing. No review comments.
+
+Related: [[board]].

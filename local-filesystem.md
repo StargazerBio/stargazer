@@ -147,3 +147,5 @@ Note: `rel_path` is relative to `local_dir`. Absolute path reconstructed as `loc
 ## Outcome
 
 Implemented 2026-01-19 (`4da5b57`, `a850d51`): a local-only mode with TinyDB metadata, and `STARGAZER_CACHE` renamed `STARGAZER_LOCAL`. [[asset-storage-index]] later replaced TinyDB with the SQLite index.
+
+Related: [[board]].

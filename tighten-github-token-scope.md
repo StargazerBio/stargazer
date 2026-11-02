@@ -152,3 +152,5 @@ The pod is injected a **signed capability** (`SG_POD_TOKEN`, `SESSION_SECRET`-si
 ## Outcome
 
 Shipped 2026-06-05 ([[roadmap-complete]]): the broad OAuth token is used once, to fork, and a GitHub App scoped to the fork mints short-lived tokens for the rest. Its deploy checklist was never run. [[workspace-state-object-storage]] later removed GitHub from the app tier.
+
+Related: [[board]].

@@ -39,3 +39,5 @@ Nothing needed a code change. Both devbox facts went into `devbox/setup.sh`'s
 ## Outcome
 
 Edit mode, saving and the terminal were driven on the devbox on 2026-10-21 (above) and needed no code change. The two devbox facts (Stop only scales to zero; pods run as root) went into `devbox/setup.sh`'s "What it can't fix", riding on PR #73 (merge `0f43b8b`). Nothing left.
+
+Related: [[board]].

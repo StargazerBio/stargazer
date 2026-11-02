@@ -27,3 +27,5 @@ Keeping it private would mean only the dashboard holds it:
 
 Related: [[org-wide-platform-key]] (the platform key in every pod) and
 [[per-user-storage-isolation]] (one IAM role for every project).
+
+Related: [[board]].

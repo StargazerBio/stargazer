@@ -84,4 +84,4 @@ workspace notebook's OpenCode). Left: a tool call over a minute on Union with
 the `mcp_timeout` fix, and a Claude Code turn, which needs a sign-in. The PR
 had no review comments.
 
-Related: [[marimo-terminal]], [[skills-replace-mcp]].
+Related: [[marimo-terminal]], [[skills-replace-mcp]], [[board]].

@@ -88,3 +88,5 @@ the secret.
 The key was never out of reach: on `main` before this, notebook code got it
 through a ten-line task declaring the secret (run `ujgbbqc4xtlwgbb2hjst`).
 Keeping it private is ticket [[private-pinata-key]] (`maybe`).
+
+Related: [[board]].

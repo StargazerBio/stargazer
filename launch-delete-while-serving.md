@@ -65,3 +65,5 @@ already in flight when the serve is cancelled, and a claim committed but not
 yet registered in `_serving`), named in the PR. The pod writing a deleted
 notebook back on its shutdown save, found while verifying, is ticket
 [[delete-running-notebook-resurrects]].
+
+Related: [[board]].

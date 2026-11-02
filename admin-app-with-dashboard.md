@@ -94,3 +94,5 @@ All the above has been implemented:
 ## Outcome
 
 Shipped 2026-05-18 ([[roadmap-complete]]): one shared FastAPI deployment with OAuth, fork discovery and creation, per-user provisioning, the dashboard tiles and the `/launch` broker, with snapshots, copy-to-workspace and workspace save following through 2026-07-01. Layer 2 is [[per-notebook-apps]]; [[per-user-dashboard]] later replaced the shared app.
+
+Related: [[board]].

@@ -32,3 +32,5 @@ docstr-coverage hook, the docs workflow, the notebooks' PEP 723 headers), and
 `X | NoneType` on 3.14. The `gen-catalog` hook also runs on `registry.py`
 changes. Verified on the branch: catalog identical, unit 512, tasks tier
 39 + 19. Nothing left.
+
+Related: [[board]].

@@ -195,3 +195,5 @@ lock held.
 ## Outcome
 
 Shipped in PR #96 (merge `4f795d7`): the explorer's search, type chips with counts, keyvalue chips with "filter by this", Clear and the result count, all filtering loaded entries in the browser; sources still fetch. The owner saves the filter as `explorer_default` in `settings.json` (`POST`/`DELETE /settings/explorer-default`), the page opens on it fitted to the visitor, and Settings shows it with Reset. Verified by the unit tier (560 passed) and on Union with the test account's dashboard at `7dcebf7` and `cbb10cb` (the recipe above). Left: the graph's legend becoming the type chips, ticket [[constellation-graph]]. No review comments.
+
+Related: [[board]].

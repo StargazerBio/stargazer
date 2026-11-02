@@ -65,3 +65,5 @@ body Cloudflare passes through (measured with `cf-status-probe` above). On
 the test account's dashboard, `POST /stop` for a notebook with no app
 answered 500 with `{"error":"stop failed: entry not found"}` through the
 public URL. Nothing left.
+
+Related: [[board]].

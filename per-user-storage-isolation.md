@@ -736,3 +736,5 @@ on either PR.
 Left: run metadata (ticket [[per-user-run-metadata]], waiting on Union), the
 shared image repository (ticket [[shared-image-repository]]), and the hang in
 `upgrade` (ticket [[deploy-watch-timeout]]).
+
+Related: [[board]].

@@ -276,3 +276,5 @@ projects that can't be deleted.
 Left: deleting the org key and the injection era's other keys and secrets
 (ticket [[retire-org-key]]), and `pause` / `resume` (ticket
 [[pause-resume-users]]).
+
+Related: [[board]].

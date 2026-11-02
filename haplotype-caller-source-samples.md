@@ -37,4 +37,4 @@ Left: GVCFs stored by earlier runs keep the string. The new test passed
 `Alignment(format=...)`, which #37 removed; merged separately, the two broke
 the tasks tier on `main` until #35 dropped the argument.
 
-Related: [[gatk]].
+Related: [[gatk]], [[board]].

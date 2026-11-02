@@ -20,3 +20,5 @@ Shipped in PR #63 (merge `956ea36`). `app/notebook_agent.md` is the one condense
 Verified (measured): the local image and the hosted recipe (built locally, not pushed), each run as `flyte`, have Claude Code 2.1.304 and a `flyte`-owned `/workspace/AGENTS.md` identical to the source. `claude -p` from `/workspace` against a fake Messages API sent it as `Contents of /workspace/AGENTS.md` with default settings. The proxy's own hydrate and sync showed the baked copy isn't saved until edited, and an edited copy wins at the next launch. Unit tier 515 passed.
 
 Left: the new recipe wasn't built on Union's remote builder (the earlier run built the `~/.claude` placement), and the hosted images rebuild at the next `stargazer-users onboard` or `upgrade`. The published `ghcr.io/stargazerbio/stargazer:latest` predates this change and #65's; ticket [[publish-stargazer-image]].
+
+Related: [[board]].

@@ -203,3 +203,5 @@ No longer needed — `Constellation` replaces it entirely.
 ## Outcome
 
 Implemented 2026-03-03 to 2026-03-07: `cf1feab` rebuilt the types as `Asset` with one `_asset_key`, `5c7f19d` made tasks fetch their own inputs with their companions, and `d42c222` replaced the `Constellation` class with `assemble()`. Followed by [[annotation-fields]].
+
+Related: [[board]].
