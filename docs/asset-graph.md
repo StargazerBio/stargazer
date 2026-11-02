@@ -89,7 +89,7 @@ Sharing analysis usually takes coordination: agreeing on folder layouts and file
 - **Publishing joins the public graph.** A published asset keeps its CID and metadata, and with the public tier on, everyone's `assemble()` includes it beside their own assets, their own copy winning when both have one. Your name goes on it as its owner.
 - **Work done once travels.** Publish a reference's indices beside it, and anyone who fetches that reference without indices of their own gets yours. Public indices come only from whoever published the reference, so builds from different publishers never mix.
 - **Outputs link back to what they used.** A colleague's alignment against your published reference records your reference's CID, so the graph shows what was built on it.
-- **Notebooks are in the graph too.** A published notebook is an asset anyone can find and copy into their workspace. Since it asks the graph for its data, it runs against theirs unchanged.
+- **Notebooks travel as code.** A notebook in any GitHub repo opens into your workspace, pinned to a commit if you like. Since it asks the graph for its data, it runs against yours unchanged.
 - **Tasks grow the shared SDK.** A task written in a notebook can be promoted into Stargazer and ships in the next image, where every notebook can import it ([Notebooks → Promotion](architecture/notebook.md#promotion)).
 
 Publishing is one call, from a notebook, the SDK or an agent's `publish_file` tool:
