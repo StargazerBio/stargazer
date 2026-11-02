@@ -56,7 +56,7 @@ _LOCAL_NOTEBOOK_IMAGE = "notebook-app:local"
 NOTEBOOK_DISK = "20Gi"
 
 # Defaults for resources a notebook's `main_env` leaves unset; the 6Gi limit
-# fits the scRNA workflow notebook.
+# fits the community repo's scRNA pipeline notebook.
 NOTEBOOK_RESOURCES = flyte.Resources(cpu=1, memory=("2Gi", "6Gi"), disk=NOTEBOOK_DISK)
 
 

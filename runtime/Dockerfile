@@ -98,7 +98,7 @@ RUN mkdir -p /home/flyte/.stargazer \
     && chown -R flyte:flyte /workspace /home/flyte/.stargazer /home/flyte/.config
 
 # What a local /workspace starts with: the SDK's whole notebooks folder
-# (templates, tutorials, workflows), without the package files: the notebooks
+# (templates and tutorials), without the package files: the notebooks
 # are in its section directories, and the modules beside them (`ui.py`) aren't.
 RUN mkdir /opt/workspace \
     && cp -r /stargazer/src/stargazer/notebooks /opt/workspace/ \
