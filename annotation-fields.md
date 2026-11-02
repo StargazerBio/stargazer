@@ -1,3 +1,10 @@
+---
+title: annotation-fields
+status: done
+priority: normal
+created: 2026-03-09
+---
+
 # Annotation-Based Field Declarations
 
 ## Goal
@@ -503,3 +510,7 @@ New file `tests/unit/test_annotation_fields.py`. Write before implementing.
 - [ ] `uv run pytest tests/unit/test_annotation_fields.py -v` — all pass
 - [ ] `uv run pytest tests/ -v` — full suite passes
 - [ ] `ruff --fix src/stargazer/assets/ src/stargazer/server.py`
+
+## Outcome
+
+Implemented 2026-03-09 (`df324fd`): plain typed annotations replaced the `_field_types` and `_field_defaults` dicts on every asset type from [[constellations]].

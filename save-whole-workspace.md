@@ -165,7 +165,7 @@ What's known:
   default), and the save has about 255 s once uvicorn's 15 s shutdown
   timeout is spent.
 - The save at scale-down has never been checked on its own on Union. The
-  2026-10-06 tenant run (plan 25) showed edits survive scale-to-zero, but the
+  2026-10-06 tenant run ([[workspace-state-object-storage|plan 25]]) showed edits survive scale-to-zero, but the
   5 s save had already stored them.
 - Nothing runs when the pod dies without SIGTERM: the node is lost, the
   kubelet evicts it with no grace (inferred: as for a pod over its

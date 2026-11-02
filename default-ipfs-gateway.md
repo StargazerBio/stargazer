@@ -13,7 +13,7 @@ service worker gateway only" (`sunset: 21 Sep 2026`), so
 config, and with them the README quickstart. `gateway.pinata.cloud`
 answered a full download with a Cloudflare challenge (429) and
 `w3s.link` with 429 (all measured 2026-10-09). The account's dedicated
-gateway (`<name>.mypinata.cloud`) served the demo files during plan 27,
+gateway (`<name>.mypinata.cloud`) served the demo files during [[asset-storage-index|plan 27]],
 but anonymous downloads through it spend account bandwidth. Picking the
 default is a decision, not a one-line fix.
 

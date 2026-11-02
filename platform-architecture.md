@@ -1,3 +1,10 @@
+---
+title: platform-architecture
+status: done
+priority: normal
+created: 2026-03-25
+---
+
 # Platform Architecture Plan
 
 ## Overview
@@ -139,3 +146,7 @@ Users log in to the hosted version (Union) with GitHub OAuth. This gives us:
 - [ ] "My contributions" view showing exported tasks and PR status
 - [ ] Union UI deep links from notebook execution cells
 - [ ] Wire stargazer MCP server into marimo chat (when upstream support ships)
+
+## Outcome
+
+Became the shape of Stargazer's surfaces: a hosted marimo notebook ([[per-notebook-apps]]) and the MCP server ([[mcp-server]]) are built; the Union console and GitHub are linked to. The marimo `[ai] rules` it describes are [[marimo-toml]], and the Union link-out is [[union-console-handoff]] (inferred from those tickets, not traced commit by commit).

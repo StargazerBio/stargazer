@@ -1,3 +1,10 @@
+---
+title: workspace-state-object-storage
+status: done
+priority: normal
+created: 2026-09-29
+---
+
 # 25 — One Login: Union Auth + Workspace State on Object Storage
 
 Make Union's GitHub SSO the **only** login a user ever sees, and make saving
@@ -275,3 +282,7 @@ Track the simplification. If something here survives, the design drifted.
 - [x] Module docstrings on every module touched.
 - [x] Plan 24: strike Pieces 1–3 (settled here), keep the console-access grant.
 - [x] ROADMAP: mark ✅ and move to Complete; add the accepted-risk follow-ups.
+
+## Outcome
+
+Shipped 2026-10-06 ([[roadmap-complete]]): Union's GitHub sign-in is the only login, and workspace notebooks live on object storage keyed by the Union subject, hydrated at launch and saved while the pod runs. Replaced the GitHub flow of [[tighten-github-token-scope]]; project creation moved to [[per-user-dashboard]]'s onboarding.

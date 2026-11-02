@@ -1,3 +1,10 @@
+---
+title: storage-client-refactor
+status: done
+priority: normal
+created: 2026-02-15
+---
+
 # Storage Client Refactor Plan
 
 ## Overview
@@ -177,3 +184,7 @@ Update `.opencode/specs/filesystem_spec.md` to reflect the new storage abstracti
 4. **local_dir on both implementations**: Both clients need a local directory — `LocalStorageClient` for primary storage, `PinataClient` for download caching. The property stays on the protocol.
 
 5. **Execution is not a storage concern**: Local vs remote workflow execution is handled by the Flyte SDK's own run context (`flyte run --local` vs remote). This refactor only addresses storage.
+
+## Outcome
+
+Implemented 2026-02-16 in `3ced460`, beside [[stargazer-mode-config]]: `LocalStorageClient` split from the Pinata client. [[storage-consolidation]] and then [[asset-storage-index]] reshaped storage again.

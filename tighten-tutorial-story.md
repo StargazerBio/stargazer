@@ -1,3 +1,10 @@
+---
+title: tighten-tutorial-story
+status: done
+priority: normal
+created: 2026-06-09
+---
+
 # 19 — Tighten the tutorial story
 
 ## Problem
@@ -112,3 +119,7 @@ The smoke test (`tests/notebooks/test_notebook_smoke.py`) covers every notebook
 generically via `rglob`: imports cleanly, all cells parse, no multiply-defined
 reactive vars. The new Workflows notebook is covered automatically. No bespoke
 tests needed.
+
+## Outcome
+
+Shipped 2026-06-09 ([[roadmap-complete]]): the tutorials given one arc, after [[scrna-tutorial-rebuild]].

@@ -1,3 +1,10 @@
+---
+title: asset-storage-index
+status: done
+priority: normal
+created: 2026-10-06
+---
+
 # 27 — Asset Storage on the Object Store, Indexed per User
 
 Move asset bytes off Pinata and into object storage, and move the metadata
@@ -582,3 +589,7 @@ branch.
   and triggers.
 - Data-aware caching: with Flyte's cache key set to the CID, check how much of
   that ROADMAP item is left.
+
+## Outcome
+
+Shipped 2026-10-08 in PR #13 ([[roadmap-complete]]): asset bytes on the object store, identified by locally computed CIDs, and a per-user SQLite index; TinyDB and the storage modes are gone, and Pinata stays as the public tier. Its follow-ups include [[vqsr-tranches-companion]], [[postgres-index]] and [[dsql-asset-index]].

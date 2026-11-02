@@ -1,3 +1,10 @@
+---
+title: stargazer-mode-config
+status: done
+priority: normal
+created: 2026-02-15
+---
+
 # STARGAZER_MODE Configuration Plan
 
 ## Overview
@@ -167,3 +174,7 @@ def setup_local_mode(tmp_path, monkeypatch):
 5. **Execution mode is Flyte's concern**: `STARGAZER_MODE=cloud` implies Union execution, but Stargazer doesn't configure this — the Flyte SDK handles it based on whether a Union client is configured. The mode setting is about storage and overall intent, not execution orchestration.
 
 6. **Tests use monkeypatch, not mutation**: Instead of mutating `default_client.local_only` at runtime, tests use `monkeypatch` to set env vars and re-initialize the client. This is more realistic and doesn't leak state between tests.
+
+## Outcome
+
+Implemented 2026-02-16 (`3ced460`, merged as `f520bff` from `wt/stargazer-mode-config`). [[storage-consolidation]] dropped the mode variable (`b57c8b5`), and [[asset-storage-index]] the storage modes behind it.

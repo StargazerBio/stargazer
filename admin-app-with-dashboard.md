@@ -1,6 +1,13 @@
+---
+title: admin-app-with-dashboard
+status: done
+priority: normal
+created: 2026-05-20
+---
+
 # Admin App with Embedded Dashboard
 
-Layer 1 of the **two-app** architecture (was three; the per-user dashboard pod has been folded into the admin app). Layer 2 (per-notebook apps spawned on Edit/Run click) is in [`17_per_notebook_apps.md`](./17_per_notebook_apps.md).
+Layer 1 of the **two-app** architecture (was three; the per-user dashboard pod has been folded into the admin app). Layer 2 (per-notebook apps spawned on Edit/Run click) is in [[per-notebook-apps]].
 
 The reshape: a single admin pod hosts both the unauthenticated landing and the post-login dashboard. There is **no per-user dashboard pod**, and **no per-user PVC** — Flyte v2 doesn't yet support pod templates on AppEnvironments (`"K8sPod app payload is not yet supported"` from the server), so per-notebook pods hold workspace state in their own ephemeral container storage, clone the user's fork on startup, and push back on shutdown. The admin app reads each user's workspace state on demand from whichever per-notebook pod they have running (via in-cluster service DNS), with the GitHub Contents API as a cold-case read-only fallback.
 
@@ -83,3 +90,7 @@ All the above has been implemented:
 - MCP / in-notebook LLM.
 - Promotion workflow (still implicit via GitHub PR from the user's fork).
 - Authentication beyond the signed cookie (e.g. CSRF tokens on `/launch`) — left for a hardening pass.
+
+## Outcome
+
+Shipped 2026-05-18 ([[roadmap-complete]]): one shared FastAPI deployment with OAuth, fork discovery and creation, per-user provisioning, the dashboard tiles and the `/launch` broker, with snapshots, copy-to-workspace and workspace save following through 2026-07-01. Layer 2 is [[per-notebook-apps]]; [[per-user-dashboard]] later replaced the shared app.

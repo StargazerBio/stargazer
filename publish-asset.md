@@ -7,7 +7,7 @@ pr: 43
 ---
 
 `publish(asset)` promotes a stored asset to Pinata's public network with its keyvalues and
-`_owner`. The CID doesn't change. A follow-up from [plan 27](archive/27_asset_storage_index.md).
+`_owner`. The CID doesn't change. A follow-up from [[asset-storage-index|plan 27]].
 
 It's the step under every Publish button: on an asset (ticket
 [[assets-on-dashboard-home]]) and on a notebook (ticket [[public-notebooks]]).
