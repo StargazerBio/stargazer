@@ -142,15 +142,19 @@ async def update_file(cid: str, keyvalues: dict[str, str]) -> dict:
 
 
 @mcp.tool()
-async def publish_file(cid: str) -> dict:
-    """Publish one of your stored files: anyone on the internet can then find
-    and download it. The CID doesn't change, and your own copy stays.
+async def publish_file(cid: str) -> list[dict]:
+    """Publish one of your stored files and its companions (files whose
+    `companion_of` is its CID, such as a reference's indices): anyone on the
+    internet can then find and download them. The CIDs don't change, and your
+    own copies stay. A companion that's already public isn't sent again.
 
     Needs the public tier (a Pinata key). Refused for a CID that isn't in your
-    storage, and for metadata over the public tier's limits (nine fields, 250
-    characters each), before anything is sent.
+    storage, and when any file in the set has metadata over the public tier's
+    limits (nine fields, 250 characters each), before anything is sent.
 
-    When displaying results, always show a table with the CID and all keyvalues.
+    Returns a record (cid, name, keyvalues) for each file that went public,
+    the file itself first. When displaying results, always show a table with
+    the CID, name and all keyvalues of each.
     """
     return await _storage.default_client.publish(cid)
 

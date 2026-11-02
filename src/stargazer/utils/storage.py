@@ -44,7 +44,7 @@ import stargazer.config  # ensure env var defaults are set  # noqa: F401
 from stargazer.assets.asset import Asset
 from stargazer.utils.cid import compute_cid
 from stargazer.utils.index import SqlIndex, make_index
-from stargazer.utils.pinata import PinataClient, _stamp_owner
+from stargazer.utils.pinata import PinataClient, _check_new_file, _stamp_owner
 from stargazer.utils.query import generate_query_combinations
 
 
@@ -306,9 +306,7 @@ class StorageClient:
         Returns:
             Rows with `cid`, `uri`, `name` and `keyvalues`
         """
-        own: dict[str, dict] = {}
-        for row in await self.index.query({"companion_of": cid}):
-            own.setdefault(row["name"], row)
+        own = await self._own_companions(cid)
         rows = list(own.values())
         if self.public is None:
             return rows
@@ -329,6 +327,13 @@ class StorageClient:
                     rows.append(public)
         return rows
 
+    async def _own_companions(self, cid: str) -> dict[str, dict]:
+        """The user's own rows whose `companion_of` is `cid`, newest per name."""
+        own: dict[str, dict] = {}
+        for row in await self.index.query({"companion_of": cid}):
+            own.setdefault(row["name"], row)
+        return own
+
     async def delete(self, asset: Asset) -> None:
         """Remove the asset's index row and, if it's in the store, its file.
 
@@ -340,45 +345,68 @@ class StorageClient:
         if row is not None and not row["uri"].startswith(("http://", "https://")):
             await asyncio.to_thread(_remove, row["uri"])
 
-    async def publish(self, cid: str) -> dict:
-        """Put one of the user's stored assets on the public tier, same CID.
+    async def publish(self, cid: str) -> list[dict]:
+        """Put one of the user's stored assets on the public tier, with its companions.
 
         Uploads the stored file to Pinata's public network with its index
-        row's keyvalues; `_owner` is restamped from `STARGAZER_OWNER`, as on
-        any upload, and files over 100 MB go up in resumable chunks. The
-        user's row stays, so the asset is in both tiers, and `query` keeps
-        the row over the public duplicate.
+        row's keyvalues, then the user's own companions of it (newest per
+        name, the ones `companions()` takes first), each with its own row's
+        keyvalues, so a reference goes public with the indices tools need.
+        `_owner` is restamped from `STARGAZER_OWNER`, as on any upload, and
+        files over 100 MB go up in resumable chunks. A companion already
+        public beside `cid` under the same owner and CID isn't sent again.
+        The user's rows stay, so the assets are in both tiers, and `query`
+        keeps a row over its public duplicate.
 
         Args:
             cid: The stored asset to publish
 
         Returns:
-            The public record: `cid`, `name` and `keyvalues`
+            A public record (`cid`, `name`, `keyvalues`) for each file sent:
+            the asset's first, then its companions' by name
 
         Raises:
             ValueError: with no public tier, for a CID that isn't in the
-                user's index, for keyvalues over Pinata's limits (before
-                anything is sent), or when Pinata assigns a different CID
+                user's index, for any file's keyvalues over Pinata's limits
+                (checked for the whole set before anything is sent), or when
+                Pinata assigns a different CID
         """
         if self.public is None:
             raise ValueError("No PINATA_JWT: there's no public tier to publish to")
         row = await self.index.get(cid)
         if row is None:
             raise ValueError(f"{cid} isn't in your storage")
+        own = await self._own_companions(cid)
+        public = (
+            {
+                (r["cid"], r["keyvalues"].get("_owner"))
+                for r in await self.public.query({"companion_of": cid})
+            }
+            if own
+            else set()
+        )
+        sends = [(row, _stamp_owner(dict(row["keyvalues"])))]
+        for name in sorted(own):
+            kv = _stamp_owner(dict(own[name]["keyvalues"]))
+            if (own[name]["cid"], kv.get("_owner")) not in public:
+                sends.append((own[name], kv))
+        for _, kv in sends:
+            _check_new_file(kv)
+        return [await self._publish_row(r, kv) for r, kv in sends]
+
+    async def _publish_row(self, row: dict, keyvalues: dict[str, str]) -> dict:
+        """Upload the file an index row points at to the public tier, same CID."""
+        cid = row["cid"]
         stored = Asset(cid=cid, path=File(path=row["uri"], name=row["name"], hash=cid))
         local = await self.download(stored)
-        published = Asset(keyvalues=_stamp_owner(dict(row["keyvalues"])))
+        published = Asset(keyvalues=keyvalues)
         await self.public.upload(published, local)
         # Our CIDs are computed to match Pinata's, so a mismatch is a bug.
         if published.cid != cid:
             raise ValueError(
                 f"Pinata stored {cid} as {published.cid}; the CIDs should match"
             )
-        return {
-            "cid": cid,
-            "name": row["name"],
-            "keyvalues": published.to_keyvalues(),
-        }
+        return {"cid": cid, "name": row["name"], "keyvalues": published.to_keyvalues()}
 
     async def update_metadata(self, cid: str, keyvalues: dict[str, str]) -> dict:
         """Merge a metadata patch onto the user's index row, restamping `_owner`.
