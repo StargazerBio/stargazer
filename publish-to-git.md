@@ -26,10 +26,11 @@ piece of [[notebooks-in-git]].
 - The dashboard records each workspace notebook's published path and PR in
   its state table, so the tile shows Republish, Unpublish and a link.
 
-Credential: a GitHub App, `Stargazer Notebooks`, installed on
-community-notebooks only, its private key the Flyte secret
-`stargazer-github-app-key`, its ID `STARGAZER_GITHUB_APP_ID` in `tenant.env`.
-The user creates the App, the ruleset and the secret.
+Credential: the org's existing GitHub App, `stargazer-workspaces`, given
+Pull requests write and installed on community-notebooks only. Its private
+key is the Flyte secret `stargazer-github-app-key`, its ID
+`STARGAZER_GITHUB_APP_ID` in `tenant.env`. The user updates and installs the
+App, makes the ruleset with it on the bypass list, and creates the secret.
 
 Not here: the tile showing why CI failed (it links the PR), the explorer
 listing the repo, retiring the public-tier path, migrating public notebooks.
