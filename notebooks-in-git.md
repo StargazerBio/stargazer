@@ -1,6 +1,6 @@
 ---
 title: notebooks-in-git
-status: review
+status: done
 priority: normal
 created: 2026-11-02
 pr: 124
@@ -111,26 +111,28 @@ revisit:
 
 ## Pieces
 
-- [ ] Decide credentials.
+- [x] Decide credentials: the org's `stargazer-workspaces` App (ticket [[publish-to-git]]).
 - [x] Build `StargazerBio/community-notebooks`' content: licence, README,
       topic folders, CI that runs each changed notebook on its demo inputs,
       `catalog.yaml`.
 - [x] Create the repo, push the bundle, set branch protection requiring
       the `Notebooks` checks, allow auto-merge. Done 2026-11-03: public, `main` requires `layout` and `plan`. The `run (<folder>)` jobs are named per matrix entry, so they can't be required yet: a gate job that needs `run` would make them required.
-- [ ] Infra: Publish and Republish as PRs against it, Unpublish as a
-      commit to `main`, Copy as Open from GitHub.
-- [ ] Infra: the explorer lists it, the catalog first.
+- [x] Infra: Publish, Republish and Unpublish as commits to `main`, Copy
+      as Open from GitHub (infra PR 29, ticket [[publish-to-git]]).
+- [ ] Infra: the explorer lists it, the catalog first (ticket
+      [[community-explorer-listing]]).
 - [x] Move the scRNA pipeline notebook there (`scrna/clustering-pipeline`),
       with its demo bundle named, in the catalog. Remove
       `notebooks/workflows/` from this repo and the image, and its smoke
       test entries (PR 124; PR 121 closed when its branch was renamed).
 - [ ] Infra: the dashboard lists the scRNA notebook from the catalog, not
-      as a built-in. Must land before infra's pin moves to a release
+      as a built-in (ticket [[community-explorer-listing]]). Must land before infra's pin moves to a release
       without `notebooks/workflows/`.
 - [x] Docs here: `docs/architecture/notebook.md` (the Workflows notebook
       type, Workflow graduation, Copy to workspace) and
       `docs/getting-started.md` (the image's `workflows/` folder).
-- [ ] Migrate existing public notebooks, then retire the public-tier path.
+- [ ] Migrate existing public notebooks, then retire the public-tier path
+      (ticket [[retire-public-notebooks]]).
 - [x] Docs: `docs/architecture/notebook.md` gains how notebooks are shared
       (its Sharing Notebooks section; extend it with dashboard publishing
       when that ships).
@@ -197,4 +199,19 @@ image's `/stargazer`. With it, every check passes: germline ran the full
 workflow with `--run` (section 5: 47 sites across 1 sample), and scRNA ran
 every cell on `scrna_demo`.
 
-Related: [[germline-notebook]], [[public-notebooks]], [[board]].
+## Outcome
+
+Shipped in stargazer PR 124 (`ad22338`): the scRNA pipeline left this repo
+and the image for `StargazerBio/community-notebooks`, which holds it and the
+new germline notebook, and `docs/architecture/notebook.md` describes sharing
+through that repo. Publishing to it from the dashboard shipped in infra PR 29
+(ticket [[publish-to-git]]). Verified locally (unit tier, both notebooks
+headless from their community paths) and in the released image on GitHub
+Actions (community-notebooks PR 1); see the evidence above.
+
+Left: the explorer listing the repo and the scRNA tile moving off its
+built-in path, which must land before infra's pin moves past v2026.10.30
+(ticket [[community-explorer-listing]]); migrating and retiring public-tier
+notebooks (ticket [[retire-public-notebooks]]).
+
+Related: [[germline-notebook]], [[public-notebooks]], [[community-explorer-listing]], [[retire-public-notebooks]], [[board]].

@@ -1,6 +1,6 @@
 ---
 title: publish-to-git
-status: review
+status: done
 pr: 29
 priority: normal
 created: 2026-11-03
@@ -57,4 +57,16 @@ listing the repo, retiring the public-tier path, migrating public notebooks.
 6. Delete the notebook, `union_dashboard.py teardown`, and confirm no app
    or run is left up.
 
-Related: [[board]], [[notebooks-in-git]].
+## Outcome
+
+Shipped in infra PR 29 (`19fc9fc`): Publish, Republish and Unpublish commit
+to `StargazerBio/community-notebooks` as the `stargazer-workspaces` App, with
+owners in each notebook's header. Verified by unit tests against a fake GitHub
+and on the tenant as the test account (commits above). The 403 on someone
+else's path is unit-tested only.
+
+Left: the explorer listing the repo (ticket [[community-explorer-listing]]);
+retiring the public-tier listing and the App's unused Pull requests write
+(ticket [[retire-public-notebooks]]).
+
+Related: [[board]], [[notebooks-in-git]], [[community-explorer-listing]], [[retire-public-notebooks]].
