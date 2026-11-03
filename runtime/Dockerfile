@@ -52,8 +52,8 @@ RUN ACP=/usr/local/lib/node_modules/@agentclientprotocol/claude-agent-acp \
 
 # The runtime's venv: the proxy's packages from the project's `runtime` group,
 # `flyte` among them (hosted pods start under it, and the proxy stores
-# notebooks with it), and the launcher marimo, pinned: notebooks don't list
-# marimo in their headers, and `--sandbox` puts this version into every
+# notebooks with it), and the launcher marimo, pinned: a notebook's header
+# lists `marimo` unpinned, and `--sandbox` layers this version over every
 # kernel's venv. pydantic-ai-slim is what marimo's AI chat and completions run
 # on in the server, with the OpenAI and Anthropic providers; marimo only
 # brings it in its `recommended` extra. The range is that extra's for this
@@ -114,12 +114,40 @@ ENV PATH="/opt/venv/bin:${PATH}" \
     LC_ALL="C.UTF-8" \
     PYTHONPATH="/usr/local/lib" \
     UV_LINK_MODE="copy" \
+    UV_CACHE_DIR="/opt/uv-cache" \
     DISABLE_AUTOUPDATER="1"
+
+RUN install -d -o flyte -g flyte /opt/uv-cache
+USER flyte
+
+# A warm uv cache, so a notebook's sandbox starts from local disk and only what
+# a user adds to a header comes from PyPI. These are the calls marimo makes:
+# the server starts under a `--with marimo[lsp]` layer over the runtime venv,
+# and a notebook's sandbox syncs a venv from its header, then starts the kernel
+# under a `--with marimo` layer over it. uv keys a script's venv on its path,
+# so each built-in notebook gets its venv built where it opens: under
+# /workspace/notebooks locally, under /stargazer on a hosted pod. Hardlinked
+# within this one layer, the venvs cost little more than their bytecode. The
+# copy at /workspace is removed, since the proxy would save it to a hosted
+# user's store.
+RUN VIRTUAL_ENV=/opt/venv uv run -q --active --no-project \
+        --python /opt/venv/bin/python --with "marimo[lsp]==0.25.1" \
+        -- python -c 'import marimo' \
+    && cp -r /opt/workspace/notebooks /workspace/ \
+    && for nb in $(find /workspace/notebooks /stargazer/src/stargazer/notebooks \
+            -mindepth 2 -name '*.py' ! -name __init__.py); do \
+        UV_LINK_MODE=hardlink uv sync -q --script "$nb" --compile-bytecode \
+        && py="$(uv python find --script "$nb")" \
+        && VIRTUAL_ENV="${py%/bin/python}" UV_LINK_MODE=hardlink uv run -q \
+            --active --no-project --python "$py" --with marimo==0.25.1 \
+            -- python -c 'import marimo' \
+        || exit 1; \
+    done \
+    && rm -rf /workspace/notebooks
 
 # Not /workspace: a hosted pod's `fserve` unpacks its code bundle and writes
 # its parameters file into the working directory, and the proxy saves
 # everything in /workspace to the user's store. The launch script moves there.
-USER flyte
 WORKDIR /home/flyte
 
 EXPOSE 8080

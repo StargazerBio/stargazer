@@ -13,8 +13,11 @@ How a marimo notebook carries its own dependencies and gets a venv of its own. S
 - **The record is a PEP 723 header**: a `# /// script` comment block that is a pyproject inlined, with `requires-python` and `dependencies`. See [[marimo-inlining-dependencies#Inline script metadata]].
 - **The editor adds imports to the header** when it sees a third-party import, and the package panel adds and removes them; removing an import leaves its package. By hand, `uv add --script` and `uv remove --script` edit it.
 - **`[tool.uv.sources]`** in the header points a package somewhere other than PyPI: a local path (optionally editable), a git URL, or a named `[[tool.uv.index]]`.
+- **Before syncing, the sandbox adds `marimo` to a header that lacks it** (`uv add --script`), then builds the venv with `uv sync --script --compile-bytecode` and starts the kernel under `uv run --with marimo==<launcher version>` layered over it. The server itself runs under a `--with marimo[lsp]` layer. Read in marimo 0.25.1's `_environments/`.
+- **uv keys a script's venv on the script's absolute path** (`environments-v2/<name>-<hash>` in its cache), so the same header at two paths gets two venvs, and an edited header updates its venv in place.
 - **uv's environment variables configure the sandbox**, such as `UV_PYTHON` for the Python version and `UV_LINK_MODE`.
 
 ## In Stargazer
 
 - **Every notebook's header points `stargazer-bio` at `/stargazer`** through `[tool.uv.sources]`, so a sandbox installs the SDK the image was built with. How the image sets that up is in `docs/architecture/runtime.md` and `runtime/Dockerfile`.
+- **The image prebuilds each built-in notebook's venv** into a warm uv cache, at the paths the notebooks open from, so they open offline. The built-in headers list `marimo` so the sandbox leaves them unedited.
