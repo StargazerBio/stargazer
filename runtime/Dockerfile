@@ -21,6 +21,17 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash flyte
 
+# micromamba, for the conda packages a notebook needs, bioconda's tools among
+# them. Its prefix is the runtime user's and on everyone's path, the kernels'
+# included, so `micromamba install samtools` in marimo's terminal puts the tool
+# on every notebook's path, for as long as the container runs. It's last on the
+# path, so a package that brings its own Python doesn't shadow the runtime's.
+RUN case "$(uname -m)" in x86_64) MM=linux-64 ;; aarch64) MM=linux-aarch64 ;; esac \
+    && curl -Ls "https://micro.mamba.pm/api/micromamba/${MM}/latest" \
+        | tar -xj -C /usr/local/bin --strip-components=1 bin/micromamba \
+    && install -d -o flyte -g flyte /opt/conda \
+    && printf 'channels:\n  - conda-forge\n  - bioconda\n' > /opt/conda/.condarc
+
 # uv, which `marimo --sandbox` uses to build per-notebook venvs.
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && install -m 755 /root/.local/bin/uv /root/.local/bin/uvx /usr/local/bin/
@@ -98,7 +109,8 @@ RUN mkdir /opt/workspace \
 
 # A locale the slim image has: marimo's terminal sets en_US.UTF-8 unless one
 # is set, and bash warns that it doesn't exist.
-ENV PATH="/opt/venv/bin:${PATH}" \
+ENV PATH="/opt/venv/bin:${PATH}:/opt/conda/bin" \
+    MAMBA_ROOT_PREFIX="/opt/conda" \
     LANG="C.UTF-8" \
     LC_ALL="C.UTF-8" \
     PYTHONPATH="/usr/local/lib" \
