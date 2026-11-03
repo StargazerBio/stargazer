@@ -10,36 +10,31 @@ The dashboard's Publish, Republish and Unpublish put a workspace notebook in
 piece of [[notebooks-in-git]].
 
 - **Publish** asks for the notebook's name (its slug, prefilled with the
-  workspace notebook's), a domain, its demo bundle and a message. It writes
-  `<domain>/<slug>.py` with `owners` and `demo_bundle` set in its
-  `[tool.stargazer]` header, on a branch `publish/<domain>/<slug>`, opens a
-  PR authored by the dashboard's GitHub App, and turns on auto-merge, so CI
-  passing merges it.
-- **Republish** resets that branch to `main` and commits the new version, so
-  an open PR picks it up and a merged one gets a new PR.
-- **Unpublish** deletes the file in a commit straight to `main` (the App is
-  on the ruleset's bypass list); a notebook whose PR hasn't merged has its PR
-  closed instead.
+  workspace notebook's), a domain and a message, and commits
+  `<domain>/<slug>.py` to `main` with `owners` set in its `[tool.stargazer]`
+  header. No branch, no PR: the repo has no branch protection and its CI only
+  checks the layout.
+- **Republish** commits the new version to the same path.
+- **Unpublish** deletes the file in a commit to `main`.
 - **Owners** are Union subjects; `maintainers` is the org admins
   (`STARGAZER_ADMIN_SUBJECTS`). Writing to a path someone else owns is
   refused.
-- The dashboard records each workspace notebook's published path and PR in
-  its state table, so the tile shows Republish, Unpublish and a link.
+- The dashboard records each workspace notebook's published path in its
+  state table, so the tile shows Republish, Unpublish and a link to the file.
 
 Credential: the org's existing GitHub App, `stargazer-workspaces`, given
-Pull requests write and installed on community-notebooks only. Its private
+Pull requests write (unused now) and installed on community-notebooks only. Its private
 key is the Flyte secret `stargazer-github-app-key`, its ID
-`STARGAZER_GITHUB_APP_ID` in `tenant.env`. The user updates and installs the
-App, makes the ruleset with it on the bypass list, and creates the secret.
+`STARGAZER_GITHUB_APP_ID` in `tenant.env`. The user updated and installed the
+App and created the secret (done 2026-11-03).
 
-Not here: the tile showing why CI failed (it links the PR), the explorer
+Not here: the explorer
 listing the repo, retiring the public-tier path, migrating public notebooks.
 
 - [x] Unit tests against a fake GitHub
 - [x] `app/community_notebooks.py` and the publish routes
 - [x] Publish dialog
-- [ ] Verified on the tenant as the test account (needs the App set up,
-      its ID in `tenant.env`, and community-notebooks #1 and #2 merged, so
-      the repo's CI checks the single-file layout)
+- [ ] Verified on the tenant as the test account (needs community-notebooks
+      #2 merged, so the repo is on the single-file layout)
 
 Related: [[board]], [[notebooks-in-git]].

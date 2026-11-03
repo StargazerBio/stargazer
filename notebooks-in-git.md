@@ -36,23 +36,19 @@ proposes notebooks to one Stargazer-owned repository for them.
   in the publish dialog: the slug is the notebook's name as they give it,
   and the domain is theirs to choose. Who may update a notebook is recorded in the
   notebook itself; attribution is the commit author.
-- **Publish opens a PR** with a message the user writes. The PR's author
-  is the user (name from Union's `X-User-Claim-Name`); Stargazer's app
-  opens it. Republish is another PR, so every version keeps its history
-  and message.
-- **CI is the inclusion bar, and passing PRs merge on their own.** The
-  check is that the notebook parses and runs headless against its demo
-  inputs (a bundle it names). A failing PR stays open, and the dashboard
-  tile shows why. No lock files or image digests live in the repo: those
-  belong to runs (ticket `run-records`).
+- **Publish is a commit to `main`**, with a message the user writes and
+  their name as its author (from Union's `X-User-Claim-Name`); Stargazer's
+  App makes it. Republish is another commit, so every version keeps its
+  history and message. No PRs, no review, no branch protection: the repo is
+  where notebooks are published (decided 2026-11-03). CI only checks the
+  layout, and reports. No lock files or image digests live in the repo:
+  those belong to runs (ticket `run-records`).
 - **A catalog is the curation.** Maintainers keep a `catalog.yaml` of
   featured notebooks at a commit, the way a bundle lists approved files.
   The explorer shows the catalog by default and the rest behind a filter.
   Add first-PR review per contributor only if spam appears.
-- **Unpublish** deletes the notebook in a commit straight to `main`, with
-  no PR: removing your own notebook needs no review. The app checks the
-  caller is in its `owners` first, and its GitHub App needs leave to push
-  to `main` past the branch protection. Its history stays, as a published
+- **Unpublish** deletes the notebook in a commit to `main`. The app checks
+  the caller is in its `owners` first. Its history stays, as a published
   file's should: say so in the dialog.
 - **Copy** a public notebook into a workspace is Open from GitHub at the
   commit, so a copy names exactly which version it came from.
@@ -67,16 +63,12 @@ proposes notebooks to one Stargazer-owned repository for them.
   long-lived GitHub secret the one-login work removed; keep user code out
   of the process that holds it (the dashboard evaluates a notebook's
   `main_env` line today, ticket `private-pinata-key`).
-- **CI cost.** Running a notebook headless needs its tools; a GATK
-  notebook runs only where the tools are (the image, or the devbox). Run
-  the check in the Stargazer image.
 - **Licence.** The repo's licence applies to what's published; the dialog
   says which.
 - **SDK drift.** In this repo a notebook is tested against the SDK at the
-  same commit, so a change that breaks it fails here. In the community repo
-  it's tested against a release. Run the community repo's CI against each
-  new release (and optionally `main`), so a break shows up as a failing
-  notebook there before or as the release ships.
+  same commit, so a change that breaks it fails here. The community repo
+  doesn't run its notebooks, so a release that breaks one shows up only
+  when someone runs it.
 
 ## Retire public notebooks
 
@@ -98,24 +90,24 @@ revisit:
 
 - **Layout:** one file per notebook, `<domain>/<slug>.py`, with a
   `[tool.stargazer]` table in its PEP 723 script header naming `owners`
-  (Union user names, `maintainers` for the repo's own) and `demo_bundle`.
+  (Union subjects, `maintainers` for the org's admins). (`demo_bundle` went
+  with the notebook runs.)
   uv keeps the table when it edits the header's dependencies. Each notebook
   declares `main_name` and `main_description` for its tile; the layout check
   enforces both. (The first cut was a `<slug>/` folder holding `notebook.py`
   and `meta.yaml`; changed 2026-11-03, since it named every notebook the same
   and kept its metadata apart from it.)
-- **CI:** a layout check; each changed notebook runs
-  `marimo export html --sandbox ... -- --run` in the Stargazer image on an
-  empty store holding only its demo bundle; every notebook daily on
-  `latest` (instead of a cross-repo dispatch from the release workflow,
-  which would need a token here); manual runs take an image tag.
+- **CI:** the layout check, on pushes and PRs. The first cut also ran each
+  changed notebook headless in the Stargazer image on its demo bundle, and
+  every notebook daily; removed 2026-11-03 (community-notebooks #2) as more
+  than the repo needs.
 - **`--run`:** `mo.app_meta().mode` is `edit` under `marimo export`
   (measured), so a notebook can't detect a headless run that way. CI passes
   `-- --run` and a notebook gates button-held work on
   `"run" in mo.cli_args()`.
 - **Licence:** MIT, as this repo.
-- **Credentials:** still open; the GitHub App on that one repo remains the
-  plan.
+- **Credentials:** the org's `stargazer-workspaces` App, installed on that
+  one repo with Contents and Pull requests write (ticket [[publish-to-git]]).
 
 ## Pieces
 
