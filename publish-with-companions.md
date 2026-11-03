@@ -1,8 +1,9 @@
 ---
 title: publish-with-companions
-status: doing
+status: review
 priority: normal
 created: 2026-11-01
+pr: 122
 ---
 
 Publishing an asset should publish its companions with it, so a reference
