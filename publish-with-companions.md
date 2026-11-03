@@ -1,6 +1,6 @@
 ---
 title: publish-with-companions
-status: review
+status: done
 priority: normal
 created: 2026-11-01
 pr: 122
@@ -47,10 +47,23 @@ the asset graph and "collaboration without coordination".
       CIDs; a companion over the keyvalue limit refuses the whole set with
       nothing sent; an already-public companion isn't sent again.
 - [x] `StorageClient.publish` and MCP `publish_file`.
-- [ ] Pinata tier (written in `tests/pinata/test_client.py`, not yet run: no key
+- [x] Pinata tier (written in `tests/pinata/test_client.py`, not yet run: no key
       where it was made): publish a small parent and companion, `fetch()` the
       parent from an isolated store with no companions of its own and see
       the public companion land beside it, then delete both from Pinata.
 - [x] Docs: the public tier in `docs/architecture/configuration.md`.
+
+## Outcome
+
+Shipped in PR #122 (merge `573603a`). `StorageClient.publish(cid)` and MCP
+`publish_file` publish an asset with its own companions, check the whole
+set against Pinata's limits before sending, skip companions already public,
+and return a list of records. Verified: unit tier 263 passed, with three new
+tests that failed first; the pinata tier's companion test passed against
+the real API on `main` after merge (`pytest -m pinata tests/pinata/test_client.py -k companion`,
+1 passed, measured 2026-11-03). The infra dashboard publishes notebooks
+through its own Pinata calls, not `StorageClient.publish`, so the return
+type change doesn't reach it (inferred from reading `app/public_notebooks.py`).
+Nothing left.
 
 Related: [[board]].
