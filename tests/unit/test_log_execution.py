@@ -1,5 +1,6 @@
 """Tests for log_execution in config, run in real git repositories."""
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -8,6 +9,18 @@ import pytest
 
 import stargazer.config as config_mod
 from stargazer.config import log_execution
+
+
+@pytest.fixture(autouse=True)
+def no_git_env(monkeypatch):
+    """Drop every GIT_* variable, so git finds the tmp repos and not the caller's.
+
+    Git exports GIT_INDEX_FILE (and from some callers GIT_DIR) to hooks such as
+    pre-commit. Inherited, they point `git add` at the real index and make
+    `git init` reinitialize the real repository, flipping its core.bare.
+    """
+    for name in [n for n in os.environ if n.startswith("GIT_")]:
+        monkeypatch.delenv(name)
 
 
 def _git(cwd, *args) -> str:
