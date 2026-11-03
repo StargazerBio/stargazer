@@ -1,6 +1,7 @@
 ---
 title: warm-uv-cache
-status: doing
+status: review
+pr: 125
 priority: normal
 created: 2026-10-31
 ---
@@ -25,19 +26,24 @@ So within one container the second notebook is already mostly local. The cost is
 
 ## Plan
 
-- [ ] Measure the baseline: a fresh `docker run` of the current image, the time from start to the Assets tutorial's kernel running, and how many packages it downloads; the same for the scRNA notebook (the `bio` extra) opened second.
-- [ ] Warm the cache at build time: a fixed `UV_CACHE_DIR` owned by `flyte` (so the runtime user can write to it, and a hosted pod's home isn't the only place it can live), filled by syncing the headers the built-in notebooks use (`stargazer-bio` and `stargazer-bio[bio]` from `/stargazer`, plus the `--with marimo==0.25.1` layer) with the same uv binary the runtime uses.
-- [ ] Measure the image size it adds and the cold start again, locally and on a hosted pod with the test account.
-- [ ] Update `docs/architecture/runtime.md`'s list of what the image holds.
+- [x] Measure the baseline. Locally (fresh `docker run`, replaying marimo's uv calls): the Assets tutorial resolves and downloads 76 packages and the kernel's marimo layer 25 more, ~7.8 s; the scRNA notebook opened second still downloads 50. Hosted (release `v2026.10.30`, test account, 1 CPU): 16 large wheels downloaded, `Installed 108 packages in 26.67s`, `Bytecode compiled 4826 files in 12.00s`; uvicorn up 20:19:18, editor connected 20:20:07, ~49 s.
+- [x] Warm the cache at build time: `UV_CACHE_DIR=/opt/uv-cache` owned by `flyte`; each built-in notebook's venv prebuilt at both paths it opens from, hardlinked to the cache within one layer; the server's `--with marimo[lsp]` layer warmed too (it downloaded `ruff` on every start).
+- [x] Measure again. Hosted, debug image `ghcr.io/stargazerbio/debug:warm-uv-cache`: no downloads; the notebook's sync takes 1.4 s and 1.3 s on two pods (`Resolved 93 packages in 155ms`, `Bytecode compiled 4600 files in 250ms`), and the setup cell ran in 374 ms. Locally: ~1.8 s, and it works with `--network none`. Image: +2.4 GB uncompressed (~1.1 GB cache, ~1.2 GB bytecode in the 14 venvs), 1.17 → 2.35 GB compressed; the first pull on a fresh node took 83 s.
+- [x] Update `docs/architecture/runtime.md`'s list of what the image holds.
 
-## Open questions
+## Findings
 
-- **Drift.** The headers aren't locked, so a sync resolves to the latest versions PyPI has. Once a dependency releases after the image was built, the pod downloads the newer version anyway, and the cache only helps for what hasn't moved. Check whether `uv sync --script` honours a lock beside the script (`uv lock --script`) and whether the built-in notebooks should ship one, or whether `exclude-newer` at build time is enough. Also check that uv's cached index responses expiring doesn't put a network round trip back on every start.
-- **Disk.** `UV_LINK_MODE=copy` means each venv is a full copy on the pod's disk, cache or not. Hardlinking out of an image layer would most likely copy up anyway on overlayfs (a guess). Check whether pre-building the venvs themselves at the paths notebooks open from (`/workspace/notebooks/...` locally) is possible, given the venv's hash is keyed on the script's path.
-- **Declared images.** A notebook that declares its own image (`main_img` built on the Stargazer image) should inherit the cache. Confirm it does.
+- **marimo 0.25.1 edits a notebook's header on open.** Before syncing, it runs `uv add --script <notebook> marimo` on a header without `marimo`, which resolves the latest marimo (0.25.2 at the time) and would put every prebuilt venv behind marimo's next release. The built-in headers now list `marimo`, so the sandbox leaves them alone.
+- **Drift is mostly a non-issue.** With a venv already present, uv prefers the installed versions over newer ones on PyPI. With index responses past their 600 s max-age, resolution revalidates in ~300 ms instead of ~40 ms (measured locally, image 20 min old). No lock needed.
+- **Disk.** A prebuilt venv lives in the image, not the pod's writable layer, so a built-in notebook no longer writes its venv to the pod's disk at all.
+- **The editable `stargazer-bio` rebuilds on every open** (~0.5 s locally, ~0.8 s hosted): uv keys it on `/stargazer/src`'s mtime, and its own build writes the egg-info there. Left as is.
+- **Declared images** are built `FROM` the Stargazer image, so they carry `/opt/uv-cache` and `UV_CACHE_DIR` (inferred, not driven).
 
 ## Verification recipe
 
-The fresh-container cold start, before and after, locally and hosted. Locally: build the image, `docker run` it with nothing cached, and time from start to the Assets tutorial's first cell output, counting the downloads in marimo's sync output. Hosted: open a tutorial in edit mode as the test account and read the pod log's install lines and timings. Then deactivate the app.
+The fresh-container cold start, before and after, locally and hosted.
+
+- Locally: build the image, `docker run -p 18080:8080` it, open it in the browser and read `docker logs` for the sandbox's `Resolved`/`Prepared`/`Installed` lines (a warm image has no `Downloading` and `Prepared 1 package`, the editable SDK). Replaying marimo's calls in a fresh container times it without a browser: `uv sync --script <notebook> --compile-bytecode`, then `uv run --active --no-project --python <venv python> --with marimo==0.25.1 -- python -c 'import marimo, stargazer'` with `VIRTUAL_ENV` set to the venv. `--network none` proves nothing is fetched.
+- Hosted: push the branch image to `ghcr.io/stargazerbio/debug:<slug>`, deploy the test dashboard with `STARGAZER_NOTEBOOK_IMAGE` set to it (infra's `verify-dashboard`), launch the Assets tutorial in edit mode, open it, and read the pod's log with read-only `kubectl logs -c nb-assets-edit` (the container is named after the app). Then redeploy the dashboard on the release image and tear down.
 
 Related: [[board]].
