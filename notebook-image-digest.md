@@ -70,3 +70,5 @@ overwrite a tag (ticket `shared-image-repository`).
 - [ ] Infra: resolve and serve on the digest at launch; expose it in the
       pod.
 - [ ] Build or pull, with ticket `run-records`' replay.
+
+Related: [[run-records]], [[launch-build-state]], [[shared-image-repository]], [[board]].
