@@ -1,6 +1,7 @@
 ---
 title: publish-to-git
-status: doing
+status: review
+pr: 29
 priority: normal
 created: 2026-11-03
 ---
@@ -34,7 +35,26 @@ listing the repo, retiring the public-tier path, migrating public notebooks.
 - [x] Unit tests against a fake GitHub
 - [x] `app/community_notebooks.py` and the publish routes
 - [x] Publish dialog
-- [ ] Verified on the tenant as the test account (needs community-notebooks
-      #2 merged, so the repo is on the single-file layout)
+- [x] Verified on the tenant as the test account (2026-11-03): publish
+      `91ff2ad`, republish `a2a702a`, unpublish `6004f43` of
+      `test/publish-check.py`
+
+## Verification recipe
+
+1. `set -a; . ./tenant.env; set +a`, then
+   `uv run python .claude/skills/verify-dashboard/scripts/union_dashboard.py deploy`
+   from the infra worktree.
+2. Signed in to the console, open the test account's dashboard; its tiles
+   offer Publish.
+3. Create a throwaway workspace notebook, Publish it to domain `test`, and
+   check `gh api 'repos/StargazerBio/community-notebooks/commits?path=test/<name>.py'`:
+   the user's name as author, `stargazer-workspaces[bot]` as committer, and
+   `owners` the test account's subject in the file's header.
+4. Change its description through its setup, Republish (the dialog locks
+   name and domain), and see a second commit with the change. Unchanged
+   content makes no commit.
+5. Unpublish: a delete commit, the path 404s, the tile offers Publish again.
+6. Delete the notebook, `union_dashboard.py teardown`, and confirm no app
+   or run is left up.
 
 Related: [[board]], [[notebooks-in-git]].
