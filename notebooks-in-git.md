@@ -48,7 +48,7 @@ proposes notebooks to one Stargazer-owned repository for them.
   featured notebooks at a commit, the way a bundle lists approved files.
   The explorer shows the catalog by default and the rest behind a filter.
   Add first-PR review per contributor only if spam appears.
-- **Unpublish** opens a PR deleting the folder. Its history stays, as a
+- **Unpublish** opens a PR deleting the notebook. Its history stays, as a
   published file's should: say so in the dialog.
 - **Copy** a public notebook into a workspace is Open from GitHub at the
   commit, so a copy names exactly which version it came from.
