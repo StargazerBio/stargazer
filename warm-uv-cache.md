@@ -1,6 +1,6 @@
 ---
 title: warm-uv-cache
-status: backlog
+status: doing
 priority: normal
 created: 2026-10-31
 ---
