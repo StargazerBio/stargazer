@@ -131,7 +131,10 @@ class TestUploadFileTool:
 class TestPublishFileTool:
     """server.py::publish_file publishes one of the user's stored files."""
 
-    async def test_publishes_a_stored_file(self, isolated_storage, tmp_path):
+    async def test_publishes_a_stored_file(
+        self, isolated_storage, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("STARGAZER_OWNER", "u1")
         isolated_storage.public = public = FakePublicTier()
         f = tmp_path / "sheet.tsv"
         f.write_text("a\tb\n")
@@ -140,5 +143,6 @@ class TestPublishFileTool:
         result = await publish_file(stored["cid"])
 
         assert [u["bytes"] for u in public.uploads] == [b"a\tb\n"]
-        assert result["cid"] == stored["cid"]
-        assert result["keyvalues"] == {"asset": "sample_sheet_probe"}
+        assert [(r["cid"], r["keyvalues"]) for r in result] == [
+            (stored["cid"], {"asset": "sample_sheet_probe", "_owner": "u1"})
+        ]

@@ -421,13 +421,94 @@ async def test_publish_sends_the_stored_file_and_its_keyvalues(tmp_path, monkeyp
     await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x07"), sample_id="S1")
     row = await c.index.get(aln.cid)
 
-    record = await c.publish(aln.cid)
+    records = await c.publish(aln.cid)
 
     assert public.uploads == [
         {"bytes": b"BAM\x07", "name": "s1.bam", "keyvalues": row["keyvalues"]}
     ]
     assert row["keyvalues"]["_owner"] == "u1"
-    assert record == {"cid": aln.cid, "name": "s1.bam", "keyvalues": row["keyvalues"]}
+    assert records == [
+        {"cid": aln.cid, "name": "s1.bam", "keyvalues": row["keyvalues"]}
+    ]
+
+
+async def _reference_with_two_companions(tmp_path) -> tuple[Reference, list[dict]]:
+    """A stored reference with a `.fai` and a `.bwt`, and their index rows."""
+    ref = Reference()
+    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
+    fai = ReferenceIndex()
+    await fai.update(
+        _write(tmp_path / "w" / "ref.fa.fai", b"chr1\t4\t6\t4\t5\n"),
+        companion_of=ref.cid,
+    )
+    bwt = AlignerIndex()
+    await bwt.update(
+        _write(tmp_path / "w" / "ref.fa.bwt", b"bwt"),
+        aligner="bwa",
+        build="T",
+        companion_of=ref.cid,
+    )
+    client = storage_mod.default_client
+    rows = [await client.index.get(a.cid) for a in (ref, fai, bwt)]
+    return ref, rows
+
+
+@pytest.mark.asyncio
+async def test_publish_sends_the_assets_companions_with_it(tmp_path, monkeypatch):
+    """A reference goes public with its companions, each with its own keyvalues."""
+    monkeypatch.setenv("STARGAZER_OWNER", "u1")
+    public = FakePublicTier()
+    c = make_client(tmp_path, public=public)
+    monkeypatch.setattr(storage_mod, "default_client", c)
+    ref, rows = await _reference_with_two_companions(tmp_path)
+
+    records = await c.publish(ref.cid)
+
+    assert [(u["name"], u["bytes"]) for u in public.uploads] == [
+        ("ref.fa", b">chr1\nACGT\n"),
+        ("ref.fa.bwt", b"bwt"),
+        ("ref.fa.fai", b"chr1\t4\t6\t4\t5\n"),
+    ]
+    ref_row, fai_row, bwt_row = rows
+    assert records == [
+        {"cid": r["cid"], "name": r["name"], "keyvalues": r["keyvalues"]}
+        for r in (ref_row, bwt_row, fai_row)
+    ]
+    assert records[1]["keyvalues"]["companion_of"] == ref.cid
+    assert records[1]["keyvalues"]["aligner"] == "bwa"
+
+
+@pytest.mark.asyncio
+async def test_publish_refuses_the_set_when_a_companion_is_over_the_limits(
+    tmp_path, monkeypatch
+):
+    """One companion over the keyvalue cap stops the whole set; nothing is sent."""
+    monkeypatch.setenv("STARGAZER_OWNER", "u1")
+    public = FakePublicTier()
+    c = make_client(tmp_path, public=public)
+    monkeypatch.setattr(storage_mod, "default_client", c)
+    ref, rows = await _reference_with_two_companions(tmp_path)
+    await c.update_metadata(rows[2]["cid"], {f"x{i}": "y" for i in range(9)})
+
+    with pytest.raises(ValueError, match="at most 9 metadata fields"):
+        await c.publish(ref.cid)
+    assert public.uploads == []
+
+
+@pytest.mark.asyncio
+async def test_publish_skips_a_companion_already_public(tmp_path, monkeypatch):
+    """A companion the user already published beside this parent isn't sent again."""
+    monkeypatch.setenv("STARGAZER_OWNER", "u1")
+    public = FakePublicTier(tmp_path / "gateway")
+    c = make_client(tmp_path, public=public)
+    monkeypatch.setattr(storage_mod, "default_client", c)
+    ref, rows = await _reference_with_two_companions(tmp_path)
+    public.add("ref.fa.fai", b"chr1\t4\t6\t4\t5\n", **rows[1]["keyvalues"])
+
+    records = await c.publish(ref.cid)
+
+    assert [u["name"] for u in public.uploads] == ["ref.fa", "ref.fa.bwt"]
+    assert [r["name"] for r in records] == ["ref.fa", "ref.fa.bwt"]
 
 
 @pytest.mark.asyncio
@@ -454,6 +535,7 @@ async def test_publish_refuses_an_unknown_cid(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_publish_raises_when_the_cid_changes(tmp_path, monkeypatch):
     """A public CID that differs from ours is a bug, not a quiet success."""
+    monkeypatch.setenv("STARGAZER_OWNER", "u1")
     c = make_client(tmp_path, public=FakePublicTier(cid="bafyDifferent"))
     monkeypatch.setattr(storage_mod, "default_client", c)
     aln = Alignment()

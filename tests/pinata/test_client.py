@@ -11,6 +11,7 @@ import uuid
 
 import pytest
 
+import stargazer.utils.storage as storage_mod
 from stargazer.assets import R1
 from stargazer.assets.asset import Asset
 from stargazer.utils.index import SqliteIndex
@@ -135,8 +136,10 @@ async def test_upload_at_the_keyvalue_cap(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_publish_puts_a_stored_asset_on_the_public_network(tmp_path):
-    """A stored asset published keeps its CID and keyvalues on Pinata."""
+async def test_publish_puts_an_asset_and_its_companion_on_the_public_network(
+    tmp_path, monkeypatch
+):
+    """A published asset's companion goes public too, and a fresh store's fetch takes it."""
     tag = uuid.uuid4().hex
     client = StorageClient(
         local_dir=tmp_path / "cache",
@@ -144,19 +147,51 @@ async def test_publish_puts_a_stored_asset_on_the_public_network(tmp_path):
         index=SqliteIndex(tmp_path / "index.db"),
         public=PinataClient(),
     )
-    stored = Asset(keyvalues={"asset": "publish_probe", "tag": tag})
-    await client.upload(stored, _unique_file(tmp_path, tag))
+    parent = Asset(keyvalues={"asset": "publish_probe", "tag": tag})
+    await client.upload(parent, _unique_file(tmp_path, tag))
+    companion_file = tmp_path / f"{tag}.txt.idx"
+    companion_file.write_text(f"stargazer companion {tag}\n")
+    companion = Asset(
+        keyvalues={
+            "asset": "publish_probe_index",
+            "tag": tag,
+            "companion_of": parent.cid,
+        }
+    )
+    await client.upload(companion, companion_file)
 
-    record = await client.publish(stored.cid)
+    records = await client.publish(parent.cid)
 
     try:
-        assert record["cid"] == stored.cid
-        [rec] = await client.public.query({"tag": tag})
-        assert rec["cid"] == stored.cid
-        assert rec["keyvalues"] == {
-            "asset": "publish_probe",
-            "tag": tag,
-            "_owner": "integration-test",
+        assert [r["cid"] for r in records] == [parent.cid, companion.cid]
+        public = {
+            r["cid"]: r["keyvalues"] for r in await client.public.query({"tag": tag})
         }
+        assert public == {
+            parent.cid: {
+                "asset": "publish_probe",
+                "tag": tag,
+                "_owner": "integration-test",
+            },
+            companion.cid: {
+                "asset": "publish_probe_index",
+                "tag": tag,
+                "companion_of": parent.cid,
+                "_owner": "integration-test",
+            },
+        }
+
+        pod = StorageClient(
+            local_dir=tmp_path / "pod",
+            store_root=str(tmp_path / "pod-store"),
+            index=SqliteIndex(tmp_path / "pod-index.db"),
+            public=PinataClient(),
+        )
+        monkeypatch.setattr(storage_mod, "default_client", pod)
+        local = await Asset(cid=parent.cid).fetch()
+        assert (local.parent / companion_file.name).read_text() == (
+            f"stargazer companion {tag}\n"
+        )
     finally:
-        await client.public.delete(Asset(cid=stored.cid))
+        await client.public.delete(Asset(cid=parent.cid))
+        await client.public.delete(Asset(cid=companion.cid))
