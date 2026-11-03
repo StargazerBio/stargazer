@@ -17,20 +17,9 @@ RUN npm install -g --omit=dev @agentclientprotocol/claude-agent-acp@0.99.1 \
 FROM python:3.14-slim-bookworm
 
 RUN apt-get update \
-    && apt-get install -y build-essential ca-certificates curl git bzip2 \
+    && apt-get install -y build-essential ca-certificates curl git \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash flyte
-
-# micromamba + the bioinformatics tools (same set as gatk_env), reachable by
-# subprocess from inside each notebook's sandbox venv.
-RUN case "$(uname -m)" in x86_64) MM=linux-64 ;; aarch64) MM=linux-aarch64 ;; esac \
-    && curl -Ls "https://micro.mamba.pm/api/micromamba/${MM}/latest" \
-        | tar -xj -C /usr/local/bin --strip-components=1 bin/micromamba \
-    && micromamba create -p /opt/conda -y -c bioconda -c conda-forge \
-        gatk4 samtools bwa bwa-mem2 \
-    && micromamba clean -a -y \
-    && ln -s /opt/conda/bin/gatk /opt/conda/bin/java /opt/conda/bin/samtools \
-        /opt/conda/bin/bwa /opt/conda/bin/bwa-mem2* /usr/local/bin/
 
 # uv, which `marimo --sandbox` uses to build per-notebook venvs.
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
@@ -124,26 +113,23 @@ USER flyte
 # a user adds to a header comes from PyPI. These are the calls marimo makes:
 # the server starts under a `--with marimo[lsp]` layer over the runtime venv,
 # and a notebook's sandbox syncs a venv from its header, then starts the kernel
-# under a `--with marimo` layer over it. uv keys a script's venv on its path,
-# so each built-in notebook gets its venv built where it opens: under
-# /workspace/notebooks locally, under /stargazer on a hosted pod. Hardlinked
-# within this one layer, the venvs cost little more than their bytecode. The
-# copy at /workspace is removed, since the proxy would save it to a hosted
-# user's store.
+# under a `--with marimo` layer over it. Only notebooks on the core SDK are
+# warmed: one needing an extra downloads it when it first opens. uv keys a
+# script's venv on its path, so the venvs are built where a hosted pod opens
+# the notebooks, under /stargazer, sparing its one CPU the bytecode compile;
+# locally they open from /workspace and build their venv from the cache.
 RUN VIRTUAL_ENV=/opt/venv uv run -q --active --no-project \
         --python /opt/venv/bin/python --with "marimo[lsp]==0.25.1" \
         -- python -c 'import marimo' \
-    && cp -r /opt/workspace/notebooks /workspace/ \
-    && for nb in $(find /workspace/notebooks /stargazer/src/stargazer/notebooks \
-            -mindepth 2 -name '*.py' ! -name __init__.py); do \
+    && for nb in $(find /stargazer/src/stargazer/notebooks -mindepth 2 \
+            -name '*.py' ! -name __init__.py -exec grep -L 'stargazer-bio\[' {} +); do \
         UV_LINK_MODE=hardlink uv sync -q --script "$nb" --compile-bytecode \
         && py="$(uv python find --script "$nb")" \
         && VIRTUAL_ENV="${py%/bin/python}" UV_LINK_MODE=hardlink uv run -q \
             --active --no-project --python "$py" --with marimo==0.25.1 \
             -- python -c 'import marimo' \
         || exit 1; \
-    done \
-    && rm -rf /workspace/notebooks
+    done
 
 # Not /workspace: a hosted pod's `fserve` unpacks its code bundle and writes
 # its parameters file into the working directory, and the proxy saves

@@ -20,4 +20,4 @@ How a marimo notebook carries its own dependencies and gets a venv of its own. S
 ## In Stargazer
 
 - **Every notebook's header points `stargazer-bio` at `/stargazer`** through `[tool.uv.sources]`, so a sandbox installs the SDK the image was built with. How the image sets that up is in `docs/architecture/runtime.md` and `runtime/Dockerfile`.
-- **The image prebuilds each built-in notebook's venv** into a warm uv cache, at the paths the notebooks open from, so they open offline. The built-in headers list `marimo` so the sandbox leaves them unedited.
+- **The image warms a uv cache** with the core SDK's packages and prebuilds each built-in notebook's venv at the path a hosted pod opens it from, so they open without downloading. The built-in headers list `marimo` so the sandbox leaves them unedited.

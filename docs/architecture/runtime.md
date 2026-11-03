@@ -1,6 +1,6 @@
 # Notebook Runtime
 
-What runs in a notebook pod: one image holding the SDK, marimo, the bioinformatics tools and the agents (Claude Code and OpenCode), with a small proxy in front of marimo. The same image runs everywhere a notebook does. Locally `docker run` starts it on the notebooks it ships with; on a cluster a pod manager launches it once per notebook, signed in and saving to object storage. Stargazer's own pod manager is the hosted dashboard, kept in the infra repository; anything that keeps to [the pod contract](#the-pod-contract) can launch it.
+What runs in a notebook pod: one image holding the SDK, marimo and the agents (Claude Code and OpenCode), with a small proxy in front of marimo. The same image runs everywhere a notebook does. Locally `docker run` starts it on the notebooks it ships with; on a cluster a pod manager launches it once per notebook, signed in and saving to object storage. Stargazer's own pod manager is the hosted dashboard, kept in the infra repository; anything that keeps to [the pod contract](#the-pod-contract) can launch it.
 
 For what the notebooks themselves are, see [Notebooks](notebook.md). The launch, signal and save protocols are documented where they're implemented: hydrate, saving and the `/__sg__/*` endpoints in `runtime/proxy.py`, the signal chain in `runtime/launch-notebook.sh`, the working directory and `AGENTS.md` seeding in `runtime/Dockerfile`.
 
@@ -9,9 +9,9 @@ For what the notebooks themselves are, see [Notebooks](notebook.md). The launch,
 `runtime/Dockerfile` builds it, from the repository root. It holds:
 
 - **The SDK's source at `/stargazer`.** Notebooks don't run in the image's Python: each notebook's PEP 723 header names `stargazer-bio` with `/stargazer` as its source, and marimo's sandbox builds the notebook a venv from that header when it opens. The built-in notebooks are under `/stargazer/src/stargazer/notebooks/`.
-- **A warm uv cache at `/opt/uv-cache`**, holding a ready venv for each built-in notebook at both paths it opens from (`/workspace/notebooks/` locally, `/stargazer/src/stargazer/notebooks/` on a cluster), and the packages they're built from. A built-in notebook opens without downloading anything, and a notebook of the user's only downloads what its header adds. The built-in headers list `marimo`, so marimo's sandbox doesn't add it when a notebook opens.
+- **A warm uv cache at `/opt/uv-cache`** holding the packages notebooks on the core SDK are built from, and a ready venv for each built-in one at the path a cluster opens it from. A built-in notebook opens without downloading anything, from its ready venv on a cluster and from the cache locally. Any other notebook only downloads what its header adds beyond the core SDK, such as the `bio` extra. The built-in headers list `marimo`, so marimo's sandbox doesn't add it when a notebook opens.
 - **The runtime venv**: `flyte`, the launcher marimo (pinned, and put into every sandbox, so the kernel and the launcher are the same build), `pydantic-ai-slim` with the OpenAI and Anthropic providers for marimo's AI chat and completions, and the proxy's web packages.
-- **The bioinformatics tools** (gatk, samtools, bwa, bwa-mem2), on every sandbox's path, so a notebook can run a tool on the pod's own data.
+- **No bioinformatics tools.** A task run on the cluster gets its tools from its own environment's image. A notebook that runs a tool in its own process declares the tool in its image ([Notebook Environment](notebook.md#notebook-environment)).
 - **Claude Code and OpenCode**, pinned, for marimo's agent panel, with `/workspace/AGENTS.md` telling them where they are and how Stargazer notebooks, tasks and runs work. marimo's user config turns the panel on, and OpenCode's gives an MCP request an hour, since a run's tools answer when the run ends.
 - **The [MCP server](mcp-server.md)** in a venv of its own, built from the lock and installed from `/stargazer`, for the agents in the panel.
 
