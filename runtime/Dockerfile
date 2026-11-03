@@ -17,7 +17,7 @@ RUN npm install -g --omit=dev @agentclientprotocol/claude-agent-acp@0.99.1 \
 FROM python:3.14-slim-bookworm
 
 RUN apt-get update \
-    && apt-get install -y build-essential ca-certificates curl git \
+    && apt-get install -y build-essential ca-certificates curl git bzip2 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash flyte
 

@@ -51,13 +51,13 @@ A notebook's Python packages go in its header, the `# /// script` block at the t
 micromamba install samtools
 ```
 
-It installs from conda-forge and bioconda, and every notebook can call the tool straight away. Installs last until the container stops. To keep them, mount a volume at `/opt/conda`:
+It installs from conda-forge and bioconda, and every notebook can call the tool straight away. Installs last until the container stops. To keep them, mount a named volume at `/opt/conda`:
 
 ```bash
 docker run -p 8080:8080 -v stargazer-conda:/opt/conda ghcr.io/stargazerbio/stargazer
 ```
 
-A directory of your own works too; on Linux it must be writable by user 1000.
+Docker creates the volume on first run and reuses it after, on any OS.
 
 ## Agents — Claude Code and OpenCode in the Notebook
 
