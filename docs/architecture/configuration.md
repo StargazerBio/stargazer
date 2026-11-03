@@ -61,7 +61,7 @@ flowchart TD
 
 ## The public tier
 
-Shared data — bundles, reference genomes — lives on Pinata's public network: anyone can read it, and `_owner` records who uploaded it. Every public record needs an `_owner`, so publishing needs `STARGAZER_OWNER`. The SDK reads Pinata's public index (which needs `PINATA_JWT` even for public files) and downloads public bytes from `PINATA_GATEWAY`. On Union the key is a Flyte secret every task environment, dashboard and notebook pod declares, so its value never appears in a task's or app's spec. The devbox drops app secrets, so devbox dashboards and notebook pods have no public tier.
+Shared data — bundles, reference genomes — lives on Pinata's public network, the part of the asset graph every user can read: anyone can read it, and `_owner` records who uploaded it. Every public record needs an `_owner`, so publishing needs `STARGAZER_OWNER`. The SDK reads Pinata's public index (which needs `PINATA_JWT` even for public files) and downloads public bytes from `PINATA_GATEWAY`. On Union the key is a Flyte secret every task environment, dashboard and notebook pod declares, so its value never appears in a task's or app's spec. The devbox drops app secrets, so devbox dashboards and notebook pods have no public tier.
 
 **Publishing moves a stored asset into the public tier.** `StorageClient.publish(cid)` uploads one of the user's stored files to Pinata with its keyvalues, `_owner` restamped. The CID must come back the same, or it raises. The user's own row stays, so the asset is in both tiers. Companions aren't published with their asset. The MCP server exposes it as `publish_file`.
 

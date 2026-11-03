@@ -1,16 +1,29 @@
 # Getting Started
 
-Stargazer installs as a Python package (`stargazer-bio`), and each release publishes one end-user Docker image, **`stargazer`**, for running pipelines and exploring data in a notebook with an AI agent alongside.
+Stargazer runs in two places. **Hosted**, you sign in and get a workspace of notebooks with a cluster behind it. **Locally**, one Docker image, **`stargazer`**, runs the same notebooks on your machine. The SDK installs as a Python package (`stargazer-bio`) for authoring in an IDE.
 
-If you want to add tasks or workflows to Stargazer itself, see [Contributing](guides/contributing.md) for the native setup. The image below is for using Stargazer, not editing it.
+If you want to add tasks or workflows to Stargazer itself, see [Contributing](guides/contributing.md) for the native setup.
 
-## Notebook Interface
+## Hosted
+
+Sign in at [stargazer.bio/login](https://stargazer.bio/login) with GitHub, and you land on your dashboard. Hosted workspaces are set up by invitation. The first visit after an idle hour shows an *Opening your workspace* page for about a minute while it starts.
+
+The dashboard has two halves:
+
+- **Workspace**: your own notebooks. Start one from the blank or basic template, or open a `.py` notebook from a GitHub link. Each opens in **Edit**, the full editor with a terminal and the agents, or **Run**, the notebook as an app.
+- **Assets**: your asset graph, as a graph or a list, with the Tutorials and Workflows notebooks and public data beside your own files. Upload files here to store them as assets.
+
+![The dashboard's Assets graph, showing public data and Stargazer's notebooks](assets/dashboard-assets.jpg)
+
+Your workspace is saved as you work, every 30 seconds and when a notebook stops, and comes back the next time you open it. A file over 100 MB in the workspace isn't saved: a banner names it, with a cell that stores it as an asset instead. **"On the cluster" runs go to your own project**, and your files are reachable only by your own notebooks and runs.
+
+## Run It Locally
 
 ```bash
 docker run -p 8080:8080 ghcr.io/stargazerbio/stargazer
 ```
 
-Serves [Marimo](https://marimo.io/) notebooks at `http://localhost:8080` in edit mode, opening on the Assets tutorial. The rest are in the file explorer, in a `notebooks/` folder: `tutorials/`, in reading order Assets, Tasks, Workflows and Execution, `workflows/`, and `templates/` with `blank.py` and `basic.py` to start your own from. Start a notebook of your own by copying a template rather than with marimo's *Create a new notebook*, whose notebooks don't have Stargazer installed. This is the image hosted notebooks run on (see [Notebooks](architecture/notebook.md) and [Notebook Runtime](architecture/runtime.md)).
+Serves [Marimo](https://marimo.io/) notebooks at `http://localhost:8080` in edit mode, opening on the Assets tutorial. The rest are in the file explorer, in a `notebooks/` folder: `tutorials/`, in reading order Assets, Tasks, Workflows and Execution, `workflows/`, and `templates/` with `blank.py` and `basic.py` to start your own from. Start a notebook of your own by copying a template rather than with marimo's *Create a new notebook*, whose notebooks don't have Stargazer installed. This is the same image hosted notebooks run on (see [Notebooks](architecture/notebook.md) and [Notebook Runtime](architecture/runtime.md)).
 
 ## Use Your Own Files
 
@@ -28,7 +41,7 @@ To keep assets between runs, mount a volume at `/home/flyte/.stargazer`, which h
 docker run -p 8080:8080 -v stargazer-data:/home/flyte/.stargazer ghcr.io/stargazerbio/stargazer
 ```
 
-A file in `/workspace` isn't an asset until a notebook stores it with `await asset.update(path, ...)`; after that `assemble()` finds it by its metadata and `fetch()` copies it into the download cache. The Assets tutorial walks through it. To keep assets somewhere else, set `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` (see Configuration below).
+A file in `/workspace` isn't in the [asset graph](index.md#the-asset-graph) until a notebook stores it with `await asset.update(path, ...)`; after that `assemble()` finds it by its metadata and `fetch()` copies it into the download cache. The Assets tutorial walks through it. To keep assets somewhere else, set `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` (see Configuration below).
 
 ## Agents — Claude Code and OpenCode in the Notebook
 
