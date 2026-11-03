@@ -3,8 +3,6 @@ title: germline-notebook
 status: doing
 priority: normal
 created: 2026-11-02
-blocked_by:
-  - notebooks-in-git
 ---
 
 A workflow notebook for germline short variant discovery, in the
@@ -65,10 +63,9 @@ it's listed through the community repo's catalog.
       `meta.yaml`. The run waits on a button, or `--run` (CI). Step 3 has
       no console link: `dispatch()` returns only the output.
 - [x] In `catalog.yaml`.
-- [ ] It passes the community repo's CI (runs headless on its demo
-      inputs). Not run yet: the tools weren't available where it was
-      written. Parts verified there are in ticket [[notebooks-in-git]]'s
-      evidence.
+- [x] It runs headless on its demo inputs in the released image: the full
+      workflow with `--run` on GitHub Actions, 47 sites across 1 sample
+      (community-notebooks PR 1, evidence in ticket [[notebooks-in-git]]).
 - [ ] Docs: the Asset Graph page can link to it as the runnable version of
       its germline example.
 
