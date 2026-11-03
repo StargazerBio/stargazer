@@ -3,7 +3,7 @@ title: notebooks-in-git
 status: review
 priority: normal
 created: 2026-11-02
-pr: 121
+pr: 124
 ---
 
 Notebooks are code, and code lives in git; the asset graph is for data.
@@ -116,14 +116,14 @@ revisit:
 - [x] Build `StargazerBio/community-notebooks`' content: licence, README,
       topic folders, CI that runs each changed notebook on its demo inputs,
       `catalog.yaml`.
-- [ ] Create the repo, push the bundle, set branch protection requiring
-      the `Notebooks` checks, allow auto-merge. Do this before merging PR 121.
+- [x] Create the repo, push the bundle, set branch protection requiring
+      the `Notebooks` checks, allow auto-merge. Done 2026-11-03: public, `main` requires `layout` and `plan`. The `run (<folder>)` jobs are named per matrix entry, so they can't be required yet: a gate job that needs `run` would make them required.
 - [ ] Infra: Publish, Republish, Unpublish and Copy as PRs against it.
 - [ ] Infra: the explorer lists it, the catalog first.
 - [x] Move the scRNA pipeline notebook there (`scrna/clustering-pipeline`),
       with its demo bundle named, in the catalog. Remove
       `notebooks/workflows/` from this repo and the image, and its smoke
-      test entries (PR 121).
+      test entries (PR 124; PR 121 closed when its branch was renamed).
 - [ ] Infra: the dashboard lists the scRNA notebook from the catalog, not
       as a built-in. Must land before infra's pin moves to a release
       without `notebooks/workflows/`.
@@ -187,3 +187,5 @@ without `--run`; with it, the workflow started and failed on `samtools`
 missing; sections 4–5 on fixture outputs gave a 5-row lineage table and
 46 sites (SNP 25, deletion 14, insertion 8, symbolic 3). CN-3: passes,
 flags a bad folder. Not yet run: the image path and GitHub Actions.
+
+Related: [[germline-notebook]], [[public-notebooks]], [[board]].
