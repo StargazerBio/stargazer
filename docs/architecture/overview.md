@@ -20,7 +20,7 @@ Every file is an `Asset` — a dataclass with a content identifier, where its st
 
 Assets link to related files by CID: an output records the input it came from in an `{asset_key}_cid` keyvalue, and a companion, such as an index, records its primary file in `companion_of`. Calling `fetch()` on an asset downloads it and its companions. Assets and their links make up the **asset graph**.
 
-**The asset graph is what the other layers have in common.** Tasks write into it and never see a path they didn't fetch; workflows query it with scalar parameters and never take a file; the public tier extends it across users. So a workflow runs on anyone's data that carries the metadata it asks for, which is what lets people build on each other's work without coordinating first. [The Asset Graph](../asset-graph.md) walks through it, and [Types](types.md) holds the contract and the full asset catalog.
+**The asset graph is what the other layers have in common.** Tasks write into it and never see a path they didn't fetch; workflows query it with scalar parameters and never take a file; the public tier extends it across users. So a workflow runs on anyone's data that carries the metadata it asks for, which is what lets people build on each other's work without coordinating first. [Home](../index.md#the-asset-graph) introduces it, and [Types](types.md) holds the contract and the full asset catalog.
 
 ## Tasks
 

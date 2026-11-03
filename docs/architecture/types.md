@@ -1,6 +1,6 @@
 # Types and Asset System
 
-Every file in Stargazer carries structured keyvalue metadata describing its role, and links by CID to the files it relates to. Those assets and links are the **asset graph** ([The Asset Graph](../asset-graph.md) introduces it). The metadata gives tools one contract, lets new asset types be added without breaking old code, and lets files be found by metadata instead of path conventions.
+Every file in Stargazer carries structured keyvalue metadata describing its role, and links by CID to the files it relates to. Those assets and links are the **asset graph** ([Home](../index.md#the-asset-graph) introduces it). The metadata gives tools one contract, lets new asset types be added without breaking old code, and lets files be found by metadata instead of path conventions.
 
 ```mermaid
 flowchart TD
