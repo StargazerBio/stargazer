@@ -35,9 +35,11 @@ App, makes the ruleset with it on the bypass list, and creates the secret.
 Not here: the tile showing why CI failed (it links the PR), the explorer
 listing the repo, retiring the public-tier path, migrating public notebooks.
 
-- [ ] Unit tests against a fake GitHub
-- [ ] `app/community_notebooks.py` and the publish routes
-- [ ] Publish dialog
-- [ ] Verified on the tenant as the test account
+- [x] Unit tests against a fake GitHub
+- [x] `app/community_notebooks.py` and the publish routes
+- [x] Publish dialog
+- [ ] Verified on the tenant as the test account (needs the App set up,
+      its ID in `tenant.env`, and community-notebooks #1 and #2 merged, so
+      the repo's CI checks the single-file layout)
 
 Related: [[board]], [[notebooks-in-git]].
