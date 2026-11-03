@@ -20,7 +20,7 @@ A cluster can only run tasks its pods can import: the SDK's, and those a noteboo
 |------|-----------|-----------------|---------|
 | **Tutorials** | `tutorials/` | Image-baked | Learn the building blocks, in order: Assets → Tasks → Workflows → Execution |
 | **Templates** | `templates/` | Image-baked | Starting points for a new Workspace notebook (`blank`, `basic`) |
-| **Community** | `<domain>/<slug>/` | The `StargazerBio/community-notebooks` repo | Production pipelines, parameterized — bring your own data (e.g. the scRNA-seq and germline pipelines) |
+| **Community** | `<domain>/<slug>.py` | The `StargazerBio/community-notebooks` repo | Production pipelines, parameterized — bring your own data (e.g. the scRNA-seq and germline pipelines) |
 | **Workspace** | — | The user's workspace store | The user's own notebooks, persisted across sessions |
 
 Tutorials and templates are baked into the image and pinned by its release: they teach and scaffold the SDK of the same version. Community notebooks live in git, outside the image: a tutorial is read once, while a pipeline notebook is meant to be run repeatedly on new data, so it's opened into a Workspace and run from there. A user's Workspace is one folder saved whole in the [workspace store](runtime.md#the-pod-contract): notebooks side by side so they can import each other, plus any data or helper files kept beside them.
@@ -68,12 +68,12 @@ The setup block also declares the dashboard tile's `main_name` and `main_descrip
 
 ## Sharing Notebooks
 
-Notebooks are code, so they're shared through git: the `StargazerBio/community-notebooks` repository holds the pipeline notebooks anyone can run, Stargazer's own included, organized by topic as `<domain>/<slug>/notebook.py`.
+Notebooks are code, so they're shared through git: the `StargazerBio/community-notebooks` repository holds the pipeline notebooks anyone can run, Stargazer's own included, one file per notebook, organized by topic as `<domain>/<slug>.py`.
 
-- **Each folder carries its metadata.** Beside the notebook, `meta.yaml` names the bundle that is its demo input and who may update it. The notebook's setup block declares its dashboard tile (`main_name`, `main_description`), as any notebook does, and imports only public `stargazer` APIs.
+- **Each notebook carries its metadata.** A `[tool.stargazer]` table in its script header, beside its dependencies, names the bundle that is its demo input and who may update it. Its setup block declares its dashboard tile (`main_name`, `main_description`), as any notebook does, and imports only public `stargazer` APIs.
 - **CI is the inclusion bar.** A PR's changed notebooks run headless in the Stargazer image against their demo bundle, and only a passing PR merges. The same check runs on a schedule against the latest release, so a release that breaks a community notebook shows up as a failing run there. The repo pins no lock files or image digests: a notebook runs against the SDK of the image it's opened in.
 - **A catalog is the curation.** `catalog.yaml` lists the featured notebooks, each at the commit its maintainers reviewed; the rest of the repo is there to browse and open.
-- **Removing a notebook** is a PR deleting its folder; its history stays.
+- **Removing a notebook** is a PR deleting it; its history stays.
 - **Running one** is Open from GitHub with a link to the notebook at a commit.
 
 ## In-Notebook AI
