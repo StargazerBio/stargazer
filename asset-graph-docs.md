@@ -3,7 +3,7 @@ title: asset-graph-docs
 status: review
 priority: normal
 created: 2026-11-01
-pr: 119
+pr: 123
 ---
 
 Rewrite the docs people meet first around Stargazer's two killer
