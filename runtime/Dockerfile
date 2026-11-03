@@ -24,13 +24,16 @@ RUN apt-get update \
 # micromamba, for the conda packages a notebook needs, bioconda's tools among
 # them. Its prefix is the runtime user's and on everyone's path, the kernels'
 # included, so `micromamba install samtools` in marimo's terminal puts the tool
-# on every notebook's path, for as long as the container runs. It's last on the
-# path, so a package that brings its own Python doesn't shadow the runtime's.
+# on every notebook's path, for as long as the container runs, or longer with
+# a volume mounted there. It's last on the path, so a package that brings its
+# own Python doesn't shadow the runtime's. The channels are set outside the
+# prefix, so a mount there doesn't hide them.
 RUN case "$(uname -m)" in x86_64) MM=linux-64 ;; aarch64) MM=linux-aarch64 ;; esac \
     && curl -Ls "https://micro.mamba.pm/api/micromamba/${MM}/latest" \
         | tar -xj -C /usr/local/bin --strip-components=1 bin/micromamba \
     && install -d -o flyte -g flyte /opt/conda \
-    && printf 'channels:\n  - conda-forge\n  - bioconda\n' > /opt/conda/.condarc
+    && mkdir -p /etc/conda \
+    && printf 'channels:\n  - conda-forge\n  - bioconda\n' > /etc/conda/.condarc
 
 # uv, which `marimo --sandbox` uses to build per-notebook venvs.
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \

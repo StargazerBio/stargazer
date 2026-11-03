@@ -43,9 +43,25 @@ docker run -p 8080:8080 -v stargazer-data:/home/flyte/.stargazer ghcr.io/stargaz
 
 A file in `/workspace` isn't in the [asset graph](index.md#the-asset-graph) until a notebook stores it with `await asset.update(path, ...)`; after that `assemble()` finds it by its metadata and `fetch()` copies it into the download cache. The Assets tutorial walks through it. To keep assets somewhere else, set `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` (see Configuration below).
 
+## Install Tools
+
+A notebook's Python packages go in its header, the `# /// script` block at the top, and install when it opens. Command-line tools, such as samtools or GATK, come from conda. In the notebook's terminal (++ctrl+grave++):
+
+```bash
+micromamba install samtools
+```
+
+It installs from conda-forge and bioconda, and every notebook can call the tool straight away. Installs last until the container stops. To keep them, mount a volume at `/opt/conda`:
+
+```bash
+docker run -p 8080:8080 -v stargazer-conda:/opt/conda ghcr.io/stargazerbio/stargazer
+```
+
+A directory of your own works too; on Linux it must be writable by user 1000.
+
 ## Agents — Claude Code and OpenCode in the Notebook
 
-Press ++ctrl+grave++ in the notebook to open its terminal and sign in once: run `claude` for Claude Code, or `opencode auth login` for OpenCode. Then open the AI panel from the sidebar, switch to **Agents** and start a new Claude or OpenCode session. A hosted notebook keeps your sign-in for your next session; the local image keeps it until the container stops. The agent works in the open notebook's folder, with the Stargazer SDK installed at `/stargazer` and the tools the bundled workflows call (GATK, samtools, BWA) on the `PATH`, so it can run them for you. It also has Stargazer's own tools, which list the tasks and workflows, run them, and find, upload and tag your files. When it edits the open notebook, the changed cells show up in the editor, ready to run. The terminal and the agent are part of the editor, so a notebook opened to run has neither.
+Press ++ctrl+grave++ in the notebook to open its terminal and sign in once: run `claude` for Claude Code, or `opencode auth login` for OpenCode. Then open the AI panel from the sidebar, switch to **Agents** and start a new Claude or OpenCode session. A hosted notebook keeps your sign-in for your next session; the local image keeps it until the container stops. The agent works in the open notebook's folder, with the Stargazer SDK installed at `/stargazer`, and it can install the command-line tools a notebook needs from conda. It also has Stargazer's own tools, which list the tasks and workflows, run them, and find, upload and tag your files. When it edits the open notebook, the changed cells show up in the editor, ready to run. The terminal and the agent are part of the editor, so a notebook opened to run has neither.
 
 ## MCP Client Configuration
 

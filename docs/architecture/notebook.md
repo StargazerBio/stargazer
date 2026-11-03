@@ -59,7 +59,7 @@ A notebook runs in the Stargazer image unless it says otherwise. That image is k
 
 - **Python packages** go in the notebook's PEP 723 header and install when it starts, with no image to rebuild, wherever it runs.
 - **System tools and the pod itself** go in the setup block as `main_env`, a `flyte.app.AppEnvironment` cloned from `notebook_env`. Its image holds system tools (`notebook_base.with_apt_packages(...)` and the other `flyte.Image` layers); its resources size the pod. The image must be built on `notebook_base`, which carries the runtime the pod needs. It's the same API production tasks and apps use, and notebooks created from the templates start with one to edit.
-- **Conda packages** install from the notebook's terminal with `micromamba install <package>`, from conda-forge and bioconda, into a prefix that's on every notebook's path, the running kernel's included. They last until the container stops.
+- **Conda packages** install from the notebook's terminal with `micromamba install <package>`, from conda-forge and bioconda, into a prefix that's on every notebook's path, the running kernel's included. They last until the container stops, or longer with a volume mounted at the prefix ([Getting Started](../getting-started.md#install-tools)).
 
 Where the notebook runs decides which of these apply:
 
