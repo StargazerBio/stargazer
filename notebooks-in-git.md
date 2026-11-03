@@ -32,8 +32,9 @@ Microsoft, so not every user has a GitHub account. So the dashboard
 proposes notebooks to one Stargazer-owned repository for them.
 
 - **`StargazerBio/community-notebooks`, organized by topic:**
-  `<domain>/<slug>.py`, e.g. `germline/tp53-qc.py`. The publish
-  dialog asks for the domain. Who may update a notebook is recorded in the
+  `<domain>/<slug>.py`, e.g. `germline/tp53-qc.py`. The user sets both
+  in the publish dialog: the slug is the notebook's name as they give it,
+  and the domain is theirs to choose. Who may update a notebook is recorded in the
   notebook itself; attribution is the commit author.
 - **Publish opens a PR** with a message the user writes. The PR's author
   is the user (name from Union's `X-User-Claim-Name`); Stargazer's app
@@ -48,8 +49,11 @@ proposes notebooks to one Stargazer-owned repository for them.
   featured notebooks at a commit, the way a bundle lists approved files.
   The explorer shows the catalog by default and the rest behind a filter.
   Add first-PR review per contributor only if spam appears.
-- **Unpublish** opens a PR deleting the notebook. Its history stays, as a
-  published file's should: say so in the dialog.
+- **Unpublish** deletes the notebook in a commit straight to `main`, with
+  no PR: removing your own notebook needs no review. The app checks the
+  caller is in its `owners` first, and its GitHub App needs leave to push
+  to `main` past the branch protection. Its history stays, as a published
+  file's should: say so in the dialog.
 - **Copy** a public notebook into a workspace is Open from GitHub at the
   commit, so a copy names exactly which version it came from.
 - **Discovery:** the explorer lists the repo from a cached copy of the tree
@@ -121,7 +125,8 @@ revisit:
       `catalog.yaml`.
 - [x] Create the repo, push the bundle, set branch protection requiring
       the `Notebooks` checks, allow auto-merge. Done 2026-11-03: public, `main` requires `layout` and `plan`. The `run (<folder>)` jobs are named per matrix entry, so they can't be required yet: a gate job that needs `run` would make them required.
-- [ ] Infra: Publish, Republish, Unpublish and Copy as PRs against it.
+- [ ] Infra: Publish and Republish as PRs against it, Unpublish as a
+      commit to `main`, Copy as Open from GitHub.
 - [ ] Infra: the explorer lists it, the catalog first.
 - [x] Move the scRNA pipeline notebook there (`scrna/clustering-pipeline`),
       with its demo bundle named, in the catalog. Remove
