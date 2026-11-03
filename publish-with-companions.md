@@ -47,8 +47,7 @@ the asset graph and "collaboration without coordination".
       CIDs; a companion over the keyvalue limit refuses the whole set with
       nothing sent; an already-public companion isn't sent again.
 - [x] `StorageClient.publish` and MCP `publish_file`.
-- [x] Pinata tier (written in `tests/pinata/test_client.py`, not yet run: no key
-      where it was made): publish a small parent and companion, `fetch()` the
+- [x] Pinata tier (`tests/pinata/test_client.py`): publish a small parent and companion, `fetch()` the
       parent from an isolated store with no companions of its own and see
       the public companion land beside it, then delete both from Pinata.
 - [x] Docs: the public tier in `docs/architecture/configuration.md`.
