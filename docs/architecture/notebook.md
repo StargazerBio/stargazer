@@ -19,10 +19,11 @@ A cluster can only run tasks its pods can import: the SDK's, and those a noteboo
 | Type | Directory | Source of truth | Purpose |
 |------|-----------|-----------------|---------|
 | **Tutorials** | `tutorials/` | Image-baked | Learn the building blocks, in order: Assets → Tasks → Workflows → Execution |
-| **Workflows** | `workflows/` | Image-baked | Production pipelines, parameterized — bring your own data (e.g. the scRNA-seq pipeline) |
+| **Templates** | `templates/` | Image-baked | Starting points for a new Workspace notebook (`blank`, `basic`) |
+| **Community** | `<domain>/<slug>.py` | The `StargazerBio/community-notebooks` repo | Production pipelines, parameterized — bring your own data (e.g. the scRNA-seq and germline pipelines) |
 | **Workspace** | — | The user's workspace store | The user's own notebooks, persisted across sessions |
 
-Tutorials and Workflows are baked into the image, work for everyone, and appear in the dashboard's asset explorer. A tutorial is read once; a workflow notebook is meant to be run repeatedly on new data. A user's Workspace is one folder saved whole in the [workspace store](runtime.md#the-pod-contract): notebooks side by side so they can import each other, plus any data or helper files kept beside them.
+Tutorials and templates are baked into the image and pinned by its release: they teach and scaffold the SDK of the same version. Community notebooks live in git, outside the image: a tutorial is read once, while a pipeline notebook is meant to be run repeatedly on new data, so it's opened into a Workspace and run from there. A user's Workspace is one folder saved whole in the [workspace store](runtime.md#the-pod-contract): notebooks side by side so they can import each other, plus any data or helper files kept beside them.
 
 A notebook is served in **Edit** (full marimo UI) or **Run** (a read-only app view), one at a time; either mode can dispatch locally or to a cluster.
 
@@ -33,17 +34,16 @@ Work flows from experimentation toward the SDK along two paths, both starting in
 ```mermaid
 flowchart LR
     W[Workspace notebook] -->|promote task| T[src/stargazer/tasks/]
-    W -->|graduate pipeline| P[notebooks/workflows/]
-    P -.->|copy| W
+    W -->|graduate pipeline| P[(community-notebooks)]
+    P -.->|open from GitHub| W
     T -->|PR| U[(upstream Stargazer)]
-    P -->|PR| U
 ```
 
 **Task promotion.** Author a task in a notebook cell with the proper conventions (`@gatk_env.task`, asset types, async). Promotion moves the function into the right `src/stargazer/tasks/` subdirectory with a test, and PR review adds the polish. From there it's ordinary SDK work ([Contributing](../guides/contributing.md)).
 
-**Workflow graduation.** A notebook that proves out a reusable pipeline first has its tasks promoted, then the notebook itself, now a thin parameterized UI over SDK calls, is PR'd into `notebooks/workflows/` and ships in the next release's image. The scRNA-seq notebook is the template.
+**Workflow graduation.** A notebook that proves out a reusable pipeline first has its tasks promoted, then the notebook itself, now a thin parameterized UI over SDK calls, is published to the community repo (see [Sharing Notebooks](#sharing-notebooks)). The scRNA-seq notebook there is the template.
 
-**Copy to workspace.** The reverse: a button on every workflow's explorer card drops an editable copy into the Workspace. The original is untouched.
+**Copy to workspace.** The reverse: Open from GitHub, given a link to a community notebook at a commit, drops an editable copy into the Workspace that names exactly which version it came from. The original is untouched.
 
 Once promoted, the next image release bakes a task into every notebook, where anyone can import it.
 
@@ -63,7 +63,18 @@ The setup block also declares the dashboard tile's `main_name` and `main_descrip
 ## Adding Notebooks
 
 - **Workspace notebooks** are created from the dashboard (the blank or basic template in `notebooks/templates/`) and live in the user's workspace store, with no repo change.
-- **Built-in notebooks** are a `.py` file (standard marimo format, importing only public `stargazer` APIs) under `src/stargazer/notebooks/tutorials/` or `workflows/`. It ships in the next release's image, and the dashboard lists it once its tile is registered there.
+- **Built-in notebooks** are a `.py` file (standard marimo format, importing only public `stargazer` APIs) under `src/stargazer/notebooks/tutorials/` or `templates/`. It ships in the next release's image, and the dashboard lists it once its tile is registered there.
+- **Community notebooks** are published to the community repo (below), with no release of Stargazer needed.
+
+## Sharing Notebooks
+
+Notebooks are code, so they're shared through git: the `StargazerBio/community-notebooks` repository holds the pipeline notebooks anyone can run, Stargazer's own included, one file per notebook, organized by topic as `<domain>/<slug>.py`.
+
+- **Publishing is a commit.** A workspace notebook's Publish, on the dashboard, commits it to the repo under a name and domain the user picks; Unpublish deletes it, and its history stays. Anyone can also add one by hand. There's no review: the repo's CI only checks its layout.
+- **Each notebook carries its metadata.** A `[tool.stargazer]` table in its script header, beside its dependencies, names who may update it. Its setup block declares its dashboard tile (`main_name`, `main_description`), as any notebook does, and imports only public `stargazer` APIs.
+- **Nothing is pinned.** The repo has no lock files or image digests: a notebook runs against the SDK of the image it's opened in.
+- **A catalog is the curation.** `catalog.yaml` lists the featured notebooks, each at the commit its maintainers reviewed; the rest of the repo is there to browse and open.
+- **Running one** is Open from GitHub with a link to the notebook at a commit.
 
 ## In-Notebook AI
 
