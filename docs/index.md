@@ -56,7 +56,7 @@ A `companion_of` link means "belongs beside", the way an index belongs beside it
 
 ## Interface
 
-The hosted app serves per-user marimo notebooks for learning, running pipelines and authoring. Each release publishes one image, **`stargazer`**, which runs the same notebooks locally with Claude Code or OpenCode in the agent panel. The SDK is a first-class surface too: import its tasks and author workflows in an IDE. The MCP server gives any MCP client (Claude Code, OpenCode, Cursor) the same tasks, workflows and asset graph.
+The [hosted app](getting-started.md#hosted) gives you a workspace of marimo notebooks for learning, running pipelines and authoring, with a cluster behind it. Each release publishes one image, **`stargazer`**, which runs the same notebooks locally with Claude Code or OpenCode in the agent panel. The SDK is a first-class surface too: import its tasks and author workflows in an IDE. The MCP server gives any MCP client (Claude Code, OpenCode, Cursor) the same tasks, workflows and asset graph.
 
 ## Documentation
 
