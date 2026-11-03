@@ -41,7 +41,7 @@ flowchart LR
 
 **Task promotion.** Author a task in a notebook cell with the proper conventions (`@gatk_env.task`, asset types, async). Promotion moves the function into the right `src/stargazer/tasks/` subdirectory with a test, and PR review adds the polish. From there it's ordinary SDK work ([Contributing](../guides/contributing.md)).
 
-**Workflow graduation.** A notebook that proves out a reusable pipeline first has its tasks promoted, then the notebook itself, now a thin parameterized UI over SDK calls, is PR'd into the community repo (see [Sharing Notebooks](#sharing-notebooks)). The scRNA-seq notebook there is the template.
+**Workflow graduation.** A notebook that proves out a reusable pipeline first has its tasks promoted, then the notebook itself, now a thin parameterized UI over SDK calls, is published to the community repo (see [Sharing Notebooks](#sharing-notebooks)). The scRNA-seq notebook there is the template.
 
 **Copy to workspace.** The reverse: Open from GitHub, given a link to a community notebook at a commit, drops an editable copy into the Workspace that names exactly which version it came from. The original is untouched.
 
@@ -64,16 +64,16 @@ The setup block also declares the dashboard tile's `main_name` and `main_descrip
 
 - **Workspace notebooks** are created from the dashboard (the blank or basic template in `notebooks/templates/`) and live in the user's workspace store, with no repo change.
 - **Built-in notebooks** are a `.py` file (standard marimo format, importing only public `stargazer` APIs) under `src/stargazer/notebooks/tutorials/` or `templates/`. It ships in the next release's image, and the dashboard lists it once its tile is registered there.
-- **Community notebooks** are a PR to the community repo (below), with no release of Stargazer needed.
+- **Community notebooks** are published to the community repo (below), with no release of Stargazer needed.
 
 ## Sharing Notebooks
 
 Notebooks are code, so they're shared through git: the `StargazerBio/community-notebooks` repository holds the pipeline notebooks anyone can run, Stargazer's own included, one file per notebook, organized by topic as `<domain>/<slug>.py`.
 
-- **Each notebook carries its metadata.** A `[tool.stargazer]` table in its script header, beside its dependencies, names the bundle that is its demo input and who may update it. Its setup block declares its dashboard tile (`main_name`, `main_description`), as any notebook does, and imports only public `stargazer` APIs.
-- **CI is the inclusion bar.** A PR's changed notebooks run headless in the Stargazer image against their demo bundle, and only a passing PR merges. The same check runs on a schedule against the latest release, so a release that breaks a community notebook shows up as a failing run there. The repo pins no lock files or image digests: a notebook runs against the SDK of the image it's opened in.
+- **Publishing is a commit.** A workspace notebook's Publish, on the dashboard, commits it to the repo under a name and domain the user picks; Unpublish deletes it, and its history stays. Anyone can also add one by hand. There's no review: the repo's CI only checks its layout.
+- **Each notebook carries its metadata.** A `[tool.stargazer]` table in its script header, beside its dependencies, names who may update it. Its setup block declares its dashboard tile (`main_name`, `main_description`), as any notebook does, and imports only public `stargazer` APIs.
+- **Nothing is pinned.** The repo has no lock files or image digests: a notebook runs against the SDK of the image it's opened in.
 - **A catalog is the curation.** `catalog.yaml` lists the featured notebooks, each at the commit its maintainers reviewed; the rest of the repo is there to browse and open.
-- **Removing a notebook** is a PR deleting it; its history stays.
 - **Running one** is Open from GitHub with a link to the notebook at a commit.
 
 ## In-Notebook AI
