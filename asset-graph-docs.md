@@ -6,11 +6,14 @@ created: 2026-11-01
 pr: 119
 ---
 
-Rewrite the docs people meet first around the asset graph: data that knows
-what it is. The home page leads with the system, a new page explains the
-asset graph and how tasks and workflows read from and write into it, and
-"collaboration without coordination" names what that combination makes
-possible. The term "asset graph" is used across the docs and the Assets
+Rewrite the docs people meet first around Stargazer's two killer
+features, on one concise Home page: production-grade notebooks (the same
+cell runs on exploratory data in the notebook or fanned out across a
+cluster, with one switch), first so readers are grounded, then the asset
+graph (data that knows what it is), with "collaboration without
+coordination" naming what it makes possible. A separate Asset Graph page
+was tried and folded back into Home: the two repeated each other, and it
+left notebooks with one paragraph. The term "asset graph" is used across the docs and the Assets
 tutorial.
 
 Claims are held to what's true today. Three gaps found while planning are
