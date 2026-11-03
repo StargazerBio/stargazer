@@ -100,3 +100,5 @@ replay share the snapshot reader.
 - [ ] Replay from a notebook.
 - [ ] Docs: `docs/architecture/types.md` (run records, snapshots) and the
       Asset Graph page.
+
+Related: [[notebook-image-digest]], [[notebooks-in-git]], [[board]].
