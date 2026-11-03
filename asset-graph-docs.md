@@ -1,6 +1,6 @@
 ---
 title: asset-graph-docs
-status: review
+status: done
 priority: normal
 created: 2026-11-01
 pr: 123
@@ -26,5 +26,17 @@ their own tickets: [[publish-with-companions]],
       notebook and getting-started docs
 - [x] Assets tutorial: section 7 reframed as the payoff, a section on
       extending the graph with extra keys, run headless
+
+## Outcome
+
+Shipped in PR #123 (merge `9770826`). Home (`docs/index.md`) leads with
+production-grade notebooks and the asset graph; the separate Asset Graph
+page was folded back into Home, and Getting Started gained a Hosted
+section with a screenshot of the dashboard's Assets graph. Verified: the
+four tutorials export headless against an isolated store, `zensical build`
+is clean with every doc in nav, and the Hosted section was walked on the
+live dashboard as the test account. Home's two code snippets weren't run.
+Left: [[reuse-reference-companions]] and [[provenance-on-every-output]]
+(both backlog); [[publish-with-companions]] shipped as #122.
 
 Related: [[board]].
