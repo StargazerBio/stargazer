@@ -188,4 +188,13 @@ missing; sections 4–5 on fixture outputs gave a 5-row lineage table and
 46 sites (SNP 25, deletion 14, insertion 8, symbolic 3). CN-3: passes,
 flags a bad folder. Not yet run: the image path and GitHub Actions.
 
+### Evidence (2026-11-03, community-notebooks PR 1)
+
+In the released image (v2026.10.30) on GitHub Actions. The first run on
+`main` failed both notebooks at the bundle fetch (`/opt/mcp` isn't in that
+release); community-notebooks PR 1 fetches with a venv uv builds from the
+image's `/stargazer`. With it, every check passes: germline ran the full
+workflow with `--run` (section 5: 47 sites across 1 sample), and scRNA ran
+every cell on `scrna_demo`.
+
 Related: [[germline-notebook]], [[public-notebooks]], [[board]].
