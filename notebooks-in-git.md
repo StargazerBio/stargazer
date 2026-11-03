@@ -32,9 +32,9 @@ Microsoft, so not every user has a GitHub account. So the dashboard
 proposes notebooks to one Stargazer-owned repository for them.
 
 - **`StargazerBio/community-notebooks`, organized by topic:**
-  `<domain>/<slug>/notebook.py`, e.g. `germline/tp53-qc/`. The publish
-  dialog asks for the domain. Who may update a notebook is recorded in its
-  folder; attribution is the commit author.
+  `<domain>/<slug>.py`, e.g. `germline/tp53-qc.py`. The publish
+  dialog asks for the domain. Who may update a notebook is recorded in the
+  notebook itself; attribution is the commit author.
 - **Publish opens a PR** with a message the user writes. The PR's author
   is the user (name from Union's `X-User-Claim-Name`); Stargazer's app
   opens it. Republish is another PR, so every version keeps its history
@@ -92,11 +92,14 @@ as a git bundle in the session that opened PR 121, since that session could
 neither create the repo nor reach infra. Best guesses made there, to
 revisit:
 
-- **Layout:** `<domain>/<slug>/notebook.py` plus `meta.yaml` with `owners`
+- **Layout:** one file per notebook, `<domain>/<slug>.py`, with a
+  `[tool.stargazer]` table in its PEP 723 script header naming `owners`
   (Union user names, `maintainers` for the repo's own) and `demo_bundle`.
-  Every notebook file is `notebook.py`, so each must declare `main_name`
-  (Open from GitHub names a file without one after its stem); the layout
-  check enforces it.
+  uv keeps the table when it edits the header's dependencies. Each notebook
+  declares `main_name` and `main_description` for its tile; the layout check
+  enforces both. (The first cut was a `<slug>/` folder holding `notebook.py`
+  and `meta.yaml`; changed 2026-11-03, since it named every notebook the same
+  and kept its metadata apart from it.)
 - **CI:** a layout check; each changed notebook runs
   `marimo export html --sandbox ... -- --run` in the Stargazer image on an
   empty store holding only its demo bundle; every notebook daily on
@@ -149,8 +152,8 @@ only its demo bundle.
 
 ### How to get to it (user POV)
 
-Dashboard: Open from GitHub with a link to `<domain>/<slug>/notebook.py`.
-Locally: the folder's notebook in the Stargazer image.
+Dashboard: Open from GitHub with a link to `<domain>/<slug>.py`.
+Locally: the notebook file in the Stargazer image.
 
 ### Driving it
 
