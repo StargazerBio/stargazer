@@ -1,6 +1,6 @@
 ---
 title: notebook-dockerignore
-status: review
+status: done
 priority: high
 created: 2026-11-04
 pr: 133
@@ -21,4 +21,12 @@ Running the Execution tutorial's cells made marimo add `flyte==2.12.4` to `execu
 
 The pixi-notebook-sandbox ticket's recipe, Hosted: push the branch's image to `ghcr.io/stargazerbio/debug:notebook-dockerignore`, deploy u-pryce's dashboard with `STARGAZER_NOTEBOOK_IMAGE` set to it, `POST /launch` `slug=execution mode=edit section=tutorials`, run all cells. Passes when the remote cell's log shows no `Context size` warning (or one far under 540 MB), the image builds, the run succeeds and `local CIDs == remote CIDs → True`.
 
-Related: [[board]], [[pixi-notebook-sandbox]], [[flyte-images]]
+## Outcome
+
+Shipped in PR 133 (merged 2026-11-04). `_with_source` passes the checkout's `.dockerignore` to every task image with `with_dockerignore`, and the notebook image copies it into `/stargazer`. Without it, a hosted kernel's task images uploaded the MCP environment in `.pixi/`.
+
+Verified on Union: the hosted Execution tutorial's build context went from 539.78 MB to under 5 MB, the image built in 17 s, and the run succeeded. The unit tier passed (266). There were no review comments.
+
+Left: the header rewrite by marimo moves to [[marimo-autoadd-headers]].
+
+Related: [[board]], [[marimo-autoadd-headers]], [[pixi-notebook-sandbox]], [[flyte-images]]
