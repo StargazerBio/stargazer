@@ -199,15 +199,20 @@ def init_flyte() -> None:
 def _with_source(image: flyte.Image, *, deps: bool) -> flyte.Image:
     """`image` with the checkout's stargazer installed on top, from its source.
 
-    A layer of its own, so a source change rebuilds only it; .dockerignore
-    keeps docs, tests and git history out of it. A task pod resolves the
+    A layer of its own, so a source change rebuilds only it; the checkout's
+    .dockerignore keeps docs, tests, git history and pixi's environments out
+    of it, and out of every other folder the image copies. It's named here
+    because Flyte otherwise reads the one in `flyte.init`'s root, which is the
+    cwd, or `src/` in a notebook pod (`init_flyte`). A task pod resolves the
     tasks it calls as installed modules (`stargazer.tasks…`), so the package
     must be the checkout's, wherever the run was submitted from. uv installs
     into the pixi environment, which the layer below made `VIRTUAL_ENV`.
     """
     install = ["uv", "pip", "install", "--no-cache", *([] if deps else ["--no-deps"])]
-    return image.with_source_folder(PROJECT_ROOT, "/opt/stargazer").with_commands(
-        [" ".join([*install, "/opt/stargazer"])]
+    return (
+        image.with_dockerignore(PROJECT_ROOT / ".dockerignore")
+        .with_source_folder(PROJECT_ROOT, "/opt/stargazer")
+        .with_commands([" ".join([*install, "/opt/stargazer"])])
     )
 
 

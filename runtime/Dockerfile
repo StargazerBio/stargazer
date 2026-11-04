@@ -75,8 +75,9 @@ COPY runtime/launch-notebook.sh runtime/start-local.sh /usr/local/bin/
 # and writes its egg-info here. pixi.lock is the MCP server's environment
 # below and the one a notebook's own task images install (`core_image()`); a
 # domain's task image installs its `env.py` header, from the lock beside it in
-# src/.
-COPY --chown=flyte:flyte pyproject.toml pixi.lock README.md /stargazer/
+# src/. .dockerignore keeps the MCP server's environment, in .pixi/, out of
+# the source layer of every task image a kernel builds from this tree.
+COPY --chown=flyte:flyte pyproject.toml pixi.lock README.md .dockerignore /stargazer/
 COPY --chown=flyte:flyte src/ /stargazer/src/
 
 # The `stargazer` MCP server for the agent panel, which the launch script
