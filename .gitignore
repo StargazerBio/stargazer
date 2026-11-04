@@ -194,3 +194,6 @@ src/stargazer/notebooks/**/__marimo__/
 
 # Import graphs drawn on demand by cli/diagrams.sh. Redraw them, don't commit them.
 /diagrams/
+
+# pixi environments (pixi.lock is tracked)
+.pixi/
