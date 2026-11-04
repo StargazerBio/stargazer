@@ -1753,11 +1753,9 @@ packages:
   - scikit-image>=0.26.0 ; extra == 'bio'
   - igraph>=1.0.0 ; extra == 'bio'
   - pooch>=1.9.0 ; extra == 'bio'
-  - marimo>=0.10.0 ; extra == 'notebook'
-  - stargazer-bio[bio] ; extra == 'notebook'
   - mcp[cli]>=2.0,<3 ; extra == 'mcp'
   - mkdocstrings[python]>=1.0.3 ; extra == 'docs'
-  - stargazer-bio[notebook,mcp,docs] ; extra == 'all'
+  - stargazer-bio[bio,mcp,docs] ; extra == 'all'
   requires_python: '>=3.14'
 - pypi: https://files.pythonhosted.org/packages/02/36/ecc85bc96c273dc8a11273ed4782272975e6338d4a3e9228621175edf0e3/jaraco_functools-4.6.0-py3-none-any.whl
   name: jaraco-functools

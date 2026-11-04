@@ -30,13 +30,12 @@ bio = [
     "igraph>=1.0.0",
     "pooch>=1.9.0",
 ]
-notebook = ["marimo>=0.10.0", "stargazer-bio[bio]"]
 # Bounded to the 2.x major: SDK 2.0 renamed the high-level server class
 # (`FastMCP` → `MCPServer`, `mcp.server.fastmcp` → `mcp.server`), so an
 # unbounded range silently resolves across a breaking rename.
 mcp = ["mcp[cli]>=2.0,<3"]
 docs = ["mkdocstrings[python]>=1.0.3"]
-all = ["stargazer-bio[notebook,mcp,docs]"]
+all = ["stargazer-bio[bio,mcp,docs]"]
 
 [project.scripts]
 stargazer = "stargazer.server:main"
@@ -75,6 +74,9 @@ stargazer = ["bundles/*.yaml", "notebooks/*.py"]
 
 [dependency-groups]
 dev = [
+    # The unit tier imports the SDK's notebooks, and `marimo edit` from a checkout.
+    # The notebook image pins the version notebooks run on (runtime/Dockerfile).
+    "marimo>=0.25.1,<0.26",
     "mkdocstrings[python]>=1.0.3",
     "pre-commit>=4.5.0",
     "pytest>=9.0.1",

@@ -51,8 +51,9 @@ repos:
         pass_filenames: false
         files: ^(src/stargazer/(server|registry|marshal)\.py|src/stargazer/assets/.*\.py|pyproject\.toml)$
       # The unit tier: a bare pytest run selects it (`addopts` in
-      # pyproject.toml). The notebook smoke tests need the `notebook` extra,
-      # so all extras.
+      # pyproject.toml). Collection imports every test module, the scRNA
+      # tasks' (the `bio` extra) and the MCP server's (`mcp`) included, so all
+      # extras.
       - id: unit-tests
         name: unit tests (pytest)
         entry: uv run --all-extras pytest -q

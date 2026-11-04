@@ -14,7 +14,7 @@ uv run pre-commit install
 You now have:
 
 - The stargazer package installed in editable mode in a project venv
-- All Python deps from the lockfile, including every optional extra (scRNA, notebook, MCP, docs), plus the `dev` group (pytest, ruff, pre-commit)
+- All Python deps from the lockfile, including every optional extra (scRNA, MCP, docs), plus the `dev` group (pytest, ruff, pre-commit, marimo)
 - A pre-commit hook that lints, checks docstrings, builds the docs and runs the unit tests on every commit
 
 The bioinformatics tools (gatk, bwa, bwa-mem2, samtools) aren't needed: their tests run in the task image (see [Running Tests](#running-tests)). Running those tasks locally, outside the tests, needs them on your PATH, from bioconda for instance.
