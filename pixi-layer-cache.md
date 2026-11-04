@@ -1,8 +1,9 @@
 ---
 title: pixi-layer-cache
-status: doing
+status: review
 priority: normal
 created: 2026-11-04
+pr: 128
 ---
 
 A source change rebuilds the task images' whole pixi environment. `with_pixi_project(..., project_install_mode="install_project")` copies the project in before `pixi install`, in one layer, so editing any module throws away the 1.4 GB gatk environment (gatk4, its JVM, samtools, bwa, bwa-mem2, every PyPI dependency) and installs it again. Locally pixi's package cache keeps that to re-linking; Union's remote builder keeps no cache between builds. Under uv the micromamba tools were a layer of their own that survived source edits.
