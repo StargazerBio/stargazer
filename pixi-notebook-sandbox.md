@@ -1,6 +1,6 @@
 ---
 title: pixi-notebook-sandbox
-status: next
+status: doing
 priority: normal
 created: 2026-11-03
 ---
