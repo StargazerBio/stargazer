@@ -98,6 +98,19 @@ header still allows it; `--update` solves from scratch. `--check` changes
 nothing and exits 1 if a lock is out of date, as the pre-commit hook does when
 a manifest or lock changes.
 
+## publish_task_images.py
+
+Builds every domain's task image from the checkout, with the recipe a
+checkout runs its tasks on, and publishes it where an installed
+`stargazer-bio` of the checkout's version looks for it
+(`ghcr.io/stargazerbio/stargazer-<domain>:<version>`). The release workflow
+runs it from the tagged checkout. Needs Docker with buildx, signed in to
+GHCR.
+
+```bash
+pixi run python cli/publish_task_images.py
+```
+
 ## docker_task_tests.py
 
 Runs the tasks test tier: `tests/tasks`, each domain's tests in the image
