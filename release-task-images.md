@@ -1,8 +1,9 @@
 ---
 title: release-task-images
-status: next
+status: review
 priority: normal
 created: 2026-11-04
+pr: 132
 ---
 
 A release publishes the task images, and an installed `stargazer-bio` runs its tasks on them instead of building from source. Today `gatk_env` and `scrna_env` build from `PROJECT_ROOT / "pyproject.toml"`, which exists only in a checkout or the notebook image's `/stargazer`. Installed from PyPI, `PROJECT_ROOT` is `<venv>/lib/python3.14` and the build fails (measured 2026-11-04 with the wheel in a clean venv: `FileNotFoundError: Pixi manifest file .../lib/python3.14/pyproject.toml does not exist`), so SDK authoring from an IDE can't run a task remotely.
@@ -27,9 +28,13 @@ With releases on prebuilt images, the notebook headers can install the released 
 ## Plan
 
 - [x] Settle the open questions above.
-- [ ] `release.yml` builds `stargazer-gatk` and `stargazer-scrna` from the tagged checkout with the environment modules' recipe, pushes them to GHCR and tags them with the normalized version.
-- [ ] An installed package's environments use `from_base` of the published image of their version; a checkout builds from source.
-- [ ] Verified: a wheel in a clean venv submits a task that runs on Union on a published image (`ghcr.io/stargazerbio/debug` tags, no real release).
-- [ ] Docs: Configuration → Container Images, the release's description in `release.yml`, the wiki's `flyte-images`.
+- [x] `release.yml` builds `stargazer-gatk` and `stargazer-scrna` from the tagged checkout with the environment modules' recipe, pushes them to GHCR and tags them with the normalized version.
+- [x] An installed package's environments use `from_base` of the published image of their version; a checkout builds from source.
+- [x] Verified: a wheel in a clean venv submits a task that runs on Union on a published image (`ghcr.io/stargazerbio/debug` tags, no real release).
+- [x] Docs: Configuration → Container Images, the release's description in `release.yml`, the wiki's `flyte-images`.
+
+## Verification recipe
+
+Without a release: copy the branch, point `released_image()` in `config.py` at `ghcr.io/stargazerbio/debug:{name}-{release}`, then in the copy `docker login ghcr.io` (with `gh auth token`) and `pixi run python cli/publish_task_images.py`, which pushes `debug:stargazer-<domain>-<version>`. Build the copy's wheel (`pixi exec --spec python-build --spec "python=3.14.*" -- pyproject-build --wheel`), install it in a clean venv, and from an empty directory submit a task on `gatk_env` and one on `scrna_env` to `u-pryce` with `.flyte/union.yaml`. Expect Flyte to build nothing ("Built image" names the GHCR URI as is), stargazer imported from `/opt/pixi-project/.pixi/envs/default`, and the tools or scanpy there. After a real release, the same script runs without the copy and with no patch. Measured 2026-11-04: runs `u7qnxnmz2clsxlldxzww` (gatk, `samtools_faidx`) and `uxftkndlrk844hfdnvr5` (scrna) succeeded.
 
 Related: [[board]], [[pixi-layer-cache]], [[pixi-notebook-sandbox]], [[pixi-dependencies]], [[flyte-images]].
