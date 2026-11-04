@@ -3485,7 +3485,6 @@ dependencies = [
 all = [
     { name = "anndata" },
     { name = "igraph" },
-    { name = "marimo" },
     { name = "mcp", extra = ["cli"] },
     { name = "mkdocstrings", extra = ["python"] },
     { name = "pooch" },
@@ -3505,20 +3504,13 @@ docs = [
 mcp = [
     { name = "mcp", extra = ["cli"] },
 ]
-notebook = [
-    { name = "anndata" },
-    { name = "igraph" },
-    { name = "marimo" },
-    { name = "pooch" },
-    { name = "scanpy" },
-    { name = "scikit-image" },
-]
 
 [package.dev-dependencies]
 dev = [
     { name = "fastapi" },
     { name = "flyte" },
     { name = "httpx" },
+    { name = "marimo" },
     { name = "mkdocstrings", extra = ["python"] },
     { name = "pre-commit" },
     { name = "pyjwt", extra = ["crypto"] },
@@ -3553,7 +3545,6 @@ requires-dist = [
     { name = "flyte", extras = ["tui"], specifier = ">=2.0.3" },
     { name = "igraph", marker = "extra == 'bio'", specifier = ">=1.0.0" },
     { name = "loguru", specifier = ">=0.7.3" },
-    { name = "marimo", marker = "extra == 'notebook'", specifier = ">=0.10.0" },
     { name = "mcp", extras = ["cli"], marker = "extra == 'mcp'", specifier = ">=2.0,<3" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=1.0.3" },
     { name = "pooch", marker = "extra == 'bio'", specifier = ">=1.9.0" },
@@ -3561,16 +3552,16 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "scanpy", marker = "extra == 'bio'", specifier = ">=1.12" },
     { name = "scikit-image", marker = "extra == 'bio'", specifier = ">=0.26.0" },
-    { name = "stargazer-bio", extras = ["bio"], marker = "extra == 'notebook'" },
-    { name = "stargazer-bio", extras = ["notebook", "mcp", "docs"], marker = "extra == 'all'" },
+    { name = "stargazer-bio", extras = ["bio", "mcp", "docs"], marker = "extra == 'all'" },
 ]
-provides-extras = ["bio", "notebook", "mcp", "docs", "all"]
+provides-extras = ["bio", "mcp", "docs", "all"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "flyte", specifier = ">=2.0.3" },
     { name = "httpx", specifier = ">=0.27,<1" },
+    { name = "marimo", specifier = ">=0.25.1,<0.26" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0.3" },
     { name = "pre-commit", specifier = ">=4.5.0" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8,<3" },

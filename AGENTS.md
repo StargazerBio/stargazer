@@ -206,7 +206,7 @@ The project follows this structure:
 
 - **Paths:** Use `pathlib.Path` for all filesystem operations (e.g., `joinpath`). Use `resolve()` for absolute paths. Only convert to `str` immediately before a subprocess call.
 - **Formatting:** Use `ruff` for formatting and correctness checking
-- **Imports:** Use the `stargazer` package name, not relative imports across packages. Module level imports should be at the top of the file!!
+- **Imports:** Use the `stargazer` package name, not relative imports across packages.
 - **Documentation:** Include docstrings explaining purpose and behavior
 - **Comments:** A comment says what the code can't: why it's done this way, a constraint or invariant it upholds, the external quirk it works around, a non-obvious unit or shape. Don't write comments that restate the next line (`# Assemble the reference` above `refs = await assemble(...)`), narrate control flow (`# Unwrap single outputs` above `if len(named) == 1:`), label a block whose names already say what it does (`# GenomicsDBImport` above `import_cmd = ["gatk", "GenomicsDBImport", ...]`), or group entries in a list that ruff will re-sort. If the code needs a comment to be understood, try a better name first. When you touch code, delete the superfluous comments around it.
 - **Resource Awareness:** Specify appropriate resource requests for bioinformatics workloads
