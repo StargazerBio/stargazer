@@ -39,7 +39,8 @@ import asyncio
 
 import stargazer.utils.storage as _storage
 from stargazer.assets import Alignment, MyOutput, Reference
-from stargazer.config import gatk_env, logger
+from stargazer.config import logger
+from stargazer.tasks.gatk.env import gatk_env
 from stargazer.utils import _run
 
 
@@ -69,7 +70,8 @@ async def my_tool(ref: Reference, alignment: Alignment) -> MyOutput:
 - **Always `update()` outputs** to store them and record their metadata
 - **Use `asyncio.gather`** to fetch multiple inputs in parallel
 - **Write outputs under `_storage.default_client.local_dir`, named after the sample** — samples fanned out in one process share that directory, so a fixed filename lets them overwrite each other
-- **Pick the environment whose image carries the tool** — `gatk_env` or `scrna_env` in `src/stargazer/config.py`, where resources are set too. A new tool goes onto that image (see [Configuration → Container Images](../architecture/configuration.md#container-images))
+- **Pick the environment whose image carries the tool** — `gatk_env` in `src/stargazer/tasks/gatk/env.py` or `scrna_env` in `src/stargazer/tasks/scrna/env.py`, where resources are set too. A new tool goes in that file's header, then `pixi run python cli/lock_envs.py` relocks it (see [Configuration → Container Images](../architecture/configuration.md#container-images))
+- **Import a domain's packages inside the task body** — `import scanpy as sc` in the function, not at the top of the file, so importing the task needs only the core
 - **Use `pathlib.Path`** for all filesystem operations; `_run` converts its arguments to `str` for the subprocess
 
 ## 4. Register in the MCP Server
@@ -81,7 +83,7 @@ The MCP registry and the [Catalog](../reference/catalog.md) list the tasks `star
 Write its tests in `tests/tasks/<domain>/` and run them in the task's own image, where the tool is installed:
 
 ```bash
-uv run --all-extras python cli/docker_task_tests.py tests/tasks/gatk/test_my_tool.py
+pixi run python cli/docker_task_tests.py tests/tasks/gatk/test_my_tool.py
 ```
 
 Build inputs from the fixture files; each test runs against its own empty store, so the task's outputs land there. Assert on the output's fields and file, not just its type. The patterns are in [the `write-tests` skill](https://github.com/StargazerBio/stargazer/blob/main/.claude/skills/write-tests/SKILL.md).

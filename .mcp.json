@@ -2,7 +2,7 @@
   "mcpServers": {
     "stargazer": {
       "type": "stdio",
-      "command": "uv",
+      "command": "pixi",
       "args": [
         "run",
         "stargazer"

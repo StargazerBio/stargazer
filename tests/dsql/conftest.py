@@ -1,4 +1,4 @@
-"""Fixtures for the dsql tier (`uv run --all-extras pytest -m dsql`).
+"""Fixtures for the dsql tier (`pixi run pytest -m dsql`).
 
 The index tests run against the real cluster `STARGAZER_DSQL_CLUSTER_ARN`
 names (infra's `tenant.env`), as its admin with your AWS session: a run

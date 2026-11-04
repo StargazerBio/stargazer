@@ -4,7 +4,7 @@ Tests for Pinata uploads, queries, edits and deletes against the real API.
 The JWT comes from tests/.secrets/pinata_jwt (this directory's conftest).
 
 To populate expected CIDs for test files, run:
-    uv run python cli/upload_to_pinata.py tests/fixtures/general/FILE -m asset=reference --update-config
+    pixi run python cli/upload_to_pinata.py tests/fixtures/general/FILE -m asset=reference --update-config
 """
 
 import uuid

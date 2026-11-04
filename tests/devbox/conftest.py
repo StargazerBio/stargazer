@@ -1,4 +1,4 @@
-"""Fixtures for the devbox tier (`uv run --all-extras pytest -m devbox`).
+"""Fixtures for the devbox tier (`pixi run pytest -m devbox`).
 
 These tests run on the local devbox, so they need it up, `devbox/setup.sh`
 applied since it was created (it also starts the Postgres server that holds

@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(uv run python:*)",
+      "Bash(pixi run python:*)",
       "WebFetch(domain:www.union.ai)"
     ]
   },

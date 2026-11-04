@@ -15,7 +15,7 @@ whose `sources` name a file this branch changes (against its merge base with
 `origin/main`, uncommitted changes included) when the branch leaves the page
 itself alone. The page may well still hold; the warning says to reread it.
 
-Usage: uv run python cli/wiki_lint.py
+Usage: pixi run python cli/wiki_lint.py
 """
 
 import re

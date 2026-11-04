@@ -56,12 +56,12 @@ mkdir -p "$RUN_DIR/evidence"
 
 The three `STARGAZER_*` paths are the run's whole asset store: the local cache, the stored files, and the index. Without all three, a run shares the user's defaults under `~/.stargazer/`. `PINATA_JWT=` must be explicitly empty, not unset: marimo loads `.env`, which holds a real JWT, and an empty value already in the environment wins over it. With it empty, nothing reaches Pinata, and `assemble()` can't pick up public records that aren't part of the run. `doctor.sh` is read-only; its `FAIL` lines block the drive.
 
-**Seed** the inputs the notebook looks up. A bundle (`src/stargazer/bundles/`) fetches into the run's store with `uv run python -c "import asyncio; from stargazer.bundles import fetch_bundle; asyncio.run(fetch_bundle('<bundle>'))"`. Public IPFS gateways rate-limit with HTTP `429` after a few full downloads, so fetch once per run.
+**Seed** the inputs the notebook looks up. A bundle (`src/stargazer/bundles/`) fetches into the run's store with `pixi run python -c "import asyncio; from stargazer.bundles import fetch_bundle; asyncio.run(fetch_bundle('<bundle>'))"`. Public IPFS gateways rate-limit with HTTP `429` after a few full downloads, so fetch once per run.
 
 **Drive** with one headless export, which runs every cell and exits:
 
 ```bash
-uv run marimo export html <notebook.py> -o "$RUN_DIR/evidence/<name>.html" > "$RUN_DIR/evidence/<name>.log" 2>&1
+pixi run marimo export html <notebook.py> -o "$RUN_DIR/evidence/<name>.html" > "$RUN_DIR/evidence/<name>.log" 2>&1
 ```
 
 Exit `0` means every cell ran. Exit `1` with `Export was successful, but some cells failed to execute` means a cell raised; the log names the exception and the HTML holds the traceback. Exit `0` is not proof: a notebook can run every cell and show the wrong data. Tasks called from cells run in-process, so their tools must be on this machine's PATH; a notebook that needs gatk, bwa or samtools is verified on the devbox instead.
@@ -74,7 +74,7 @@ rm -rf "$RUN_DIR/local" "$RUN_DIR/store" "$RUN_DIR"/index.db*
 
 ## Devbox
 
-For anything that runs across pods: workflows, task images, the devbox's object store and Postgres index. The devbox test tier is the driver: `uv run --all-extras pytest -m devbox -rP <tests>` passes the devbox storage settings to every run and reads the index through a port-forward. `-rP` prints each run's URL; keep the output as evidence. When no test covers the change, write one in `tests/devbox/` (the `write-tests` skill).
+For anything that runs across pods: workflows, task images, the devbox's object store and Postgres index. The devbox test tier is the driver: `pixi run pytest -m devbox -rP <tests>` passes the devbox storage settings to every run and reads the index through a port-forward. `-rP` prints each run's URL; keep the output as evidence. When no test covers the change, write one in `tests/devbox/` (the `write-tests` skill).
 
 Preconditions: the devbox is up, `devbox/setup.sh` has run since it was last created (its verify step ends with `✓ Postgres ready`), `FLYTE_IMAGE_REGISTRY=localhost:30000` is exported, and `kubectl config current-context` is `flyte-devbox`.
 

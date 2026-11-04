@@ -4,8 +4,12 @@
 Sets environment variable defaults at import time. Consumers read
 os.environ directly rather than importing named values from this module.
 
-Also the source of truth for the lean per-task Flyte environments
-(`scrna_env`, `gatk_env`).
+Also what every task environment shares: the platform its image is built
+for, the variables and secrets forwarded into its pods, and the image
+recipes, `task_image()` for a domain's and `core_image()` for tasks that need
+only the SDK.
+The environments themselves live in their domains' `env.py`
+(`stargazer.tasks.scrna.env`, `stargazer.tasks.gatk.env`).
 
 `init_flyte()` is the one Flyte init for notebooks, the MCP server and the
 tests: an in-cluster client in a hosted notebook pod, the config file anywhere
@@ -191,51 +195,49 @@ def init_flyte() -> None:
         )
 
 
-def _task_image(name: str, environment: str) -> flyte.Image:
-    """A task image: one of pixi.lock's environments, then the stargazer package.
+def _with_source(image: flyte.Image, *, deps: bool) -> flyte.Image:
+    """`image` with the checkout's stargazer installed on top, from its source.
 
-    The environment comes from pyproject.toml's `[tool.pixi]` and pixi.lock
-    alone, so its layer (Python, the tools, every dependency) is cached until
-    either changes, and pixi's environment replaces the Flyte base's venv as
-    the pod's Python. The package goes on top, without its dependencies, from
-    the project's source, so a source change rebuilds only that layer;
-    .dockerignore keeps docs, tests and git history out of it. A task pod
-    resolves the tasks it calls as installed modules (`stargazer.tasks…`), so
-    without the package a workflow's child tasks can't import, wherever the
-    run was submitted from.
+    A layer of its own, so a source change rebuilds only it; .dockerignore
+    keeps docs, tests and git history out of it. A task pod resolves the
+    tasks it calls as installed modules (`stargazer.tasks…`), so the package
+    must be the checkout's, wherever the run was submitted from. uv installs
+    into the pixi environment, which the layer below made `VIRTUAL_ENV`.
     """
-    return (
-        flyte.Image.from_debian_base(name=name, platform=IMAGE_PLATFORM)
-        .with_pixi_project(PROJECT_ROOT / "pyproject.toml", environment=environment)
-        .with_source_folder(PROJECT_ROOT, "/opt/stargazer")
-        # uv installs into the pixi environment, which the layer above made
-        # `VIRTUAL_ENV`.
-        .with_commands(["uv pip install --no-deps --no-cache /opt/stargazer"])
+    install = ["uv", "pip", "install", "--no-cache", *([] if deps else ["--no-deps"])]
+    return image.with_source_folder(PROJECT_ROOT, "/opt/stargazer").with_commands(
+        [" ".join([*install, "/opt/stargazer"])]
     )
 
 
-# The `bio` extra: scanpy plus what its steps import lazily (scikit-image for
-# scrublet's automatic threshold, igraph for Leiden). Memory-hungry at runtime
-# because scanpy loads full AnnData objects into RAM.
-scrna_env = flyte.TaskEnvironment(
-    name="scrna",
-    description="scanpy-based single-cell RNA analysis; memory-intensive AnnData workloads",
-    image=_task_image("stargazer-scrna", "scrna"),
-    resources=flyte.Resources(memory=("2Gi", "6Gi")),
-    env_vars=STARGAZER_ENV_VARS,
-    secrets=STARGAZER_SECRETS,
-)
+def task_image(env: str | Path) -> flyte.Image:
+    """A domain's task image, `stargazer-<domain>`: its `env.py`'s header, then the checkout.
 
-# The `gatk` feature: gatk4 (with the JVM its wrapper calls), samtools, bwa
-# and bwa-mem2 from bioconda, on the pod's PATH from the environment.
-gatk_env = flyte.TaskEnvironment(
-    name="gatk",
-    description="GATK, BWA, and samtools alignment and variant-calling workloads",
-    image=_task_image("stargazer-gatk", "gatk"),
-    # A 1Gi request: the germline workflow holds three gatk_env pods at once
-    # (workflow, prepare_reference or preprocess_sample, the tool), and three
-    # 2Gi requests don't fit the devbox node beside a dashboard.
-    resources=flyte.Resources(memory=("1Gi", "6Gi")),
-    env_vars=STARGAZER_ENV_VARS,
-    secrets=STARGAZER_SECRETS,
-)
+    `env` is the domain's `env.py` (its `__file__`), whose PEP 723 header lists
+    the environment's conda and PyPI packages, the released SDK among them,
+    locked in the `env.py.pixi.lock` beside it (`cli/lock_envs.py`). Flyte
+    renders the header as a pixi workspace and installs it from the header and
+    lock alone, so that layer (Python, the tools, every dependency) is cached
+    until either changes, and pixi's environment is the pod's Python. The
+    checkout goes on top of the released SDK, and uv adds any core dependency
+    it has gained since the release.
+    """
+    env = Path(env)
+    image = flyte.Image.from_pixi_script(
+        env, name=f"stargazer-{env.parent.name}", platform=IMAGE_PLATFORM
+    )
+    return _with_source(image, deps=True)
+
+
+def core_image(name: str) -> flyte.Image:
+    """An image for tasks that need only the SDK: pixi.lock's `core` environment, then the checkout.
+
+    The core dependencies alone, at the versions development runs, from
+    pyproject.toml and pixi.lock (`dependencies_only`), so that layer is
+    cached until either changes. The checkout goes on top without
+    dependencies, since the environment is its own.
+    """
+    image = flyte.Image.from_debian_base(
+        name=name, platform=IMAGE_PLATFORM
+    ).with_pixi_project(PROJECT_ROOT / "pyproject.toml", environment="core")
+    return _with_source(image, deps=False)

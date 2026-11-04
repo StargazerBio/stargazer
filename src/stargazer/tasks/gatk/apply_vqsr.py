@@ -14,7 +14,8 @@ from stargazer.assets import (
     VQSRModel,
     assemble,
 )
-from stargazer.config import gatk_env, logger
+from stargazer.config import logger
+from stargazer.tasks.gatk.env import gatk_env
 from stargazer.utils import _run
 
 _DEFAULT_FILTER_LEVEL = {"SNP": 99.5, "INDEL": 99.0}

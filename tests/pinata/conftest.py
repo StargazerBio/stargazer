@@ -1,4 +1,4 @@
-"""Fixtures for the pinata tier (`uv run --all-extras pytest -m pinata`).
+"""Fixtures for the pinata tier (`pixi run pytest -m pinata`).
 
 These tests call the real Pinata API with the key in tests/.secrets/pinata_jwt.
 The root conftest strips PINATA_JWT before anything imports stargazer; each

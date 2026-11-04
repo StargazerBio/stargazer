@@ -9,7 +9,8 @@ import shlex
 
 import stargazer.utils.storage as _storage
 from stargazer.assets import R1, R2, AlignerIndex, Alignment, Reference
-from stargazer.config import gatk_env, logger
+from stargazer.config import logger
+from stargazer.tasks.gatk.env import gatk_env
 from stargazer.utils import _run
 
 

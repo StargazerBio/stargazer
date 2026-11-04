@@ -1,8 +1,5 @@
 """Tests for normalize task."""
 
-import numpy as np
-import scanpy as sc
-import scipy.sparse as sp
 from conftest import SCRNA_FIXTURES_DIR
 
 from stargazer.tasks.scrna.normalize import normalize
@@ -10,11 +7,16 @@ from stargazer.tasks.scrna.normalize import normalize
 
 def _dense(matrix):
     """Return a matrix as a dense array, whichever form it was stored in."""
+    import scipy.sparse as sp
+
     return matrix.toarray() if sp.issparse(matrix) else matrix
 
 
 async def test_normalize_layers(scrna_input):
     """normalize keeps the input's raw counts in .layers['counts'] and applies log1p."""
+    import numpy as np
+    import scanpy as sc
+
     result = await normalize(adata=scrna_input("qc_filtered.h5ad"))
 
     assert result.stage == "normalized"

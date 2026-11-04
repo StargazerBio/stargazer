@@ -23,7 +23,7 @@ For stdio, point the client at the `stargazer` command:
 }
 ```
 
-The repository's own `.mcp.json` runs `uv run stargazer` instead, which uses the project venv a contributor set up with `uv sync --all-extras`.
+The repository's own `.mcp.json` runs `pixi run stargazer` instead, in the development environment ([Contributing → Setup](contributing.md#setup)).
 
 For remote access, run `stargazer --http` and connect over streamable HTTP (port 8000).
 

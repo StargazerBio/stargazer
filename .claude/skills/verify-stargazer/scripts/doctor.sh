@@ -13,9 +13,9 @@ note() { printf 'info  %s\n' "$1"; }
 
 cd "$ROOT" || exit 1
 
-if uv run python -c "import stargazer" >/dev/null 2>&1; then ok "stargazer importable in uv env"; else bad "stargazer not importable: run 'uv sync'"; fi
+if pixi run python -c "import stargazer" >/dev/null 2>&1; then ok "stargazer importable in the pixi env"; else bad "stargazer not importable: run 'pixi install'"; fi
 for bin in flyte marimo; do
-  if uv run which "$bin" >/dev/null 2>&1; then ok "$bin in uv env"; else bad "$bin missing from uv env"; fi
+  if pixi run which "$bin" >/dev/null 2>&1; then ok "$bin in the pixi env"; else bad "$bin missing from the pixi env"; fi
 done
 
 check_path() {  # name, the user's default it must not equal

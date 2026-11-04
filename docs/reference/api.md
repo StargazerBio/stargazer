@@ -43,6 +43,7 @@
 ::: stargazer.tasks.gatk.base_recalibrator
 ::: stargazer.tasks.gatk.combine_gvcfs
 ::: stargazer.tasks.gatk.create_sequence_dictionary
+::: stargazer.tasks.gatk.env
 ::: stargazer.tasks.gatk.haplotype_caller
 ::: stargazer.tasks.gatk.index_feature_file
 ::: stargazer.tasks.gatk.joint_call_gvcfs
@@ -54,6 +55,7 @@
 ::: stargazer.tasks.general.bwa_mem2
 ::: stargazer.tasks.general.samtools
 ::: stargazer.tasks.scrna.cluster
+::: stargazer.tasks.scrna.env
 ::: stargazer.tasks.scrna.find_markers
 ::: stargazer.tasks.scrna.normalize
 ::: stargazer.tasks.scrna.qc_filter

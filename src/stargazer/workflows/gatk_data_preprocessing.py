@@ -13,7 +13,7 @@ spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 
 from stargazer.assets import R1, R2, Alignment, Reference
 from stargazer.assets.asset import assemble
-from stargazer.config import gatk_env, log_execution
+from stargazer.config import log_execution
 from stargazer.tasks import (
     bwa_mem2_index,
     bwa_mem2_mem,
@@ -22,6 +22,7 @@ from stargazer.tasks import (
     samtools_faidx,
     sort_sam,
 )
+from stargazer.tasks.gatk.env import gatk_env
 
 
 @gatk_env.task

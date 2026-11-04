@@ -20,7 +20,7 @@ You're the agent in a Stargazer notebook's editor, opened from marimo's agent pa
 - A cell's last expression is its output: `mo.md(...)`, a `mo.ui` element, `mo.ui.table(...)`, a plot. Assign each `mo.ui` element (`mo.ui.file`, `mo.ui.dropdown`, `mo.ui.run_button`, ...) to a global and read its `.value` in another cell, never in the cell that made it. `mo.stop(condition, output)` halts a cell, e.g. until a file is uploaded.
 - Cells can `await` at the top level.
 - `with app.setup:` holds imports and definitions every cell can use. A cell holding just one function or class, decorated `@app.function` or `@app.class_definition` and using only setup-block names, is importable from the notebook like a module (`from other_notebook import fn`).
-- Packages and tools go in the PEP 723 header (`# /// script`); each notebook runs in its own pixi environment built from it at start. PyPI packages go in `dependencies`; conda packages, such as bioconda's `gatk4`, `samtools` and `bwa-mem2`, under `[tool.pixi.dependencies]`, with `channels = ["conda-forge", "bioconda"]` under `[tool.pixi.workspace]`. `stargazer-bio` resolves to `/stargazer` through the header's `[tool.pixi.pypi-dependencies]` entry, and `python = "3.14.*"` under `[tool.pixi.dependencies]` pins the Python; keep both. Running the SDK's scRNA tasks in the notebook itself needs `stargazer-bio[bio]` in `dependencies` in place of `stargazer-bio`.
+- Packages and tools go in the PEP 723 header (`# /// script`); each notebook runs in its own pixi environment built from it at start. PyPI packages go in `dependencies`; conda packages, such as bioconda's `gatk4`, `samtools` and `bwa-mem2`, under `[tool.pixi.dependencies]`, with `channels = ["conda-forge", "bioconda"]` under `[tool.pixi.workspace]`. `stargazer-bio` resolves to `/stargazer` through the header's `[tool.pixi.pypi-dependencies]` entry, and `python = "3.14.*"` under `[tool.pixi.dependencies]` pins the Python; keep both. Running the SDK's scRNA tasks in the notebook itself needs their packages (scanpy and the rest of the header of `stargazer/tasks/scrna/env.py`) in the header too.
 - The pod the notebook runs in is declared in the setup block as `main_env = notebook_env.clone_with(name=..., image=notebook_base.with_apt_packages(...), resources=flyte.Resources(cpu=2, memory="8Gi"))` (`from stargazer.notebooks import notebook_base, notebook_env`). System packages conda doesn't have go in its image, and CPU, memory and disk in its resources. It takes effect the next time the notebook launches from the dashboard. The line is evaluated on its own, so it can use only `flyte`, `notebook_base` and `notebook_env`.
 - The dashboard tile's title and blurb are `main_name` and `main_description` in the setup block. The dashboard reads them without running code, so keep them plain strings.
 - Another notebook opened in this pod runs in this notebook's environment, not its own `main_env`. Launch it from the dashboard to run it in its own.
@@ -34,7 +34,9 @@ import asyncio
 
 import stargazer.utils.storage as _storage
 from stargazer.assets import R1, Alignment, Reference
-from stargazer.config import gatk_env  # or scrna_env
+from stargazer.tasks.gatk.env import (
+    gatk_env,
+)  # or stargazer.tasks.scrna.env's scrna_env
 from stargazer.utils import _run
 
 
@@ -54,7 +56,7 @@ async def align_reads(ref: Reference, r1: R1) -> Alignment:
 - fetch() returns the input's local path, with its companions (indexes, dictionaries) beside it; use that path, not asset.path (the stored file)
 - Always update() outputs to store them; name output files after the sample
 - Use pathlib.Path for filesystem ops; _run converts arguments to str for the subprocess
-- Import from stargazer.assets, stargazer.config, stargazer.utils (never flytekit)
+- Import from stargazer.assets, stargazer.config, stargazer.utils and the domain's env module (never flytekit)
 - No TYPE_CHECKING blocks — Flyte always checks types
 - Resources (CPU, memory, GPU) and the image are set on the TaskEnvironment, not per task. `gatk_env` and `scrna_env` carry the SDK and its tools; a `flyte.TaskEnvironment` you define needs an image with everything its tasks import
 

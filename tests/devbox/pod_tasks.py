@@ -13,7 +13,8 @@ from flyte.io import File
 
 from stargazer.assets import R1, R2, Reference
 from stargazer.assets.asset import Asset, assemble
-from stargazer.config import STARGAZER_ENV_VARS, gatk_env
+from stargazer.config import STARGAZER_ENV_VARS
+from stargazer.tasks.gatk.env import gatk_env
 from stargazer.utils.storage import default_client
 
 BUILD = "GRCh38"

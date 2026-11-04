@@ -51,7 +51,7 @@ Once promoted, the next image release bakes a task into every notebook, where an
 
 **The SDK never imports notebooks.** Notebooks import the SDK; production code never depends on a notebook, so notebook changes can't break tasks or workflows. Notebook-to-notebook reuse is allowed: a notebook can export importable definitions via `app.setup` + `@app.function`, as the Execution tutorial does with the Workflows tutorial's workflow.
 
-**Production notebooks get the SDK from the image.** Each notebook's PEP 723 header points at the SDK source baked into the image (through `[tool.pixi.pypi-dependencies]`), so package tasks are available automatically and saved notebooks can't change which SDK they run. Locally a notebook imports your checkout. A package task run in the notebook's own process needs its Python packages, so the header names the SDK extra that carries them (`stargazer[bio]` for scRNA).
+**Production notebooks get the SDK from the image.** Each notebook's PEP 723 header points at the SDK source baked into the image (through `[tool.pixi.pypi-dependencies]`), so package tasks are available automatically and saved notebooks can't change which SDK they run. Locally a notebook imports your checkout. A package task run in the notebook's own process needs its domain's packages, which the SDK doesn't carry: they're in its task image, listed in the header of its domain's `env.py`, so the notebook's header lists them too (scanpy for scRNA).
 
 ## Notebook Environment
 
