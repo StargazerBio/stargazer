@@ -1,14 +1,15 @@
 ---
 sources:
   - src/stargazer/config.py
+  - pyproject.toml
   - src/stargazer/tasks/gatk/__init__.py
 ---
 
 # GATK
 
-The Broad Institute's Genome Analysis Toolkit, which most of Stargazer's germline tasks wrap. It's installed in `gatk_env`'s image from bioconda's `gatk4` (the comment above `gatk_env` in `src/stargazer/config.py`).
+The Broad Institute's Genome Analysis Toolkit, which most of Stargazer's germline tasks wrap. It's installed in `gatk_env`'s image from bioconda's `gatk4`, through the `gatk` pixi feature in `pyproject.toml` (the comment above `gatk_env` in `src/stargazer/config.py`).
 
-**The help was captured from GATK 4.6.1.0.** The image installs bioconda's current `gatk4`, unpinned, so when a flag matters, check `gatk --version` in the image against the help's `Version:` line.
+**The help was captured from GATK 4.6.1.0.** The image installs the `gatk4` that `pixi.lock` pins, so when a flag matters, check that version (or `gatk --version` in the image) against the help's `Version:` line.
 
 | Tool | Help | Stargazer task |
 |------|------|----------------|
