@@ -1,9 +1,11 @@
 # Cuts a Stargazer release from a calendar tag (`v2026.10.28`, a second release
-# that day `v2026.10.28.1`): the package to PyPI as `stargazer-bio`, and the
-# image (runtime/Dockerfile) to GHCR under the same tag and `latest`. The tag
-# has to name pyproject.toml's version. Infra pins one release and takes both
-# halves from it. Union's nodes pull the image straight from GHCR, which is
-# public.
+# that day `v2026.10.28.1`): the package to PyPI as `stargazer-bio`, the
+# notebook image (runtime/Dockerfile) to GHCR under the same tag and `latest`,
+# and each domain's task image to GHCR under the package's version
+# (`stargazer-gatk:2026.10.28`), which is what an installed package of that
+# version runs its tasks on. The tag has to name pyproject.toml's version.
+# Infra pins one release and takes the package and notebook image from it.
+# Union's nodes pull the images straight from GHCR, which is public.
 name: Release
 on:
   push:
@@ -70,3 +72,24 @@ jobs:
             ghcr.io/stargazerbio/stargazer:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+  task-images:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      # The development environment: the SDK editable from this checkout,
+      # whose version names the images.
+      - uses: prefix-dev/setup-pixi@v0.11.3
+        with:
+          pixi-version: v0.84.1
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Each image from this checkout with the recipe a checkout runs its
+      # tasks on, built by Flyte's local builder with docker.
+      - run: pixi run python cli/publish_task_images.py

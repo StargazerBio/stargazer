@@ -48,6 +48,7 @@ import os
 import subprocess
 import sys
 from datetime import UTC, datetime
+from importlib.metadata import version
 from pathlib import Path
 
 import flyte
@@ -210,6 +211,26 @@ def _with_source(image: flyte.Image, *, deps: bool) -> flyte.Image:
     )
 
 
+def released_image(name: str, release: str) -> str:
+    """Where a release publishes the task image `name`, tagged with its version.
+
+    `release` is the package version as installed (`importlib.metadata`
+    normalizes it, so tag `v2026.11.04` publishes `2026.11.4`).
+    `cli/publish_task_images.py` pushes there, and an installed package pulls
+    from there.
+    """
+    return f"ghcr.io/stargazerbio/{name}:{release}"
+
+
+def _checkout() -> bool:
+    """Whether the package runs from a checkout, which can build its images.
+
+    Installed from PyPI, `PROJECT_ROOT` is the environment's `lib/python3.x`,
+    which holds no `pyproject.toml`.
+    """
+    return (PROJECT_ROOT / "pyproject.toml").is_file()
+
+
 def task_image(env: str | Path) -> flyte.Image:
     """A domain's task image, `stargazer-<domain>`: its `env.py`'s header, then the checkout.
 
@@ -221,11 +242,16 @@ def task_image(env: str | Path) -> flyte.Image:
     until either changes, and pixi's environment is the pod's Python. The
     checkout goes on top of the released SDK, and uv adds any core dependency
     it has gained since the release.
+
+    An installed package has no checkout to build from: it runs on the image
+    its release built this way and published (`released_image()`), so nothing
+    builds.
     """
     env = Path(env)
-    image = flyte.Image.from_pixi_script(
-        env, name=f"stargazer-{env.parent.name}", platform=IMAGE_PLATFORM
-    )
+    name = f"stargazer-{env.parent.name}"
+    if not _checkout():
+        return flyte.Image.from_base(released_image(name, version("stargazer-bio")))
+    image = flyte.Image.from_pixi_script(env, name=name, platform=IMAGE_PLATFORM)
     return _with_source(image, deps=True)
 
 
@@ -235,9 +261,11 @@ def core_image(name: str) -> flyte.Image:
     The core dependencies alone, at the versions development runs, from
     pyproject.toml and pixi.lock (`dependencies_only`), so that layer is
     cached until either changes. The checkout goes on top without
-    dependencies, since the environment is its own.
+    dependencies, since the environment is its own. An installed package has
+    neither, so its image installs the same version of the SDK from PyPI.
     """
-    image = flyte.Image.from_debian_base(
-        name=name, platform=IMAGE_PLATFORM
-    ).with_pixi_project(PROJECT_ROOT / "pyproject.toml", environment="core")
+    base = flyte.Image.from_debian_base(name=name, platform=IMAGE_PLATFORM)
+    if not _checkout():
+        return base.with_pip_packages(f"stargazer-bio=={version('stargazer-bio')}")
+    image = base.with_pixi_project(PROJECT_ROOT / "pyproject.toml", environment="core")
     return _with_source(image, deps=False)
