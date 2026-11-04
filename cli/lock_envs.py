@@ -15,7 +15,7 @@ Usage:
     pixi run python cli/lock_envs.py [--check] [--update] [env.py ...]
 
 With no paths, it locks every environment. `--check` changes nothing and
-exits 1 if any lock is out of date with its header.
+exits 1 if relocking would change any lock.
 """
 
 import argparse
@@ -41,7 +41,7 @@ def lock_path(env: Path) -> Path:
 
 
 def lock(env: Path, *, check: bool, update: bool) -> bool:
-    """Lock `env` (or only check it); return whether its lock was up to date."""
+    """Lock `env` (or with `check`, only relock a copy); return whether its lock was up to date."""
     manifest = render_pixi_manifest(
         parse_pixi_script_file(env), platforms_for(IMAGE_PLATFORM)
     )
@@ -62,18 +62,20 @@ def lock(env: Path, *, check: bool, update: bool) -> bool:
                 f"ghcr.io/prefix-dev/pixi:{PIXI_VERSION}",
                 "pixi",
                 "lock",
-                *(["--check"] if check else []),
             ],
             capture_output=True,
             text=True,
-            check=False,  # --check's exit code is the result
+            check=False,  # a failed solve is reported below
         )
-        if check:
-            return result.returncode == 0
         if result.returncode != 0:
             raise SystemExit(f"pixi lock failed for {env}:\n{result.stderr}")
-        shutil.copy(work / "pixi.lock", lock_path(env))
-        return True
+        # This pixi's own `lock --check` exits 0 on a lock it has just
+        # rewritten, so a check compares the relocked file instead.
+        locked = (work / "pixi.lock").read_bytes()
+        current = lock_path(env).read_bytes() if lock_path(env).exists() else b""
+        if not check:
+            lock_path(env).write_bytes(locked)
+        return locked == current
 
 
 def main(argv: list[str]) -> int:

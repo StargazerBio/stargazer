@@ -7,17 +7,15 @@ Stargazer has multiple contributor shapes — researchers writing notebooks, age
 ```bash
 git clone https://github.com/StargazerBio/stargazer.git
 cd stargazer
-uv sync --all-extras
-uv run pre-commit install
+pixi run pre-commit install
 ```
 
-You now have:
+This needs [pixi](https://pixi.prefix.dev/latest/installation/) and Docker. You now have:
 
-- The stargazer package installed in editable mode in a project venv
-- All Python deps from the lockfile, including every optional extra (scRNA, MCP, docs), plus the `dev` group (pytest, ruff, pre-commit, marimo)
+- A development environment in `.pixi/`, from `pixi.lock`: Python, the stargazer package installed in editable mode, the core dependencies, the MCP server's, and the `dev` group (pytest, ruff, pre-commit, marimo). `pixi run <command>` runs in it, and installs it again when `pyproject.toml` changes
 - A pre-commit hook that lints, checks docstrings, builds the docs and runs the unit tests on every commit
 
-The bioinformatics tools (gatk, bwa, bwa-mem2, samtools) aren't needed: their tests run in the task image (see [Running Tests](#running-tests)). Running those tasks locally, outside the tests, needs them on your PATH, from bioconda for instance.
+What each kind of task runs with, the bioinformatics tools (gatk, bwa, bwa-mem2, samtools) and scanpy among them, isn't in it: those are in the task images, and their tests run there (see [Running Tests](#running-tests)).
 
 ## Running on the Devbox
 
@@ -35,12 +33,12 @@ To have submitted runs store their assets on the devbox, also export `STARGAZER_
 Each top-level directory under `tests/` belongs to one tier, and each tier has a pytest marker. The unit tier runs on every commit through pre-commit; run the others when your change reaches them.
 
 ```bash
-uv run --all-extras pytest                            # unit: this venv
-uv run --all-extras python cli/docker_task_tests.py   # tasks: in each task's image
-uv run --all-extras pytest -m devbox                  # devbox: the local devbox
-uv run --all-extras pytest -m pinata                  # the real Pinata API
-uv run --all-extras pytest -m postgres                # the index on Postgres, in Docker
-uv run --all-extras pytest -m dsql                    # the index on the real DSQL cluster
+pixi run pytest                            # unit: the dev environment
+pixi run python cli/docker_task_tests.py   # tasks: in each task's image
+pixi run pytest -m devbox                  # devbox: the local devbox
+pixi run pytest -m pinata                  # the real Pinata API
+pixi run pytest -m postgres                # the index on Postgres, in Docker
+pixi run pytest -m dsql                    # the index on the real DSQL cluster
 ```
 
 - **Unit** (`tests/assets`, `notebooks`, `unit`, `utils`) is the cheap tests that need only Python. Each test gets its own empty store, index and cache and no `PINATA_JWT`.
@@ -55,12 +53,12 @@ Outside its tier a test is deselected, never skipped, and inside it a missing to
 ## Code Style
 
 ```bash
-uv run ruff check --fix . && uv run ruff format .
+pixi run ruff check --fix . && pixi run ruff format .
 ```
 
 Pre-commit runs `ruff` (lint and format) and `docstr-coverage` (a docstring on every module, class and function in `src/`), regenerates the catalog and API reference, builds the docs, checks the MCP server imports, and runs the unit tests.
 
-Ruff is pinned twice — `rev:` in `.pre-commit-config.yaml` and the `ruff` entry in `pyproject.toml`'s dev group. **Bump both together**, or the commit hook and `uv run ruff` will enforce different rules. Deliberate rule exceptions live in `[tool.ruff.lint]` in `pyproject.toml`, each with the reason.
+Ruff is pinned twice — `rev:` in `.pre-commit-config.yaml` and the `ruff` entry in `pyproject.toml`'s dev group. **Bump both together**, or the commit hook and `pixi run ruff` will enforce different rules. Deliberate rule exceptions live in `[tool.ruff.lint]` in `pyproject.toml`, each with the reason.
 
 ### Import Layers
 
@@ -89,11 +87,13 @@ See [Configuration → Container Images](../architecture/configuration.md#contai
 
 **Flyte task images (`stargazer-scrna`, `stargazer-gatk`)** build themselves, tagged by a hash of their recipe and the project's source, the first time a run or the tasks test tier needs them. `image.builder` in the Flyte config picks `local` (needs Docker) or `remote` (Union only).
 
-They install environments from `pixi.lock`, which a build refuses if it's out of date with `pyproject.toml`. After changing a dependency, or a tool under `[tool.pixi]`, relock with `uv lock` and with pixi, at the version Flyte builds the images with:
+Each installs the environment the header of its domain's `env.py` declares (`src/stargazer/tasks/gatk/env.py`, `src/stargazer/tasks/scrna/env.py`), from the `env.py.pixi.lock` beside it, which a build refuses if it's out of date with the header. After changing a header, relock with the pixi version Flyte builds the images with (it runs that pixi in Docker):
 
 ```bash
-docker run --rm -v "$PWD":/w -w /w ghcr.io/prefix-dev/pixi:0.72.2 pixi lock
+pixi run python cli/lock_envs.py            # every environment; --check only checks
 ```
+
+The development environment is `pyproject.toml`'s `[tool.pixi]`, locked in `pixi.lock`; `pixi add --pypi <package>` adds a core dependency and relocks.
 
 **The notebook image (`stargazer`)** builds from `runtime/Dockerfile`, from the repository root, when you change it or want the current source in it:
 

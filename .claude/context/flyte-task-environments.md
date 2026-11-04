@@ -3,6 +3,8 @@ sources:
   - "[[flyte-v2-docs]]"
   - "[[flyte-sdk-examples]]"
   - src/stargazer/config.py
+  - src/stargazer/tasks/gatk/env.py
+  - src/stargazer/tasks/scrna/env.py
 ---
 
 # Flyte task environments
@@ -32,7 +34,7 @@ From most general to most specific, and the more specific wins:
 
 ## In Stargazer
 
-- **The environments are in `config.py`** (`gatk_env`, `scrna_env`), with comments on how each is sized and built ([[flyte-images]]). The rules for adding one, and the devbox's memory budget, are in `AGENTS.md`.
+- **The environments are in their domains' `env.py`** (`tasks/gatk/env.py`'s `gatk_env`, `tasks/scrna/env.py`'s `scrna_env`), with comments on how each is sized; how they're built is in [[flyte-images]]. The rules for adding one, and the devbox's memory budget, are in `AGENTS.md`.
 
 ## Related
 

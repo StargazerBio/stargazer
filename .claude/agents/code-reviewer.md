@@ -30,7 +30,7 @@ Types (dataclasses) → Tasks (single-purpose) → Workflows (composition)
 
 ### Configuration and Environments
 
-Environment-driven behavior lives in `config.py`: read it for the current settings and their defaults rather than trusting a list. Task environments (`TaskEnvironment`) are defined there too, each with its image and resources, set on the environment rather than per task.
+Environment-driven behavior lives in `config.py`: read it for the current settings and their defaults rather than trusting a list. Task environments (`TaskEnvironment`) are defined in each domain's `env.py`, each with its image (the module's PEP 723 header) and resources, set on the environment rather than per task; a domain's packages import inside task bodies, never at a module's top.
 
 **Edge cases to catch:**
 - [ ] Code that assumes an optional service or credential is present (the public tier, a key, a cluster)

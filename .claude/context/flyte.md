@@ -4,11 +4,12 @@ sources:
   - "[[flyte-sdk-examples]]"
   - src/stargazer/config.py
   - pyproject.toml
+  - pixi.lock
 ---
 
 # Flyte v2
 
-The orchestrator every Stargazer task and workflow runs on. The raw sources are a snapshot of the Flyte 2 docs from its beta ([[flyte-v2-docs]]) and a digest of its SDK examples ([[flyte-sdk-examples]]); `pyproject.toml` pins the `flyte` package Stargazer actually runs, and the installed package wins where they disagree.
+The orchestrator every Stargazer task and workflow runs on. The raw sources are a snapshot of the Flyte 2 docs from its beta ([[flyte-v2-docs]]) and a digest of its SDK examples ([[flyte-sdk-examples]]); `pixi.lock` pins the `flyte` package development submits with and each task environment's `env.py.pixi.lock` the one its pods run, and the installed package wins where they disagree.
 
 ## The model
 

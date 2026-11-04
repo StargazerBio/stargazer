@@ -2,7 +2,7 @@
 sources:
   - .claude/context/raw/tool-help/generate_help_docs.sh
   - .claude/context/raw/tool-help/commands.example.txt
-  - src/stargazer/config.py
+  - src/stargazer/tasks/gatk/env.py
 ---
 
 # Tool help

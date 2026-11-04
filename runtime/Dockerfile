@@ -73,19 +73,19 @@ COPY runtime/proxy.py /usr/local/lib/sg_proxy.py
 COPY runtime/agent_redirect.html runtime/save_banner.html /usr/local/lib/
 COPY runtime/launch-notebook.sh runtime/start-local.sh /usr/local/bin/
 # Owned by the runtime user: each sandbox builds `stargazer-bio` from this tree
-# and writes its egg-info here. The locks are there for the task images a
-# kernel builds: pixi.lock for the SDK's (`with_pixi_project`), which install
-# exactly what it locks, and uv.lock for a notebook's own `with_uv_project`,
-# which Union's builder skips without one.
-COPY --chown=flyte:flyte pyproject.toml pixi.lock uv.lock README.md /stargazer/
+# and writes its egg-info here. The task images a kernel builds install the
+# environments the domains' `env.py` headers declare, from the locks beside
+# them in src/.
+COPY --chown=flyte:flyte pyproject.toml pixi.lock README.md /stargazer/
 COPY --chown=flyte:flyte src/ /stargazer/src/
 
 # The `stargazer` MCP server for the agent panel, which the launch script
-# starts. Its own venv, from the lock: the runtime venv holds no SDK. Editable,
-# so `init_flyte()` bundles a run from /stargazer, as a notebook's does; the
+# starts. Its own venv: the runtime venv holds no SDK. Editable, so
+# `init_flyte()` bundles a run from /stargazer, as a notebook's does; the
 # chown hands the egg-info the install leaves back to the runtime user.
-RUN UV_PROJECT_ENVIRONMENT=/opt/mcp uv sync --project /stargazer --locked \
-        --no-dev --extra mcp --no-cache \
+RUN uv venv --no-cache /opt/mcp \
+    && uv pip install --no-cache --python /opt/mcp/bin/python \
+        -e "/stargazer[mcp]" \
     && chown -R flyte:flyte /stargazer
 
 # /workspace starts with the agent's context: Claude Code starts there and

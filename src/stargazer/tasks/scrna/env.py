@@ -10,7 +10,7 @@
 # ]
 #
 # [tool.pixi.workspace]
-# channels = ["conda-forge", "bioconda"]
+# channels = ["conda-forge"]
 # platforms = ["linux-64"]
 #
 # [tool.pixi.dependencies]
@@ -23,7 +23,7 @@
 its image's packages: scanpy, plus what its steps import lazily (scikit-image
 for scrublet's automatic threshold, igraph for Leiden, pooch for scanpy's
 datasets), and the released SDK, whose core dependencies the lock pins.
-`pixi lock --script` locks it into `env.py.pixi.lock` beside this file.
+`cli/lock_envs.py` locks it into `env.py.pixi.lock` beside this file.
 
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
