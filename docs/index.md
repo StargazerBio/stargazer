@@ -64,6 +64,8 @@ A `companion_of` link means "belongs beside", the way an index belongs beside it
     )
     ```
 
+    The [germline notebook](https://github.com/StargazerBio/community-notebooks/blob/main/germline/short-variant-discovery.py) runs it on a slice of TP53 and shows what the run added to the graph.
+
 - **Every run grows the graph.** A task stores its output with its type, its fields and a link to what it was made from. Nobody files it, and the next query sees it.
 - **The graph grows with your work.** Tag any asset with a key its type doesn't declare and query on it. A type defined in a notebook cell is in the graph as soon as the cell runs.
 - **Identity outlives location.** The same file has the same ID locally, in a cloud bucket and on the public network, so a notebook that names an asset by ID reads the same bytes for anyone who opens it.

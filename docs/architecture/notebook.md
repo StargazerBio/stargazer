@@ -51,12 +51,20 @@ Once promoted, the next image release bakes a task into every notebook, where an
 
 **The SDK never imports notebooks.** Notebooks import the SDK; production code never depends on a notebook, so notebook changes can't break tasks or workflows. Notebook-to-notebook reuse is allowed: a notebook can export importable definitions via `app.setup` + `@app.function`, as the Execution tutorial does with the Workflows tutorial's workflow.
 
-**Production notebooks get the SDK from the image.** Each notebook's PEP 723 header points at the SDK source baked into the image, so package tasks are available automatically and saved notebooks can't change which SDK they run. Locally a notebook imports your checkout. A package task run in the notebook's own process needs its Python packages, so the header names the SDK extra that carries them (`stargazer[bio]` for scRNA).
+**Production notebooks get the SDK from the image.** Each notebook's PEP 723 header points at the SDK source baked into the image (through `[tool.pixi.pypi-dependencies]`), so package tasks are available automatically and saved notebooks can't change which SDK they run. Locally a notebook imports your checkout. A package task run in the notebook's own process needs its Python packages, so the header names the SDK extra that carries them (`stargazer[bio]` for scRNA).
 
 ## Notebook Environment
 
-- **Python packages** go in the notebook's PEP 723 header and install when it starts, with no image to rebuild.
-- **The pod itself** goes in the setup block as `main_env`, a `flyte.app.AppEnvironment` cloned from `notebook_env`. Its image (built on `notebook_base`) holds system tools; its resources size the pod. It's the same API production tasks and apps use, and notebooks created from the templates start with one to edit.
+A notebook runs in the Stargazer image unless it says otherwise. That image is kept lean: the SDK, marimo and the agents, with no bioinformatics tools. A notebook adds what it needs in one of two places:
+
+- **Packages and tools** go in the notebook's PEP 723 header and install when it opens, with no image to rebuild, wherever it runs. Python packages from PyPI are its `dependencies`; conda packages, bioconda's command-line tools among them, are its `[tool.pixi.dependencies]`, with their channels in `[tool.pixi.workspace]`. marimo builds each notebook an environment of its own from its header with pixi, so a tool one notebook declares is on that notebook's path, and a run in its own process can use it.
+- **System packages and the pod itself** go in the setup block as `main_env`, a `flyte.app.AppEnvironment` cloned from `notebook_env`. Its image holds what conda doesn't have (`notebook_base.with_apt_packages(...)` and the other `flyte.Image` layers); its resources size the pod. The image must be built on `notebook_base`, which carries the runtime the pod needs. It's the same API production tasks and apps use, and notebooks created from the templates start with one to edit.
+
+Where the notebook runs decides which of these apply:
+
+- **Hosted**, the pod runs `main_env`'s image, with the header's environment on top.
+- **Locally**, `docker run` starts the Stargazer image as it is, and `main_env` isn't used. The header's packages and tools still install. The container doesn't run as root, so system packages can't be added.
+- **On the cluster**, a run submitted from either one runs each task in its own `TaskEnvironment`'s image, whatever the notebook's image holds.
 
 The setup block also declares the dashboard tile's `main_name` and `main_description` as plain strings, and the tile's gear edits the whole block while the notebook is stopped. A declared image is built at launch if needed and reused after; a change takes effect the next time the notebook launches, and an environment that can't evaluate or build fails the launch with the reason. Building an image needs the hosted deployment.
 

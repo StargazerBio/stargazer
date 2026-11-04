@@ -1,6 +1,6 @@
 # Notebook Runtime
 
-What runs in a notebook pod: one image holding the SDK, marimo, the bioinformatics tools and the agents (Claude Code and OpenCode), with a small proxy in front of marimo. The same image runs everywhere a notebook does. Locally `docker run` starts it on the notebooks it ships with; on a cluster a pod manager launches it once per notebook, signed in and saving to object storage. Stargazer's own pod manager is the hosted dashboard, kept in the infra repository; anything that keeps to [the pod contract](#the-pod-contract) can launch it.
+What runs in a notebook pod: one image holding the SDK, marimo and the agents (Claude Code and OpenCode), with a small proxy in front of marimo. The same image runs everywhere a notebook does. Locally `docker run` starts it on the notebooks it ships with; on a cluster a pod manager launches it once per notebook, signed in and saving to object storage. Stargazer's own pod manager is the hosted dashboard, kept in the infra repository; anything that keeps to [the pod contract](#the-pod-contract) can launch it.
 
 For what the notebooks themselves are, see [Notebooks](notebook.md). The launch, signal and save protocols are documented where they're implemented: hydrate, saving and the `/__sg__/*` endpoints in `runtime/proxy.py`, the signal chain in `runtime/launch-notebook.sh`, the working directory and `AGENTS.md` seeding in `runtime/Dockerfile`.
 
@@ -8,9 +8,11 @@ For what the notebooks themselves are, see [Notebooks](notebook.md). The launch,
 
 `runtime/Dockerfile` builds it, from the repository root. It holds:
 
-- **The SDK's source at `/stargazer`.** Notebooks don't run in the image's Python: each notebook's PEP 723 header names `stargazer-bio` with `/stargazer` as its source, and marimo's sandbox builds the notebook a venv from that header when it opens. The built-in notebooks are under `/stargazer/src/stargazer/notebooks/`.
+- **The SDK's source at `/stargazer`.** Notebooks don't run in the image's Python: each notebook's PEP 723 header names `stargazer-bio` with `/stargazer` as its source, and marimo's pixi sandbox builds the notebook an environment from that header when it opens, conda packages and PyPI ones. The built-in notebooks are under `/stargazer/src/stargazer/notebooks/`.
+- **pixi**, which builds those environments, newer than the pixi Flyte's image builder uses, since marimo needs its `install --script`.
+- **A warm cache** at `/opt/pixi-cache` and `/opt/uv-cache`, holding the packages the built-in notebooks are built from, the layers of the launcher's marimo that marimo puts over the server and each kernel, and a ready environment for each tutorial at the path a cluster opens it from. A tutorial opens on a cluster without installing anything. Any other notebook builds its environment from the cache, and downloads only what its header adds, such as a tool. An environment links the cache's PyPI files by symlink, since a hardlink to a file in an image layer copies it. The built-in headers list `marimo`, so marimo's sandbox doesn't add it when a notebook opens.
 - **The runtime venv**: `flyte`, the launcher marimo (pinned, and put into every sandbox, so the kernel and the launcher are the same build), `pydantic-ai-slim` with the OpenAI and Anthropic providers for marimo's AI chat and completions, and the proxy's web packages.
-- **The bioinformatics tools** (gatk, samtools, bwa, bwa-mem2), on every sandbox's path, so a notebook can run a tool on the pod's own data.
+- **No bioinformatics tools.** A task run on the cluster gets its tools from its own environment's image. A notebook that runs a tool in its own process declares it in its header ([Notebook Environment](notebook.md#notebook-environment)).
 - **Claude Code and OpenCode**, pinned, for marimo's agent panel, with `/workspace/AGENTS.md` telling them where they are and how Stargazer notebooks, tasks and runs work. marimo's user config turns the panel on, and OpenCode's gives an MCP request an hour, since a run's tools answer when the run ends.
 - **The [MCP server](mcp-server.md)** in a venv of its own, built from the lock and installed from `/stargazer`, for the agents in the panel.
 

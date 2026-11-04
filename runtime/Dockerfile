@@ -49,8 +49,8 @@ RUN ACP=/usr/local/lib/node_modules/@agentclientprotocol/claude-agent-acp \
 
 # The runtime's venv: the proxy's packages from the project's `runtime` group,
 # `flyte` among them (hosted pods start under it, and the proxy stores
-# notebooks with it), and the launcher marimo, pinned: notebooks don't list
-# marimo in their headers, and `--sandbox` puts this version into every
+# notebooks with it), and the launcher marimo, pinned: a notebook's header
+# lists `marimo` unpinned, and `--sandbox` layers this version over every
 # kernel's venv. pydantic-ai-slim is what marimo's AI chat and completions run
 # on in the server, with the OpenAI and Anthropic providers; marimo only
 # brings it in its `recommended` extra. The range is that extra's for this
