@@ -1,6 +1,6 @@
 ---
 title: pixi-dependencies
-status: maybe
+status: doing
 priority: normal
 created: 2026-11-03
 ---
@@ -35,5 +35,34 @@ In stages, each shippable alone:
 - [ ] Task images: a `[tool.pixi]` section in `pyproject.toml` with `gatk` and `scrna` features, `pixi.lock`, and `gatk_env`/`scrna_env` built with `with_pixi_project`. Verify with the tasks tier and a germline run on the devbox.
 - [ ] Notebook sandbox: pixi in the image, `--sandbox=pixi` in the launch script, headers moved to `[tool.pixi.pypi-dependencies]` for the SDK, the warm cache redone for pixi. Verify a core notebook and the germline notebook (with its tools in its header) locally and hosted, timed against uv.
 - [ ] Development: contributor setup, tests, pre-commit and release under pixi.
+
+## Verification recipe: task images from pixi
+
+`gatk_env` and `scrna_env` build their images from pixi.lock's `gatk` and `scrna` environments, and every task runs in them as before: the tools on PATH at their locked versions, the stargazer package importable, Flyte running the task.
+
+### Sub-features
+
+- `pixi-tasks-tier`: every task test passes in its pixi-built image.
+- `pixi-tool-versions`: the gatk image's tools are the versions pixi.lock pins.
+- `pixi-devbox-germline`: the germline workflow runs on the devbox, each step in a pod on the pixi-built gatk image.
+- `pixi-union-build`: Union's remote builder builds both images (it lowers the pixi layer to primitive layers) and a task runs in each.
+
+### How to get to it (user POV)
+
+Any task or workflow run, from a notebook or SDK code. Nothing changes for the user; the image recipe does.
+
+### Driving it
+
+Preconditions: docker; for the devbox, the devbox recipe in ticket `devbox-postgres-index`; for Union, `.flyte/union.yaml` and `STARGAZER_API_KEY_SECRET=UNION_API_KEY`.
+
+- **Tasks tier.** `uv run --all-extras python cli/docker_task_tests.py` exits `0` (`pixi-tasks-tier`).
+- **Tool versions.** `docker run --rm --platform linux/amd64 <gatk image> sh -c 'gatk --version; samtools --version | head -1; bwa 2>&1 | grep Version; bwa-mem2 version'` prints the versions in pixi.lock's `gatk` environment (`pixi-tool-versions`). The image name is the tasks tier's `image:` line.
+- **Devbox germline.** `uv run --all-extras pytest -m devbox -rP tests/devbox/test_germline.py` passes both tests (`pixi-devbox-germline`).
+- **Union.** Build both images with `flyte --config .flyte/union.yaml build` (or a run), then run one task per image on Union; each run succeeds (`pixi-union-build`).
+
+### Gotchas
+
+- Without a `python` pin, pixi takes the newest conda-forge Python (3.15) over `requires-python = ">=3.14"`.
+- pixi.lock and uv.lock are separate resolutions, so they drift by lock date; the Flyte SDK must match between submitter and pod.
 
 Related: [[board]], [[warm-uv-cache]], [[local-notebook-images]], [[layered-notebook-image-cache]], [[marimo-sandbox]], [[flyte-images]].
