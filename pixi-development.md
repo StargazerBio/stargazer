@@ -1,10 +1,8 @@
 ---
 title: pixi-development
-status: backlog
+status: doing
 priority: normal
 created: 2026-11-03
-blocked_by:
-  - drop-notebook-extra
 ---
 
 A task's dependencies belong to the environment that runs it, not to the package that defines it, and each environment declares them in a PEP 723 header in its own module, the way a notebook does. The SDK's `pyproject.toml` keeps only the core dependencies, and development moves from uv to pixi, so `uv.lock` goes. The third stage of [[pixi-dependencies]].
