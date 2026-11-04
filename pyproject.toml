@@ -115,6 +115,9 @@ diagrams = [
 # PyPI dependencies on top. pixi turns the extras and dependency groups above
 # into features of the same names. Changing a dependency means `pixi lock`
 # beside `uv lock`, or the images' `pixi install --locked` refuses the build.
+# The project itself isn't one of its environments' packages: an image installs
+# them from this file and pixi.lock alone, and the source on top
+# (`_task_image` in config.py).
 [tool.pixi.workspace]
 # bioconda's packages build against conda-forge's, which come first.
 channels = ["conda-forge", "bioconda"]
@@ -124,9 +127,6 @@ platforms = ["linux-64"]
 [tool.pixi.dependencies]
 # requires-python alone lets pixi take the newest Python; .python-version's.
 python = "3.14.*"
-
-[tool.pixi.pypi-dependencies]
-stargazer-bio = { path = ".", editable = true }
 
 [tool.pixi.feature.gatk.dependencies]
 gatk4 = "4.6.*"
