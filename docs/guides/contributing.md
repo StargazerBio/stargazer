@@ -85,7 +85,7 @@ Every change goes through a pull request — nothing is committed directly to `m
 
 See [Configuration → Container Images](../architecture/configuration.md#container-images) for what each image is.
 
-**Flyte task images (`stargazer-scrna`, `stargazer-gatk`)** build themselves, tagged by a hash of their recipe and the project's source, the first time a run or the tasks test tier needs them. `image.builder` in the Flyte config picks `local` (needs Docker) or `remote` (Union only).
+**Flyte task images (`stargazer-scrna`, `stargazer-gatk`)** build themselves from a checkout, tagged by a hash of their recipe and the project's source, the first time a run or the tasks test tier needs them. An installed package pulls its release's instead. `image.builder` in the Flyte config picks `local` (needs Docker) or `remote` (Union only).
 
 Each installs the environment the header of its domain's `env.py` declares (`src/stargazer/tasks/gatk/env.py`, `src/stargazer/tasks/scrna/env.py`), from the `env.py.pixi.lock` beside it, which a build refuses if it's out of date with the header. After changing a header, relock with the pixi version Flyte builds the images with (it fetches that pixi itself):
 
@@ -112,4 +112,4 @@ git tag v2026.11.27 origin/main
 git push origin v2026.11.27
 ```
 
-The **Release** workflow (`.github/workflows/release.yml`) checks the tag names the version, then publishes the package to PyPI as `stargazer-bio` and the image to `ghcr.io/stargazerbio/stargazer` under the tag and `latest`. The hosted dashboard picks a release up when its pin moves to it.
+The **Release** workflow (`.github/workflows/release.yml`) checks the tag names the version, then publishes the package to PyPI as `stargazer-bio`, the notebook image to `ghcr.io/stargazerbio/stargazer` under the tag and `latest`, and each task image to `ghcr.io/stargazerbio/stargazer-<domain>` under the package's version (`cli/publish_task_images.py`), which an installed package of that version runs its tasks on. The hosted dashboard picks a release up when its pin moves to it.
