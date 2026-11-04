@@ -1,6 +1,6 @@
 ---
 title: pixi-notebook-sandbox
-status: review
+status: done
 priority: normal
 created: 2026-11-03
 pr: 131
@@ -62,4 +62,20 @@ Preconditions: docker; the community notebooks repo at a commit whose headers de
 - marimo's edit mode here is lazy: a run button marks its cells stale, so run the stale cells after pressing it.
 - `marimo export` has no pixi option; drive notebooks through the server.
 
-Related: [[board]], [[pixi-dependencies]], [[marimo-sandbox]], [[local-notebook-images]], [[warm-uv-cache]].
+## Outcome
+
+Shipped in PR 131 (merged 2026-11-04). Notebook environments are built by pixi from each notebook's PEP 723 header. The tutorials' environments come prebuilt in the image, and a notebook's tools (germline's gatk4, samtools, bwa-mem2) come from its own header rather than the image. pixi 0.83 is in the notebook image because marimo's sandbox runs `pixi install --script`, which 0.72.2 lacks. The MCP server installs from pixi.lock's `mcp` environment with that pixi.
+
+Verified on Union with `ghcr.io/stargazerbio/debug:pixi-notebook-sandbox` before 130 merged into the branch:
+- Hosted Assets: from proxy up to kernel ready dropped from 49.5 s to 4–6 s.
+- Hosted germline ran to 47 sites, both On this machine and on the cluster.
+- The Execution tutorial's CIDs matched between local and remote.
+
+After the merge (`d64dc50`), pre-commit, the unit tier (263) and a local arm64 image build passed. The Union rerun after the merge was skipped when the PR merged. There were no review comments.
+
+Left:
+- The community catalog's headers and infra's notebook docs: [[community-catalog-pixi-headers]].
+- A non-editable SDK in notebook environments: [[release-task-images]].
+- Offline, a notebook at a new path can't build its environment, and a prebuilt one opens after 48 s of retries.
+
+Related: [[board]], [[pixi-dependencies]], [[marimo-sandbox]], [[local-notebook-images]], [[warm-uv-cache]], [[community-catalog-pixi-headers]].
