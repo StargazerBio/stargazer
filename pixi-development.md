@@ -1,6 +1,6 @@
 ---
 title: pixi-development
-status: review
+status: done
 priority: normal
 created: 2026-11-03
 pr: 130
@@ -115,4 +115,22 @@ Preconditions: pixi, docker, the devbox (ticket `devbox-postgres-index`), `.flyt
 - Unit tier under pixi on osx-arm64: passed, scanpy absent.
 - Notebook image (arm64): built; `/opt/mcp`, pixi's `mcp` environment, runs flyte 2.12.4 and mcp 2.3.0, and `stargazer --http` answers MCP `initialize` with 200.
 
-Related: [[board]], [[pixi-dependencies]], [[pixi-layer-cache]], [[drop-notebook-extra]], [[release-task-images]], [[pixi-notebook-sandbox]], [[flyte-images]].
+## Outcome
+
+Shipped in PR 130 (merged 2026-11-04). Each domain's task environment lives in its `env.py` with a PEP 723 header and the `env.py.pixi.lock` beside it, locked by `cli/lock_envs.py` with Flyte's pixi. `task_image(__file__)` builds a domain's image, and `core_image()` builds images for SDK-only tasks from `pyproject.toml`'s `core` environment. Development runs under pixi and `uv.lock` is gone. The notebook image installs the MCP server as pixi.lock's `mcp` environment.
+
+Verified by:
+- the tasks tier, 35 passed in the new images;
+- the devbox germline tests, 2 of 2;
+- Union builds and probes of the gatk, scrna and core images (run IDs in Evidence);
+- the unit tier under pixi on osx-arm64.
+
+Both review comments, on the Dockerfile's regex pinning and on `task_image`'s call chain, were addressed by 40b62ac before the merge.
+
+Left:
+- "On this machine" in a notebook still runs a domain's tasks in the kernel: ticket [[local-runs-in-task-image]].
+- The dev environment covers `osx-arm64` and `linux-64` only.
+- A checkout's source layer adds core dependencies newer than the release without a pin, until the next release relocks.
+- An installed package finding a published image: [[release-task-images]], now unblocked.
+
+Related: [[board]], [[pixi-dependencies]], [[pixi-layer-cache]], [[drop-notebook-extra]], [[release-task-images]], [[pixi-notebook-sandbox]], [[local-runs-in-task-image]], [[flyte-images]].
