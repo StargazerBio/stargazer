@@ -1,7 +1,7 @@
 repos:
   # Keep this rev and the `ruff` pin in pyproject's dev group on the SAME
   # version. The hook builds its own isolated env, so if the two drift, the
-  # pre-commit gate and `uv run ruff` enforce different rule sets — which is
+  # pre-commit gate and `pixi run ruff` enforce different rule sets — which is
   # exactly what happened between 0.14 and 0.16 (default selection went from
   # 59 rules to 413). Bump both together.
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -22,7 +22,7 @@ repos:
     hooks:
       - id: gen-catalog
         name: regenerate docs catalog + API reference
-        entry: uv run python docs/gen_catalog.py
+        entry: pixi run python docs/gen_catalog.py
         language: system
         pass_filenames: false
         files: ^(src/stargazer/(tasks|workflows|assets|bundles)/.*\.py|src/stargazer/bundles/.*\.yaml|src/stargazer/registry\.py|docs/gen_catalog\.py)$
@@ -30,7 +30,7 @@ repos:
       # so the build's output and cache are removed, keeping the build's status.
       - id: zensical-build
         name: zensical build (docs compile check)
-        entry: bash -c 'uv run zensical build --clean; status=$?; rm -rf site .cache; exit $status'
+        entry: bash -c 'pixi run zensical build --clean; status=$?; rm -rf site .cache; exit $status'
         language: system
         pass_filenames: false
         files: ^(docs/.*\.md|src/.*\.py|zensical\.toml|pyproject\.toml)$
@@ -39,24 +39,30 @@ repos:
       # Verbose so its stale-page warnings show on a commit that passes.
       - id: wiki-lint
         name: wiki lint (links, index, sources, stale pages)
-        entry: uv run python cli/wiki_lint.py
+        entry: pixi run python cli/wiki_lint.py
         language: system
         pass_filenames: false
         always_run: true
         verbose: true
       - id: mcp-server-import
         name: mcp server import check
-        entry: uv run --extra mcp python -c "from stargazer.server import mcp"
+        entry: pixi run python -c "from stargazer.server import mcp"
         language: system
         pass_filenames: false
         files: ^(src/stargazer/(server|registry|marshal)\.py|src/stargazer/assets/.*\.py|pyproject\.toml)$
-      # The unit tier: a bare pytest run selects it (`addopts` in
-      # pyproject.toml). Collection imports every test module, the scRNA
-      # tasks' (the `bio` extra) and the MCP server's (`mcp`) included, so all
-      # extras.
-      - id: unit-tests
-        name: unit tests (pytest)
-        entry: uv run --all-extras pytest -q
+      # A header the image build would refuse: its lock no longer matches it.
+      # Locks in docker, as the build does (cli/lock_envs.py).
+      - id: env-locks
+        name: task environment locks match their headers
+        entry: pixi run python cli/lock_envs.py --check
         language: system
         pass_filenames: false
-        files: ^(src/|runtime/|cli/|tests/|pyproject\.toml$|uv\.lock$)
+        files: ^src/stargazer/tasks/[^/]+/env\.py(\.pixi\.lock)?$
+      # The unit tier: a bare pytest run selects it (`addopts` in
+      # pyproject.toml), in the dev environment.
+      - id: unit-tests
+        name: unit tests (pytest)
+        entry: pixi run pytest -q
+        language: system
+        pass_filenames: false
+        files: ^(src/|runtime/|cli/|tests/|pyproject\.toml$|pixi\.lock$)

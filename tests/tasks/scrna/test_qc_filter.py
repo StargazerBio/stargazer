@@ -1,8 +1,6 @@
 """Tests for qc_filter task."""
 
-import anndata
 import pytest
-import scanpy as sc
 from conftest import SCRNA_FIXTURES_DIR
 
 from stargazer.assets.scrna import AnnData
@@ -13,6 +11,8 @@ RAW_FIXTURE = SCRNA_FIXTURES_DIR / "synthetic_200x500.h5ad"
 
 async def test_qc_filter_output_shape(scrna_input):
     """qc_filter drops cells (doublets) and annotates QC metrics on the output."""
+    import scanpy as sc
+
     result = await qc_filter(
         adata=scrna_input("synthetic_200x500.h5ad"),
         min_genes=1,
@@ -38,6 +38,9 @@ def mouse_symbols(name: str) -> str:
 
 async def test_qc_filter_uses_asset_organism_prefixes(tmp_path):
     """A mouse-labeled asset is filtered on mouse gene prefixes (mt-, Rps/Rpl, Hb)."""
+    import anndata
+    import scanpy as sc
+
     raw = anndata.read_h5ad(RAW_FIXTURE)
     raw.var_names = [mouse_symbols(n) for n in raw.var_names]
     mouse_path = tmp_path / "mouse_200x500.h5ad"

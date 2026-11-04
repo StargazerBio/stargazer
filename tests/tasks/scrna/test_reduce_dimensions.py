@@ -1,12 +1,12 @@
 """Tests for reduce_dimensions task."""
 
-import scanpy as sc
-
 from stargazer.tasks.scrna.reduce_dimensions import reduce_dimensions
 
 
 async def test_reduce_dimensions_embeddings(scrna_input):
     """reduce_dimensions adds PCA and UMAP embeddings to .obsm."""
+    import scanpy as sc
+
     result = await reduce_dimensions(
         adata=scrna_input("featured.h5ad"), n_pcs=10, n_neighbors=5
     )

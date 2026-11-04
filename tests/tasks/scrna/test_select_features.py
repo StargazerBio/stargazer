@@ -1,12 +1,12 @@
 """Tests for select_features task."""
 
-import scanpy as sc
-
 from stargazer.tasks.scrna.select_features import select_features
 
 
 async def test_select_features_hvg(scrna_input):
     """select_features annotates .var with highly_variable column."""
+    import scanpy as sc
+
     result = await select_features(
         adata=scrna_input("normalized.h5ad"), n_top_genes=100
     )

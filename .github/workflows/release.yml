@@ -33,8 +33,16 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
-      - run: uv build
+      # pixi alone: the build needs no environment of the project's, so
+      # nothing is installed or locked.
+      - uses: prefix-dev/setup-pixi@v0.11.3
+        with:
+          pixi-version: v0.84.1
+          run-install: false
+          cache: false
+      # setuptools builds the wheel and sdist into dist/, in an isolated
+      # environment of the build backend's.
+      - run: pixi exec --spec python-build --spec "python=3.14.*" -- pyproject-build
       - uses: pypa/gh-action-pypi-publish@release/v1
   image:
     needs: check

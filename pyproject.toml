@@ -23,19 +23,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-bio = [
-    "scanpy>=1.12",
-    "anndata>=0.12.10",
-    "scikit-image>=0.26.0",
-    "igraph>=1.0.0",
-    "pooch>=1.9.0",
-]
 # Bounded to the 2.x major: SDK 2.0 renamed the high-level server class
 # (`FastMCP` → `MCPServer`, `mcp.server.fastmcp` → `mcp.server`), so an
 # unbounded range silently resolves across a breaking rename.
 mcp = ["mcp[cli]>=2.0,<3"]
 docs = ["mkdocstrings[python]>=1.0.3"]
-all = ["stargazer-bio[bio,mcp,docs]"]
 
 [project.scripts]
 stargazer = "stargazer.server:main"
@@ -70,7 +62,7 @@ where = ["src"]
 include = ["stargazer*"]
 
 [tool.setuptools.package-data]
-stargazer = ["bundles/*.yaml", "notebooks/*.py"]
+stargazer = ["bundles/*.yaml", "notebooks/*.py", "tasks/*/env.py.pixi.lock"]
 
 [dependency-groups]
 dev = [
@@ -101,42 +93,36 @@ runtime = [
     # Checks Union's signed login tokens (`_TokenGate`).
     "pyjwt[crypto]>=2.8,<3",
 ]
-# cli/diagrams.sh installs this group when it runs, so a plain `uv sync`
-# doesn't. pygraphviz's wheels bundle Graphviz, so drawing needs nothing
-# installed outside uv.
+# cli/diagrams.sh's, in pixi's `diagrams` environment.
 diagrams = [
     "pydeps>=3,<4",
     "pygraphviz>=2,<3",
 ]
 
-# pixi reads this file as its manifest too, and pixi.lock locks it. The task
-# images install its environments (`gatk_env`, `scrna_env` in config.py):
-# conda-forge's Python, bioconda's command-line tools, and the project's own
-# PyPI dependencies on top. pixi turns the extras and dependency groups above
-# into features of the same names. Changing a dependency means `pixi lock`
-# beside `uv lock`, or the images' `pixi install --locked` refuses the build.
-# The project itself isn't one of its environments' packages: an image installs
-# them from this file and pixi.lock alone, and the source on top
-# (`_task_image` in config.py).
+# pixi reads this file as its manifest too, for development: `pixi run` runs
+# in the default environment, the core dependencies above, the `mcp` extra
+# and the `dev` group, with the SDK installed editable from this checkout.
+# pixi turns the extras and dependency groups into features of the same
+# names, and pixi.lock locks them. The task images don't use it: each
+# domain's environment is the header of its `env.py` (`task_image()` in
+# config.py).
 [tool.pixi.workspace]
-# bioconda's packages build against conda-forge's, which come first.
-channels = ["conda-forge", "bioconda"]
-# What the images are built for (`IMAGE_PLATFORM` in config.py).
-platforms = ["linux-64"]
+channels = ["conda-forge"]
+# A contributor's Mac beside Linux (CI, a devbox host).
+platforms = ["osx-arm64", "linux-64"]
 
 [tool.pixi.dependencies]
 # requires-python alone lets pixi take the newest Python; .python-version's.
 python = "3.14.*"
 
-[tool.pixi.feature.gatk.dependencies]
-gatk4 = "4.6.*"
-samtools = "1.*"
-bwa = "0.7.*"
-bwa-mem2 = "2.*"
+# Editable in development only, so no image ever installs the SDK editable.
+[tool.pixi.feature.dev.pypi-dependencies]
+stargazer-bio = { path = ".", editable = true }
 
 [tool.pixi.environments]
-gatk = ["gatk"]
-scrna = ["bio"]
+default = { features = ["dev", "mcp"], solve-group = "sdk" }
+# cli/diagrams.sh's; pygraphviz's wheels bundle Graphviz.
+diagrams = { features = ["dev", "mcp", "diagrams"], solve-group = "sdk" }
 
 # Rule selection is ruff's default for the pinned version (see the ruff pin in
 # [dependency-groups] and the matching rev in .pre-commit-config.yaml — bump

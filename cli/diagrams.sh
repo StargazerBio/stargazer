@@ -23,8 +23,8 @@ mkdir -p diagrams
 draw() {
     # Absolute, since pydeps changes directory while it works.
     local dot="$PWD/diagrams/$2.dot" svg="diagrams/$2.svg"
-    uv run --group diagrams pydeps "$1" --no-output --dot-output "$dot" "${@:3}"
-    uv run --group diagrams python -c \
+    pixi run -e diagrams pydeps "$1" --no-output --dot-output "$dot" "${@:3}"
+    pixi run -e diagrams python -c \
         'import sys, pygraphviz; pygraphviz.AGraph(sys.argv[1]).draw(sys.argv[2], prog="dot")' \
         "$dot" "$svg"
     rm "$dot"

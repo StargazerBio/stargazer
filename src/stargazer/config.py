@@ -4,8 +4,10 @@
 Sets environment variable defaults at import time. Consumers read
 os.environ directly rather than importing named values from this module.
 
-Also the source of truth for the lean per-task Flyte environments
-(`scrna_env`, `gatk_env`).
+Also what every task environment shares: the platform its image is built
+for, the variables and secrets forwarded into its pods, and `task_image()`.
+The environments themselves live in their domains' `env.py`
+(`stargazer.tasks.scrna.env`, `stargazer.tasks.gatk.env`).
 
 `init_flyte()` is the one Flyte init for notebooks, the MCP server and the
 tests: an in-cluster client in a hosted notebook pod, the config file anywhere
@@ -191,51 +193,26 @@ def init_flyte() -> None:
         )
 
 
-def _task_image(name: str, environment: str) -> flyte.Image:
-    """A task image: one of pixi.lock's environments, then the stargazer package.
+def task_image(env: Path, name: str) -> flyte.Image:
+    """A task image: the environment `env`'s header declares, then the checkout's stargazer.
 
-    The environment comes from pyproject.toml's `[tool.pixi]` and pixi.lock
+    `env` is a domain's `env.py`, whose PEP 723 header lists the environment's
+    conda and PyPI packages, the released SDK among them, locked in the
+    `env.py.pixi.lock` beside it (`cli/lock_envs.py`). Flyte renders the
+    header as a pixi workspace and installs it from the header and lock
     alone, so its layer (Python, the tools, every dependency) is cached until
-    either changes, and pixi's environment replaces the Flyte base's venv as
-    the pod's Python. The package goes on top, without its dependencies, from
-    the project's source, so a source change rebuilds only that layer;
-    .dockerignore keeps docs, tests and git history out of it. A task pod
-    resolves the tasks it calls as installed modules (`stargazer.tasks…`), so
-    without the package a workflow's child tasks can't import, wherever the
+    either changes, and pixi's environment is the pod's Python. The checkout's
+    source goes on top, over the released SDK, so a source change rebuilds
+    only that layer; uv adds any core dependency the checkout has gained since
+    the release. .dockerignore keeps docs, tests and git history out of it. A
+    task pod resolves the tasks it calls as installed modules
+    (`stargazer.tasks…`), so the package must be the checkout's, wherever the
     run was submitted from.
     """
     return (
-        flyte.Image.from_debian_base(name=name, platform=IMAGE_PLATFORM)
-        .with_pixi_project(PROJECT_ROOT / "pyproject.toml", environment=environment)
+        flyte.Image.from_pixi_script(env, name=name, platform=IMAGE_PLATFORM)
         .with_source_folder(PROJECT_ROOT, "/opt/stargazer")
         # uv installs into the pixi environment, which the layer above made
         # `VIRTUAL_ENV`.
-        .with_commands(["uv pip install --no-deps --no-cache /opt/stargazer"])
+        .with_commands(["uv pip install --no-cache /opt/stargazer"])
     )
-
-
-# The `bio` extra: scanpy plus what its steps import lazily (scikit-image for
-# scrublet's automatic threshold, igraph for Leiden). Memory-hungry at runtime
-# because scanpy loads full AnnData objects into RAM.
-scrna_env = flyte.TaskEnvironment(
-    name="scrna",
-    description="scanpy-based single-cell RNA analysis; memory-intensive AnnData workloads",
-    image=_task_image("stargazer-scrna", "scrna"),
-    resources=flyte.Resources(memory=("2Gi", "6Gi")),
-    env_vars=STARGAZER_ENV_VARS,
-    secrets=STARGAZER_SECRETS,
-)
-
-# The `gatk` feature: gatk4 (with the JVM its wrapper calls), samtools, bwa
-# and bwa-mem2 from bioconda, on the pod's PATH from the environment.
-gatk_env = flyte.TaskEnvironment(
-    name="gatk",
-    description="GATK, BWA, and samtools alignment and variant-calling workloads",
-    image=_task_image("stargazer-gatk", "gatk"),
-    # A 1Gi request: the germline workflow holds three gatk_env pods at once
-    # (workflow, prepare_reference or preprocess_sample, the tool), and three
-    # 2Gi requests don't fit the devbox node beside a dashboard.
-    resources=flyte.Resources(memory=("1Gi", "6Gi")),
-    env_vars=STARGAZER_ENV_VARS,
-    secrets=STARGAZER_SECRETS,
-)
