@@ -191,74 +191,47 @@ def init_flyte() -> None:
         )
 
 
-# Both task images install the stargazer package itself, not only its
-# dependencies. A task pod resolves the tasks it calls as installed modules
-# (`stargazer.tasks…`), so without the package a workflow's child tasks can't
-# import, wherever the run was submitted from. The project's files feed the
-# image hash, so a source change builds a new image; .dockerignore keeps docs,
-# tests and git history out of it. `--no-dev` because Flyte's `uv sync` would
-# otherwise install the default `dev` group (pytest, ruff, the docs tools).
+def _task_image(name: str, environment: str) -> flyte.Image:
+    """A task image: one of pixi.lock's environments, then the stargazer package.
 
-# Lean image: the project's `bio` extra on top of the Flyte debian base —
-# scanpy plus what its steps import lazily (scikit-image for scrublet's
-# automatic threshold, igraph for Leiden). Memory-hungry at runtime because
-# scanpy loads full AnnData objects into RAM.
+    The environment comes from pyproject.toml's `[tool.pixi]` and pixi.lock
+    alone, so its layer (Python, the tools, every dependency) is cached until
+    either changes, and pixi's environment replaces the Flyte base's venv as
+    the pod's Python. The package goes on top, without its dependencies, from
+    the project's source, so a source change rebuilds only that layer;
+    .dockerignore keeps docs, tests and git history out of it. A task pod
+    resolves the tasks it calls as installed modules (`stargazer.tasks…`), so
+    without the package a workflow's child tasks can't import, wherever the
+    run was submitted from.
+    """
+    return (
+        flyte.Image.from_debian_base(name=name, platform=IMAGE_PLATFORM)
+        .with_pixi_project(PROJECT_ROOT / "pyproject.toml", environment=environment)
+        .with_source_folder(PROJECT_ROOT, "/opt/stargazer")
+        # uv installs into the pixi environment, which the layer above made
+        # `VIRTUAL_ENV`.
+        .with_commands(["uv pip install --no-deps --no-cache /opt/stargazer"])
+    )
+
+
+# The `bio` extra: scanpy plus what its steps import lazily (scikit-image for
+# scrublet's automatic threshold, igraph for Leiden). Memory-hungry at runtime
+# because scanpy loads full AnnData objects into RAM.
 scrna_env = flyte.TaskEnvironment(
     name="scrna",
     description="scanpy-based single-cell RNA analysis; memory-intensive AnnData workloads",
-    image=(
-        flyte.Image.from_debian_base(
-            name="stargazer-scrna",
-            platform=IMAGE_PLATFORM,
-        )
-        .with_apt_packages("ca-certificates")
-        .with_uv_project(
-            PROJECT_ROOT / "pyproject.toml",
-            extra_args="--extra bio --no-dev",
-            project_install_mode="install_project",
-        )
-    ),
+    image=_task_image("stargazer-scrna", "scrna"),
     resources=flyte.Resources(memory=("2Gi", "6Gi")),
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,
 )
 
-# Debian base with micromamba layered on. gatk4, samtools, bwa, and bwa-mem2
-# all come from bioconda. Conda env lives at /opt/conda; binaries symlinked
-# onto PATH so tasks invoke them directly.
+# The `gatk` feature: gatk4 (with the JVM its wrapper calls), samtools, bwa
+# and bwa-mem2 from bioconda, on the pod's PATH from the environment.
 gatk_env = flyte.TaskEnvironment(
     name="gatk",
     description="GATK, BWA, and samtools alignment and variant-calling workloads",
-    image=(
-        flyte.Image.from_debian_base(
-            name="stargazer-gatk",
-            platform=IMAGE_PLATFORM,
-        )
-        .with_apt_packages("ca-certificates", "curl", "bzip2")
-        .with_commands(
-            [
-                "curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest "
-                "| tar -xj -C /usr/local/bin --strip-components=1 bin/micromamba",
-                "/usr/local/bin/micromamba create -p /opt/conda -y "
-                "-c bioconda -c conda-forge gatk4 samtools bwa bwa-mem2 "
-                "&& /usr/local/bin/micromamba clean -a -y",
-                # java is the JVM bundled by the gatk4 conda package; gatk's
-                # wrapper calls it by name, so it must be on PATH. bwa-mem2 is
-                # a launcher that runs a CPU-specific sibling (bwa-mem2.avx2,
-                # …) from its own directory, so every variant is linked.
-                "ln -s /opt/conda/bin/gatk /usr/local/bin/gatk "
-                "&& ln -s /opt/conda/bin/java /usr/local/bin/java "
-                "&& ln -s /opt/conda/bin/samtools /usr/local/bin/samtools "
-                "&& ln -s /opt/conda/bin/bwa /usr/local/bin/bwa "
-                "&& ln -s /opt/conda/bin/bwa-mem2* /usr/local/bin/",
-            ]
-        )
-        .with_uv_project(
-            PROJECT_ROOT / "pyproject.toml",
-            extra_args="--no-dev",
-            project_install_mode="install_project",
-        )
-    ),
+    image=_task_image("stargazer-gatk", "gatk"),
     # A 1Gi request: the germline workflow holds three gatk_env pods at once
     # (workflow, prepare_reference or preprocess_sample, the tool), and three
     # 2Gi requests don't fit the devbox node beside a dashboard.

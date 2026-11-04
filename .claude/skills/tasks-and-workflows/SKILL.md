@@ -25,7 +25,7 @@ A task wraps one bioinformatics tool and does one thing. A workflow composes tas
 
 - **Where:** the domain subdirectory of `src/stargazer/tasks/` (`gatk/`, `general/`, `scrna/`), one file per tool. Related tasks can share a module (`bwa_index` and `bwa_mem`).
 - **Name:** `{action}_{tool}` or the tool's own verb (`bwa_mem`, `sort_sam`, `haplotype_caller`).
-- **Image:** the tool must be on the environment's image (`with_apt_packages`, `with_commands`, or the bioconda block). If it isn't, add it and say so.
+- **Image:** the tool must be in the pixi environment the environment's image installs (its feature under `[tool.pixi]` in `pyproject.toml`). If it isn't, add it, run `pixi lock`, and say so.
 - **Inputs:** validate them first, with errors that say what to fix. A missing input is never made up for by doing another task's work: raise, naming the task that produces it.
 
 ```python

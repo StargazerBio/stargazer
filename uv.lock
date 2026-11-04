@@ -218,19 +218,6 @@ wheels = [
 ]
 
 [[package]]
-name = "asyncssh"
-version = "2.24.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/0f/c5/41a0d5477865c48cee65050586092dc3ba3fc1c52e29b47fba08d3a44581/asyncssh-2.24.1.tar.gz", hash = "sha256:efcd36e9b35f79873535b06444a7c9b0a3c61d97081b208c7fdd3fd8a40f1eca", size = 558085, upload-time = "2026-10-04T02:48:24.913Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/07/e5/8bc721f04ff545c5a84c9c23fbf788fbb56960bb57a86c6366bc35be0f66/asyncssh-2.24.1-py3-none-any.whl", hash = "sha256:fc560b4f43be0f0c602d184783e5e3876f5d24d933a25359d86e5a50a5f46fe5", size = 382514, upload-time = "2026-10-04T02:48:23.676Z" },
-]
-
-[[package]]
 name = "attrs"
 version = "26.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -773,13 +760,12 @@ wheels = [
 
 [[package]]
 name = "flyte"
-version = "2.10.7"
+version = "2.12.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
     { name = "aiolimiter" },
     { name = "async-lru" },
-    { name = "asyncssh" },
     { name = "click" },
     { name = "cloudpickle" },
     { name = "connectrpc" },
@@ -801,7 +787,7 @@ dependencies = [
     { name = "toml" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9f/a4/35f8b575949afdc1c4259d3c66cb20f33bea71b547ed7df244d3ff2454be/flyte-2.10.7-py3-none-any.whl", hash = "sha256:5c2385f3a972f62fecb19d26df43d5afcce20d2e89b4521ccf5b5fee23c42d64", size = 1130600, upload-time = "2026-10-02T19:42:45.57Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/50/ccd246d7446e4d535c27bb20883a92f6a755bd01dd70d50c9274c9cc74e4/flyte-2.12.4-py3-none-any.whl", hash = "sha256:13ad26643ba2966d2876494408899d986cf917f1d4765ede548ca6795c925f02", size = 1237823, upload-time = "2026-11-02T23:01:11.419Z" },
 ]
 
 [package.optional-dependencies]
@@ -811,7 +797,7 @@ tui = [
 
 [[package]]
 name = "flyteidl2"
-version = "2.0.50"
+version = "2.0.53"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "googleapis-common-protos" },
@@ -820,7 +806,7 @@ dependencies = [
     { name = "protovalidate" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ab/e9/b2adf0dadf127d1443e7785dbca0e217f23186630a3d52a39a54070a0d96/flyteidl2-2.0.50-py3-none-any.whl", hash = "sha256:33056d03e3b87b1539973b3c312894f4d0d20a9b547afeef3891df9e41a03f8a", size = 384743, upload-time = "2026-09-24T23:33:16.437Z" },
+    { url = "https://files.pythonhosted.org/packages/30/c5/f71f7f6c06144437c4c089f0b505df4215d824d4296b5a358ec8e05d16a3/flyteidl2-2.0.53-py3-none-any.whl", hash = "sha256:61a1fc68dd2e590104b402082dd509aa1dc64870271ff978c0cc12fd799a8c34", size = 387747, upload-time = "2026-10-27T04:35:17.151Z" },
 ]
 
 [[package]]
@@ -3499,7 +3485,6 @@ dependencies = [
 all = [
     { name = "anndata" },
     { name = "igraph" },
-    { name = "marimo" },
     { name = "mcp", extra = ["cli"] },
     { name = "mkdocstrings", extra = ["python"] },
     { name = "pooch" },
@@ -3519,20 +3504,13 @@ docs = [
 mcp = [
     { name = "mcp", extra = ["cli"] },
 ]
-notebook = [
-    { name = "anndata" },
-    { name = "igraph" },
-    { name = "marimo" },
-    { name = "pooch" },
-    { name = "scanpy" },
-    { name = "scikit-image" },
-]
 
 [package.dev-dependencies]
 dev = [
     { name = "fastapi" },
     { name = "flyte" },
     { name = "httpx" },
+    { name = "marimo" },
     { name = "mkdocstrings", extra = ["python"] },
     { name = "pre-commit" },
     { name = "pyjwt", extra = ["crypto"] },
@@ -3567,7 +3545,6 @@ requires-dist = [
     { name = "flyte", extras = ["tui"], specifier = ">=2.0.3" },
     { name = "igraph", marker = "extra == 'bio'", specifier = ">=1.0.0" },
     { name = "loguru", specifier = ">=0.7.3" },
-    { name = "marimo", marker = "extra == 'notebook'", specifier = ">=0.10.0" },
     { name = "mcp", extras = ["cli"], marker = "extra == 'mcp'", specifier = ">=2.0,<3" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=1.0.3" },
     { name = "pooch", marker = "extra == 'bio'", specifier = ">=1.9.0" },
@@ -3575,16 +3552,16 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "scanpy", marker = "extra == 'bio'", specifier = ">=1.12" },
     { name = "scikit-image", marker = "extra == 'bio'", specifier = ">=0.26.0" },
-    { name = "stargazer-bio", extras = ["bio"], marker = "extra == 'notebook'" },
-    { name = "stargazer-bio", extras = ["notebook", "mcp", "docs"], marker = "extra == 'all'" },
+    { name = "stargazer-bio", extras = ["bio", "mcp", "docs"], marker = "extra == 'all'" },
 ]
-provides-extras = ["bio", "notebook", "mcp", "docs", "all"]
+provides-extras = ["bio", "mcp", "docs", "all"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "flyte", specifier = ">=2.0.3" },
     { name = "httpx", specifier = ">=0.27,<1" },
+    { name = "marimo", specifier = ">=0.25.1,<0.26" },
     { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0.3" },
     { name = "pre-commit", specifier = ">=4.5.0" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8,<3" },

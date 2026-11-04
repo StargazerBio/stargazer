@@ -14,7 +14,7 @@ uv run pre-commit install
 You now have:
 
 - The stargazer package installed in editable mode in a project venv
-- All Python deps from the lockfile, including every optional extra (scRNA, notebook, MCP, docs), plus the `dev` group (pytest, ruff, pre-commit)
+- All Python deps from the lockfile, including every optional extra (scRNA, MCP, docs), plus the `dev` group (pytest, ruff, pre-commit, marimo)
 - A pre-commit hook that lints, checks docstrings, builds the docs and runs the unit tests on every commit
 
 The bioinformatics tools (gatk, bwa, bwa-mem2, samtools) aren't needed: their tests run in the task image (see [Running Tests](#running-tests)). Running those tasks locally, outside the tests, needs them on your PATH, from bioconda for instance.
@@ -88,6 +88,12 @@ Every change goes through a pull request — nothing is committed directly to `m
 See [Configuration → Container Images](../architecture/configuration.md#container-images) for what each image is.
 
 **Flyte task images (`stargazer-scrna`, `stargazer-gatk`)** build themselves, tagged by a hash of their recipe and the project's source, the first time a run or the tasks test tier needs them. `image.builder` in the Flyte config picks `local` (needs Docker) or `remote` (Union only).
+
+They install environments from `pixi.lock`, which a build refuses if it's out of date with `pyproject.toml`. After changing a dependency, or a tool under `[tool.pixi]`, relock with `uv lock` and with pixi, at the version Flyte builds the images with:
+
+```bash
+docker run --rm -v "$PWD":/w -w /w ghcr.io/prefix-dev/pixi:0.72.2 pixi lock
+```
 
 **The notebook image (`stargazer`)** builds from `runtime/Dockerfile`, from the repository root, when you change it or want the current source in it:
 
