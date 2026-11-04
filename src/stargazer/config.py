@@ -191,14 +191,28 @@ def init_flyte() -> None:
         )
 
 
-# Each task image is one of pixi.lock's environments (`[tool.pixi]` in
-# pyproject.toml) on the Flyte debian base, and pixi's environment replaces
-# the base's venv as the pod's Python. Both install the stargazer package
-# itself, not only its dependencies: a task pod resolves the tasks it calls as
-# installed modules (`stargazer.tasks…`), so without the package a workflow's
-# child tasks can't import, wherever the run was submitted from. The project's
-# files feed the image hash, so a source change builds a new image;
-# .dockerignore keeps docs, tests and git history out of it.
+def _task_image(name: str, environment: str) -> flyte.Image:
+    """A task image: one of pixi.lock's environments, then the stargazer package.
+
+    The environment comes from pyproject.toml's `[tool.pixi]` and pixi.lock
+    alone, so its layer (Python, the tools, every dependency) is cached until
+    either changes, and pixi's environment replaces the Flyte base's venv as
+    the pod's Python. The package goes on top, without its dependencies, from
+    the project's source, so a source change rebuilds only that layer;
+    .dockerignore keeps docs, tests and git history out of it. A task pod
+    resolves the tasks it calls as installed modules (`stargazer.tasks…`), so
+    without the package a workflow's child tasks can't import, wherever the
+    run was submitted from.
+    """
+    return (
+        flyte.Image.from_debian_base(name=name, platform=IMAGE_PLATFORM)
+        .with_pixi_project(PROJECT_ROOT / "pyproject.toml", environment=environment)
+        .with_source_folder(PROJECT_ROOT, "/opt/stargazer")
+        # uv installs into the pixi environment, which the layer above made
+        # `VIRTUAL_ENV`.
+        .with_commands(["uv pip install --no-deps --no-cache /opt/stargazer"])
+    )
+
 
 # The `bio` extra: scanpy plus what its steps import lazily (scikit-image for
 # scrublet's automatic threshold, igraph for Leiden). Memory-hungry at runtime
@@ -206,14 +220,7 @@ def init_flyte() -> None:
 scrna_env = flyte.TaskEnvironment(
     name="scrna",
     description="scanpy-based single-cell RNA analysis; memory-intensive AnnData workloads",
-    image=flyte.Image.from_debian_base(
-        name="stargazer-scrna",
-        platform=IMAGE_PLATFORM,
-    ).with_pixi_project(
-        PROJECT_ROOT / "pyproject.toml",
-        environment="scrna",
-        project_install_mode="install_project",
-    ),
+    image=_task_image("stargazer-scrna", "scrna"),
     resources=flyte.Resources(memory=("2Gi", "6Gi")),
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,
@@ -224,14 +231,7 @@ scrna_env = flyte.TaskEnvironment(
 gatk_env = flyte.TaskEnvironment(
     name="gatk",
     description="GATK, BWA, and samtools alignment and variant-calling workloads",
-    image=flyte.Image.from_debian_base(
-        name="stargazer-gatk",
-        platform=IMAGE_PLATFORM,
-    ).with_pixi_project(
-        PROJECT_ROOT / "pyproject.toml",
-        environment="gatk",
-        project_install_mode="install_project",
-    ),
+    image=_task_image("stargazer-gatk", "gatk"),
     # A 1Gi request: the germline workflow holds three gatk_env pods at once
     # (workflow, prepare_reference or preprocess_sample, the tool), and three
     # 2Gi requests don't fit the devbox node beside a dashboard.
