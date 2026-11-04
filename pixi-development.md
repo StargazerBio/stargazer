@@ -4,7 +4,6 @@ status: backlog
 priority: normal
 created: 2026-11-03
 blocked_by:
-  - pixi-layer-cache
   - drop-notebook-extra
 ---
 
