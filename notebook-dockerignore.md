@@ -4,7 +4,9 @@ status: doing
 priority: high
 created: 2026-11-04
 ---
-Every task image a hosted notebook's kernel builds uploads a 540 MB build context. The MCP server's pixi environment lives in `/stargazer/.pixi/envs/mcp`, inside the source folder `_with_source` copies into each task image (`core_image()` for the tutorials and template, `task_image()` for gatk and scrna). Flyte filters a source folder by the `.dockerignore` at `init_flyte`'s root, `/stargazer` in a pod, and the image copies none there. The repo's `.dockerignore` already excludes `.pixi/`, so copying it into `/stargazer` in `runtime/Dockerfile` fixes it.
+Every task image a hosted notebook's kernel builds uploads a 540 MB build context. The MCP server's pixi environment lives in `/stargazer/.pixi/envs/mcp`, inside the source folder `_with_source` copies into each task image (`core_image()` for the tutorials and template, `task_image()` for gatk and scrna). Flyte filters a source folder by a `with_dockerignore` layer's file, else the `.dockerignore` at `flyte.init`'s `root_dir`, which is the cwd, or `/stargazer/src` in a pod (`init_flyte` chdirs there). Neither has one. The fix: `_with_source` adds `with_dockerignore(PROJECT_ROOT / ".dockerignore")`, and the notebook image copies the repo's `.dockerignore` (which excludes `.pixi/`) into `/stargazer`.
+
+A first attempt only copied the file into `/stargazer`; the hosted rerun (image `sha256:cf38025e…`) still printed `Context size is 539.78 MB`, since nothing reads it there. Local check of the real fix, `core_image()` with the cwd at `src/` and `.pixi/` present: 530.1 MB without the layer, 0.9 MB with it.
 
 Measured before the fix (image `ghcr.io/stargazerbio/debug@sha256:3a33f76d…`, main's tree): the hosted Execution tutorial's remote run printed `Context size is 539.78 MB`, the upload took about 3 min before the build was submitted, then the `stargazer-tutorial` image built in 43 s and run `u7m2pqknhvvkjtfhg4p9` succeeded.
 
