@@ -51,7 +51,7 @@ repos:
         pass_filenames: false
         files: ^(src/stargazer/(server|registry|marshal)\.py|src/stargazer/assets/.*\.py|pyproject\.toml)$
       # A header the image build would refuse: its lock no longer matches it.
-      # Locks in docker, as the build does (cli/lock_envs.py).
+      # Locks with the build's pixi version (cli/lock_envs.py).
       - id: env-locks
         name: task environment locks match their headers
         entry: pixi run python cli/lock_envs.py --check

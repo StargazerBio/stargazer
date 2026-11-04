@@ -4,10 +4,11 @@ Lock the task environments: each `env.py`'s header under `src/stargazer/` into t
 
 A task image installs its environment with `pixi install --locked`, from the
 pixi manifest Flyte renders out of the header and the pixi version Flyte's
-image builder pins. This locks that same manifest with that same pixi, in
-docker, so the build accepts the lock: a lock from `pixi lock --script` by a
-newer pixi records the platform's virtual packages in a form the builder's
-pixi reads as out of date, and the build refuses it. The existing lock is
+image builder pins. This locks that same manifest with that same pixi, run
+from conda-forge through `pixi exec`, so the build accepts the lock: a lock
+from `pixi lock --script` by a newer pixi records the platform's virtual
+packages in a form the builder's pixi reads as out of date, and the build
+refuses it. The existing lock is
 kept where the header still allows it, as `pixi lock` keeps it; `--update`
 solves from scratch, as `pixi update` does.
 
@@ -17,7 +18,7 @@ Usage:
 With no paths, it locks every environment: each domain's
 (`src/stargazer/tasks/<domain>/env.py`) and the core one
 (`src/stargazer/env.py`). `--check` changes nothing and exits 1 if relocking
-would change any lock. Needs docker.
+would change any lock.
 """
 
 import argparse
@@ -57,20 +58,19 @@ def lock(env: Path, *, check: bool, update: bool) -> bool:
         (work / "pixi.toml").write_text(manifest)
         if lock_path(env).exists() and not update:
             shutil.copy(lock_path(env), work / "pixi.lock")
-        if shutil.which("docker") is None:
-            raise SystemExit("lock_envs.py runs pixi in docker: install docker")
         result = subprocess.run(
             [
-                "docker",
-                "run",
-                "--rm",
-                "-v",
-                f"{work}:/w",
-                "-w",
-                "/w",
-                f"ghcr.io/prefix-dev/pixi:{PIXI_VERSION}",
+                "pixi",
+                "exec",
+                "--spec",
+                f"pixi=={PIXI_VERSION}",
+                "--",
                 "pixi",
                 "lock",
+                # Under `pixi run`, the variables pixi sets name this
+                # checkout's manifest, which the flag overrides.
+                "--manifest-path",
+                str(work / "pixi.toml"),
             ],
             capture_output=True,
             text=True,

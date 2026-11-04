@@ -81,12 +81,13 @@ to add by hand.
 
 ## lock_envs.py
 
-Locks each task environment: the header of `src/stargazer/tasks/<domain>/env.py`
-into the `env.py.pixi.lock` beside it, which the image's `pixi install
---locked` installs. It locks the pixi manifest Flyte renders from the header,
-with the pixi version Flyte's image builder runs, in docker, since a newer
+Locks each task environment: the header of each `env.py` under
+`src/stargazer/` (a domain's, and the core one) into the `env.py.pixi.lock`
+beside it, which the image's `pixi install --locked` installs. It locks the
+pixi manifest Flyte renders from the header, with the pixi version Flyte's
+image builder runs, fetched from conda-forge by `pixi exec`, since a newer
 pixi's lock (`pixi lock --script`) is one the builder refuses. Run it after
-changing a header. Needs docker.
+changing a header.
 
 ```bash
 pixi run python cli/lock_envs.py [--check] [--update] [env.py ...]

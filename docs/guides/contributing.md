@@ -87,7 +87,7 @@ See [Configuration → Container Images](../architecture/configuration.md#contai
 
 **Flyte task images (`stargazer-scrna`, `stargazer-gatk`)** build themselves, tagged by a hash of their recipe and the project's source, the first time a run or the tasks test tier needs them. `image.builder` in the Flyte config picks `local` (needs Docker) or `remote` (Union only).
 
-Each installs the environment the header of its domain's `env.py` declares (`src/stargazer/tasks/gatk/env.py`, `src/stargazer/tasks/scrna/env.py`), from the `env.py.pixi.lock` beside it, which a build refuses if it's out of date with the header. After changing a header, relock with the pixi version Flyte builds the images with (it runs that pixi in Docker):
+Each installs the environment the header of its domain's `env.py` declares (`src/stargazer/tasks/gatk/env.py`, `src/stargazer/tasks/scrna/env.py`), from the `env.py.pixi.lock` beside it, which a build refuses if it's out of date with the header. After changing a header, relock with the pixi version Flyte builds the images with (it fetches that pixi itself):
 
 ```bash
 pixi run python cli/lock_envs.py            # every environment; --check only checks
