@@ -1,6 +1,6 @@
 ---
 title: warm-uv-cache
-status: review
+status: done
 pr: 125
 priority: normal
 created: 2026-10-31
@@ -43,6 +43,10 @@ So within one container the second notebook is already mostly local. The cost is
 - **Disk.** A prebuilt venv lives in the image, not the pod's writable layer, so a built-in notebook no longer writes its venv to the pod's disk at all.
 - **The editable `stargazer-bio` rebuilds on every open** (~0.5 s locally, ~0.8 s hosted): uv keys it on `/stargazer/src`'s mtime, and its own build writes the egg-info there. Left as is.
 - **Declared images** are built `FROM` the Stargazer image, so they carry `/opt/uv-cache` and `UV_CACHE_DIR` (inferred, not driven).
+
+## Outcome
+
+Shipped in PR 125 (merge `51da133`, 2026-11-04). The notebook image bakes a warm uv cache at `/opt/uv-cache` with a prebuilt venv for each built-in notebook at its hosted path, drops the bioinformatics tools, and keeps micromamba so a notebook can `micromamba install` a conda package (channels in `/etc/conda/.condarc`, `/opt/conda` owned by the runtime user). Verified again after merging main, on Union as the test account with the final image (`debug:warm-uv-cache@sha256:78c59f82…`): browser connect to kernel in 1.9 s, nothing downloaded (`Resolved 93 packages in 10ms`), `micromamba install samtools` in 17.1 s with `samtools 1.25` running; locally offline, a venv from the cache in 2.7 s. Left: ticket [[pixi-notebook-sandbox]] replaces the uv sandbox, its cache and micromamba with pixi; [[layered-notebook-image-cache]] and [[local-notebook-images]] as before; the editable SDK still rebuilds on each open (0.5–3.8 s). No review comments.
 
 ## Verification recipe
 
