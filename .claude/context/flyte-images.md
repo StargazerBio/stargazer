@@ -24,6 +24,7 @@ How a `flyte.Image` is declared and built. Examples: [[flyte-v2-docs#Container I
 - **`from_base` refuses layers until cloned** with `.clone(name=..., extendable=True)`; the name prefixes the built image's tag.
 - **Two builders.** `image.builder` in the Flyte config is `local` (the Docker daemon, pushing to `FLYTE_IMAGE_REGISTRY`) or `remote` (Union's ImageBuilder, Union only). See [[flyte-config]].
 - **The registry is fixed when the image is defined**, not when a later init reads the config.
+- **`with_source_folder` filters by a `.dockerignore`**: a `with_dockerignore` layer's, else the one at `flyte.init`'s `root_dir` (`get_and_list_dockerignore` in `flyte/_internal/imagebuild/utils.py`). Without one the folder ships whole, and everything in it feeds the image hash and the build context.
 
 ## In Stargazer
 
