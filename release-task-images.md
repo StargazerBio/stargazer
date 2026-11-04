@@ -3,8 +3,6 @@ title: release-task-images
 status: backlog
 priority: normal
 created: 2026-11-04
-blocked_by:
-  - pixi-layer-cache
 ---
 
 A release publishes the task images, and an installed `stargazer-bio` runs its tasks on them instead of building from source. Today `gatk_env` and `scrna_env` build from `PROJECT_ROOT / "pyproject.toml"`, which exists only in a checkout or the notebook image's `/stargazer`. Installed from PyPI, `PROJECT_ROOT` is `<venv>/lib/python3.14` and the build fails (measured 2026-11-04 with the wheel in a clean venv: `FileNotFoundError: Pixi manifest file .../lib/python3.14/pyproject.toml does not exist`), so SDK authoring from an IDE can't run a task remotely.

@@ -1,6 +1,6 @@
 ---
 title: pixi-layer-cache
-status: review
+status: done
 priority: normal
 created: 2026-11-04
 pr: 128
@@ -55,5 +55,9 @@ print(f"BUILT {gatk_env.image.uri} in {time.monotonic() - start:.0f}s")
 ### Gotchas
 
 - The local times include loading the image into docker (`sending tarball`), about 15 s of each.
+
+## Outcome
+
+Shipped in PR #128 (merge `4bc7d01`, 2026-11-04). `_task_image(name, environment)` in `config.py` builds both task images as the pixi environment from `pyproject.toml` and `pixi.lock` alone (`dependencies_only`), then the source copied to `/opt/stargazer` and installed non-editable without dependencies; the manifest no longer lists `stargazer-bio` as an editable path dependency. A source-only rebuild of the gatk image went from 52 s to 20 s locally and from 1:39 to 0:12 on Union's remote builder. The tasks tier (20 gatk, 15 scrna) and the devbox germline tests passed on the split images, and a probe task ran on each Union-built image with stargazer imported from site-packages. Left: prebuilt task images per release, ticket [[release-task-images]]; the notebook headers' editable `/stargazer` install, tickets [[pixi-notebook-sandbox]] and [[release-task-images]]. No review comments.
 
 Related: [[board]], [[pixi-dependencies]], [[flyte-images]].
