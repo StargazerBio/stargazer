@@ -5,7 +5,10 @@
 #   "stargazer-bio",
 # ]
 #
-# [tool.uv.sources]
+# [tool.pixi.dependencies]
+# python = "3.14.*"
+#
+# [tool.pixi.pypi-dependencies]
 # stargazer-bio = { path = "/stargazer", editable = true }
 # ///
 """

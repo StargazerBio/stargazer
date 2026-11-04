@@ -51,8 +51,8 @@ import flyte.app
 # supplies the real one.
 _LOCAL_NOTEBOOK_IMAGE = "notebook-app:local"
 
-# Ephemeral disk for the kernel's sandbox venv, uv cache and workspace; set
-# explicitly because the sidecar's 1Gi default is too small.
+# Ephemeral disk for the kernel's sandbox environment, the package caches and
+# the workspace; set explicitly because the sidecar's 1Gi default is too small.
 NOTEBOOK_DISK = "20Gi"
 
 # Defaults for resources a notebook's `main_env` leaves unset; the 6Gi limit

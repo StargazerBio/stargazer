@@ -14,32 +14,24 @@ RUN npm install -g --omit=dev @agentclientprotocol/claude-agent-acp@0.99.1 \
         opencode-ai@1.19.5 \
     && npm cache clean --force
 
-# pixi, for the MCP server's environment below: the version Flyte's image
-# builder runs, which wrote pixi.lock (cli/lock_envs.py).
-FROM ghcr.io/prefix-dev/pixi:0.72.2 AS pixi
+FROM ghcr.io/prefix-dev/pixi:0.83.0 AS pixi
 
 FROM python:3.14-slim-bookworm
 
 RUN apt-get update \
-    && apt-get install -y build-essential ca-certificates curl git bzip2 \
+    && apt-get install -y build-essential ca-certificates curl git \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash flyte
 
-# micromamba, for the conda packages a notebook needs, bioconda's tools among
-# them. Its prefix is the runtime user's and on everyone's path, the kernels'
-# included, so `micromamba install samtools` in marimo's terminal puts the tool
-# on every notebook's path, for as long as the container runs, or longer with
-# a volume mounted there. It's last on the path, so a package that brings its
-# own Python doesn't shadow the runtime's. The channels are set outside the
-# prefix, so a mount there doesn't hide them.
-RUN case "$(uname -m)" in x86_64) MM=linux-64 ;; aarch64) MM=linux-aarch64 ;; esac \
-    && curl -Ls "https://micro.mamba.pm/api/micromamba/${MM}/latest" \
-        | tar -xj -C /usr/local/bin --strip-components=1 bin/micromamba \
-    && install -d -o flyte -g flyte /opt/conda \
-    && mkdir -p /etc/conda \
-    && printf 'channels:\n  - conda-forge\n  - bioconda\n' > /etc/conda/.condarc
+# pixi, which `marimo --sandbox=pixi` builds each notebook's environment
+# with, from its header: conda packages (bioconda's tools among them) and PyPI
+# ones. It also installs the MCP server's environment below. Newer than the
+# pixi Flyte's image builder uses, which wrote pixi.lock (cli/lock_envs.py):
+# marimo needs its `install --script`, and this version installs that lock
+# as it is.
+COPY --from=pixi /usr/local/bin/pixi /usr/local/bin/
 
-# uv, which `marimo --sandbox` uses to build per-notebook venvs.
+# uv, which builds the runtime's venv below.
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && install -m 755 /root/.local/bin/uv /root/.local/bin/uvx /usr/local/bin/
 
@@ -87,7 +79,6 @@ COPY runtime/launch-notebook.sh runtime/start-local.sh /usr/local/bin/
 COPY --chown=flyte:flyte pyproject.toml pixi.lock README.md /stargazer/
 COPY --chown=flyte:flyte src/ /stargazer/src/
 
-COPY --from=pixi /usr/local/bin/pixi /usr/local/bin/pixi
 # The `stargazer` MCP server for the agent panel, which the launch script
 # starts: pixi.lock's `mcp` environment, the SDK with the `mcp` extra, at the
 # versions development runs, so it submits runs with the `flyte` the task
@@ -121,38 +112,49 @@ RUN mkdir /opt/workspace \
     && cp /workspace/AGENTS.md /opt/workspace/
 
 # A locale the slim image has: marimo's terminal sets en_US.UTF-8 unless one
-# is set, and bash warns that it doesn't exist.
-ENV PATH="/opt/venv/bin:${PATH}:/opt/conda/bin" \
-    MAMBA_ROOT_PREFIX="/opt/conda" \
+# is set, and bash warns that it doesn't exist. An environment links its
+# packages from the caches below, which are in an image layer, where a hardlink
+# costs a copy of the file, synced to disk: 20 s for a notebook on the core
+# SDK, against 3 s with symlinks. pixi copies the conda packages' files
+# instead, and symlinks the PyPI ones, as uv does.
+ENV PATH="/opt/venv/bin:${PATH}" \
     LANG="C.UTF-8" \
     LC_ALL="C.UTF-8" \
     PYTHONPATH="/usr/local/lib" \
-    UV_LINK_MODE="copy" \
+    PIXI_CACHE_DIR="/opt/pixi-cache" \
+    PIXI_NO_HARD_LINKS="true" \
+    PIXI_NO_REF_LINKS="true" \
     UV_CACHE_DIR="/opt/uv-cache" \
+    UV_LINK_MODE="symlink" \
     DISABLE_AUTOUPDATER="1"
 
-RUN install -d -o flyte -g flyte /opt/uv-cache
+RUN install -d -o flyte -g flyte /opt/pixi-cache /opt/uv-cache
 USER flyte
 
-# A warm uv cache, so a notebook's sandbox starts from local disk and only what
-# a user adds to a header comes from PyPI. These are the calls marimo makes:
+# A warm cache, so a notebook's environment starts from local disk and only
+# what a header adds comes from the network. These are the calls marimo makes:
 # the server starts under a `--with marimo[lsp]` layer over the runtime venv,
-# and a notebook's sandbox syncs a venv from its header, then starts the kernel
-# under a `--with marimo` layer over it. Only notebooks on the core SDK are
-# warmed: one needing an extra downloads it when it first opens. uv keys a
-# script's venv on its path, so the venvs are built where a hosted pod opens
-# the notebooks, under /stargazer, sparing its one CPU the bytecode compile;
-# locally they open from /workspace and build their venv from the cache.
-RUN VIRTUAL_ENV=/opt/venv uv run -q --active --no-project \
+# and a notebook's sandbox installs its header's environment with pixi, then
+# starts the kernel under a `--with marimo` layer over it, both layers by uv
+# through `pixi exec`. pixi keys a notebook's environment on its path, so the
+# tutorials' are built where a hosted pod opens them, under /stargazer; any
+# other path builds its own from the cache. The templates are only ever opened
+# as copies, so only their packages are kept. Within this layer hardlinks
+# cost nothing.
+RUN export PIXI_NO_HARD_LINKS=false PIXI_NO_REF_LINKS=false \
+        UV_LINK_MODE=hardlink \
+    && UV="pixi exec --spec uv>=0.12 uv" \
+    && VIRTUAL_ENV=/opt/venv $UV run -q --active --no-project \
         --python /opt/venv/bin/python --with "marimo[lsp]==0.25.1" \
         -- python -c 'import marimo' \
     && for nb in $(find /stargazer/src/stargazer/notebooks -mindepth 2 \
-            -name '*.py' ! -name __init__.py -exec grep -L 'stargazer-bio\[' {} +); do \
-        UV_LINK_MODE=hardlink uv sync -q --script "$nb" --compile-bytecode \
-        && py="$(uv python find --script "$nb")" \
-        && VIRTUAL_ENV="${py%/bin/python}" UV_LINK_MODE=hardlink uv run -q \
-            --active --no-project --python "$py" --with marimo==0.25.1 \
-            -- python -c 'import marimo' \
+            -name '*.py' ! -name __init__.py); do \
+        env="$(pixi install --script "$nb" 2>&1 \
+            | sed -n "s/.*installed at '\(.*\)'\.$/\1/p")" \
+        && [ -n "$env" ] \
+        && case "$nb" in */templates/*) rm -rf "${env%/envs/*}"; continue ;; esac \
+        && $UV run -q --no-project --python "$env/bin/python" \
+            --with marimo==0.25.1 -- python -c 'import marimo, stargazer' \
         || exit 1; \
     done
 

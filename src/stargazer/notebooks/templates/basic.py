@@ -5,7 +5,14 @@
 #   "stargazer-bio",
 # ]
 #
-# [tool.uv.sources]
+# [tool.pixi.workspace]
+# channels = ["conda-forge", "bioconda"]
+#
+# [tool.pixi.dependencies]
+# python = "3.14.*"
+# bcftools = "1.*"
+#
+# [tool.pixi.pypi-dependencies]
 # stargazer-bio = { path = "/stargazer", editable = true }
 # ///
 """
@@ -40,17 +47,18 @@ with app.setup:
         STARGAZER_SECRETS,
         core_image,
     )
-    from stargazer.notebooks import notebook_base, notebook_env
+    from stargazer.notebooks import notebook_env
 
     # TODO: the dashboard tile's blurb.
     main_description = ""
 
-    # TODO: the pod this notebook runs in. System tools go in its image,
-    # Python packages in the script header above. The dashboard names the pod
-    # after the notebook.
+    # TODO: the pod this notebook runs in. Packages and tools go in the script
+    # header above; its image takes only what conda doesn't have, as in
+    # `image=notebook_base.with_apt_packages(...)`, with `notebook_base`
+    # imported beside `notebook_env`. The dashboard names the pod after the
+    # notebook.
     main_env = notebook_env.clone_with(
         name="notebook",
-        image=notebook_base.with_apt_packages("bcftools"),
         resources=flyte.Resources(cpu=2, memory="4Gi"),
     )
 
@@ -101,11 +109,12 @@ def _():
         f"""
         ## 0. Pod
 
-        The setup block declares the pod this notebook runs in as
-        `main_env`: its CPU and memory, and its image. Add system tools to
-        the image (apt packages, or `with_commands` for bioconda tools) and
-        they're there the next time you launch the notebook. Python packages
-        go in the script header instead and install when it starts. The
+        The script header at the top of this file lists what the notebook
+        runs with, installed when it starts: Python packages under
+        `dependencies`, and conda packages, bioconda's tools among them,
+        under `[tool.pixi.dependencies]`. The setup block declares the pod
+        it runs in as `main_env`: its CPU and memory, and its image, for a
+        system package conda doesn't have (`with_apt_packages`). The
         dashboard tile's gear edits the same block, along with the tile's
         name and description.
 
