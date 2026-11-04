@@ -61,7 +61,7 @@ The gatk environment's header lists gatk4, samtools, bwa and bwa-mem2 under `[to
 ## Open questions
 
 - ~~Union's remote builder with a script layer.~~ It builds them (measured 2026-11-04): scrna 1:25 and gatk 1:38 cold, 0:08 to 0:09 for a source-only rebuild, and a probe task succeeded on each.
-- ~~`pixi lock --script` with conda dependencies at pixi 0.72.2.~~ 0.72.2 has no `--script` at all. A lock from 0.84's `pixi lock --script` is refused by 0.72.2's `--locked` ("declares virtual packages [] but the lock-file was solved with [__unix=0]"; 0.72.2 writes `__unix=0=0`), and 0.72.2's own `lock --check` exits 0 on a lock it rewrites. So `cli/lock_envs.py` renders the header with Flyte's `render_pixi_manifest`, locks it with `ghcr.io/prefix-dev/pixi:<Flyte's PIXI_VERSION>` in docker, and checks by comparing a relocked copy. The same mismatch means no image can install from the dev `pixi.lock` (written by a local pixi 0.84): `with_pixi_project(pyproject.toml)` fails `--locked`.
+- ~~`pixi lock --script` with conda dependencies at pixi 0.72.2.~~ 0.72.2 has no `--script` at all. A lock from 0.84's `pixi lock --script` is refused by 0.72.2's `--locked` ("declares virtual packages [] but the lock-file was solved with [__unix=0]"; 0.72.2 writes `__unix=0=0`), and 0.72.2's own `lock --check` exits 0 on a lock it rewrites. So `cli/lock_envs.py` renders the header with Flyte's `render_pixi_manifest`, locks it with `ghcr.io/prefix-dev/pixi:<Flyte's PIXI_VERSION>` in docker, and checks by comparing a relocked copy. The same mismatch is why `pixi.lock` is also written by 0.72.2: a local 0.84 accepts that lock and leaves it alone, and images then install its `core` and `mcp` environments.
 - "On this machine" for a notebook: run the task in its image with docker rather than in the kernel, so notebooks never install a domain's packages. Whether Flyte 2 can run a task in its container locally; if not, `stargazer.notebooks.ui.dispatch` does it, as `cli/docker_task_tests.py` does. On Apple silicon the images run emulated.
 - ~~What the dev environment carries for the domains.~~ None: the scRNA tests import scanpy inside their bodies, so collection needs no domain's packages, and the tasks tier still collects in the dev environment. Bioconda's `osx-arm64` coverage for tools added later; GenomicsDB stays x86_64-only, so joint calling never runs natively on a Mac.
 
@@ -71,7 +71,7 @@ The gatk environment's header lists gatk4, samtools, bwa and bwa-mem2 under `[to
 - [x] Every environment in its domain's `env.py`; `config.py` keeps the shared settings (`IMAGE_PLATFORM`, `STARGAZER_ENV_VARS`, `STARGAZER_SECRETS`). `pyproject.toml` loses `[tool.pixi]`'s image environments and the `bio` extra.
 - [x] Development under pixi: the dev environment, the tiers, pre-commit, release, `uv.lock` removed.
 - [x] AGENTS.md (where environments live, how to add a tool), the `tasks-and-workflows` and `write-tests` skills, Contributing, Configuration → Container Images, the wiki's `flyte-images` and `gatk` pages.
-- [x] Found in review: the template's and the Tasks tutorial's own task images (`with_uv_project`, which Union's builder skips without a uv.lock) build from a core environment, `src/stargazer/env.py` (the SDK alone), with `task_image()`. The notebook image's MCP venv installs under pins read from `pixi.lock`.
+- [x] Found in review: the template's and the Tasks tutorial's own task images (`with_uv_project`, which Union's builder skips without a uv.lock) build from `pyproject.toml`'s `core` environment with `core_image()`. That works because `pixi.lock` is written by Flyte's pixi too (`cli/lock_envs.py`), which a local pixi 0.84 accepts and leaves alone; the earlier failure building from `pyproject.toml` was the lock's pixi version, not the editable SDK. The notebook image installs the MCP server as `pixi.lock`'s `mcp` environment with `pixi install --locked`. `task_image(__file__)` names the image after its domain.
 
 ## Verification recipe: task environments from their headers
 
@@ -82,7 +82,7 @@ Each domain's environment is the PEP 723 header of its `env.py`, locked beside i
 - `env-tasks-tier`: every task test passes in its domain's image.
 - `env-devbox-germline`: the germline workflow runs on the devbox on the gatk image.
 - `env-union-build`: Union builds the gatk, scrna and tutorial images and a probe task runs on each, stargazer from site-packages, the locked tools and flyte.
-- `env-locks`: `cli/lock_envs.py --check` fails on a header changed without relocking and passes otherwise.
+- `env-locks`: `cli/lock_envs.py --check` fails on a header changed without relocking, or a `pixi.lock` a newer pixi rewrote, and passes otherwise.
 - `dev-env`: the unit tier passes under `pixi run pytest` on a Mac, with no scanpy installed.
 - `notebook-image`: the notebook image builds, and its MCP venv imports the server on the pinned flyte.
 
@@ -96,8 +96,8 @@ Preconditions: pixi, docker, the devbox (ticket `devbox-postgres-index`), `.flyt
 
 - **Tasks tier.** `pixi run python cli/docker_task_tests.py` exits 0 (`env-tasks-tier`).
 - **Devbox.** `FLYTE_IMAGE_REGISTRY=localhost:30000 FLYTE_DOCKER_BUILD_EXTRA_ARGS=--provenance=false pixi run pytest -m devbox -rP tests/devbox/test_germline.py` passes both (`env-devbox-germline`).
-- **Union.** The probe in [[pixi-dependencies]]'s recipe, with the environments imported from `stargazer.tasks.gatk.env` and `stargazer.tasks.scrna.env`, and each task defined at module level (a pod imports the module, so nothing may depend on `sys.argv`); a third probe on `stargazer.notebooks.tutorials.tasks.tutorial_env.image` importing `aiohttp`, `marimo` and `stargazer`. Each prints `/opt/pixi-project/.pixi/envs/default/...` paths and flyte matching `pixi.lock` (`env-union-build`).
-- **Locks.** Add a package not in the lock to a header's `dependencies`, `pixi run python cli/lock_envs.py --check` exits 1; restore it, exit 0 (`env-locks`).
+- **Union.** The probe in [[pixi-dependencies]]'s recipe, with the environments imported from `stargazer.tasks.gatk.env` and `stargazer.tasks.scrna.env`, and each task defined at module level (a pod imports the module, so nothing may depend on `sys.argv`); a third probe on `stargazer.notebooks.tutorials.tasks.tutorial_env.image` (`core_image`) importing `aiohttp`, `marimo` and `stargazer`. Each prints `/opt/pixi-project/.pixi/envs/default/...` paths and flyte matching `pixi.lock` (`env-union-build`).
+- **Locks.** Add a package not in the lock to a header's `dependencies`, `pixi run python cli/lock_envs.py --check` exits 1; restore it, exit 0. `rm pixi.lock && pixi lock` with a pixi newer than Flyte's, `--check` exits 1; `pixi run python cli/lock_envs.py pyproject.toml` restores the committed lock (`env-locks`).
 - **Dev.** `pixi run pytest` passes; `pixi run python -c "import scanpy"` fails (`dev-env`).
 - **Notebook image.** `docker build -f runtime/Dockerfile -t sg-test .`, then `docker run --rm --entrypoint sh sg-test -c '/opt/mcp/bin/python -c "from stargazer.server import mcp; import flyte; print(flyte.__version__)"'` (`notebook-image`).
 
@@ -111,8 +111,8 @@ Preconditions: pixi, docker, the devbox (ticket `devbox-postgres-index`), `.flyt
 
 - Tasks tier: 20 gatk/general and 15 scrna passed (3:04, images built locally, emulated).
 - Devbox germline: 2 passed in 2:28.
-- Union: scrna probe `umcssd9dqwht86m4nbrn` (scanpy 1.12.5), gatk probe `uhnd7bwg97m7hhrmpjcn` (gatk 4.6.2.0, samtools 1.25, bwa 0.7.19-r1273, bwa-mem2 reporting 2.2.1, Java 17), tutorial probe `u5gk84dzqwc974d4ff7m` (aiohttp 3.14.5, marimo 0.23.16), all on flyte 2.12.4 with stargazer in site-packages and no `/opt/venv`.
+- Union: scrna probe `umcssd9dqwht86m4nbrn` (scanpy 1.12.5), gatk probe `uhnd7bwg97m7hhrmpjcn` (gatk 4.6.2.0, samtools 1.25, bwa 0.7.19-r1273, bwa-mem2 reporting 2.2.1, Java 17), tutorial probe on `core_image` `u8vm8sdsk2zc9svpgqr6` (aiohttp 3.14.5, marimo 0.23.16), all on flyte 2.12.4 with stargazer in site-packages and no `/opt/venv`.
 - Unit tier under pixi on osx-arm64: passed, scanpy absent.
-- Notebook image: built; `/opt/mcp` runs flyte 2.12.4 and mcp 2.3.0.
+- Notebook image (arm64): built; `/opt/mcp`, pixi's `mcp` environment, runs flyte 2.12.4 and mcp 2.3.0, and `stargazer --http` answers MCP `initialize` with 200.
 
 Related: [[board]], [[pixi-dependencies]], [[pixi-layer-cache]], [[drop-notebook-extra]], [[release-task-images]], [[pixi-notebook-sandbox]], [[flyte-images]].
