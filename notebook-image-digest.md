@@ -26,11 +26,17 @@ check with `crane copy`).
 
 ## Why Flyte's tag isn't enough
 
-Read in Flyte 2.10.7 (`flyte/_image.py`, `_internal/imagebuild/remote_builder.py`),
+Read in Flyte 2.12.4 (`flyte/_image.py`, `_internal/imagebuild/remote_builder.py`),
 not measured. An image's tag is an md5 of its *declaration* (the base
-image's name and each layer's text; only `with_uv_project` hashes real
-contents, the lock file), so unversioned packages rebuild to new bytes
-under the same tag. The remote builder returns only `<registry>/<name>:<tag>`.
+image's name and each layer's text), plus real contents for the layers
+that hash them: `with_uv_project` and `with_pixi_project` hash the lock
+file and manifest (`dependencies_only`) or the project's files, and
+`with_source_folder` the folder's files. So a notebook's `main_env` that
+installs unversioned packages rebuilds to new bytes under the same tag.
+The task images (`_task_image` in `config.py`) are a pixi.lock environment
+plus the source, so their tags follow the locked packages and the source;
+the Debian base layer is still unpinned. The remote builder returns only
+`<registry>/<name>:<tag>`.
 Every project pushes to one shared ECR repository where any user's pod can
 overwrite a tag (ticket `shared-image-repository`).
 
@@ -55,9 +61,11 @@ overwrite a tag (ticket `shared-image-repository`).
 ## Open questions
 
 - Task images a run uses (`gatk_env`, `scrna_env`, a notebook's own
-  `TaskEnvironment`s) have the same tag problem. Resolve their digests when
-  the run record is built (from the tags Flyte recorded), or leave them to
-  the tags?
+  `TaskEnvironment`s): `gatk_env`'s and `scrna_env`'s tags follow pixi.lock
+  and the source, but any pod can still overwrite a tag in the shared
+  repository, and a notebook's own `TaskEnvironment` can install unversioned
+  packages. Resolve their digests when the run record is built (from the
+  tags Flyte recorded), or leave them to the tags?
 - Making a digest public: a later "publish environment" step copies the
   image to a public registry, digest unchanged. Not in this ticket.
 

@@ -11,7 +11,7 @@ Notebooks build their environments with pixi instead of uv, so a notebook's head
 - Notebook headers point at the SDK through `[tool.pixi.pypi-dependencies]` (pixi ignores `[tool.uv.sources]`).
 - The warm cache redone for pixi (rattler's cache in place of `/opt/uv-cache`).
 - The micromamba block in `runtime/Dockerfile` goes; the germline notebook declares its tools in its header.
-- The notebook template's and the tasks tutorial's `with_uv_project` environments move to `with_pixi_project`.
+- The notebook template's and the tasks tutorial's `with_uv_project` environments move to `with_pixi_project`, split the way `_task_image` in `config.py` builds the task images: the environment with `dependencies_only`, then the source installed on top without dependencies. With `install_project`, as both use today, any source change reinstalls the whole environment, and an editable path dependency on the SDK fails `pixi install --locked` without the source present ([[pixi-layer-cache]]).
 
 Open questions, from [[pixi-dependencies]]: open times against uv for a core notebook and the germline notebook; the kernel's `--with marimo` overlay over a conda prefix; the conda-to-PyPI name mapping, which pixi fetches from the network; whether hosted pods still need a declared `main_env` image for tools.
 
