@@ -36,10 +36,9 @@ with app.setup:
 
     from stargazer.assets.asset import Asset
     from stargazer.config import (
-        IMAGE_PLATFORM,
-        PROJECT_ROOT,
         STARGAZER_ENV_VARS,
         STARGAZER_SECRETS,
+        core_image,
     )
     from stargazer.notebooks import notebook_base, notebook_env
 
@@ -61,14 +60,7 @@ with app.setup:
     my_env = flyte.TaskEnvironment(
         name="template",
         image=(
-            flyte.Image.from_debian_base(
-                name="stargazer-template",
-                platform=IMAGE_PLATFORM,
-            )
-            .with_uv_project(
-                PROJECT_ROOT / "pyproject.toml", project_install_mode="install_project"
-            )
-            .with_pip_packages("marimo>=0.23,<0.24")
+            core_image("stargazer-template").with_pip_packages("marimo>=0.23,<0.24")
         ),
         resources=flyte.Resources(cpu=1, memory="512Mi"),
         env_vars=STARGAZER_ENV_VARS,

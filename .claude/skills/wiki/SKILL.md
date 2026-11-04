@@ -47,6 +47,6 @@ When a source arrives (a new tool's help, a framework's updated docs):
 
 ### Lint
 
-`uv run python cli/wiki_lint.py` runs in pre-commit. It fails on what can be checked mechanically: links and headings resolve, every page is in the index, every raw source is cited, every source path exists, no name is shared, no page has `status`. It also warns, without failing, about each page whose `sources` include a file the branch changes while the page is unchanged. Reread each one it names and fix what no longer holds; a page that still holds needs no edit, and the warning lasts until the branch merges.
+`pixi run python cli/wiki_lint.py` runs in pre-commit. It fails on what can be checked mechanically: links and headings resolve, every page is in the index, every raw source is cited, every source path exists, no name is shared, no page has `status`. It also warns, without failing, about each page whose `sources` include a file the branch changes while the page is unchanged. Reread each one it names and fix what no longer holds; a page that still holds needs no edit, and the warning lasts until the branch merges.
 
 The rest is yours when you touch a page: a claim the code no longer bears out, two pages that disagree, a topic mentioned on several pages that has no page of its own, an `## In Stargazer` bullet that restates code instead of pointing at it.

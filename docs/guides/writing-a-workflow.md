@@ -15,7 +15,7 @@ spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 
 from stargazer.assets import R1, R2, Reference, Variants
 from stargazer.assets.asset import assemble
-from stargazer.config import gatk_env
+from stargazer.tasks.gatk.env import gatk_env
 from stargazer.tasks import bwa_mem2_mem, haplotype_caller, mark_duplicates, sort_sam
 
 
@@ -51,4 +51,4 @@ The MCP registry and the [Catalog](../reference/catalog.md#workflows) list the w
 
 ## 4. Test
 
-Test a workflow end to end where its tasks run. A GATK workflow needs a cluster, so it's tested on the devbox: `tests/devbox/test_germline.py` seeds a reference and a sample's reads from a pod, runs `germline_short_variant_discovery` the way SDK code submits it, and checks the cohort's VCF from another pod (`uv run --all-extras pytest -m devbox`).
+Test a workflow end to end where its tasks run. A GATK workflow needs a cluster, so it's tested on the devbox: `tests/devbox/test_germline.py` seeds a reference and a sample's reads from a pod, runs `germline_short_variant_discovery` the way SDK code submits it, and checks the cohort's VCF from another pod (`pixi run pytest -m devbox`).

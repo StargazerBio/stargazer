@@ -14,6 +14,10 @@ RUN npm install -g --omit=dev @agentclientprotocol/claude-agent-acp@0.99.1 \
         opencode-ai@1.19.5 \
     && npm cache clean --force
 
+# pixi, for the MCP server's environment below: the version Flyte's image
+# builder runs, which wrote pixi.lock (cli/lock_envs.py).
+FROM ghcr.io/prefix-dev/pixi:0.72.2 AS pixi
+
 FROM python:3.14-slim-bookworm
 
 RUN apt-get update \
@@ -76,19 +80,24 @@ COPY runtime/proxy.py /usr/local/lib/sg_proxy.py
 COPY runtime/agent_redirect.html runtime/save_banner.html /usr/local/lib/
 COPY runtime/launch-notebook.sh runtime/start-local.sh /usr/local/bin/
 # Owned by the runtime user: each sandbox builds `stargazer-bio` from this tree
-# and writes its egg-info here. The locks are there for the task images a
-# kernel builds: pixi.lock for the SDK's (`with_pixi_project`), which install
-# exactly what it locks, and uv.lock for a notebook's own `with_uv_project`,
-# which Union's builder skips without one.
-COPY --chown=flyte:flyte pyproject.toml pixi.lock uv.lock README.md /stargazer/
+# and writes its egg-info here. pixi.lock is the MCP server's environment
+# below and the one a notebook's own task images install (`core_image()`); a
+# domain's task image installs its `env.py` header, from the lock beside it in
+# src/.
+COPY --chown=flyte:flyte pyproject.toml pixi.lock README.md /stargazer/
 COPY --chown=flyte:flyte src/ /stargazer/src/
 
+COPY --from=pixi /usr/local/bin/pixi /usr/local/bin/pixi
 # The `stargazer` MCP server for the agent panel, which the launch script
-# starts. Its own venv, from the lock: the runtime venv holds no SDK. Editable,
-# so `init_flyte()` bundles a run from /stargazer, as a notebook's does; the
-# chown hands the egg-info the install leaves back to the runtime user.
-RUN UV_PROJECT_ENVIRONMENT=/opt/mcp uv sync --project /stargazer --locked \
-        --no-dev --extra mcp --no-cache \
+# starts: pixi.lock's `mcp` environment, the SDK with the `mcp` extra, at the
+# versions development runs, so it submits runs with the `flyte` the task
+# images run. The runtime venv holds no SDK. Editable, so `init_flyte()`
+# bundles a run from /stargazer, as a notebook's does; the chown hands the
+# environment and the egg-info back to the runtime user.
+RUN PIXI_CACHE_DIR=/tmp/pixi-cache pixi install --locked \
+        --manifest-path /stargazer/pyproject.toml --environment mcp \
+    && rm -rf /tmp/pixi-cache \
+    && ln -s /stargazer/.pixi/envs/mcp /opt/mcp \
     && chown -R flyte:flyte /stargazer
 
 # /workspace starts with the agent's context: Claude Code starts there and

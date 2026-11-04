@@ -34,14 +34,14 @@ Every top-level directory under `tests/` belongs to exactly one tier, and its te
 
 | Tier | Marker | Directories | Where it runs | When | Command |
 |------|--------|-------------|---------------|------|---------|
-| Unit | `unit` | `assets/`, `notebooks/`, `unit/`, `utils/` | This venv | Every commit (pre-commit) | `uv run --all-extras pytest` |
-| Tasks | `tasks` | `tasks/` | Each task's image, x86_64 | When you add or change a task | `uv run --all-extras python cli/docker_task_tests.py` |
-| Devbox | `devbox` | `devbox/` | The local devbox | When a change reaches the cluster | `uv run --all-extras pytest -m devbox` |
-| Pinata | `pinata` | `pinata/` | Against the real Pinata API | When the Pinata client changes | `uv run --all-extras pytest -m pinata` |
-| Postgres | `postgres` | `postgres/` | Against a throwaway Postgres container (Docker) | When the index changes | `uv run --all-extras pytest -m postgres` |
-| DSQL | `dsql` | `dsql/` | Against the real Aurora DSQL cluster, as its admin | When the index's SQL or its DSQL connection changes | `uv run --all-extras --env-file ../infra/tenant.env pytest -m dsql` |
+| Unit | `unit` | `assets/`, `notebooks/`, `unit/`, `utils/` | The dev environment | Every commit (pre-commit) | `pixi run pytest` |
+| Tasks | `tasks` | `tasks/` | Each task's image, x86_64 | When you add or change a task | `pixi run python cli/docker_task_tests.py` |
+| Devbox | `devbox` | `devbox/` | The local devbox | When a change reaches the cluster | `pixi run pytest -m devbox` |
+| Pinata | `pinata` | `pinata/` | Against the real Pinata API | When the Pinata client changes | `pixi run pytest -m pinata` |
+| Postgres | `postgres` | `postgres/` | Against a throwaway Postgres container (Docker) | When the index changes | `pixi run pytest -m postgres` |
+| DSQL | `dsql` | `dsql/` | Against the real Aurora DSQL cluster, as its admin | When the index's SQL or its DSQL connection changes | `(set -a; . ../infra/tenant.env; set +a; pixi run pytest -m dsql)` |
 
-- **Unit:** cheap tests that run on Python alone: the asset types, the notebook proxy, storage and the index, the notebook smoke tests. `--all-extras` because collection imports every test module, the scRNA tasks' (`bio`) and the MCP server's (`mcp`) included.
+- **Unit:** cheap tests that run on Python alone: the asset types, the notebook proxy, storage and the index, the notebook smoke tests. The dev environment has no domain's packages (scanpy and the like live in the task images), and collection imports every test module, so a test imports a domain's packages inside its body, as the task it tests does.
 - **Tasks:** every test of a task, in the image that task runs in. `tests/tasks/<domain>` runs in the image of its domain's `TaskEnvironment` (`IMAGES` in `cli/docker_task_tests.py` maps each). So a task test checks what a pod gets, and no one installs the tools. The runner builds each image as a task pod gets it, with the project installed, and mounts only `tests/` and `pyproject.toml`, so a source change builds the images again before the tests run. x86_64 like Union, emulated on Apple silicon.
 - **Devbox:** anything that needs a cluster: running workflows across pods, the devbox's object store and its Postgres index. The session passes the devbox storage settings to each run and reads the index from this machine through a port-forward (`index_query`). It needs the devbox up, with `devbox/setup.sh` applied, and `FLYTE_IMAGE_REGISTRY=localhost:30000` exported. Pod-side tasks live in `tests/devbox/pod_tasks.py`, which imports only what the task image carries.
 - **Pinata:** calls the real API with the key in `tests/.secrets/pinata_jwt` (`tests/pinata/conftest.py`), and fails without it. Pinata-client tests that don't call the API are in `tests/utils/`.
@@ -119,7 +119,7 @@ A task test calls the task directly and awaits it, which runs the function in th
 Task tests run in the task's image:
 
 ```bash
-uv run --all-extras python cli/docker_task_tests.py tests/tasks/{domain}/test_{tool}.py
+pixi run python cli/docker_task_tests.py tests/tasks/{domain}/test_{tool}.py
 ```
 
 ## Running Through Flyte
@@ -143,7 +143,7 @@ docker run --rm --platform linux/amd64 -v "$PWD/tests/fixtures/<domain>:/data" <
   <tool> <args> /data/<file>
 ```
 
-`uv run --all-extras python cli/docker_task_tests.py` prints the image it builds.
+`pixi run python cli/docker_task_tests.py` prints the image it builds.
 
 ## Pytest Configuration
 
@@ -185,8 +185,8 @@ docker run --rm --platform linux/amd64 -v "$PWD/tests/fixtures/<domain>:/data" <
 Each tier's command is in the [tier table](#test-tiers). Paths or `-k` pick a subset:
 
 ```bash
-uv run --all-extras python cli/docker_task_tests.py tests/tasks/<domain>/test_<tool>.py
-uv run --all-extras python cli/docker_task_tests.py -k <name>
+pixi run python cli/docker_task_tests.py tests/tasks/<domain>/test_<tool>.py
+pixi run python cli/docker_task_tests.py -k <name>
 ```
 
 `pytest tests/tasks/` on its own selects nothing: the default `-m unit` deselects that tier.

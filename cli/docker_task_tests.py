@@ -9,13 +9,13 @@ a developer's machine. This builds each image into the local docker store (no
 registry) as a task pod gets it, x86_64 like Union, and runs pytest in it
 against the stargazer the image installs. The images leave out the dev
 group, so pytest and pytest-asyncio are installed in each container at the
-versions uv.lock pins. Only the tests and the pytest configuration are
+versions pixi.lock pins. Only the tests and the pytest configuration are
 mounted, read only, so a source change builds the images again first; the
 layers before the project's own come from cache. On Apple silicon the
 containers run under emulation. Needs docker; not the devbox.
 
 Usage:
-    uv run --all-extras python cli/docker_task_tests.py [paths or -k EXPR]
+    pixi run python cli/docker_task_tests.py [paths or -k EXPR]
 
 The arguments select tests under tests/tasks as they would for pytest; with
 none, it runs them all. Exits 0 when every image's run passes, otherwise with
@@ -26,13 +26,15 @@ import asyncio
 import shlex
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
 import flyte
+import yaml
 from flyte._internal.imagebuild.docker_builder import DockerImageBuilder
 
-from stargazer.config import PROJECT_ROOT, gatk_env, scrna_env
+from stargazer.config import PROJECT_ROOT
+from stargazer.tasks.gatk.env import gatk_env
+from stargazer.tasks.scrna.env import scrna_env
 
 # The image each tests/tasks/<domain> runs in: the one its tasks run in.
 IMAGES = {
@@ -66,17 +68,22 @@ def build_image(image: flyte.Image) -> str:
 
 
 def test_requirements() -> list[str]:
-    """`TEST_PACKAGES` pinned to the versions in uv.lock."""
-    lock = tomllib.loads((PROJECT_ROOT / "uv.lock").read_text())
-    versions = {pkg["name"]: pkg["version"] for pkg in lock["package"]}
+    """`TEST_PACKAGES` pinned to the versions pixi.lock gives the dev environment."""
+    lock = yaml.safe_load((PROJECT_ROOT / "pixi.lock").read_text())
+    versions = {
+        pkg["name"]: pkg["version"]
+        for pkg in lock["packages"]
+        if pkg.get("name") in TEST_PACKAGES
+    }
     return [f"{name}=={versions[name]}" for name in TEST_PACKAGES]
 
 
 def task_tests(args: list[str]) -> dict[str, list[str]]:
     """The node IDs `args` select under tests/tasks, by domain.
 
-    Collected in this venv rather than in an image, which can't import
-    another domain's test modules.
+    Collected in the dev environment rather than in an image, which can't
+    import another domain's tasks' packages. Collection imports no domain's
+    packages: a test imports them inside its body, as a task does.
     """
     collected = subprocess.run(
         [sys.executable, "-m", "pytest", "--collect-only", "-q", "-m", "tasks"]
@@ -126,7 +133,10 @@ def run_in(image: flyte.Image, tests: list[str]) -> int:
             uri,
             "sh",
             "-c",
-            f"uv pip install --quiet {shlex.join(test_requirements())} && exec {pytest}",
+            # The environment belongs to root and the pod's user is `flyte`,
+            # so the test packages go into a directory of their own.
+            f"uv pip install --quiet --target /tmp/test-packages {shlex.join(test_requirements())}"
+            f" && PYTHONPATH=/tmp/test-packages exec {pytest}",
         ],
         check=False,  # pytest's exit code is the result
     ).returncode

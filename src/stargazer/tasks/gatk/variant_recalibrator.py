@@ -15,7 +15,8 @@ from stargazer.assets import (
     VQSRModelIndex,
     VQSRTranches,
 )
-from stargazer.config import gatk_env, logger
+from stargazer.config import logger
+from stargazer.tasks.gatk.env import gatk_env
 from stargazer.utils import _run
 
 _SNP_ANNOTATIONS = ["QD", "MQ", "MQRankSum", "ReadPosRankSum", "FS", "SOR"]

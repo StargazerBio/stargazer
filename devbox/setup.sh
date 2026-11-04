@@ -88,7 +88,7 @@ while [ $# -gt 0 ]; do
 done
 
 dex()  { docker exec "$CONTAINER" "$@"; }
-flyte_cli() { uv run --project "$REPO" flyte --config "$REPO/.flyte/config.yaml" "$@"; }
+flyte_cli() { pixi run --manifest-path "$REPO/pyproject.toml" flyte --config "$REPO/.flyte/config.yaml" "$@"; }
 kc()   { docker exec "$CONTAINER" kubectl "$@"; }
 # Run a mutating command, or just print it under --dry-run.
 run()  { if [ "$DRY_RUN" = 1 ]; then printf '   %s[dry-run]%s %s\n' "$c_yellow" "$c_off" "$*"; else "$@"; fi; }
@@ -244,7 +244,7 @@ for repo in "$REPO" ${INFRA_CHECKOUT:+"$INFRA_CHECKOUT"}; do
 done | while read -r checkout; do
     cache="$checkout/.flyte/local-cache/cache.db"
     [ -f "$cache" ] || continue
-    run uv run --project "$REPO" python -c "
+    run pixi run --manifest-path "$REPO/pyproject.toml" python -c "
 import sqlite3, sys
 db = sqlite3.connect(sys.argv[1])
 for table in ('image_cache', 'bundle_cache', 'task_cache', 'runs'):

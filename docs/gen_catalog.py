@@ -4,7 +4,7 @@ Writes standalone pages under docs/reference/ from the task, workflow,
 and asset registries. Run this before `zensical build`.
 
 Usage:
-    uv run python docs/gen_catalog.py
+    pixi run python docs/gen_catalog.py
 """
 
 import dataclasses

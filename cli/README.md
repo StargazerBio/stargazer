@@ -13,19 +13,19 @@ demo bundles. A user's own files go to the object store through
 
 ```bash
 # One file, JSON metadata
-uv run python cli/upload_to_pinata.py /path/to/file.fa \
+pixi run python cli/upload_to_pinata.py /path/to/file.fa \
   --metadata '{"asset": "reference", "build": "GRCh38"}'
 
 # key=value metadata (repeat -m)
-uv run python cli/upload_to_pinata.py results.vcf \
+pixi run python cli/upload_to_pinata.py results.vcf \
   -m asset=variants -m sample_id=NA12829
 
 # Several files with the same metadata
-uv run python cli/upload_to_pinata.py file1.txt file2.txt \
+pixi run python cli/upload_to_pinata.py file1.txt file2.txt \
   --metadata '{"asset": "dataset"}'
 
 # JSON plus key=value (key=value wins on a shared key)
-uv run python cli/upload_to_pinata.py data.csv \
+pixi run python cli/upload_to_pinata.py data.csv \
   --metadata '{"asset": "dataset"}' -m version=2
 ```
 
@@ -72,12 +72,31 @@ files. To add one, put an empty entry in its `CIDS` dict
 (`"new_fixture.fa": "",`), then upload with `--update-config`:
 
 ```bash
-uv run python cli/upload_to_pinata.py tests/fixtures/general/new_fixture.fa \
+pixi run python cli/upload_to_pinata.py tests/fixtures/general/new_fixture.fa \
   -m asset=reference --update-config
 ```
 
 An entry that already has a CID is left alone, and the script prints the line
 to add by hand.
+
+## lock_envs.py
+
+Locks what the images install with `pixi install --locked`: `pyproject.toml`
+into `pixi.lock`, and each domain's `env.py` header into the
+`env.py.pixi.lock` beside it, as the pixi manifest Flyte renders from the
+header. It locks with the pixi version Flyte's image builder runs, fetched
+from conda-forge by `pixi exec`, since a lock from a newer pixi (yours, or
+`pixi lock --script`) is one the builder refuses. Run it after changing a
+header, `[tool.pixi]` or a core dependency.
+
+```bash
+pixi run python cli/lock_envs.py [--check] [--update] [pyproject.toml | env.py ...]
+```
+
+With no paths it locks all of them. The existing lock is kept where the
+header still allows it; `--update` solves from scratch. `--check` changes
+nothing and exits 1 if a lock is out of date, as the pre-commit hook does when
+a manifest or lock changes.
 
 ## docker_task_tests.py
 
@@ -91,13 +110,13 @@ pytest in it against the stargazer the image installs. Only `tests/` and
 first. Needs docker, not the devbox.
 
 ```bash
-uv run --all-extras python cli/docker_task_tests.py [paths or -k EXPR]
+pixi run python cli/docker_task_tests.py [paths or -k EXPR]
 ```
 
 With no arguments it runs every test under `tests/tasks`; paths or `-k` pick
-a subset. The tests are collected in your venv, since one image can't import
-another domain's test modules, and their IDs passed to pytest in each
-container. It exits 0 when every image's run passes, otherwise with the
+a subset. The tests are collected in the dev environment, which has no
+domain's packages (a test imports them inside its body), and their IDs passed
+to pytest in each container. It exits 0 when every image's run passes, otherwise with the
 first failing run's pytest exit code.
 
 
@@ -105,8 +124,8 @@ first failing run's pytest exit code.
 
 Draws import graphs with [pydeps](https://github.com/thebjorn/pydeps) into
 `diagrams/`, which is gitignored. Draw them when you need them; don't commit
-them. It installs the `diagrams` dependency group as it runs: pydeps, and
-pygraphviz, whose wheels bundle Graphviz, so nothing is installed outside uv.
+them. It runs in pixi's `diagrams` environment: pydeps, and pygraphviz, whose
+wheels bundle Graphviz, so nothing is installed outside pixi.
 
 ```bash
 cli/diagrams.sh                                                     # the standard set
@@ -135,5 +154,5 @@ changes (against its merge base with `origin/main`) while leaving the page
 alone. Pre-commit runs it on every commit.
 
 ```bash
-uv run python cli/wiki_lint.py
+pixi run python cli/wiki_lint.py
 ```

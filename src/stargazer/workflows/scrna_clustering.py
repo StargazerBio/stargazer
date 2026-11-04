@@ -18,7 +18,7 @@ spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 
 from stargazer.assets.asset import assemble
 from stargazer.assets.scrna import AnnData
-from stargazer.config import log_execution, scrna_env
+from stargazer.config import log_execution
 from stargazer.tasks.scrna import (
     cluster,
     find_markers,
@@ -27,6 +27,7 @@ from stargazer.tasks.scrna import (
     reduce_dimensions,
     select_features,
 )
+from stargazer.tasks.scrna.env import scrna_env
 
 
 @scrna_env.task(cache="disable")

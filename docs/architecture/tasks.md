@@ -8,7 +8,7 @@ Tasks are async Flyte v2 functions that perform a single bioinformatics operatio
 - An output records the assets it was made from in `<asset>_cid` fields, so the asset graph can be queried for lineage
 - Task files live in a domain subdirectory of `src/stargazer/tasks/` (`gatk/`, `general/`, `scrna/`), one file per tool
 - Async is preferred for I/O operations
-- Each task runs on a `TaskEnvironment` from `config.py` — `gatk_env` (GATK, BWA, BWA-MEM2, samtools) or `scrna_env` (scanpy) — whose image carries its tool and which sets its resources
+- Each task runs on a `TaskEnvironment` from its domain's `env.py` — `gatk_env` (GATK, BWA, BWA-MEM2, samtools; `general/` shares it) or `scrna_env` (scanpy) — whose image carries its tool and which sets its resources. A domain's packages import inside the task bodies, so importing a task needs only the core
 - Outputs are written under the storage client's local directory, named after their sample, so samples run side by side don't collide
 
 ## Available Tasks

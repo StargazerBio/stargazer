@@ -14,7 +14,7 @@ A task wraps one bioinformatics tool and does one thing. A workflow composes tas
 
 ## Both
 
-1. **Async, on a TaskEnvironment.** Every task and workflow is an `async def` decorated with a `TaskEnvironment` from `config.py` (`gatk_env` or `scrna_env`). Resources are set on the environment, shared by every task on it, not per task. The devbox node has ~7.75 GiB allocatable and a workflow's pods must fit together in ~6 GiB (the header of `devbox/setup.sh`).
+1. **Async, on a TaskEnvironment.** Every task and workflow is an `async def` decorated with a `TaskEnvironment` from its domain's `env.py` (`gatk_env` in `tasks/gatk/env.py`, `scrna_env` in `tasks/scrna/env.py`). Resources are set on the environment, shared by every task on it, not per task. The devbox node has ~7.75 GiB allocatable and a workflow's pods must fit together in ~6 GiB (the header of `devbox/setup.sh`).
 2. **Assets for I/O.** Inputs and outputs are `Asset` subclasses from `src/stargazer/assets/`, every field with a default.
 3. **Imports.** `import flyte` and `flyte.io`, never `flytekit`; `from stargazer.<module>`, never relative; no `TYPE_CHECKING` blocks. There is no `@workflow` decorator.
 4. **Paths.** `pathlib.Path` throughout; `_run` converts arguments to `str` at the subprocess boundary.
@@ -25,7 +25,7 @@ A task wraps one bioinformatics tool and does one thing. A workflow composes tas
 
 - **Where:** the domain subdirectory of `src/stargazer/tasks/` (`gatk/`, `general/`, `scrna/`), one file per tool. Related tasks can share a module (`bwa_index` and `bwa_mem`).
 - **Name:** `{action}_{tool}` or the tool's own verb (`bwa_mem`, `sort_sam`, `haplotype_caller`).
-- **Image:** the tool must be in the pixi environment the environment's image installs (its feature under `[tool.pixi]` in `pyproject.toml`). If it isn't, add it, run `pixi lock`, and say so.
+- **Image:** the tool, and any package the core doesn't have, must be in the header of the environment's `env.py`: conda-forge and bioconda packages under `[tool.pixi.dependencies]`, PyPI ones under `dependencies`. If it isn't, add it, run `pixi run python cli/lock_envs.py`, and say so. A domain's packages import inside the task body, so importing the task never needs them.
 - **Inputs:** validate them first, with errors that say what to fix. A missing input is never made up for by doing another task's work: raise, naming the task that produces it.
 
 ```python
@@ -40,7 +40,8 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 import stargazer.utils.storage as _storage
 from stargazer.assets import {InputType}, {OutputType}
-from stargazer.config import gatk_env, logger  # or scrna_env
+from stargazer.config import logger
+from stargazer.tasks.gatk.env import gatk_env  # or stargazer.tasks.scrna.env's scrna_env
 from stargazer.utils import _run
 
 
@@ -103,7 +104,8 @@ import asyncio
 
 from stargazer.assets import {InputType}, {OutputType}
 from stargazer.assets.asset import assemble
-from stargazer.config import gatk_env, log_execution  # or scrna_env
+from stargazer.config import log_execution
+from stargazer.tasks.gatk.env import gatk_env  # or stargazer.tasks.scrna.env's scrna_env
 from stargazer.tasks import {task1}, {task2}
 
 

@@ -6,7 +6,8 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 import stargazer.utils.storage as _storage
 from stargazer.assets.scrna import AnnData
-from stargazer.config import logger, scrna_env
+from stargazer.config import logger
+from stargazer.tasks.scrna.env import scrna_env
 
 
 @scrna_env.task

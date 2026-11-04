@@ -1,4 +1,4 @@
-"""Fixtures for the postgres tier (`uv run --all-extras pytest -m postgres`).
+"""Fixtures for the postgres tier (`pixi run pytest -m postgres`).
 
 The index tests run against a throwaway Postgres 16 container, the version
 Aurora DSQL is compatible with, started once per session with Docker. A run

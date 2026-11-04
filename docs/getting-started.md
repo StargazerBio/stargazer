@@ -94,13 +94,13 @@ uv pip install -e ".[mcp]"
 stargazer
 ```
 
-`stargazer` serves MCP over stdio; add the `bio` extra to run the scRNA-seq tasks locally, and `notebook` for the notebooks.
+`stargazer` serves MCP over stdio. What each kind of task runs with (scanpy for scRNA-seq, the GATK and alignment tools) is in its task image rather than the package, so a run on a cluster needs nothing more; a task run in your own process needs its packages installed beside the SDK.
 
 ## Docs
 
 To preview documentation locally:
 
 ```bash
-uv run python docs/gen_catalog.py
-uv run zensical serve
+pixi run python docs/gen_catalog.py
+pixi run zensical serve
 ```
