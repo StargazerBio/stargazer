@@ -1,8 +1,9 @@
 ---
 title: pixi-dependencies
-status: doing
+status: review
 priority: normal
 created: 2026-11-03
+pr: 127
 ---
 
 Manage Stargazer's dependencies with pixi instead of uv: one tool that installs conda packages (bioconda's tools, conda-forge's libraries) and PyPI packages into one locked environment, for notebooks, task images and development alike. Today Python packages are declared and locked (notebook headers, `pyproject.toml`, `uv.lock`), but command-line tools are not: `gatk_env` installs gatk4, samtools, bwa and bwa-mem2 from an unpinned `micromamba create` in a `with_commands` string, and since ticket [[warm-uv-cache]] a notebook that runs a tool in its own process (the community germline notebook on "On this machine") relies on the user running `micromamba install`.
@@ -32,7 +33,7 @@ Manage Stargazer's dependencies with pixi instead of uv: one tool that installs 
 
 In stages, each shippable alone:
 
-- [ ] Task images: a `[tool.pixi]` section in `pyproject.toml` with `gatk` and `scrna` features, `pixi.lock`, and `gatk_env`/`scrna_env` built with `with_pixi_project`. Verify with the tasks tier and a germline run on the devbox.
+- [x] Task images: a `[tool.pixi]` section in `pyproject.toml` with `gatk` and `scrna` features, `pixi.lock`, and `gatk_env`/`scrna_env` built with `with_pixi_project`. Verify with the tasks tier and a germline run on the devbox. PR 127. Measured 2026-11-03: tasks tier 35 passed (images built locally in 8 min, emulated), devbox germline 2 passed in 2:19, Union remote builds 2:41 (gatk) and 0:53 (scrna) with a probe task succeeding on each. uv.lock moved to flyte 2.12.4 to match pixi's lock.
 - [ ] Notebook sandbox: pixi in the image, `--sandbox=pixi` in the launch script, headers moved to `[tool.pixi.pypi-dependencies]` for the SDK, the warm cache redone for pixi. Verify a core notebook and the germline notebook (with its tools in its header) locally and hosted, timed against uv.
 - [ ] Development: contributor setup, tests, pre-commit and release under pixi.
 
@@ -58,11 +59,59 @@ Preconditions: docker; for the devbox, the devbox recipe in ticket `devbox-postg
 - **Tasks tier.** `uv run --all-extras python cli/docker_task_tests.py` exits `0` (`pixi-tasks-tier`).
 - **Tool versions.** `docker run --rm --platform linux/amd64 <gatk image> sh -c 'gatk --version; samtools --version | head -1; bwa 2>&1 | grep Version; bwa-mem2 version'` prints the versions in pixi.lock's `gatk` environment (`pixi-tool-versions`). The image name is the tasks tier's `image:` line.
 - **Devbox germline.** `uv run --all-extras pytest -m devbox -rP tests/devbox/test_germline.py` passes both tests (`pixi-devbox-germline`).
-- **Union.** Build both images with `flyte --config .flyte/union.yaml build` (or a run), then run one task per image on Union; each run succeeds (`pixi-union-build`).
+- **Union.** From the repo root, with no `FLYTE_IMAGE_REGISTRY` exported, put the probe below in its own directory with a copy of `.dockerignore` (Flyte reads it from `root_dir`; without it the image hash and context change), then `uv run --all-extras python <dir>/pixi_probe.py $PWD/.flyte/union.yaml`. Both remote builds finish and both runs succeed, printing the locked tool versions and scanpy (`pixi-union-build`). Check `get run --in-phase running` is empty after.
+
+```python
+"""Probe the pixi-built task images on Union: tools, Python, stargazer."""
+
+import subprocess
+import sys
+from pathlib import Path
+
+import flyte
+
+from stargazer.config import gatk_env, scrna_env
+
+gatk_probe_env = flyte.TaskEnvironment(name="pixi_probe_gatk", image=gatk_env.image, resources=flyte.Resources(cpu=1, memory="2Gi"))
+scrna_probe_env = flyte.TaskEnvironment(name="pixi_probe_scrna", image=scrna_env.image, resources=flyte.Resources(cpu=1, memory="2Gi"))
+
+
+def _sh(cmd: str) -> str:
+    r = subprocess.run(["sh", "-c", cmd], capture_output=True, text=True, check=False)
+    return f"$ {cmd}\n{r.stdout}{r.stderr}".strip()
+
+
+@gatk_probe_env.task
+async def probe_gatk() -> str:
+    import stargazer
+
+    return "\n".join([sys.executable, sys.version, stargazer.__file__, f"flyte {flyte.__version__}",
+        _sh("gatk --version 2>&1 | grep -i jar"), _sh("samtools --version | head -1"),
+        _sh("bwa 2>&1 | grep Version"), _sh("bwa-mem2 version 2>&1 | tail -1"), _sh("java -version 2>&1 | head -1")])
+
+
+@scrna_probe_env.task
+async def probe_scrna() -> str:
+    import scanpy
+    import stargazer
+
+    return "\n".join([sys.executable, stargazer.__file__, f"scanpy {scanpy.__version__}", f"flyte {flyte.__version__}"])
+
+
+if __name__ == "__main__":
+    flyte.init_from_config(sys.argv[1], root_dir=Path(__file__).parent)
+    for task in (probe_gatk, probe_scrna):
+        run = flyte.run(task)
+        print(run.url, flush=True)
+        run.wait()
+        print(run.outputs(), flush=True)
+```
 
 ### Gotchas
 
 - Without a `python` pin, pixi takes the newest conda-forge Python (3.15) over `requires-python = ">=3.14"`.
+- bioconda's bwa-mem2 2.3 binary reports its version as `2.2.1`.
+- Union's remote builder lowers the pixi layer to primitive layers, so its image hash differs from a local build of the same recipe.
 - pixi.lock and uv.lock are separate resolutions, so they drift by lock date; the Flyte SDK must match between submitter and pod.
 
 Related: [[board]], [[warm-uv-cache]], [[local-notebook-images]], [[layered-notebook-image-cache]], [[marimo-sandbox]], [[flyte-images]].
