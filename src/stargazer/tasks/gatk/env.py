@@ -27,8 +27,6 @@ core dependencies the lock pins. `cli/lock_envs.py` locks it into
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
 
-from pathlib import Path
-
 import flyte
 
 from stargazer.config import STARGAZER_ENV_VARS, STARGAZER_SECRETS, task_image
@@ -36,7 +34,7 @@ from stargazer.config import STARGAZER_ENV_VARS, STARGAZER_SECRETS, task_image
 gatk_env = flyte.TaskEnvironment(
     name="gatk",
     description="GATK, BWA, and samtools alignment and variant-calling workloads",
-    image=task_image(Path(__file__), "stargazer-gatk"),
+    image=task_image(__file__),
     # A 1Gi request: the germline workflow holds three gatk_env pods at once
     # (workflow, prepare_reference or preprocess_sample, the tool), and three
     # 2Gi requests don't fit the devbox node beside a dashboard.

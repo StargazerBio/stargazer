@@ -28,8 +28,6 @@ datasets), and the released SDK, whose core dependencies the lock pins.
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
 
-from pathlib import Path
-
 import flyte
 
 from stargazer.config import STARGAZER_ENV_VARS, STARGAZER_SECRETS, task_image
@@ -38,7 +36,7 @@ from stargazer.config import STARGAZER_ENV_VARS, STARGAZER_SECRETS, task_image
 scrna_env = flyte.TaskEnvironment(
     name="scrna",
     description="scanpy-based single-cell RNA analysis; memory-intensive AnnData workloads",
-    image=task_image(Path(__file__), "stargazer-scrna"),
+    image=task_image(__file__),
     resources=flyte.Resources(memory=("2Gi", "6Gi")),
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,

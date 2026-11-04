@@ -90,10 +90,10 @@ See [Configuration → Container Images](../architecture/configuration.md#contai
 Each installs the environment the header of its domain's `env.py` declares (`src/stargazer/tasks/gatk/env.py`, `src/stargazer/tasks/scrna/env.py`), from the `env.py.pixi.lock` beside it, which a build refuses if it's out of date with the header. After changing a header, relock with the pixi version Flyte builds the images with (it fetches that pixi itself):
 
 ```bash
-pixi run python cli/lock_envs.py            # every environment; --check only checks
+pixi run python cli/lock_envs.py            # pixi.lock and every header; --check only checks
 ```
 
-The development environment is `pyproject.toml`'s `[tool.pixi]`, locked in `pixi.lock`; `pixi add --pypi <package>` adds a core dependency and relocks.
+The development environment is `pyproject.toml`'s `[tool.pixi]`, locked in `pixi.lock`. Images install `pixi.lock` too (its `core` and `mcp` environments), so after `pixi add --pypi <package>` adds a core dependency, or any edit to `[tool.pixi]`, run the same command: your own pixi writes a lock the image builder refuses. Pre-commit checks it.
 
 **The notebook image (`stargazer`)** builds from `runtime/Dockerfile`, from the repository root, when you change it or want the current source in it:
 

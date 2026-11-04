@@ -26,7 +26,7 @@ How a `flyte.Image` is declared and built. Examples: [[flyte-v2-docs#Container I
 
 ## In Stargazer
 
-- **The task images** are on the environments in each domain's `env.py`, built by `task_image()` in `config.py`, whose docstring says how and why; `cli/lock_envs.py` locks their headers with the builder's pixi. The image table is in `docs/architecture/configuration.md`.
+- **The task images** are on the environments in each domain's `env.py`, built by `task_image()` in `config.py`; images for tasks that need only the SDK by `core_image()`, from `pyproject.toml`'s `core` environment. Their docstrings say how and why; `cli/lock_envs.py` locks the headers and `pixi.lock` with the builder's pixi. The image table is in `docs/architecture/configuration.md`.
 - **The notebook images**: `notebook_base` in `src/stargazer/notebooks/__init__.py`, built on the image `runtime/Dockerfile` makes and `.github/workflows/release.yml` publishes.
 - **Devbox builds** are in `devbox/setup.sh`.
 

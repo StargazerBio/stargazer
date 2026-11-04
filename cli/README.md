@@ -81,22 +81,22 @@ to add by hand.
 
 ## lock_envs.py
 
-Locks each task environment: the header of each `env.py` under
-`src/stargazer/` (a domain's, and the core one) into the `env.py.pixi.lock`
-beside it, which the image's `pixi install --locked` installs. It locks the
-pixi manifest Flyte renders from the header, with the pixi version Flyte's
-image builder runs, fetched from conda-forge by `pixi exec`, since a newer
-pixi's lock (`pixi lock --script`) is one the builder refuses. Run it after
-changing a header.
+Locks what the images install with `pixi install --locked`: `pyproject.toml`
+into `pixi.lock`, and each domain's `env.py` header into the
+`env.py.pixi.lock` beside it, as the pixi manifest Flyte renders from the
+header. It locks with the pixi version Flyte's image builder runs, fetched
+from conda-forge by `pixi exec`, since a lock from a newer pixi (yours, or
+`pixi lock --script`) is one the builder refuses. Run it after changing a
+header, `[tool.pixi]` or a core dependency.
 
 ```bash
-pixi run python cli/lock_envs.py [--check] [--update] [env.py ...]
+pixi run python cli/lock_envs.py [--check] [--update] [pyproject.toml | env.py ...]
 ```
 
-With no paths it locks every environment. The existing lock is kept where the
+With no paths it locks all of them. The existing lock is kept where the
 header still allows it; `--update` solves from scratch. `--check` changes
 nothing and exits 1 if a lock is out of date, as the pre-commit hook does when
-a header or lock changes.
+a manifest or lock changes.
 
 ## docker_task_tests.py
 

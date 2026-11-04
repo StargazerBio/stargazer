@@ -1,8 +1,8 @@
 """Tests for the task environments' locks against the development lock.
 
 A run is submitted from the development environment (`pixi.lock`) and runs in
-a task image (each `env.py.pixi.lock`: a domain's, or the core one), and Flyte's wire format only
-holds between matching SDKs. The locks are solved apart, so relocking one
+a domain's task image (its `env.py.pixi.lock`), and Flyte's wire format
+only holds between matching SDKs. The locks are solved apart, so relocking one
 can move its `flyte` away from the others.
 """
 

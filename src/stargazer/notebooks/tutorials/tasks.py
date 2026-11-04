@@ -41,9 +41,8 @@ with app.setup:
     from stargazer.config import (
         STARGAZER_ENV_VARS,
         STARGAZER_SECRETS,
-        task_image,
+        core_image,
     )
-    from stargazer.env import CORE_ENV
     from stargazer.notebooks.tutorials.assets import SampleSheet
 
     # Declared in the setup block so `summarize_cohort` can use it and stay
@@ -53,9 +52,7 @@ with app.setup:
         name="tutorial",
         description="Lightweight env for the tutorial notebooks.",
         image=(
-            task_image(CORE_ENV, "stargazer-tutorial").with_pip_packages(
-                "marimo>=0.23,<0.24"
-            )
+            core_image("stargazer-tutorial").with_pip_packages("marimo>=0.23,<0.24")
         ),
         resources=flyte.Resources(cpu=1, memory="512Mi"),
         env_vars=STARGAZER_ENV_VARS,

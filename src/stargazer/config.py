@@ -5,7 +5,9 @@ Sets environment variable defaults at import time. Consumers read
 os.environ directly rather than importing named values from this module.
 
 Also what every task environment shares: the platform its image is built
-for, the variables and secrets forwarded into its pods, and `task_image()`.
+for, the variables and secrets forwarded into its pods, and the image
+recipes, `task_image()` for a domain's and `core_image()` for tasks that need
+only the SDK.
 The environments themselves live in their domains' `env.py`
 (`stargazer.tasks.scrna.env`, `stargazer.tasks.gatk.env`).
 
@@ -193,26 +195,49 @@ def init_flyte() -> None:
         )
 
 
-def task_image(env: Path, name: str) -> flyte.Image:
-    """A task image: the environment `env`'s header declares, then the checkout's stargazer.
+def _with_source(image: flyte.Image, *, deps: bool) -> flyte.Image:
+    """`image` with the checkout's stargazer installed on top, from its source.
 
-    `env` is a domain's `env.py`, whose PEP 723 header lists the environment's
-    conda and PyPI packages, the released SDK among them, locked in the
-    `env.py.pixi.lock` beside it (`cli/lock_envs.py`). Flyte renders the
-    header as a pixi workspace and installs it from the header and lock
-    alone, so its layer (Python, the tools, every dependency) is cached until
-    either changes, and pixi's environment is the pod's Python. The checkout's
-    source goes on top, over the released SDK, so a source change rebuilds
-    only that layer; uv adds any core dependency the checkout has gained since
-    the release. .dockerignore keeps docs, tests and git history out of it. A
-    task pod resolves the tasks it calls as installed modules
-    (`stargazer.tasks…`), so the package must be the checkout's, wherever the
-    run was submitted from.
+    A layer of its own, so a source change rebuilds only it; .dockerignore
+    keeps docs, tests and git history out of it. A task pod resolves the
+    tasks it calls as installed modules (`stargazer.tasks…`), so the package
+    must be the checkout's, wherever the run was submitted from. uv installs
+    into the pixi environment, which the layer below made `VIRTUAL_ENV`.
     """
-    return (
-        flyte.Image.from_pixi_script(env, name=name, platform=IMAGE_PLATFORM)
-        .with_source_folder(PROJECT_ROOT, "/opt/stargazer")
-        # uv installs into the pixi environment, which the layer above made
-        # `VIRTUAL_ENV`.
-        .with_commands(["uv pip install --no-cache /opt/stargazer"])
+    install = ["uv", "pip", "install", "--no-cache", *([] if deps else ["--no-deps"])]
+    return image.with_source_folder(PROJECT_ROOT, "/opt/stargazer").with_commands(
+        [" ".join([*install, "/opt/stargazer"])]
     )
+
+
+def task_image(env: str | Path) -> flyte.Image:
+    """A domain's task image, `stargazer-<domain>`: its `env.py`'s header, then the checkout.
+
+    `env` is the domain's `env.py` (its `__file__`), whose PEP 723 header lists
+    the environment's conda and PyPI packages, the released SDK among them,
+    locked in the `env.py.pixi.lock` beside it (`cli/lock_envs.py`). Flyte
+    renders the header as a pixi workspace and installs it from the header and
+    lock alone, so that layer (Python, the tools, every dependency) is cached
+    until either changes, and pixi's environment is the pod's Python. The
+    checkout goes on top of the released SDK, and uv adds any core dependency
+    it has gained since the release.
+    """
+    env = Path(env)
+    image = flyte.Image.from_pixi_script(
+        env, name=f"stargazer-{env.parent.name}", platform=IMAGE_PLATFORM
+    )
+    return _with_source(image, deps=True)
+
+
+def core_image(name: str) -> flyte.Image:
+    """An image for tasks that need only the SDK: pixi.lock's `core` environment, then the checkout.
+
+    The core dependencies alone, at the versions development runs, from
+    pyproject.toml and pixi.lock (`dependencies_only`), so that layer is
+    cached until either changes. The checkout goes on top without
+    dependencies, since the environment is its own.
+    """
+    image = flyte.Image.from_debian_base(
+        name=name, platform=IMAGE_PLATFORM
+    ).with_pixi_project(PROJECT_ROOT / "pyproject.toml", environment="core")
+    return _with_source(image, deps=False)

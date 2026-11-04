@@ -14,10 +14,6 @@
 
 ::: stargazer.config
 
-## Env
-
-::: stargazer.env
-
 ## Marshal
 
 ::: stargazer.marshal

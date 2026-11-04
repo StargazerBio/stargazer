@@ -50,14 +50,15 @@ repos:
         language: system
         pass_filenames: false
         files: ^(src/stargazer/(server|registry|marshal)\.py|src/stargazer/assets/.*\.py|pyproject\.toml)$
-      # A header the image build would refuse: its lock no longer matches it.
+      # A lock the image build would refuse: out of date with its manifest, or
+      # written by a pixi other than the builder's.
       # Locks with the build's pixi version (cli/lock_envs.py).
       - id: env-locks
-        name: task environment locks match their headers
+        name: image locks match their manifests, written by the builder's pixi
         entry: pixi run python cli/lock_envs.py --check
         language: system
         pass_filenames: false
-        files: ^src/stargazer/(.+/)?env\.py(\.pixi\.lock)?$
+        files: ^(pyproject\.toml|pixi\.lock|src/stargazer/(.+/)?env\.py(\.pixi\.lock)?)$
       # The unit tier: a bare pytest run selects it (`addopts` in
       # pyproject.toml), in the dev environment.
       - id: unit-tests
