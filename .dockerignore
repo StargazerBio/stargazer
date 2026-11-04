@@ -30,3 +30,4 @@ zensical.toml
 # run and would otherwise change every image hash built from this context).
 .env
 .flyte/
+.pixi/

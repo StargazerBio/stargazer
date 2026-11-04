@@ -89,6 +89,12 @@ See [Configuration → Container Images](../architecture/configuration.md#contai
 
 **Flyte task images (`stargazer-scrna`, `stargazer-gatk`)** build themselves, tagged by a hash of their recipe and the project's source, the first time a run or the tasks test tier needs them. `image.builder` in the Flyte config picks `local` (needs Docker) or `remote` (Union only).
 
+They install environments from `pixi.lock`, which a build refuses if it's out of date with `pyproject.toml`. After changing a dependency, or a tool under `[tool.pixi]`, relock with `uv lock` and with pixi, at the version Flyte builds the images with:
+
+```bash
+docker run --rm -v "$PWD":/w -w /w ghcr.io/prefix-dev/pixi:0.72.2 pixi lock
+```
+
 **The notebook image (`stargazer`)** builds from `runtime/Dockerfile`, from the repository root, when you change it or want the current source in it:
 
 ```bash

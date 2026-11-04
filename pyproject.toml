@@ -107,6 +107,35 @@ diagrams = [
     "pygraphviz>=2,<3",
 ]
 
+# pixi reads this file as its manifest too, and pixi.lock locks it. The task
+# images install its environments (`gatk_env`, `scrna_env` in config.py):
+# conda-forge's Python, bioconda's command-line tools, and the project's own
+# PyPI dependencies on top. pixi turns the extras and dependency groups above
+# into features of the same names. Changing a dependency means `pixi lock`
+# beside `uv lock`, or the images' `pixi install --locked` refuses the build.
+[tool.pixi.workspace]
+# bioconda's packages build against conda-forge's, which come first.
+channels = ["conda-forge", "bioconda"]
+# What the images are built for (`IMAGE_PLATFORM` in config.py).
+platforms = ["linux-64"]
+
+[tool.pixi.dependencies]
+# requires-python alone lets pixi take the newest Python; .python-version's.
+python = "3.14.*"
+
+[tool.pixi.pypi-dependencies]
+stargazer-bio = { path = ".", editable = true }
+
+[tool.pixi.feature.gatk.dependencies]
+gatk4 = "4.6.*"
+samtools = "1.*"
+bwa = "0.7.*"
+bwa-mem2 = "2.*"
+
+[tool.pixi.environments]
+gatk = ["gatk"]
+scrna = ["bio"]
+
 # Rule selection is ruff's default for the pinned version (see the ruff pin in
 # [dependency-groups] and the matching rev in .pre-commit-config.yaml — bump
 # them together), plus the banned-api rule that enforces the import layers.

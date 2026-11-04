@@ -13,7 +13,7 @@ sources:
 
 How a `flyte.Image` is declared and built. Examples: [[flyte-v2-docs#Container Images]], [[flyte-sdk-examples#3. Images & Dependencies]].
 
-- **An image is declared, not built, in code.** A `flyte.Image` starts from a `from_*` base (`from_debian_base`, `from_base` for an existing image, `from_uv_script`) and takes `with_*` layers: `with_apt_packages`, `with_pip_packages`, `with_commands`, `with_env_vars`, `with_source_folder`, `with_uv_project` and more. Flyte builds it the first time a run needs it, tagged by content hash.
+- **An image is declared, not built, in code.** A `flyte.Image` starts from a `from_*` base (`from_debian_base`, `from_base` for an existing image, `from_uv_script`) and takes `with_*` layers: `with_apt_packages`, `with_pip_packages`, `with_commands`, `with_env_vars`, `with_source_folder`, `with_uv_project`, `with_pixi_project` (a pixi environment, conda and PyPI packages, which becomes the image's Python) and more. Flyte builds it the first time a run needs it, tagged by content hash.
 - **No image means Flyte's default** (`ghcr.io/flyteorg/flyte:py{python-version}-v{flyte_version}`).
 - **`from_debian_base` has no CA certificates.** Add `ca-certificates` with `with_apt_packages` or TLS fails.
 - **`from_base` refuses layers until cloned** with `.clone(name=..., extendable=True)`; the name prefixes the built image's tag.
