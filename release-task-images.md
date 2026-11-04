@@ -1,6 +1,6 @@
 ---
 title: release-task-images
-status: review
+status: done
 priority: normal
 created: 2026-11-04
 pr: 132
@@ -36,5 +36,16 @@ With releases on prebuilt images, the notebook headers can install the released 
 ## Verification recipe
 
 Without a release: copy the branch, point `released_image()` in `config.py` at `ghcr.io/stargazerbio/debug:{name}-{release}`, then in the copy `docker login ghcr.io` (with `gh auth token`) and `pixi run python cli/publish_task_images.py`, which pushes `debug:stargazer-<domain>-<version>`. Build the copy's wheel (`pixi exec --spec python-build --spec "python=3.14.*" -- pyproject-build --wheel`), install it in a clean venv, and from an empty directory submit a task on `gatk_env` and one on `scrna_env` to `u-pryce` with `.flyte/union.yaml`. Expect Flyte to build nothing ("Built image" names the GHCR URI as is), stargazer imported from `/opt/pixi-project/.pixi/envs/default`, and the tools or scanpy there. After a real release, the same script runs without the copy and with no patch. Measured 2026-11-04: runs `u7qnxnmz2clsxlldxzww` (gatk, `samtools_faidx`) and `uxftkndlrk844hfdnvr5` (scrna) succeeded.
+
+## Outcome
+
+Shipped in PR 132 (merged 2026-11-04). An installed `stargazer-bio` runs its tasks on `ghcr.io/stargazerbio/stargazer-<domain>:<version>` (`released_image()`), and a checkout still builds from source. `core_image()` installs the package's own version from PyPI when there's no checkout. `release.yml`'s `task-images` job publishes the images with `cli/publish_task_images.py`.
+
+Verified on Union with a wheel in a clean venv against `debug`-tagged images: gatk run `u7qnxnmz2clsxlldxzww` and scrna run `uxftkndlrk844hfdnvr5` succeeded, with nothing built. The tasks tier passed 35. There were no review comments.
+
+Left:
+- A full `core_image()` run waits for the first release that has it.
+- The `task-images` job runs first on the next tag.
+- Notebook headers on the released SDK: [[released-sdk-in-notebooks]], now unblocked.
 
 Related: [[board]], [[pixi-layer-cache]], [[pixi-notebook-sandbox]], [[released-sdk-in-notebooks]], [[pixi-dependencies]], [[flyte-images]].
