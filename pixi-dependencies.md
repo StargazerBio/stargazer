@@ -1,6 +1,6 @@
 ---
 title: pixi-dependencies
-status: review
+status: done
 priority: normal
 created: 2026-11-03
 pr: 127
@@ -34,8 +34,12 @@ Manage Stargazer's dependencies with pixi instead of uv: one tool that installs 
 In stages, each shippable alone:
 
 - [x] Task images: a `[tool.pixi]` section in `pyproject.toml` with `gatk` and `scrna` features, `pixi.lock`, and `gatk_env`/`scrna_env` built with `with_pixi_project`. Verify with the tasks tier and a germline run on the devbox. PR 127. Measured 2026-11-03: tasks tier 35 passed (images built locally in 8 min, emulated), devbox germline 2 passed in 2:19, Union remote builds 2:41 (gatk) and 0:53 (scrna) with a probe task succeeding on each. uv.lock moved to flyte 2.12.4 to match pixi's lock.
-- [ ] Notebook sandbox: pixi in the image, `--sandbox=pixi` in the launch script, headers moved to `[tool.pixi.pypi-dependencies]` for the SDK, the warm cache redone for pixi. Verify a core notebook and the germline notebook (with its tools in its header) locally and hosted, timed against uv.
-- [ ] Development: contributor setup, tests, pre-commit and release under pixi.
+- [ ] Notebook sandbox, ticket [[pixi-notebook-sandbox]]: pixi in the image, `--sandbox=pixi` in the launch script, headers moved to `[tool.pixi.pypi-dependencies]` for the SDK, the warm cache redone for pixi. Verify a core notebook and the germline notebook (with its tools in its header) locally and hosted, timed against uv.
+- [ ] Development, ticket [[pixi-development]]: contributor setup, tests, pre-commit and release under pixi.
+
+## Outcome
+
+PR 127 merged 2026-11-04: `gatk_env` and `scrna_env` build from pixi.lock's `gatk` and `scrna` environments with `with_pixi_project`, the tools at locked versions, and uv.lock moved to flyte 2.12.4 to match. Verified with the tasks tier, the devbox germline tests and a probe task on each image after Union's remote builder built it (the recipe below). The remaining stages are their own tickets: [[pixi-notebook-sandbox]], then [[pixi-development]].
 
 ## Verification recipe: task images from pixi
 
@@ -114,4 +118,4 @@ if __name__ == "__main__":
 - Union's remote builder lowers the pixi layer to primitive layers, so its image hash differs from a local build of the same recipe.
 - pixi.lock and uv.lock are separate resolutions, so they drift by lock date; the Flyte SDK must match between submitter and pod.
 
-Related: [[board]], [[warm-uv-cache]], [[local-notebook-images]], [[layered-notebook-image-cache]], [[marimo-sandbox]], [[flyte-images]].
+Related: [[board]], [[pixi-notebook-sandbox]], [[pixi-development]], [[warm-uv-cache]], [[local-notebook-images]], [[layered-notebook-image-cache]], [[marimo-sandbox]], [[flyte-images]].
