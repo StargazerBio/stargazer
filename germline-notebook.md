@@ -1,6 +1,6 @@
 ---
 title: germline-notebook
-status: review
+status: done
 priority: normal
 created: 2026-11-02
 pr: 125
@@ -71,6 +71,10 @@ it's listed through the community repo's catalog.
       23 characters, over the dashboard's 22, so Open from GitHub refused it.
 - [x] Docs: Home's "Workflows take questions, not files" example links to
       it (`docs/index.md`, a small doc edit on stargazer PR 125).
+
+## Outcome
+
+Shipped: the notebook in `StargazerBio/community-notebooks` (`germline/short-variant-discovery.py`, catalog pin `352b277`), and Home's "Workflows take questions, not files" example linking to it, in stargazer PR 125 (merge `51da133`, 2026-11-04). Verified on Union and headless on GitHub Actions (47 sites across 1 sample, community-notebooks PR 1). Its "On this machine" run needs the tools in the notebook's environment: today `micromamba install`, and with ticket [[pixi-notebook-sandbox]] declared in its header. No review comments.
 
 ## Verification recipe: germline notebook
 
