@@ -14,25 +14,22 @@ RUN npm install -g --omit=dev @agentclientprotocol/claude-agent-acp@0.99.1 \
         opencode-ai@1.19.5 \
     && npm cache clean --force
 
+FROM ghcr.io/prefix-dev/pixi:0.83.0 AS pixi
+
 FROM python:3.14-slim-bookworm
 
 RUN apt-get update \
-    && apt-get install -y build-essential ca-certificates curl git bzip2 \
+    && apt-get install -y build-essential ca-certificates curl git \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash flyte
 
-# micromamba + the bioinformatics tools (same set as gatk_env), reachable by
-# subprocess from inside each notebook's sandbox venv.
-RUN case "$(uname -m)" in x86_64) MM=linux-64 ;; aarch64) MM=linux-aarch64 ;; esac \
-    && curl -Ls "https://micro.mamba.pm/api/micromamba/${MM}/latest" \
-        | tar -xj -C /usr/local/bin --strip-components=1 bin/micromamba \
-    && micromamba create -p /opt/conda -y -c bioconda -c conda-forge \
-        gatk4 samtools bwa bwa-mem2 \
-    && micromamba clean -a -y \
-    && ln -s /opt/conda/bin/gatk /opt/conda/bin/java /opt/conda/bin/samtools \
-        /opt/conda/bin/bwa /opt/conda/bin/bwa-mem2* /usr/local/bin/
+# pixi, which `marimo --sandbox=pixi` builds each notebook's environment
+# with, from its header: conda packages (bioconda's tools among them) and PyPI
+# ones. Newer than the pixi Flyte's image builder uses: marimo needs its
+# `install --script`.
+COPY --from=pixi /usr/local/bin/pixi /usr/local/bin/
 
-# uv, which `marimo --sandbox` uses to build per-notebook venvs.
+# uv, which builds the runtime's and the MCP server's venvs below.
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && install -m 755 /root/.local/bin/uv /root/.local/bin/uvx /usr/local/bin/
 
@@ -109,18 +106,55 @@ RUN mkdir /opt/workspace \
     && cp /workspace/AGENTS.md /opt/workspace/
 
 # A locale the slim image has: marimo's terminal sets en_US.UTF-8 unless one
-# is set, and bash warns that it doesn't exist.
+# is set, and bash warns that it doesn't exist. An environment links its
+# packages from the caches below, which are in an image layer, where a hardlink
+# costs a copy of the file, synced to disk: 20 s for a notebook on the core
+# SDK, against 3 s with symlinks. pixi copies the conda packages' files
+# instead, and symlinks the PyPI ones, as uv does.
 ENV PATH="/opt/venv/bin:${PATH}" \
     LANG="C.UTF-8" \
     LC_ALL="C.UTF-8" \
     PYTHONPATH="/usr/local/lib" \
-    UV_LINK_MODE="copy" \
+    PIXI_CACHE_DIR="/opt/pixi-cache" \
+    PIXI_NO_HARD_LINKS="true" \
+    PIXI_NO_REF_LINKS="true" \
+    UV_CACHE_DIR="/opt/uv-cache" \
+    UV_LINK_MODE="symlink" \
     DISABLE_AUTOUPDATER="1"
+
+RUN install -d -o flyte -g flyte /opt/pixi-cache /opt/uv-cache
+USER flyte
+
+# A warm cache, so a notebook's environment starts from local disk and only
+# what a header adds comes from the network. These are the calls marimo makes:
+# the server starts under a `--with marimo[lsp]` layer over the runtime venv,
+# and a notebook's sandbox installs its header's environment with pixi, then
+# starts the kernel under a `--with marimo` layer over it, both layers by uv
+# through `pixi exec`. pixi keys a notebook's environment on its path, so the
+# tutorials' are built where a hosted pod opens them, under /stargazer; any
+# other path builds its own from the cache. The templates are only ever opened
+# as copies, so only their packages are kept. Within this layer hardlinks
+# cost nothing.
+RUN export PIXI_NO_HARD_LINKS=false PIXI_NO_REF_LINKS=false \
+        UV_LINK_MODE=hardlink \
+    && UV="pixi exec --spec uv>=0.12 uv" \
+    && VIRTUAL_ENV=/opt/venv $UV run -q --active --no-project \
+        --python /opt/venv/bin/python --with "marimo[lsp]==0.25.1" \
+        -- python -c 'import marimo' \
+    && for nb in $(find /stargazer/src/stargazer/notebooks -mindepth 2 \
+            -name '*.py' ! -name __init__.py); do \
+        env="$(pixi install --script "$nb" 2>&1 \
+            | sed -n "s/.*installed at '\(.*\)'\.$/\1/p")" \
+        && [ -n "$env" ] \
+        && case "$nb" in */templates/*) rm -rf "${env%/envs/*}"; continue ;; esac \
+        && $UV run -q --no-project --python "$env/bin/python" \
+            --with marimo==0.25.1 -- python -c 'import marimo, stargazer' \
+        || exit 1; \
+    done
 
 # Not /workspace: a hosted pod's `fserve` unpacks its code bundle and writes
 # its parameters file into the working directory, and the proxy saves
 # everything in /workspace to the user's store. The launch script moves there.
-USER flyte
 WORKDIR /home/flyte
 
 EXPOSE 8080

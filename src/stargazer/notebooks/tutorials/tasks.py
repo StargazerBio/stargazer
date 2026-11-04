@@ -1,10 +1,14 @@
 # /// script
 # requires-python = ">=3.14"
 # dependencies = [
+#   "marimo",
 #   "stargazer-bio",
 # ]
 #
-# [tool.uv.sources]
+# [tool.pixi.dependencies]
+# python = "3.14.*"
+#
+# [tool.pixi.pypi-dependencies]
 # stargazer-bio = { path = "/stargazer", editable = true }
 # ///
 """
@@ -56,9 +60,9 @@ with app.setup:
                 name="stargazer-tutorial",
                 platform=IMAGE_PLATFORM,
             )
-            .with_uv_project(
-                PROJECT_ROOT / "pyproject.toml", project_install_mode="install_project"
-            )
+            .with_pixi_project(PROJECT_ROOT / "pyproject.toml")
+            .with_source_folder(PROJECT_ROOT, "/opt/stargazer")
+            .with_commands(["uv pip install --no-deps --no-cache /opt/stargazer"])
             .with_pip_packages("marimo>=0.23,<0.24")
         ),
         resources=flyte.Resources(cpu=1, memory="512Mi"),

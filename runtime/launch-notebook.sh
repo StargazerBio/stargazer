@@ -15,8 +15,9 @@
 #      proxy module's `hydrate()`. A new user, or a deploy
 #      without a store, starts with an empty dir. The session then cd's into
 #      /workspace so marimo, its terminal and its agent all work there.
-#   2. Start marimo on 127.0.0.1:8081 in sandbox mode (notebook's PEP 723
-#      header drives the venv), watching the notebook's file in edit mode.
+#   2. Start marimo on 127.0.0.1:8081 in pixi's sandbox mode (the notebook's
+#      PEP 723 header drives its environment, conda and PyPI packages both),
+#      watching the notebook's file in edit mode.
 #   3. In edit mode, start the `stargazer` MCP server on 127.0.0.1:8000, which
 #      the proxy hands to each agent session in marimo's agent panel.
 #   4. Start the reverse proxy on 0.0.0.0:8080 (the public port).
@@ -69,7 +70,7 @@ WATCH=()
 
 # `-q`: marimo's banner advertises its own port, 8081, which only the proxy
 # can reach.
-marimo -q "${MODE}" --sandbox "${WATCH[@]}" "${NOTEBOOK_PATH}" \
+marimo -q "${MODE}" --sandbox=pixi "${WATCH[@]}" "${NOTEBOOK_PATH}" \
   --port 8081 --host 127.0.0.1 --headless --no-token &
 
 # The agents' env has no project key (the proxy's `_agent_env`), so the server
