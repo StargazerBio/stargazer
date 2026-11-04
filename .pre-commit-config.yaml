@@ -57,7 +57,7 @@ repos:
         entry: pixi run python cli/lock_envs.py --check
         language: system
         pass_filenames: false
-        files: ^src/stargazer/tasks/[^/]+/env\.py(\.pixi\.lock)?$
+        files: ^src/stargazer/(.+/)?env\.py(\.pixi\.lock)?$
       # The unit tier: a bare pytest run selects it (`addopts` in
       # pyproject.toml), in the dev environment.
       - id: unit-tests

@@ -80,12 +80,18 @@ COPY --chown=flyte:flyte pyproject.toml pixi.lock README.md /stargazer/
 COPY --chown=flyte:flyte src/ /stargazer/src/
 
 # The `stargazer` MCP server for the agent panel, which the launch script
-# starts. Its own venv: the runtime venv holds no SDK. Editable, so
-# `init_flyte()` bundles a run from /stargazer, as a notebook's does; the
-# chown hands the egg-info the install leaves back to the runtime user.
-RUN uv venv --no-cache /opt/mcp \
+# starts. Its own venv: the runtime venv holds no SDK. Pinned to the PyPI
+# versions pixi.lock gives the development environment, so it submits runs
+# with the `flyte` the task images run (their locks match pixi.lock's).
+# Editable, so `init_flyte()` bundles a run from /stargazer, as a notebook's
+# does; the chown hands the egg-info the install leaves back to the runtime
+# user.
+RUN python -c 'import re; print("\n".join(sorted({f"{n}=={v.strip(chr(39))}" for n, v in re.findall(r"^- pypi: .*\n  name: (\S+)\n  version: (\S+)$", open("/stargazer/pixi.lock").read(), re.M)})))' \
+        > /tmp/pixi-pins.txt \
+    && uv venv --no-cache /opt/mcp \
     && uv pip install --no-cache --python /opt/mcp/bin/python \
-        -e "/stargazer[mcp]" \
+        --constraint /tmp/pixi-pins.txt -e "/stargazer[mcp]" \
+    && rm /tmp/pixi-pins.txt \
     && chown -R flyte:flyte /stargazer
 
 # /workspace starts with the agent's context: Claude Code starts there and

@@ -35,11 +35,11 @@ with app.setup:
 
     from stargazer.assets.asset import Asset
     from stargazer.config import (
-        IMAGE_PLATFORM,
-        PROJECT_ROOT,
         STARGAZER_ENV_VARS,
         STARGAZER_SECRETS,
+        task_image,
     )
+    from stargazer.env import CORE_ENV
     from stargazer.notebooks import notebook_base, notebook_env
 
     # TODO: the dashboard tile's blurb.
@@ -60,14 +60,9 @@ with app.setup:
     my_env = flyte.TaskEnvironment(
         name="template",
         image=(
-            flyte.Image.from_debian_base(
-                name="stargazer-template",
-                platform=IMAGE_PLATFORM,
+            task_image(CORE_ENV, "stargazer-template").with_pip_packages(
+                "marimo>=0.23,<0.24"
             )
-            .with_uv_project(
-                PROJECT_ROOT / "pyproject.toml", project_install_mode="install_project"
-            )
-            .with_pip_packages("marimo>=0.23,<0.24")
         ),
         resources=flyte.Resources(cpu=1, memory="512Mi"),
         env_vars=STARGAZER_ENV_VARS,

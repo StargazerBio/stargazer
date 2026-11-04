@@ -122,6 +122,7 @@ The project follows this structure:
 - `runtime/` - The notebook pod's runtime, never part of the package: `Dockerfile` (the one Stargazer image, built from the repo root), `proxy.py` (baked as the top-level module `sg_proxy`), `launch-notebook.sh`, `start-local.sh` (the image's local entrypoint), the HTML fragments the proxy injects, and `notebook_agent.md` (the terminal agent's `AGENTS.md`)
 - `src/stargazer/` - Main package
   - `__init__.py` - Package root, re-exports key symbols
+  - `env.py` - The core environment: a PEP 723 header with the SDK alone, for tasks that need nothing more (a notebook's own), built with `task_image(CORE_ENV, name)`
   - `config.py` - Centralized configuration, env var defaults, what every task environment shares (`task_image()`, the forwarded env vars and secrets), logger setup
   - `server.py` - MCP server implementation
   - `marshal.py` - Serialization helpers for MCP transport

@@ -80,7 +80,7 @@ from typing import TYPE_CHECKING   # No TYPE_CHECKING blocks
 ```python
 # ALWAYS USE:
 import flyte
-from stargazer.config import <env>   # a TaskEnvironment from config.py
+from stargazer.tasks.<domain>.env import <env>   # the domain's TaskEnvironment
 from stargazer.utils import _run
 from stargazer.assets import <AssetTypes>
 ```

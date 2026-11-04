@@ -38,11 +38,11 @@ with app.setup:
 
     from stargazer.assets.asset import Asset
     from stargazer.config import (
-        IMAGE_PLATFORM,
-        PROJECT_ROOT,
         STARGAZER_ENV_VARS,
         STARGAZER_SECRETS,
+        task_image,
     )
+    from stargazer.env import CORE_ENV
     from stargazer.notebooks.tutorials.assets import SampleSheet
 
     # Declared in the setup block so `summarize_cohort` can use it and stay
@@ -52,14 +52,9 @@ with app.setup:
         name="tutorial",
         description="Lightweight env for the tutorial notebooks.",
         image=(
-            flyte.Image.from_debian_base(
-                name="stargazer-tutorial",
-                platform=IMAGE_PLATFORM,
+            task_image(CORE_ENV, "stargazer-tutorial").with_pip_packages(
+                "marimo>=0.23,<0.24"
             )
-            .with_uv_project(
-                PROJECT_ROOT / "pyproject.toml", project_install_mode="install_project"
-            )
-            .with_pip_packages("marimo>=0.23,<0.24")
         ),
         resources=flyte.Resources(cpu=1, memory="512Mi"),
         env_vars=STARGAZER_ENV_VARS,
@@ -181,12 +176,15 @@ def _():
         ### Where environments really live
 
         `tutorial_env` is a throwaway for the tutorials, but production
-        environments live in `src/stargazer/config.py`. That's where
-        `scrna_env` (the scanpy image) and `gatk_env` (the GATK image)
-        are defined, each pinning its own `flyte.Image`, resources, and
-        secrets. A real task is decorated with one of those —
+        environments live beside their tasks, in each domain's `env.py`:
+        `scrna_env` (the scanpy image) in `stargazer/tasks/scrna/env.py`
+        and `gatk_env` (the GATK image) in `stargazer/tasks/gatk/env.py`,
+        each with its own `flyte.Image`, resources, and secrets. The
+        header at the top of that file lists everything its image
+        installs. A real task is decorated with one of those —
         `@scrna_env.task`, `@gatk_env.task` — so it lands in the right
-        container. New kind of workload → new env in `config.py`.
+        container. New kind of workload → a new domain with its own
+        `env.py`.
         """
     )
 

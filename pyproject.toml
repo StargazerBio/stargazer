@@ -62,7 +62,7 @@ where = ["src"]
 include = ["stargazer*"]
 
 [tool.setuptools.package-data]
-stargazer = ["bundles/*.yaml", "notebooks/*.py", "tasks/*/env.py.pixi.lock"]
+stargazer = ["bundles/*.yaml", "notebooks/*.py", "env.py.pixi.lock", "tasks/*/env.py.pixi.lock"]
 
 [dependency-groups]
 dev = [
