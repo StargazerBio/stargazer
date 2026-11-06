@@ -12,12 +12,12 @@ With [[pixi-notebook-sandbox]] merged, notebook environments come from pixi, but
 
 ## Plan
 
-- [ ] Docs: `app/per_notebook.py`'s docstring and `app_internals.md` (the
+- [x] Docs: `app/per_notebook.py`'s docstring and `app_internals.md` (the
       paragraph on ephemeral storage, and the parenthetical on marimo
       pinning in the Workspace paragraph) describe marimo's pixi sandbox
       building each notebook an environment from its header, the image's
       warm cache, and headers listing `marimo` themselves. Rides on infra's
-      `feat/community-explorer-listing` ([[community-explorer-listing]]).
+      `feat/community-explorer-listing` ([[community-explorer-listing]], infra PR 30).
 - [ ] Catalog: after StargazerBio/community-notebooks#4 merges (open as of
       2026-11-06), set each `catalog.yaml` commit to the one that last
       touched its notebook on `main`, as a commit to the repo's `main`.
