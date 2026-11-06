@@ -1,8 +1,9 @@
 ---
 title: community-explorer-listing
-status: doing
+status: review
 priority: high
 created: 2026-11-03
+pr: 30
 ---
 
 The dashboard's explorer lists `StargazerBio/community-notebooks`, the
@@ -60,15 +61,41 @@ catalog's `scrna/clustering-pipeline.py`, listed as featured.
 
 ### Pieces
 
-- [ ] `app/community_listing.py`: fetch, parse, cache.
-- [ ] `app/assets.py`: the two sources, unavailability, download redirect.
-- [ ] `app/admin_app.py`: copy from `community`, default filter, `workflows` gone.
-- [ ] `app/notebooks.py`: scRNA built-in gone.
-- [ ] `app/static/explorer.js`: labels, card (copy, View on GitHub).
-- [ ] `pyyaml` named in `pyproject.toml` (it's only transitive today).
-- [ ] Tests: `tests/unit/test_community_listing.py` against a tarball and raw
+- [x] `app/community_listing.py`: fetch, parse, cache.
+- [x] `app/assets.py`: the two sources, unavailability, download redirect.
+- [x] `app/admin_app.py`: copy from `community`, default filter, `workflows` gone.
+- [x] `app/notebooks.py`: scRNA built-in gone.
+- [x] `app/static/explorer.js`: labels, card (copy, View on GitHub).
+- [x] `pyyaml` named in `pyproject.toml` (it's only transitive today).
+- [x] Tests: `tests/unit/test_community_listing.py` against a tarball and raw
       files served by `httpx.MockTransport`.
-- [ ] `docs/architecture/app.md`'s explorer section; `app_internals.md` where it names the scRNA built-in.
-- [ ] Verified on the devbox and the tenant as the test account (`verify-dashboard`).
+- [x] `docs/architecture/app.md`'s explorer section; `app_internals.md` where it names the scRNA built-in.
+- [x] Verified on the tenant as the test account (`verify-dashboard`); not on the devbox, which has no path of its own here.
+
+## Verification recipe
+
+- **CL-1** the explorer opens with Featured on, Community off.
+- **CL-2** `/assets/list?source=stargazer&source=featured&source=community`
+  lists the tutorials, then the catalog's notebooks at their pinned commits,
+  with no `Stargazer-Unavailable`.
+- **CL-3** a featured card's Add to workspace makes a tile whose source is
+  byte-identical to the raw file at the pinned commit.
+
+Infra's `verify-dashboard` skill: `union_dashboard.py deploy` from the
+branch, sign in to the console as the test account, open the dashboard with
+`location.href`. CL-2 and CL-3 by `fetch` from the dashboard page (compare
+`/workspace/download?slug=<slug>` with the raw URL). Delete the copy with
+`POST /workspace/delete`, then `union_dashboard.py teardown`.
+
+Locally, against the real repo:
+`uv run python -c "import asyncio; from app import community_listing as c; print(asyncio.run(c.listing()))"`.
+
+### Evidence (2026-11-06, infra PR 30)
+
+Tenant, dashboard from `721df06`: CL-1 chips Mine/Stargazer/Featured on,
+Public/Community off; CL-2 200 with 4 tutorials then scRNA at `c294e000`
+and germline at `352b277f`, no unavailable header; CL-3 `scrna-seq-clustering`
+identical to the pinned file (15967 bytes). Copy deleted, teardown left
+live runs `[]`. Unit tests: 331 passed.
 
 Related: [[board]], [[notebooks-in-git]], [[publish-to-git]].
