@@ -43,15 +43,25 @@ overwrite a tag (ticket `shared-image-repository`).
 ## Shape
 
 1. **Resolve, then launch on the digest.** When a launch's image is ready
-   (built, or found), the dashboard resolves its tag to a digest (ECR
-   `DescribeImages`, or the registry's manifest `Docker-Content-Digest`)
-   and serves the pod on `flyte.Image.from_base("<repo>@sha256:<digest>")`.
-   It already serves on `from_base(<uri>)` once a build finishes (ticket
-   `launch-build-state`). This still runs `main_env`'s image, resolved, and
-   makes the digest exactly what the pod runs, with no race against a tag
-   moving between the lookup and the pull.
-2. **Make it readable in the pod**, e.g. an env var the dashboard sets at
-   launch, so a run record built in the notebook can include it.
+   (built, or found), the dashboard resolves its tag to a digest and serves
+   the pod on `flyte.Image.from_base("<repo>@sha256:<digest>")`. An ECR tag
+   resolves through `ecr:BatchGetImage`, which the user's role already has
+   for builds; it can't `DescribeImages` (measured, below). Any other
+   registry resolves through the registry API's manifest `HEAD`
+   (`Docker-Content-Digest`), anonymously, which GHCR's public packages and
+   the devbox's registry answer. The release image is pinned once, at
+   deploy, into the dashboard's `STARGAZER_NOTEBOOK_IMAGE`: the deployer
+   can reach the devbox's `localhost:30000` registry, which a devbox pod
+   can't, and a dashboard and its pods then agree on bytes, not just a tag.
+   So a default launch makes no registry call, and a declared image's
+   launch makes one `BatchGetImage`. This still runs `main_env`'s image,
+   resolved, and makes the digest exactly what the pod runs, with no race
+   against a tag moving between the lookup and the pull.
+2. **Make it readable in the pod**: the dashboard sets `STARGAZER_POD_IMAGE`
+   (`<repo>@sha256:<digest>`, what the pod runs) at launch, so a run record
+   built in the notebook can include it. Stargazer's pod contract
+   (`docs/architecture/runtime.md`) lists it when `run-records` first reads
+   it.
 3. **Build or pull on replay.** Replaying a run offers **build** from the
    notebook's `main_env` or **pull** the recorded digest. Pull is offered
    only where the digest can be pulled (the same deployment); elsewhere it
@@ -71,12 +81,38 @@ overwrite a tag (ticket `shared-image-repository`).
 
 ## Pieces
 
-- [ ] Experiment on the Union tenant, as the test account: the dashboard's
-      role can `DescribeImages` on a Union-built tag and gets a digest; an
-      `AppEnvironment` on `…@sha256:…` serves; `crane copy` to another
-      registry keeps the digest.
-- [ ] Infra: resolve and serve on the digest at launch; expose it in the
-      pod.
+- [x] Experiment on the Union tenant, as the test account: the dashboard's
+      role can resolve a Union-built tag to a digest; an `AppEnvironment` on
+      `…@sha256:…` serves; `crane copy` to another registry keeps the digest.
+- [ ] Infra: pin the release image at deploy, resolve the served image at
+      launch, serve on the digest, set `STARGAZER_POD_IMAGE`.
 - [ ] Build or pull, with ticket `run-records`' replay.
+
+## Experiment (2026-11-07)
+
+All measured, in project `u-pryce`, as an org admin's Flyte login.
+
+- **The role resolves through `BatchGetImage`, not `DescribeImages`.** A task
+  (run `umjvd4jtvf7nv6489n4x`) on the Union-built
+  `791359099513.dkr.ecr.us-west-2.amazonaws.com/union/stargazerbio:dashboard-84c314bd159ea69b027be4ed16713d64`
+  ran as `assumed-role/stargazer-user-u-pryce`. `ecr:DescribeImages` on
+  `union/stargazerbio`: `AccessDeniedException`, "no identity-based policy
+  allows the ecr:DescribeImages action" (the managed
+  `stargazer-user-union-read` grants pull and push only). `ecr:BatchGetImage`
+  on the same tag: `sha256:76b3f73475e1237ae7bc7293807c2f89a454fdd74c28d754ffcdfc346f402b24`.
+  So no policy change: the dashboard resolves with what builds already need.
+- **An app on `…@sha256:…` serves.** `AppEnvironment` `digest-probe` on
+  `…/union/stargazerbio@sha256:76b3f734…` (`python -m http.server`): the
+  console's served image is the digest form, `is_active()` True, its URL
+  answered 200 on the first try. Deactivated after.
+- **`crane copy` keeps the digest.** `crane` (`gcr.io/go-containerregistry/crane@sha256:61bc7169…`)
+  copied `ghcr.io/stargazerbio/stargazer:v2026.10.30`, a multi-arch index, to
+  a throwaway `registry:2`: `crane digest` gave
+  `sha256:5b3a040b4f5790195049a3bf08f0eea289db0466b8a10990650e499757ceef8b`
+  on both sides. An ECR-to-elsewhere copy wasn't run (the read-only AWS
+  login had expired); it's the same property, since a digest is the hash of
+  the manifest bytes `crane` copies verbatim (inferred).
+- Seen in passing: Union's image service (`GetImage`) returns an image's
+  `fqin` and build run, no digest, so the registry is the only source.
 
 Related: [[run-records]], [[launch-build-state]], [[shared-image-repository]], [[board]].
