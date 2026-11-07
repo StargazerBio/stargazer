@@ -1,8 +1,9 @@
 ---
 title: community-catalog-pixi-headers
-status: doing
+status: review
 priority: normal
 created: 2026-11-04
+pr: 30
 ---
 
 With [[pixi-notebook-sandbox]] merged, notebook environments come from pixi, but two places still describe the uv sandbox:
@@ -18,8 +19,16 @@ With [[pixi-notebook-sandbox]] merged, notebook environments come from pixi, but
       building each notebook an environment from its header, the image's
       warm cache, and headers listing `marimo` themselves. Rides on infra's
       `feat/community-explorer-listing` ([[community-explorer-listing]], infra PR 30).
-- [ ] Catalog: after StargazerBio/community-notebooks#4 merges (open as of
-      2026-11-06), set each `catalog.yaml` commit to the one that last
-      touched its notebook on `main`, as a commit to the repo's `main`.
+- [x] Catalog: after StargazerBio/community-notebooks#4 merges, set each
+      `catalog.yaml` commit to the one that last touched its notebook on
+      `main`, as a commit to the repo's `main`. Done in community-notebooks
+      `b2197b2`: both at `63e5c10`.
+
+## Evidence
+
+- Catalog (2026-11-07): `ci/check_layout.py` passes on a clean export of
+  `b2197b2`, and the repo's Notebooks workflow passed on the push. The
+  explorer listing from infra PR 30's branch, run locally against GitHub,
+  returns both notebooks as Featured at `63e5c10` (measured).
 
 Related: [[board]], [[pixi-notebook-sandbox]], [[germline-notebook]], [[marimo-sandbox]].
