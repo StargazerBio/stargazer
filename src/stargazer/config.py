@@ -173,17 +173,33 @@ def log_execution() -> str:
     return execution_id
 
 
+def _bundle_root() -> Path:
+    """Where a hosted run's code bundle comes from.
+
+    A checkout's runs carry its source, from the directory holding the
+    `stargazer` package (the MCP server's, editable from the image's
+    `/stargazer`). A notebook's environment installs the SDK as a package,
+    whose tasks a task pod imports from its own image, the same release, so
+    its runs carry only the running notebook's folder (marimo sets
+    `__main__.__file__` to the notebook), where its own tasks are. Not
+    site-packages: Flyte never bundles a file there, and refuses an empty
+    bundle, and an environment links the package's files from the uv cache,
+    which Flyte's bundler resolves on one side of a comparison and not the
+    other.
+    """
+    if _checkout():
+        return Path(__file__).resolve().parents[1]
+    notebook = getattr(sys.modules["__main__"], "__file__", None)
+    return Path(notebook).parent if notebook else Path.cwd()
+
+
 def init_flyte() -> None:
     """Initialize Flyte wherever Stargazer runs.
 
     A hosted notebook pod (`_U_EP_OVERRIDE` set) has no config file, but it
     carries the endpoint, an API key and the owner's org, project and domain,
     which make an in-cluster client for the owner's project. Its runs bundle
-    code from the directory holding the `stargazer` package. A notebook's
-    environment installs the SDK from the image's `/stargazer` as a package, so
-    that directory is site-packages, which Flyte never bundles: a task pod
-    imports the SDK and the built-in notebooks' tasks from its own image, the
-    same release. Anywhere else the config file decides, as
+    code from `_bundle_root()`. Anywhere else the config file decides, as
     `flyte.init_from_config()` does: with none, runs stay in the caller's own
     process.
     """
@@ -191,8 +207,8 @@ def init_flyte() -> None:
         flyte.init_from_config()
         return
     # `init_in_cluster` takes the code bundle's root from the cwd and has no
-    # parameter for it. A pod's cwd is the workspace, which holds no SDK code.
-    with contextlib.chdir(Path(__file__).resolve().parents[1]):
+    # parameter for it.
+    with contextlib.chdir(_bundle_root()):
         flyte.init_in_cluster(
             org=os.environ.get("FLYTE_ORG"),
             project=os.environ.get("FLYTE_PROJECT"),
