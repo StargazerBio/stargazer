@@ -1,8 +1,9 @@
 ---
 title: notebook-image-digest
-status: doing
+status: review
 priority: normal
 created: 2026-11-02
+pr: 31
 ---
 
 Know the exact image a notebook ran in: launch its pod on a resolved
@@ -84,9 +85,63 @@ overwrite a tag (ticket `shared-image-repository`).
 - [x] Experiment on the Union tenant, as the test account: the dashboard's
       role can resolve a Union-built tag to a digest; an `AppEnvironment` on
       `…@sha256:…` serves; `crane copy` to another registry keeps the digest.
-- [ ] Infra: pin the release image at deploy, resolve the served image at
-      launch, serve on the digest, set `STARGAZER_POD_IMAGE`.
+- [x] Infra: pin the release image at deploy, resolve the served image at
+      launch, serve on the digest, set `STARGAZER_POD_IMAGE` (infra PR 31).
 - [ ] Build or pull, with ticket `run-records`' replay.
+
+## Verification recipe
+
+From an infra worktree on the branch, with `.flyte/union.yaml` linked,
+`tenant.env` loaded and the built-in browser signed in to the console as the
+test account. The `u-pryce` dashboard is shared, so check nobody else is
+testing on it first.
+
+1. `uv run python .claude/skills/verify-dashboard/scripts/union_dashboard.py deploy`.
+   Then `App.get("dashboard", project="u-pryce")`'s served env should show
+   `STARGAZER_NOTEBOOK_IMAGE=ghcr.io/stargazerbio/stargazer@sha256:…`, and
+   `crane digest ghcr.io/stargazerbio/stargazer:v<release>` should print the
+   same digest.
+2. From the dashboard page, `fetch` `POST /launch` with `slug=assets`,
+   `mode=edit`, `section=tutorials`. `union_dashboard.py check nb-assets-edit`
+   should show the served image and its `STARGAZER_POD_IMAGE` as that same
+   digest.
+3. `POST /workspace/create` with `name=Digest probe`, then `POST
+   /workspace/setup` with a `main_env` whose image is
+   `notebook_base.with_apt_packages("tabix")`, then `POST /launch`. It answers
+   202 with the build run. Once the build succeeds, `GET /launch/status`
+   serves the pod. `nb-digest-probe-edit`'s served image should be
+   `…/union/stargazerbio@sha256:…`.
+4. Open its URL. A cell `import os, shutil;
+   (os.environ['STARGAZER_POD_IMAGE'], shutil.which('tabix'))` should return
+   that digest reference and `/usr/bin/tabix`.
+5. Teardown: `POST /stop` for both apps, `POST /workspace/delete
+   slug=digest-probe`, then `union_dashboard.py teardown`. Live runs should
+   be `[]`.
+
+On the devbox: `uv run python devbox/dashboard.py`, `curl -X POST <url>/launch
+-F slug=assets -F mode=edit -F section=tutorials`. Then `kubectl get pod -n
+flyte <nb-assets-edit pod> -o yaml` should show the image, `imageID` and
+`STARGAZER_POD_IMAGE` as `ghcr…@sha256:…`; `kubectl exec` can print the env.
+
+## Evidence (2026-11-07, infra PR 31)
+
+Measured unless labeled.
+
+- Tenant, dashboard `2026.10.30-5564662`:
+  - `STARGAZER_NOTEBOOK_IMAGE` is
+    `ghcr.io/stargazerbio/stargazer@sha256:5b3a040b4f5790195049a3bf08f0eea289db0466b8a10990650e499757ceef8b`.
+  - `nb-assets-edit` is served on it, with `STARGAZER_POD_IMAGE` equal.
+  - The declared `tabix` image built (run `unjp7nx9hktjl6v92s7s`) on the
+    digest-named base. `nb-digest-probe-edit` was served on
+    `791359099513.dkr.ecr.us-west-2.amazonaws.com/union/stargazerbio@sha256:51ba2f69425071691baa1075330ebc244dff2b73e964f8e01b6acee23f8daa54`,
+    resolved by the dashboard's role. In the pod, a marimo cell read that
+    reference and found `/usr/bin/tabix`.
+  - All torn down.
+- Devbox: the pod spec, `imageID`, and `STARGAZER_POD_IMAGE` read inside the
+  pod were all `ghcr…@sha256:5b3a040b…`.
+- The tenant run was on the commits before the rebase onto infra #30, which
+  conflicted on one import line. The rebased code behaving the same is
+  inferred.
 
 ## Experiment (2026-11-07)
 
