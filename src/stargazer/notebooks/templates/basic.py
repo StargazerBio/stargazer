@@ -13,7 +13,7 @@
 # bcftools = "1.*"
 #
 # [tool.pixi.pypi-dependencies]
-# stargazer-bio = { path = "/stargazer", editable = true }
+# stargazer-bio = { path = "/stargazer" }
 # ///
 """
 ### Basic template — barebones notebook skeleton.
@@ -63,13 +63,12 @@ with app.setup:
     )
 
     # TODO: the pods your tasks run in. A cluster pod imports this notebook to
-    # find them, so the image carries stargazer and marimo; add what your
-    # tasks need with `.with_pip_packages(...)` or `.with_apt_packages(...)`.
+    # find them; the core image carries stargazer and marimo. To add what your
+    # tasks need, clone it first: `core_image(...).clone(name="my-tasks",
+    # extendable=True).with_pip_packages(...)`, or `.with_apt_packages(...)`.
     my_env = flyte.TaskEnvironment(
         name="template",
-        image=(
-            core_image("stargazer-template").with_pip_packages("marimo>=0.23,<0.24")
-        ),
+        image=core_image("stargazer-template"),
         resources=flyte.Resources(cpu=1, memory="512Mi"),
         env_vars=STARGAZER_ENV_VARS,
         secrets=STARGAZER_SECRETS,

@@ -28,7 +28,7 @@ How a `flyte.Image` is declared and built. Examples: [[flyte-v2-docs#Container I
 
 ## In Stargazer
 
-- **The task images** are on the environments in each domain's `env.py`, built by `task_image()` in `config.py`; images for tasks that need only the SDK by `core_image()`, from `pyproject.toml`'s `core` environment. Their docstrings say how and why; `cli/lock_envs.py` locks the headers and `pixi.lock` with the builder's pixi. A checkout builds them; an installed package takes `from_base` of the ones its release published (`released_image()`), which `cli/publish_task_images.py` builds and version-tags in `.github/workflows/release.yml`. The image table is in `docs/architecture/configuration.md`.
+- **The task images** are on the environments in each domain's `env.py`, built by `task_image()` in `config.py`; images for tasks that need only the SDK by `core_image()`, from `pyproject.toml`'s `core` environment. Their docstrings say how and why; `cli/lock_envs.py` locks the headers and `pixi.lock` with the builder's pixi. A checkout builds them; an installed package takes `from_base` of the ones its release published (`released_image()`), which `cli/publish_task_images.py` builds, the core image too, as `stargazer-core`, and version-tags in `.github/workflows/release.yml`; the notebooks' headers install the image's `/stargazer` non-editable, so a notebook's kernel is an installed package and takes the published images. The image table is in `docs/architecture/configuration.md`.
 - **The notebook images**: `notebook_base` in `src/stargazer/notebooks/__init__.py`, built on the image `runtime/Dockerfile` makes and `.github/workflows/release.yml` publishes.
 - **Devbox builds** are in `devbox/setup.sh`.
 

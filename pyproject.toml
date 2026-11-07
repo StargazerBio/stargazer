@@ -66,8 +66,9 @@ stargazer = ["bundles/*.yaml", "notebooks/*.py", "tasks/*/env.py.pixi.lock"]
 
 [dependency-groups]
 dev = [
-    # The unit tier imports the SDK's notebooks, and `marimo edit` from a checkout.
-    # The notebook image pins the version notebooks run on (runtime/Dockerfile).
+    # The unit tier imports the SDK's notebooks, and `marimo edit` from a checkout;
+    # `core_image()` installs this range for a notebook's own task pods. The
+    # notebook image pins the version notebooks run on (runtime/Dockerfile).
     "marimo>=0.25.1,<0.26",
     "mkdocstrings[python]>=1.0.3",
     "pre-commit>=4.5.0",

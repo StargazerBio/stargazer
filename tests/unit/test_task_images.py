@@ -37,9 +37,11 @@ def test_a_checkout_builds_its_task_image_from_source():
     assert image._layers
 
 
-def test_an_installed_package_core_image_installs_its_own_version(installed):
-    """With no pyproject.toml to read, the core image installs the released SDK."""
+def test_an_installed_package_runs_its_notebooks_tasks_on_the_released_core_image(
+    installed,
+):
+    """The core image is the published one of the installed version, nothing to build."""
     image = config.core_image("stargazer-template")
 
-    packages = [p for layer in image._layers for p in getattr(layer, "packages", ())]
-    assert packages == [f"stargazer-bio=={VERSION}"]
+    assert image.uri == f"ghcr.io/stargazerbio/stargazer-core:{VERSION}"
+    assert image._layers == ()
