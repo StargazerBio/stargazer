@@ -64,14 +64,18 @@ async def test_dispatch_on_this_machine_sends_a_package_task_to_its_image(
 def test_mounts_cover_local_storage_and_input_files(monkeypatch, tmp_path):
     """The local store, the index's directory and the scratch space are mounted
     writable at their own paths; an input file elsewhere, read-only; one inside a
-    mounted directory, not again."""
+    mounted directory or a missing one, not at all."""
     monkeypatch.setenv("STARGAZER_LOCAL", str(tmp_path / "local"))
     monkeypatch.setenv("STARGAZER_STORE_ROOT", str(tmp_path / "store"))
     monkeypatch.setenv("STARGAZER_INDEX_URL", str(tmp_path / "idx" / "index.db"))
+    (tmp_path / "data").mkdir()
     inputs = {
         "adata": AnnData(path=tmp_path / "data" / "x.h5ad", sample_id="s1"),
         "n": 3,
-        "more": [AnnData(path=tmp_path / "local" / "y.h5ad", sample_id="s2")],
+        "more": [
+            AnnData(path=tmp_path / "local" / "y.h5ad", sample_id="s2"),
+            AnnData(path=tmp_path / "gone" / "z.h5ad", sample_id="s3"),
+        ],
     }
 
     assert local_image._mounts(inputs) == [

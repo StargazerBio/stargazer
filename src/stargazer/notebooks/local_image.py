@@ -125,8 +125,8 @@ def _writable_dirs() -> list[Path]:
 def _mounts(inputs: dict[str, Any]) -> list[str]:
     """The `-v` values that show the container this machine's storage and `inputs`' files.
 
-    Each at its own path: storage writable, an input file's directory read-only
-    unless storage already covers it.
+    Each at its own path: storage writable, an existing input file's directory
+    read-only unless storage already covers it.
     """
     writable = _writable_dirs()
     readonly: list[Path] = []
@@ -135,6 +135,9 @@ def _mounts(inputs: dict[str, Any]) -> list[str]:
         if directory in readonly:
             continue
         if any(directory.is_relative_to(w) for w in writable):
+            continue
+        # The task's own error names a missing file better than docker's.
+        if not directory.is_dir():
             continue
         readonly.append(directory)
 
