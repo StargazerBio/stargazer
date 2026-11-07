@@ -1,6 +1,6 @@
 ---
 title: local-runs-in-task-image
-status: maybe
+status: doing
 priority: normal
 created: 2026-11-04
 ---
