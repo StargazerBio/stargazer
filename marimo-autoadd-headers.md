@@ -1,6 +1,6 @@
 ---
 title: marimo-autoadd-headers
-status: maybe
+status: doing
 priority: low
 created: 2026-11-04
 ---
