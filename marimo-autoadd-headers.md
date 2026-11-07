@@ -29,4 +29,31 @@ Seen while verifying [[notebook-dockerignore]].
 
 Seen alongside, a ticket of its own: `marimo-server-layer-symlinks`.
 
+## Verification recipe: built-in headers list flyte
+
+A hosted notebook pod running the Execution tutorial leaves its header alone: marimo doesn't add `flyte` to it.
+
+### Sub-features
+
+- **H1**: running the Execution tutorial's cells in a hosted edit pod logs no `pixi add --script`.
+- **H2**: a basic-template notebook created from the dashboard, run the same way, logs none either and its saved header has no `flyte==` pin.
+
+### How to get to it (user POV)
+
+The dashboard's Tutorials section, Execution, Edit; for H2, a new notebook from the basic template.
+
+### Driving it
+
+Preconditions: the branch's image pushed as `ghcr.io/stargazerbio/debug:marimo-autoadd-headers`; the infra checkout with `tenant.env` loaded; the u-pryce dashboard not in use by another session (check `union_dashboard.py check dashboard`'s `STARGAZER_NOTEBOOK_IMAGE`).
+
+1. From infra: `STARGAZER_NOTEBOOK_IMAGE=ghcr.io/stargazerbio/debug:marimo-autoadd-headers uv run python .claude/skills/verify-dashboard/scripts/union_dashboard.py deploy`. Passes: prints the dashboard URL.
+2. Sign in to the console as the test account, open the dashboard, launch Execution in edit mode, and run every cell (the local run is enough). Passes: the cells finish.
+3. Read the pod's log: `kubectl logs -n <ns> <nb-execution-edit pod> -c app | grep -c "pixi add --script"` (read-only kubectl). Passes: `0`, and the log has `Running kernel in script environment`.
+4. Teardown: `union_dashboard.py teardown`. Passes: `live runs: []`.
+
+### Gotchas
+
+- The u-pryce dashboard is shared between sessions; a deploy replaces another session's image.
+- A local, emulated container is no stand-in: the editor's kernel never connected there, and with the main image's server layer rebuilt at start the editor loads blank (ticket `marimo-server-layer-symlinks`).
+
 Related: [[board]], [[notebook-dockerignore]], [[pixi-notebook-sandbox]], [[marimo-sandbox]].
