@@ -39,6 +39,15 @@ Measured 2026-11-07 on osx-arm64, docker 29.8.2, at `9f7a97e` (PR #134):
 - Failure path: `FileNotFoundError: /nonexistent/x.h5ad doesn't exist and has no CID` and `OSError: Unable to synchronously open file (file signature not found)`, each inside `scrna.normalize failed in stargazer-scrna:<hash> (exit 1)`, and no call directory left behind.
 - Unit tier passes; tasks tier gatk 20 passed and scrna 15 passed.
 
+## Native environments, measured first
+
+Measured 2026-11-04 on osx-arm64 with pixi 0.84.1, using a copy of `tasks/scrna/env.py`'s header:
+- As written, `pixi install --script` refuses, because the header lists only `linux-64`.
+- With `osx-arm64` added to the header's platforms, it solves and installs in 23 s, and scanpy 1.12.5 imports. The SDK it carries is the released `stargazer-bio` from PyPI, so the checkout goes on top with `PYTHONPATH=src`.
+- With pytest and pytest-asyncio added to that environment via `uv pip`, `PYTHONPATH=src python -m pytest -m tasks tests/tasks/scrna` passed 14 of 15 in 42 s. `test_sample_isolation.py::test_parallel_samples_write_distinct_files[normalize]` failed once and passed 6 of 6 when rerun alone.
+
+So for scRNA, a native run needs `osx-arm64` in the header (and a lock for it) and a supported way to add the checkout and the test tools. Docker isn't needed. The gatk header is the hard case: GenomicsDB is x86_64 only.
+
 ## Verification recipe: package tasks on this machine run in their image
 
 A notebook opened from a checkout, with docker running, dispatches a package task "On this machine": the task runs in its own task image, the notebook's environment has none of the domain's packages, and the output comes back as the real asset, stored in the notebook's own local store and index.
@@ -152,13 +161,6 @@ Preconditions: docker running, the repo root as cwd, the run's isolated store ex
 - Two samples with byte-identical outputs share a CID, and the index keeps one record per CID, so dispatching the same input twice under two sample IDs leaves one record. Use distinct inputs.
 - A source change rebuilds the image (its tag hashes the checkout), about 70 s on osx-arm64 with the base layers cached. A run with the image already built took 18 s for both samples, emulated.
 - A missing input directory isn't mounted, so the task's own error reports it; mounting it would make docker refuse with `mounts denied`.
-
-Measured 2026-11-04 on osx-arm64 with pixi 0.84.1, using a copy of `tasks/scrna/env.py`'s header:
-- As written, `pixi install --script` refuses, because the header lists only `linux-64`.
-- With `osx-arm64` added to the header's platforms, it solves and installs in 23 s, and scanpy 1.12.5 imports. The SDK it carries is the released `stargazer-bio` from PyPI, so the checkout goes on top with `PYTHONPATH=src`.
-- With pytest and pytest-asyncio added to that environment via `uv pip`, `PYTHONPATH=src python -m pytest -m tasks tests/tasks/scrna` passed 14 of 15 in 42 s. `test_sample_isolation.py::test_parallel_samples_write_distinct_files[normalize]` failed once and passed 6 of 6 when rerun alone.
-
-So for scRNA, a native run needs `osx-arm64` in the header (and a lock for it) and a supported way to add the checkout and the test tools. Docker isn't needed. The gatk header is the hard case: GenomicsDB is x86_64 only.
 
 Came out of [[pixi-development]], where it was deferred.
 
