@@ -1,6 +1,6 @@
 ---
 title: released-sdk-in-notebooks
-status: backlog
+status: doing
 priority: normal
 created: 2026-11-04
 ---
