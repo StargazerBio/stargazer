@@ -1,6 +1,7 @@
 # /// script
 # requires-python = ">=3.14"
 # dependencies = [
+#   "flyte",
 #   "marimo",
 #   "matplotlib",
 #   "stargazer-bio",
