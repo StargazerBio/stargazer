@@ -43,3 +43,59 @@ def test_an_installed_package_core_image_installs_its_own_version(installed):
 
     packages = [p for layer in image._layers for p in getattr(layer, "packages", ())]
     assert packages == [f"stargazer-bio=={VERSION}"]
+
+
+TEMPLATE = Path(config.__file__).parent / "notebooks" / "templates" / "basic.py"
+
+
+def _pixi_manifest(image) -> str:
+    """The pixi manifest `image`'s header layer installs."""
+    return next(
+        layer.render_manifest() for layer in image._layers if hasattr(layer, "script")
+    )
+
+
+def _above_header(image) -> list:
+    """`image`'s layers after its header's, the ones its base doesn't bring."""
+    layers = list(image._layers)
+    return layers[[hasattr(layer, "script") for layer in layers].index(True) + 1 :]
+
+
+def test_a_notebook_image_builds_from_its_header_without_the_pods_sdk_path():
+    """The header's packages install, its SDK from PyPI; the pod-only path is gone."""
+    manifest = _pixi_manifest(config.notebook_image(TEMPLATE, "stargazer-template"))
+
+    assert 'bcftools = "1.*"' in manifest
+    assert 'stargazer-bio = "*"' in manifest
+    assert "/stargazer" not in manifest
+
+
+def test_a_checkout_notebook_image_installs_the_checkout_on_top():
+    """From a checkout, the source goes on top of the header's released SDK."""
+    image = config.notebook_image(TEMPLATE, "stargazer-template")
+
+    commands = [
+        c for layer in _above_header(image) for c in getattr(layer, "commands", ())
+    ]
+    assert commands == ["uv pip install --no-cache /opt/stargazer"]
+
+
+def test_an_installed_notebook_image_installs_the_kernels_version(installed):
+    """Installed, the release of the kernel's version goes on top instead."""
+    image = config.notebook_image(TEMPLATE, "stargazer-template")
+
+    packages = [
+        p for layer in _above_header(image) for p in getattr(layer, "packages", ())
+    ]
+    assert packages == [f"stargazer-bio=={VERSION}"]
+
+
+def test_a_notebook_image_is_the_same_wherever_its_header_is_copied(
+    monkeypatch, tmp_path
+):
+    """The kernel and a cluster pod each copy the header, and name the same image."""
+    monkeypatch.setenv("STARGAZER_LOCAL", str(tmp_path / "kernel"))
+    kernel = config.notebook_image(TEMPLATE, "stargazer-template").uri
+    monkeypatch.setenv("STARGAZER_LOCAL", str(tmp_path / "pod"))
+
+    assert config.notebook_image(TEMPLATE, "stargazer-template").uri == kernel

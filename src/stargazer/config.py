@@ -6,8 +6,8 @@ os.environ directly rather than importing named values from this module.
 
 Also what every task environment shares: the platform its image is built
 for, the variables and secrets forwarded into its pods, and the image
-recipes, `task_image()` for a domain's and `core_image()` for tasks that need
-only the SDK.
+recipes, `task_image()` for a domain's, `core_image()` for tasks that need only
+the SDK, and `notebook_image()` for a notebook's own tasks.
 The environments themselves live in their domains' `env.py`
 (`stargazer.tasks.scrna.env`, `stargazer.tasks.gatk.env`).
 
@@ -43,8 +43,10 @@ spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
 
 import contextlib
+import hashlib
 import inspect
 import os
+import re
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -274,3 +276,54 @@ def core_image(name: str) -> flyte.Image:
         return base.with_pip_packages(f"stargazer-bio=={version('stargazer-bio')}")
     image = base.with_pixi_project(PROJECT_ROOT / "pyproject.toml", environment="core")
     return _with_source(image, deps=False)
+
+
+# The PEP 723 block, as Flyte's pixi script parser reads it.
+_SCRIPT_BLOCK = re.compile(r"(?m)^# /// script\s*$\s(?:^#(?: .*)?$\s)*?^# ///\s*$")
+
+
+def _header_without_sdk_source(notebook: Path) -> str:
+    """`notebook`'s PEP 723 block, less its `[tool.pixi.pypi-dependencies]` SDK line."""
+    block = _SCRIPT_BLOCK.search(notebook.read_text()).group(0)
+    table = ""
+    kept = []
+    for line in block.splitlines():
+        text = line.removeprefix("#").strip()
+        if text.startswith("["):
+            table = text
+        if table == "[tool.pixi.pypi-dependencies]" and text.startswith(
+            "stargazer-bio"
+        ):
+            continue
+        kept.append(line)
+    return "\n".join(kept) + "\n"
+
+
+def notebook_image(notebook: str | Path, name: str) -> flyte.Image:
+    """The image a notebook's own tasks run on: its header, then the SDK on top.
+
+    `notebook` is the notebook's file (its `__file__`), whose PEP 723 header
+    lists what its cells and tasks use. The header's `stargazer-bio` source in
+    `[tool.pixi.pypi-dependencies]` is the SDK a notebook pod holds
+    (`/stargazer`), which no image build has, so the build reads a copy of the
+    header without it, under `STARGAZER_LOCAL`, and `stargazer-bio` installs
+    from PyPI. Flyte names the image by the manifest the header renders to, so
+    the kernel and a cluster pod, each with its own copy, name the same image.
+    The SDK then goes on top: a checkout's source, or the release of the
+    installed version. marimo writes no lock for a header, so the image
+    resolves its packages anew whenever it's built.
+    """
+    header = _header_without_sdk_source(Path(notebook))
+    digest = hashlib.sha256(header.encode()).hexdigest()[:16]
+    script = (
+        Path(os.environ["STARGAZER_LOCAL"])
+        / "notebook-headers"
+        / digest
+        / Path(notebook).name
+    )
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text(header)
+    image = flyte.Image.from_pixi_script(script, name=name, platform=IMAGE_PLATFORM)
+    if not _checkout():
+        return image.with_pip_packages(f"stargazer-bio=={version('stargazer-bio')}")
+    return _with_source(image, deps=True)

@@ -27,7 +27,7 @@ scanpy isn't there: `normalize` and the rest of the scRNA tasks bring it with th
 
 The switch from `run_location()` decides where `dispatch` runs a task (the Execution tutorial walks through both). *On this machine* runs:
 
-- **An SDK task** in its domain's environment. pixi installs the domain's header and lock the first time a task needs it, under your local scratch space (`STARGAZER_LOCAL`, see [Configuration](../architecture/configuration.md#environment-variables)), and reuses it after. The scRNA environment takes about a minute to install the first time. The task imports the same `stargazer` as your notebook, so an edit in your checkout shows up in its next run. Where a domain's header doesn't list your platform, docker runs the task in its task image instead.
+- **An SDK task** in its domain's environment. pixi installs the domain's header and lock the first time a task needs it, under your local scratch space (`STARGAZER_LOCAL`, see [Configuration](../architecture/configuration.md#environment-variables)), and reuses it after. The scRNA environment takes about a minute to install the first time. The task imports the same `stargazer` as your notebook, so an edit in your checkout shows up in its next run. The domains' headers cover Linux and Apple silicon; on any other platform, docker runs the task in its task image instead.
 - **An SDK workflow** in your notebook's process, with each task it calls in that task's own environment. One workflow can call gatk's tasks and scRNA's.
 - **Your notebook's own tasks** in your kernel, with whatever your header installed.
 
@@ -35,7 +35,19 @@ A hosted notebook works the same way: its pod installs the domain environments w
 
 ## On the cluster
 
-Every task runs in a pod of its own, on its environment's image. An SDK task's image is built from its domain's header and lock, with the SDK your run was submitted with on top.
+Every task runs in a pod of its own, on its environment's image. An SDK task's image is built from its domain's header and lock. Your notebook's own tasks run on an image built from your notebook's header when their environment uses `notebook_image(__file__, ...)`, as the template's does:
+
+```python
+my_env = flyte.TaskEnvironment(
+    name="my-tasks",
+    image=notebook_image(__file__, "my-tasks"),
+    resources=flyte.Resources(cpu=1, memory="512Mi"),
+    env_vars=STARGAZER_ENV_VARS,
+    secrets=STARGAZER_SECRETS,
+)
+```
+
+Either way, the SDK your run was submitted with goes on top: your checkout's source, or the release you have installed.
 
 ## At your own risk
 

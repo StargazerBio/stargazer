@@ -66,7 +66,7 @@ Where the notebook runs decides which of these apply:
 
 - **Hosted**, the pod runs `main_env`'s image, with the header's environment on top.
 - **Locally**, `docker run` starts the Stargazer image as it is, and `main_env` isn't used. The header's packages and tools still install. The container doesn't run as root, so system packages can't be added.
-- **On the cluster**, a run submitted from either one runs each task in its own `TaskEnvironment`'s image, whatever the notebook's image holds.
+- **On the cluster**, a run submitted from either one runs each task in its own `TaskEnvironment`'s image, whatever the notebook's image holds. A notebook's own tasks get its header as their image through `notebook_image()` in `config.py`, as the template's do: the header less its pod-only SDK path, then the SDK the run was submitted with.
 
 The setup block also declares the dashboard tile's `main_name` and `main_description` as plain strings, and the tile's gear edits the whole block while the notebook is stopped. A declared image is built at launch if needed and reused after; a change takes effect the next time the notebook launches, and an environment that can't evaluate or build fails the launch with the reason. Building an image needs the hosted deployment.
 

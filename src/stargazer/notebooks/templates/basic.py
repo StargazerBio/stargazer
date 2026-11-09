@@ -45,7 +45,7 @@ with app.setup:
     from stargazer.config import (
         STARGAZER_ENV_VARS,
         STARGAZER_SECRETS,
-        core_image,
+        notebook_image,
     )
     from stargazer.notebooks import notebook_env
 
@@ -62,14 +62,13 @@ with app.setup:
         resources=flyte.Resources(cpu=2, memory="4Gi"),
     )
 
-    # TODO: the pods your tasks run in. A cluster pod imports this notebook to
-    # find them, so the image carries stargazer and marimo; add what your
-    # tasks need with `.with_pip_packages(...)` or `.with_apt_packages(...)`.
+    # TODO: the pods your tasks run in. Their image is built from the header
+    # above, so what your cells install while you experiment is what your
+    # tasks get on the cluster; a cluster pod imports this notebook to find
+    # them. Set their resources here.
     my_env = flyte.TaskEnvironment(
         name="template",
-        image=(
-            core_image("stargazer-template").with_pip_packages("marimo>=0.23,<0.24")
-        ),
+        image=notebook_image(__file__, "stargazer-template"),
         resources=flyte.Resources(cpu=1, memory="512Mi"),
         env_vars=STARGAZER_ENV_VARS,
         secrets=STARGAZER_SECRETS,
