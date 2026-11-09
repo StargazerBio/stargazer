@@ -1,6 +1,6 @@
 ---
 title: local-runs-in-task-image
-status: review
+status: done
 priority: normal
 created: 2026-11-04
 pr: 134
@@ -164,4 +164,8 @@ Preconditions: docker running, the repo root as cwd, the run's isolated store ex
 
 Came out of [[pixi-development]], where it was deferred.
 
-Related: [[board]], [[pixi-development]], [[pixi-notebook-sandbox]], [[local-remote-toggle]], [[flyte-images]].
+## Outcome
+
+PR 134 shipped the docker path: "On this machine" runs a package task in its own task image under docker, so a notebook's header needs no domain packages where docker runs (the `local_image` module, merged in 45c099e). Verified with a notebook whose kernel had no scanpy normalizing two samples in the scrna image, the stored outputs read back and checked in that image, and the tasks tier (recipe and evidence above). Ticket `run-modes` carries it forward: "On this machine" installs the task's own header with pixi, with docker kept for a host the header can't solve on, and covers what's left here (hosted pods, notebook tasks, workflows spanning domains).
+
+Related: [[board]], [[run-modes]], [[pixi-development]], [[pixi-notebook-sandbox]], [[local-remote-toggle]], [[flyte-images]].
