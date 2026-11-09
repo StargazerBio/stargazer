@@ -48,6 +48,7 @@ Built on `feat/run-modes`, cut from `main` after PR 134 (the docker path) merged
       No built-in notebook lists a domain package: the template's `bcftools` and the execution tutorial's `matplotlib` are used by their own cells. Deferred: the community repo's germline header, a PR in StargazerBio/community-notebooks once this merges.
 - [x] **Docs:** a user guide, "Where your code runs", leading with the four sentences; `docs/architecture/notebook.md` and `configuration.md` for the mechanics.
       Done: `docs/guides/where-your-code-runs.md` (in `zensical.toml`'s nav), `docs/architecture/notebook.md` (Execution Context, boundary rules, notebook environment) and `configuration.md` (images); the wiki's `flyte-images` page names `notebook_image()`.
+- [ ] **No core image:** every notebook's own tasks build from its header, the tutorials included, so there's one image rule for notebooks. `core_image()`, the published `stargazer-core` and its release wiring go; the tutorials' `tutorial_env` uses `notebook_image(__file__)`. A tutorial's first cluster run on a tenant builds its image once per release, cached by tag.
 
 ## Evidence
 
