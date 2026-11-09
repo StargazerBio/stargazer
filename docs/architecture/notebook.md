@@ -12,7 +12,7 @@ Notebooks call `stargazer.config.init_flyte()` at startup. Opened locally, it re
 
 `stargazer.notebooks.ui` provides `run_location()`, a switch between *On this machine* (the default) and *On the cluster*, and `dispatch()`, which runs a task or workflow wherever the switch is set and returns its result. The Execution tutorial introduces both.
 
-*On this machine* runs a package task, one from the SDK's tasks or workflows, in its own task image under docker wherever docker is installed, so a local run gets the same environment a cluster run does. The container sees the machine's local asset store and the input files at their own paths, so assets mean the same thing on both sides. Without docker, as in a hosted notebook, and for a notebook's own tasks, the run stays in the notebook's process.
+*On this machine* runs a task, and every task it calls, in the notebook's kernel, so **the notebook's header lists what its local runs import and call**, an SDK task's packages and tools included. *On the cluster* runs each task in its environment's image, whatever the header holds. [Where Your Code Runs](../guides/where-your-code-runs.md) is the user's view.
 
 A cluster can only run tasks its pods can import: the SDK's, and those a notebook declares as top-level functions (`@app.function`). A task defined in a regular cell runs only on the notebook's own machine.
 
@@ -53,7 +53,7 @@ Once promoted, the next image release bakes a task into every notebook, where an
 
 **The SDK never imports notebooks.** Notebooks import the SDK; production code never depends on a notebook, so notebook changes can't break tasks or workflows. Notebook-to-notebook reuse is allowed: a notebook can export importable definitions via `app.setup` + `@app.function`, as the Execution tutorial does with the Workflows tutorial's workflow.
 
-**Production notebooks get the SDK from the image.** Each notebook's PEP 723 header installs the SDK from the image as a package (through `[tool.pixi.pypi-dependencies]`), so package tasks are available automatically and saved notebooks can't change which SDK they run. Production runs no editable install, and its tasks run on the release's published images. Locally a notebook imports your checkout: development from a checkout opens notebooks with `pixi run marimo edit`, where the SDK is editable and images build from source. A package task's domain packages, which the SDK doesn't carry, are in its task image, listed in the header of its domain's `env.py`. Where docker runs it in that image, the notebook's header needs none of them; a notebook that runs package tasks in its own process, as a hosted one does, lists them too (scanpy for scRNA).
+**Production notebooks get the SDK from the image.** Each notebook's PEP 723 header installs the SDK from the image as a package (through `[tool.pixi.pypi-dependencies]`), so package tasks are available automatically and saved notebooks can't change which SDK they run. Production runs no editable install, and its tasks run on the release's published images. Locally a notebook imports your checkout: development from a checkout opens notebooks with `pixi run marimo edit`, where the SDK is editable and images build from source. **A notebook's header lists only what its own cells use.** A package task's domain packages are in its domain's environment, which runs it wherever it's dispatched, so no notebook lists scanpy to call the scRNA tasks.
 
 ## Notebook Environment
 
@@ -66,7 +66,7 @@ Where the notebook runs decides which of these apply:
 
 - **Hosted**, the pod runs `main_env`'s image, with the header's environment on top.
 - **Locally**, `docker run` starts the Stargazer image as it is, and `main_env` isn't used. The header's packages and tools still install. The container doesn't run as root, so system packages can't be added.
-- **On the cluster**, a run submitted from either one runs each task in its own `TaskEnvironment`'s image, whatever the notebook's image holds.
+- **On the cluster**, a run submitted from either one runs each task in its own `TaskEnvironment`'s image, whatever the notebook's image holds. A notebook's own tasks get its header as their image through `notebook_image()` in `config.py`, as the template's do: the header less its pod-only SDK path, then the SDK the run was submitted with.
 
 The setup block also declares the dashboard tile's `main_name` and `main_description` as plain strings, and the tile's gear edits the whole block while the notebook is stopped. A declared image is built at launch if needed and reused after; a change takes effect the next time the notebook launches, and an environment that can't evaluate or build fails the launch with the reason. Building an image needs the hosted deployment.
 

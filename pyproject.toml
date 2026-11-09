@@ -66,9 +66,9 @@ stargazer = ["bundles/*.yaml", "notebooks/*.py", "tasks/*/env.py.pixi.lock"]
 
 [dependency-groups]
 dev = [
-    # The unit tier imports the SDK's notebooks, and `marimo edit` from a checkout;
-    # `core_image()` installs this range for a notebook's own task pods. The
-    # notebook image pins the version notebooks run on (runtime/Dockerfile).
+    # The unit tier imports the SDK's notebooks, and `marimo edit` from a
+    # checkout. The notebook image pins the version notebooks run on
+    # (runtime/Dockerfile).
     "marimo>=0.25.1,<0.26",
     "mkdocstrings[python]>=1.0.3",
     "pre-commit>=4.5.0",
@@ -105,11 +105,10 @@ diagrams = [
 # pixi refuses a newer one's lock. `pixi run` runs in the default
 # environment: the core dependencies above, the `mcp` extra and the `dev`
 # group, with the SDK editable from this checkout. pixi turns the extras and
-# dependency groups into features of the same names. The images install the
-# others: `core`, the core dependencies alone, for tasks that need nothing
-# more (`core_image()` in config.py), and `mcp`, the notebook image's MCP
-# server. A domain's environment is the header of its `env.py` instead
-# (`task_image()` in config.py).
+# dependency groups into features of the same names. The notebook image
+# installs `mcp`, its MCP server. A domain's environment is the header of its
+# `env.py` instead (`task_image()` in config.py), and a notebook's own tasks'
+# is the notebook's header (`notebook_image()`).
 [tool.pixi.workspace]
 channels = ["conda-forge"]
 # A contributor's Mac beside Linux: CI, a devbox host, and the images, the
@@ -120,8 +119,7 @@ platforms = ["osx-arm64", "linux-64", "linux-aarch64"]
 # requires-python alone lets pixi take the newest Python; .python-version's.
 python = "3.14.*"
 
-# The SDK from the manifest's own directory, editable. Not in `core`, whose
-# images install the source on top non-editable.
+# The SDK from the manifest's own directory, editable.
 [tool.pixi.feature.sdk.pypi-dependencies]
 stargazer-bio = { path = ".", editable = true }
 
@@ -130,7 +128,6 @@ stargazer-bio = { path = ".", editable = true }
 default = { features = ["dev", "mcp", "sdk"], solve-group = "sdk" }
 # cli/diagrams.sh's; pygraphviz's wheels bundle Graphviz.
 diagrams = { features = ["dev", "mcp", "diagrams", "sdk"], solve-group = "sdk" }
-core = { features = [], solve-group = "sdk" }
 mcp = { features = ["mcp", "sdk"], solve-group = "sdk" }
 
 # Rule selection is ruff's default for the pinned version (see the ruff pin in

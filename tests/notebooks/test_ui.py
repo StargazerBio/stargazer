@@ -2,14 +2,19 @@
 
 import importlib.util
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import flyte
 import marimo as mo
-from flyte._initialize import get_init_config
+from flyte._initialize import get_init_config, init_config_context
 from flyte._internal.resolvers.default import DefaultTaskResolver
 
+import stargazer.tasks.general.samtools as samtools_tasks
+from stargazer import config
+from stargazer.assets import Reference
 from stargazer.notebooks.ui import dispatch, run_location
+from stargazer.tasks.general.samtools import samtools_faidx
 
 env = flyte.TaskEnvironment(name="ui_test")
 
@@ -66,6 +71,28 @@ async def test_dispatch_runs_on_this_machine_by_default(monkeypatch):
     assert modes == ["local"]
 
 
+async def test_an_sdk_task_on_this_machine_runs_in_the_kernel(monkeypatch, tmp_path):
+    """On this machine an SDK task's body runs in this process, the notebook's own
+    environment, so the `samtools` it calls is this process's."""
+    commands = []
+
+    async def samtools(cmd, **kwargs):
+        """Stand in for the kernel's samtools: write the index it would."""
+        commands.append(cmd[:2])
+        Path(cmd[-1]).write_text("chrT\t20\t6\t10\t11\n")
+
+    monkeypatch.setattr(samtools_tasks, "_run", samtools)
+    fasta = tmp_path / "tiny.fa"
+    fasta.write_text(">chrT\nACGTACGTAC\nGTACGTACGT\n")
+    ref = Reference(build="tiny")
+    await ref.update(fasta)
+
+    index = await dispatch(run_location(), samtools_faidx, ref=ref)
+
+    assert commands == [["samtools", "faidx"]]
+    assert Path(await index.fetch()).read_text() == "chrT\t20\t6\t10\t11\n"
+
+
 async def test_dispatch_runs_on_the_cluster_when_picked(monkeypatch):
     """Picking the cluster submits a remote run and returns its output once done,
     as the type the task declares."""
@@ -120,3 +147,43 @@ async def test_cluster_run_bundles_from_where_the_task_was_imported(
 
     assert await dispatch(where, module.double, x=2) == 4
     assert submitted == [(tmp_path, ["mod", "my_notebook", "instance", "double"])]
+
+
+async def _bundle_root_of(monkeypatch, task, root):
+    """The code bundle's root a cluster dispatch of `task` submits with, given
+    `root` as the one `init_flyte()` set."""
+    roots = []
+
+    async def submit(task, **inputs):
+        """Record the bundle root the submission sees."""
+        roots.append(get_init_config().root_dir)
+        return _remote_run("chrT")
+
+    _record_modes(
+        monkeypatch, lambda mode, **_: SimpleNamespace(run=SimpleNamespace(aio=submit))
+    )
+    where = mo.ui.radio(options=run_location().options, value="On the cluster")
+    with init_config_context(get_init_config().replace(root_dir=root)):
+        await dispatch(where, task, ref=None)
+    return roots
+
+
+async def test_an_installed_sdk_task_bundles_from_init_flytes_root(
+    monkeypatch, tmp_path
+):
+    """With the SDK installed, a task imported from it keeps the root `init_flyte()`
+    set, the running notebook's folder: its module is in site-packages, which Flyte
+    never bundles, and in the task's image already."""
+    monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
+    workspace = tmp_path / "workspace"
+
+    assert await _bundle_root_of(monkeypatch, samtools_faidx, workspace) == [workspace]
+
+
+async def test_a_checkout_sdk_task_bundles_from_the_checkouts_source(
+    monkeypatch, tmp_path
+):
+    """From a checkout, a task imported from the SDK carries the checkout's source."""
+    source = Path(config.__file__).resolve().parents[1]
+
+    assert await _bundle_root_of(monkeypatch, samtools_faidx, tmp_path) == [source]

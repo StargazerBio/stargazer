@@ -15,8 +15,10 @@ control re-runs the dispatching cell:
 A cluster run's code bundle comes from where the dispatched task's module was
 imported from: the notebook's own directory when the notebook defining it is the
 one running, as a workspace notebook in its pod is, or the package root for one
-imported by its dotted name. The task has to be importable there, which a task
-defined in a regular cell isn't: it goes in an `@app.function`.
+imported by its dotted name from a checkout. A task from an installed SDK is
+already in its image, so its run carries the running notebook's folder. The
+task has to be importable there, which a task defined in a regular cell isn't:
+it goes in an `@app.function`.
 
 A module of its own rather than part of the package `__init__`, because it
 imports marimo and the dashboard imports `stargazer.notebooks` without it.
@@ -31,7 +33,7 @@ import flyte
 import marimo as mo
 from flyte._initialize import get_init_config, init_config_context
 
-from stargazer.notebooks import local_image
+from stargazer.config import _checkout
 
 
 def run_location() -> mo.ui.radio:
@@ -56,12 +58,10 @@ async def dispatch(location: mo.ui.radio, task: flyte.TaskTemplate, /, **inputs)
     cluster" asks for a remote run outright: `flyte.run` would quietly run
     in-process when no cluster is configured. It bundles the run's code from
     `task`'s own root (`_bundle_root`), and returns the output as the type
-    `task` declares. On this machine, a package task runs in its own task image
-    under docker where docker is on the PATH (`local_image`), and in this
-    process otherwise.
+    `task` declares. "On this machine" is Flyte's local mode: the task, and
+    every task it calls, runs in this process, so the notebook's environment
+    has to hold what they import and the tools they call.
     """
-    if location.value == "local" and local_image.runs_in_image(task):
-        return await local_image.run_in_image(task, inputs)
     runner = flyte.with_runcontext(mode=location.value)
     if location.value == "local":
         run = await runner.run.aio(task, **inputs)
@@ -69,7 +69,11 @@ async def dispatch(location: mo.ui.radio, task: flyte.TaskTemplate, /, **inputs)
         return (await run.outputs.aio())[0]
     # A context-scoped override, so samples dispatched together with
     # `asyncio.gather` each keep their own.
-    with init_config_context(get_init_config().replace(root_dir=_bundle_root(task))):
+    root = _bundle_root(task)
+    config = (
+        get_init_config() if root is None else get_init_config().replace(root_dir=root)
+    )
+    with init_config_context(config):
         run = await runner.run.aio(task, **inputs)
     await run.wait.aio()
     # A remote run's `outputs()` rebuilds each value from its stored schema, as
@@ -78,11 +82,16 @@ async def dispatch(location: mo.ui.radio, task: flyte.TaskTemplate, /, **inputs)
     return next(iter(outputs.values()))
 
 
-def _bundle_root(task: flyte.TaskTemplate) -> Path:
-    """The directory `task`'s module was imported from.
+def _bundle_root(task: flyte.TaskTemplate) -> Path | None:
+    """The directory `task`'s module was imported from, or None to keep `init_flyte()`'s.
 
     A module named `a.b.c` sits two directories below it, and a top-level one,
-    the running notebook (`__main__`) included, sits in it.
+    the running notebook (`__main__`) included, sits in it. A module of an
+    installed SDK is None: it's in site-packages, which Flyte never bundles,
+    and the task's image already has it, so the run keeps the running
+    notebook's folder that `init_flyte()` set.
     """
     module = inspect.getmodule(task.func)
+    if module.__name__.partition(".")[0] == "stargazer" and not _checkout():
+        return None
     return Path(module.__file__).absolute().parents[module.__name__.count(".")]
