@@ -26,7 +26,7 @@ To run those tasks on this machine too, add what they import, here `"scanpy"`, w
 
 The switch from `run_location()` decides where `dispatch` runs a task (the Execution tutorial walks through both). *On this machine* runs the task in your kernel, and a workflow with every task it calls. It's the place to try a step on a small input and look at the result in the next cell.
 
-A task whose package or tool your header doesn't list fails where it reaches for it, with an `ImportError` or a `FileNotFoundError` naming what's missing. Add it to the header, or send that run to the cluster, where the task's own image has it.
+A task whose package or tool your header doesn't list fails where it reaches for it, with an error naming what's missing: `No module named 'scanpy'`, or `No such file or directory: 'samtools'`. Add it to the header, or send that run to the cluster, where the task's own image has it.
 
 A hosted notebook works the same way: *On this machine* is its pod.
 
