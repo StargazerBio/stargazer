@@ -31,7 +31,7 @@ import flyte
 import marimo as mo
 from flyte._initialize import get_init_config, init_config_context
 
-from stargazer.notebooks import local_image
+from stargazer.notebooks import local_env
 
 
 def run_location() -> mo.ui.radio:
@@ -56,12 +56,12 @@ async def dispatch(location: mo.ui.radio, task: flyte.TaskTemplate, /, **inputs)
     cluster" asks for a remote run outright: `flyte.run` would quietly run
     in-process when no cluster is configured. It bundles the run's code from
     `task`'s own root (`_bundle_root`), and returns the output as the type
-    `task` declares. On this machine, a package task runs in its own task image
-    under docker where docker is on the PATH (`local_image`), and in this
-    process otherwise.
+    `task` declares. On this machine, a package task runs in its own
+    environment, in pixi or under docker (`local_env`), and in this process
+    where neither can run it.
     """
-    if location.value == "local" and local_image.runs_in_image(task):
-        return await local_image.run_in_image(task, inputs)
+    if location.value == "local" and local_env.executor(task) is not None:
+        return await local_env.run_in_env(task, inputs)
     runner = flyte.with_runcontext(mode=location.value)
     if location.value == "local":
         run = await runner.run.aio(task, **inputs)

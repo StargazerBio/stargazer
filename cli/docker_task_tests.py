@@ -32,7 +32,7 @@ import flyte
 import yaml
 
 from stargazer.config import PROJECT_ROOT
-from stargazer.notebooks.local_image import build_image as build_local_image
+from stargazer.notebooks.local_env import build_image as build_local_image
 from stargazer.tasks.gatk.env import gatk_env
 from stargazer.tasks.scrna.env import scrna_env
 

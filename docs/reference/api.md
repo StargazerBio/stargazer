@@ -20,7 +20,7 @@
 
 ## Notebooks
 
-::: stargazer.notebooks.local_image
+::: stargazer.notebooks.local_env
 ::: stargazer.notebooks.templates.basic
 ::: stargazer.notebooks.templates.blank
 ::: stargazer.notebooks.tutorials.assets
