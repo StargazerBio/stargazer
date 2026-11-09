@@ -10,6 +10,7 @@ from stargazer.notebooks import local_env
 from stargazer.notebooks.ui import dispatch, run_location
 from stargazer.tasks.general.bwa import bwa_mem
 from stargazer.tasks.scrna.normalize import normalize
+from stargazer.workflows.scrna_clustering import scrna_clustering_pipeline
 
 env = flyte.TaskEnvironment(name="local_env_test")
 TASKS = Path(stargazer.__file__).parent / "tasks"
@@ -19,6 +20,12 @@ TASKS = Path(stargazer.__file__).parent / "tasks"
 async def add_one(x: int) -> int:
     """Return `x + 1`."""
     return x + 1
+
+
+@env.task
+async def normalize_twice(adata: AnnData) -> AnnData:
+    """A notebook's own workflow: normalize, then normalize the result."""
+    return await normalize(adata=await normalize(adata=adata))
 
 
 def _host(monkeypatch, platform, *, tools):
@@ -83,6 +90,37 @@ def test_the_environment_imports_the_kernels_sdk(tmp_path):
     overlay = local_env.sdk_overlay(tmp_path)
 
     assert (overlay / "stargazer").resolve() == Path(stargazer.__file__).parent
+
+
+def test_an_sdk_workflow_runs_in_the_caller(monkeypatch):
+    """A workflow's body runs where it's called; its tasks go to their environments."""
+    _host(monkeypatch, "linux-64", tools={"pixi", "docker"})
+
+    assert local_env.executor(scrna_clustering_pipeline) is None
+
+
+async def test_a_workflow_on_this_machine_sends_each_task_to_its_environment(
+    monkeypatch, tmp_path
+):
+    """Dispatched here, a workflow's body runs in the kernel and each package
+    task it calls runs in its own environment, in the order the body calls them."""
+    _host(monkeypatch, "linux-64", tools={"pixi"})
+    calls = []
+
+    async def run_in_env(task, inputs):
+        """Record the call and return the input, marked by how many calls came before."""
+        calls.append((task, inputs))
+        return AnnData(path=tmp_path / f"{len(calls)}.h5ad", sample_id="s1")
+
+    monkeypatch.setattr(local_env, "run_in_env", run_in_env)
+    adata = AnnData(path=tmp_path / "x.h5ad", sample_id="s1", organism="human")
+
+    result = await dispatch(run_location(), normalize_twice, adata=adata)
+
+    assert [task for task, _ in calls] == [normalize, normalize]
+    assert calls[0][1]["adata"].path.path == str(tmp_path / "x.h5ad")
+    assert calls[1][1]["adata"].path.path == str(tmp_path / "1.h5ad")
+    assert result.path.path == str(tmp_path / "2.h5ad")
 
 
 async def test_dispatch_on_this_machine_sends_a_package_task_to_its_environment(

@@ -58,14 +58,16 @@ async def dispatch(location: mo.ui.radio, task: flyte.TaskTemplate, /, **inputs)
     `task`'s own root (`_bundle_root`), and returns the output as the type
     `task` declares. On this machine, a package task runs in its own
     environment, in pixi or under docker (`local_env`), and in this process
-    where neither can run it.
+    where neither can run it. A workflow's body runs in this process, and each
+    package task it calls in its own environment.
     """
     if location.value == "local" and local_env.executor(task) is not None:
         return await local_env.run_in_env(task, inputs)
     runner = flyte.with_runcontext(mode=location.value)
     if location.value == "local":
-        run = await runner.run.aio(task, **inputs)
-        await run.wait.aio()
+        with local_env.routed():
+            run = await runner.run.aio(task, **inputs)
+            await run.wait.aio()
         return (await run.outputs.aio())[0]
     # A context-scoped override, so samples dispatched together with
     # `asyncio.gather` each keep their own.

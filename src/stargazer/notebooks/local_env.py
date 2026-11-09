@@ -20,8 +20,11 @@ The inputs go in, and the output comes out, pickled in a call directory under
 `STARGAZER_LOCAL`. A container sees the host's local scratch space, local store
 and SQLite index at their own paths, and each input asset's directory
 read-only, so the asset paths on both sides agree. Inside, this module's
-`main` imports the task by module and name and runs it in Flyte's local mode,
-so a workflow's child tasks run in the same environment.
+`main` imports the task by module and name and runs it in Flyte's local mode.
+
+A workflow's body runs in the caller instead, in Flyte's local mode, and
+each package task it calls in its own environment (`routed`), so one
+workflow can span gatk's and scRNA's.
 
 Run there as `python -m stargazer.notebooks.local_env <call dir> <module>
 <name>`. It never imports marimo, which a task environment doesn't have.
@@ -30,6 +33,7 @@ spec: [docs/architecture/notebook.md](../architecture/notebook.md)
 """
 
 import asyncio
+import contextlib
 import importlib
 import os
 import pickle
@@ -37,10 +41,13 @@ import platform
 import shutil
 import sys
 import tempfile
+from collections.abc import Iterator
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
 import flyte
+from flyte._internal.controllers._local_controller import LocalController
 from flyte._internal.imagebuild.docker_builder import DockerImageBuilder
 from flyte._utils.pixi_script_parser import (
     effective_platforms,
@@ -53,8 +60,9 @@ import stargazer
 from stargazer.assets.asset import Asset
 from stargazer.config import IMAGE_PLATFORM
 
-# The modules a task image installs, which the container can import a task from.
-_PACKAGES = ("stargazer.tasks.", "stargazer.workflows.")
+# The modules whose tasks run in their domain's environment. A workflow's
+# body runs in the caller instead, and its tasks each in their own.
+_TASK_PACKAGES = ("stargazer.tasks.",)
 
 # Passed by name (`-e NAME`), so a secret's value never shows in the command
 # line; one the kernel doesn't set is left out.
@@ -70,6 +78,11 @@ _PASSED_VARS = (
 # Samples dispatched together with `asyncio.gather` would otherwise build the
 # same image, or install the same environment, at once.
 _build_lock = asyncio.Lock()
+
+# Set while `dispatch` runs something on this machine, so the task
+# environment's own local run, which calls the task in-process, isn't
+# sent back to an environment.
+_routing: ContextVar[bool] = ContextVar("stargazer_local_env_routing", default=False)
 
 _TASKS = Path(stargazer.__file__).parent / "tasks"
 
@@ -88,12 +101,13 @@ def _host_platform() -> str | None:
 
 
 def env_script(task: flyte.TaskTemplate) -> Path | None:
-    """The `env.py` whose header is `task`'s environment, or None outside the package.
+    """The `env.py` whose header is `task`'s environment, or None.
 
     The one whose module defines the `TaskEnvironment` `task` belongs to;
-    `general/`'s tasks are on gatk's.
+    `general/`'s tasks are on gatk's. None for a workflow, or a task from
+    outside the package.
     """
-    if not task.func.__module__.startswith(_PACKAGES) or task.parent_env is None:
+    if not task.func.__module__.startswith(_TASK_PACKAGES) or task.parent_env is None:
         return None
     env = task.parent_env()
     for script in sorted(_TASKS.glob("*/env.py")):
@@ -235,6 +249,38 @@ async def run_in_env(task: flyte.TaskTemplate, inputs: dict[str, Any]) -> Any:
         return await _run_in_image(task, inputs, call)
     finally:
         shutil.rmtree(call, ignore_errors=True)
+
+
+@contextlib.contextmanager
+def routed() -> Iterator[None]:
+    """Within it, a local run sends each package task it calls to its environment.
+
+    `dispatch` runs a workflow's body here in Flyte's local mode, whose
+    controller would run the body's tasks in this process too.
+    """
+    token = _routing.set(True)
+    try:
+        yield
+    finally:
+        _routing.reset(token)
+
+
+_submit = LocalController.submit
+
+
+async def _submit_in_env(
+    self: LocalController, task: flyte.TaskTemplate, *args: Any, **kwargs: Any
+) -> Any:
+    """`LocalController.submit`, sending a package task to its environment when routed."""
+    if _routing.get() and executor(task) is not None:
+        inputs = dict(zip(task.native_interface.inputs, args, strict=False))
+        return await run_in_env(task, {**inputs, **kwargs})
+    return await _submit(self, task, *args, **kwargs)
+
+
+# Flyte's local controller has no hook for where a task runs. Private API,
+# so an SDK upgrade can move it.
+LocalController.submit = _submit_in_env
 
 
 async def _run_in_pixi(task: flyte.TaskTemplate, call: Path) -> Any:
