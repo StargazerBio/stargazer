@@ -53,7 +53,7 @@ Once promoted, the next image release bakes a task into every notebook, where an
 
 **The SDK never imports notebooks.** Notebooks import the SDK; production code never depends on a notebook, so notebook changes can't break tasks or workflows. Notebook-to-notebook reuse is allowed: a notebook can export importable definitions via `app.setup` + `@app.function`, as the Execution tutorial does with the Workflows tutorial's workflow.
 
-**Production notebooks get the SDK from the image.** Each notebook's PEP 723 header points at the SDK source baked into the image (through `[tool.pixi.pypi-dependencies]`), so package tasks are available automatically and saved notebooks can't change which SDK they run. Locally a notebook imports your checkout. **A notebook's header lists only what its own cells use.** A package task's domain packages are in its domain's environment, which runs it wherever it's dispatched, so no notebook lists scanpy to call the scRNA tasks.
+**Production notebooks get the SDK from the image.** Each notebook's PEP 723 header installs the SDK from the image as a package (through `[tool.pixi.pypi-dependencies]`), so package tasks are available automatically and saved notebooks can't change which SDK they run. Production runs no editable install, and its tasks run on the release's published images. Locally a notebook imports your checkout: development from a checkout opens notebooks with `pixi run marimo edit`, where the SDK is editable and images build from source. **A notebook's header lists only what its own cells use.** A package task's domain packages are in its domain's environment, which runs it wherever it's dispatched, so no notebook lists scanpy to call the scRNA tasks.
 
 ## Notebook Environment
 

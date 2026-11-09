@@ -13,7 +13,7 @@
 # bcftools = "1.*"
 #
 # [tool.pixi.pypi-dependencies]
-# stargazer-bio = { path = "/stargazer", editable = true }
+# stargazer-bio = { path = "/stargazer" }
 # ///
 """
 ### Basic template — barebones notebook skeleton.

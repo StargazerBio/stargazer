@@ -57,7 +57,7 @@ RUN ACP=/usr/local/lib/node_modules/@agentclientprotocol/claude-agent-acp \
 # on in the server, with the OpenAI and Anthropic providers; marimo only
 # brings it in its `recommended` extra. The range is that extra's for this
 # marimo (plus the Anthropic provider), so the two move together. The
-# SDK isn't installed here: each notebook's sandbox venv builds it from
+# SDK isn't installed here: each notebook's environment installs it from
 # /stargazer.
 COPY pyproject.toml /tmp/runtime/
 RUN python -m venv /opt/venv \
@@ -71,12 +71,15 @@ RUN python -m venv /opt/venv \
 COPY runtime/proxy.py /usr/local/lib/sg_proxy.py
 COPY runtime/agent_redirect.html runtime/save_banner.html /usr/local/lib/
 COPY runtime/launch-notebook.sh runtime/start-local.sh /usr/local/bin/
-# Owned by the runtime user: each sandbox builds `stargazer-bio` from this tree
-# and writes its egg-info here. pixi.lock is the MCP server's environment
-# below and the one a notebook's own task images install (`core_image()`); a
-# domain's task image installs its `env.py` header, from the lock beside it in
-# src/. .dockerignore keeps the MCP server's environment, in .pixi/, out of
-# the source layer of every task image a kernel builds from this tree.
+# Owned by the runtime user: each notebook's environment builds `stargazer-bio`
+# from this tree, as a package, not editable, and the build writes its
+# egg-info here. Installed, a kernel's SDK runs its tasks on the images this
+# release published (`released_image()` in config.py), so it builds none.
+# pixi.lock is the MCP server's environment below, editable from this tree,
+# so the runs it starts build their task images here: pixi.lock's `core`
+# environment, or a domain's `env.py` header and the lock beside it in src/.
+# .dockerignore keeps the MCP server's environment, in .pixi/, out of the
+# source layer of each.
 COPY --chown=flyte:flyte pyproject.toml pixi.lock README.md .dockerignore /stargazer/
 COPY --chown=flyte:flyte src/ /stargazer/src/
 

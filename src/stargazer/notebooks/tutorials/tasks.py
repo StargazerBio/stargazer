@@ -9,7 +9,7 @@
 # python = "3.14.*"
 #
 # [tool.pixi.pypi-dependencies]
-# stargazer-bio = { path = "/stargazer", editable = true }
+# stargazer-bio = { path = "/stargazer" }
 # ///
 """
 ### Stargazer tasks tutorial.
@@ -49,14 +49,12 @@ with app.setup:
     from stargazer.notebooks.tutorials.assets import SampleSheet
 
     # Declared in the setup block so `summarize_cohort` can use it and stay
-    # importable. A cluster pod imports this module to find the task, so the
+    # importable. A cluster pod imports this module to find the task; the core
     # image carries stargazer and marimo.
     tutorial_env = flyte.TaskEnvironment(
         name="tutorial",
         description="Lightweight env for the tutorial notebooks.",
-        image=(
-            core_image("stargazer-tutorial").with_pip_packages("marimo>=0.23,<0.24")
-        ),
+        image=core_image("stargazer-tutorial"),
         resources=flyte.Resources(cpu=1, memory="512Mi"),
         env_vars=STARGAZER_ENV_VARS,
         secrets=STARGAZER_SECRETS,
