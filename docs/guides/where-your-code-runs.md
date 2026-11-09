@@ -1,15 +1,14 @@
 # Where Your Code Runs
 
-1. **Every SDK task runs in its domain's environment, wherever it runs.** It's declared once, in the header of `tasks/<domain>/env.py`. The cluster runs it as the task image, docker runs that image, and *On this machine* installs the same header and lock.
-2. **A notebook's kernel is its header.** marimo writes it as you import. List what your cells use, nothing else.
-3. **Calling an SDK task from a notebook needs nothing in your header.** *On this machine* runs it in its own environment on your machine, not in your kernel; *On the cluster* runs it in its task image.
-4. **Your notebook's own tasks run in your notebook's environment.** *On this machine*, in your kernel; on the cluster, in an image built from your notebook's header, so what you installed while experimenting is what the cluster gets.
+1. **An environment is a header.** A domain's is the header of `tasks/<domain>/env.py`, locked and published as an image with each release. A notebook's is the header at its top, which marimo writes as you import.
+2. **On this machine, everything runs in your notebook's kernel.** So your header lists what you run here: what your cells import, and the packages and tools of any SDK task you run on this machine.
+3. **On the cluster, each task runs in its environment's image.** An SDK task runs in its domain's image, and your notebook's own tasks in an image built from your notebook's header.
 
-So the SDK's tasks bring their own environment, and a notebook's tasks use the notebook's. In both cases one header lists a task's packages and builds its image, so the two can't drift.
+So a header is the one place a task's packages are listed, and the image a cluster runs is built from it.
 
 ## Your notebook's header
 
-A notebook that analyzes scRNA-seq data with the SDK's tasks and plots the result lists only what its cells import:
+A notebook that sends the SDK's scRNA-seq tasks to the cluster and plots what comes back lists only what its cells import:
 
 ```python
 # /// script
@@ -21,17 +20,15 @@ A notebook that analyzes scRNA-seq data with the SDK's tasks and plots the resul
 # ///
 ```
 
-scanpy isn't there: `normalize` and the rest of the scRNA tasks bring it with them. A tool your own cells call, say `bcftools`, goes under `[tool.pixi.dependencies]`, with bioconda in `[tool.pixi.workspace]`'s channels.
+To run those tasks on this machine too, add what they import, here `"scanpy"`, with `"igraph"` for Leiden clustering. The header of the domain's `env.py` (`src/stargazer/tasks/scrna/env.py`) is the full list. A command-line tool goes under `[tool.pixi.dependencies]`, with bioconda among the channels ([Getting Started](../getting-started.md#packages-and-tools) shows one): the alignment and GATK tasks call `gatk4`, `samtools`, `bwa` and `bwa-mem2`.
 
 ## On this machine
 
-The switch from `run_location()` decides where `dispatch` runs a task (the Execution tutorial walks through both). *On this machine* runs:
+The switch from `run_location()` decides where `dispatch` runs a task (the Execution tutorial walks through both). *On this machine* runs the task in your kernel, and a workflow with every task it calls. It's the place to try a step on a small input and look at the result in the next cell.
 
-- **An SDK task** in its domain's environment. pixi installs the domain's header and lock the first time a task needs it, under your local scratch space (`STARGAZER_LOCAL`, see [Configuration](../architecture/configuration.md#environment-variables)), and reuses it after. The scRNA environment takes about a minute to install the first time. The task imports the same `stargazer` as your notebook, so an edit in your checkout shows up in its next run. The domains' headers cover Linux and Apple silicon; on any other platform, docker runs the task in its task image instead.
-- **An SDK workflow** in your notebook's process, with each task it calls in that task's own environment. One workflow can call gatk's tasks and scRNA's.
-- **Your notebook's own tasks** in your kernel, with whatever your header installed.
+A task whose package or tool your header doesn't list fails where it reaches for it, with an `ImportError` or a `FileNotFoundError` naming what's missing. Add it to the header, or send that run to the cluster, where the task's own image has it.
 
-A hosted notebook works the same way: its pod installs the domain environments with pixi.
+A hosted notebook works the same way: *On this machine* is its pod.
 
 ## On the cluster
 
@@ -54,5 +51,6 @@ Either way, the SDK your run was submitted with goes on top: your checkout's sou
 These work, but the guarantees above don't cover them:
 
 - **Any other image** on your notebook's own `TaskEnvironment`, such as `flyte.Image.from_debian_base(...)` with layers added, or `flyte.Image.from_base`.
-- **Domain packages in your header**, to call an SDK task's code directly in your kernel.
 - **An unlocked notebook header.** Its cluster image can resolve differently from one build to the next, so the header alone doesn't pin what a run gets.
+- **An SDK task run on this machine** gets the versions your header resolved, not the ones its domain's lock pins. The cluster's run is the reproducible one.
+- **A tool with no build for your machine.** Run its tasks on the cluster, or open the notebook in the Stargazer image.

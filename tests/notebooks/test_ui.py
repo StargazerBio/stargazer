@@ -10,7 +10,9 @@ import marimo as mo
 from flyte._initialize import get_init_config, init_config_context
 from flyte._internal.resolvers.default import DefaultTaskResolver
 
+import stargazer.tasks.general.samtools as samtools_tasks
 from stargazer import config
+from stargazer.assets import Reference
 from stargazer.notebooks.ui import dispatch, run_location
 from stargazer.tasks.general.samtools import samtools_faidx
 
@@ -67,6 +69,28 @@ async def test_dispatch_runs_on_this_machine_by_default(monkeypatch):
 
     assert await dispatch(run_location(), add_one, x=1) == 2
     assert modes == ["local"]
+
+
+async def test_an_sdk_task_on_this_machine_runs_in_the_kernel(monkeypatch, tmp_path):
+    """On this machine an SDK task's body runs in this process, the notebook's own
+    environment, so the `samtools` it calls is this process's."""
+    commands = []
+
+    async def samtools(cmd, **kwargs):
+        """Stand in for the kernel's samtools: write the index it would."""
+        commands.append(cmd[:2])
+        Path(cmd[-1]).write_text("chrT\t20\t6\t10\t11\n")
+
+    monkeypatch.setattr(samtools_tasks, "_run", samtools)
+    fasta = tmp_path / "tiny.fa"
+    fasta.write_text(">chrT\nACGTACGTAC\nGTACGTACGT\n")
+    ref = Reference(build="tiny")
+    await ref.update(fasta)
+
+    index = await dispatch(run_location(), samtools_faidx, ref=ref)
+
+    assert commands == [["samtools", "faidx"]]
+    assert Path(await index.fetch()).read_text() == "chrT\t20\t6\t10\t11\n"
 
 
 async def test_dispatch_runs_on_the_cluster_when_picked(monkeypatch):

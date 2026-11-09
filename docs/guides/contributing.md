@@ -93,7 +93,7 @@ Each installs the environment the header of its domain's `env.py` declares (`src
 pixi run python cli/lock_envs.py            # pixi.lock and every header; --check only checks
 ```
 
-The development environment is `pyproject.toml`'s `[tool.pixi]`, locked in `pixi.lock`. Images install `pixi.lock` too (its `core` and `mcp` environments), so after `pixi add --pypi <package>` adds a core dependency, or any edit to `[tool.pixi]`, run the same command: your own pixi writes a lock the image builder refuses. Pre-commit checks it.
+The development environment is `pyproject.toml`'s `[tool.pixi]`, locked in `pixi.lock`. The notebook image installs `pixi.lock` too (its `mcp` environment), so after `pixi add --pypi <package>` adds a core dependency, or any edit to `[tool.pixi]`, run the same command: your own pixi writes a lock the image builder refuses. Pre-commit checks it.
 
 **The notebook image (`stargazer`)** builds from `runtime/Dockerfile`, from the repository root, when you change it or want the current source in it:
 

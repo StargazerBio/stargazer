@@ -16,8 +16,9 @@ A cluster run's code bundle comes from where the dispatched task's module was
 imported from: the notebook's own directory when the notebook defining it is the
 one running, as a workspace notebook in its pod is, or the package root for one
 imported by its dotted name from a checkout. A task from an installed SDK is
-already in its image, so its run carries the running notebook's folder. The task has to be importable there, which a task
-defined in a regular cell isn't: it goes in an `@app.function`.
+already in its image, so its run carries the running notebook's folder. The
+task has to be importable there, which a task defined in a regular cell isn't:
+it goes in an `@app.function`.
 
 A module of its own rather than part of the package `__init__`, because it
 imports marimo and the dashboard imports `stargazer.notebooks` without it.
@@ -33,7 +34,6 @@ import marimo as mo
 from flyte._initialize import get_init_config, init_config_context
 
 from stargazer.config import _checkout
-from stargazer.notebooks import local_env
 
 
 def run_location() -> mo.ui.radio:
@@ -58,18 +58,14 @@ async def dispatch(location: mo.ui.radio, task: flyte.TaskTemplate, /, **inputs)
     cluster" asks for a remote run outright: `flyte.run` would quietly run
     in-process when no cluster is configured. It bundles the run's code from
     `task`'s own root (`_bundle_root`), and returns the output as the type
-    `task` declares. On this machine, a package task runs in its own
-    environment, in pixi or under docker (`local_env`), and in this process
-    where neither can run it. A workflow's body runs in this process, and each
-    package task it calls in its own environment.
+    `task` declares. "On this machine" is Flyte's local mode: the task, and
+    every task it calls, runs in this process, so the notebook's environment
+    has to hold what they import and the tools they call.
     """
-    if location.value == "local" and local_env.executor(task) is not None:
-        return await local_env.run_in_env(task, inputs)
     runner = flyte.with_runcontext(mode=location.value)
     if location.value == "local":
-        with local_env.routed():
-            run = await runner.run.aio(task, **inputs)
-            await run.wait.aio()
+        run = await runner.run.aio(task, **inputs)
+        await run.wait.aio()
         return (await run.outputs.aio())[0]
     # A context-scoped override, so samples dispatched together with
     # `asyncio.gather` each keep their own.

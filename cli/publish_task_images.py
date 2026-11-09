@@ -4,8 +4,9 @@ Build every domain's task image from this checkout and publish each under the pa
 
 The release runs this from the tagged checkout, so each image is built with
 the same recipe a checkout runs its tasks on (`task_image()` in
-`stargazer.config`): the `env.py` header's environment, then this source. Flyte's local builder builds it with docker and pushes it tagged
-by content; the version tag is added to that same manifest, at
+`stargazer.config`): the `env.py` header's environment, then this source.
+Flyte's local builder builds it with docker and pushes it tagged by content;
+the version tag is added to that same manifest, at
 `released_image()`, where an installed `stargazer-bio` of that version looks
 for it.
 

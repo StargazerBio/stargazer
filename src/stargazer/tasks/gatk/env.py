@@ -5,7 +5,7 @@
 # [tool.pixi.workspace]
 # # bioconda's packages build against conda-forge's, which come first.
 # channels = ["conda-forge", "bioconda"]
-# platforms = ["linux-64", "osx-arm64"]
+# platforms = ["linux-64"]
 #
 # [tool.pixi.dependencies]
 # python = "3.14.*"

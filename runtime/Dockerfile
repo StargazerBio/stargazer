@@ -143,20 +143,26 @@ USER flyte
 # through `pixi exec`. pixi keys a notebook's environment on its path, so the
 # tutorials' are built where a hosted pod opens them, under /stargazer; any
 # other path builds its own from the cache. The templates are only ever opened
-# as copies, so only their packages are kept. Within this layer hardlinks
-# cost nothing.
+# as copies, so only their packages are kept. So are each domain's, from its
+# `env.py` header: a notebook that runs a domain's tasks in its kernel lists
+# those packages in its own header. The domains are locked for linux-64, the
+# cluster's platform, so only that build of this image holds them. Within this
+# layer hardlinks cost nothing.
 RUN export PIXI_NO_HARD_LINKS=false PIXI_NO_REF_LINKS=false \
         UV_LINK_MODE=hardlink \
     && UV="pixi exec --spec uv>=0.12 uv" \
     && VIRTUAL_ENV=/opt/venv $UV run -q --active --no-project \
         --python /opt/venv/bin/python --with "marimo[lsp]==0.25.1" \
         -- python -c 'import marimo' \
+    && DOMAINS="$([ "$(uname -m)" != x86_64 ] \
+        || echo /stargazer/src/stargazer/tasks/*/env.py)" \
     && for nb in $(find /stargazer/src/stargazer/notebooks -mindepth 2 \
-            -name '*.py' ! -name __init__.py); do \
+            -name '*.py' ! -name __init__.py) $DOMAINS; do \
         env="$(pixi install --script "$nb" 2>&1 \
             | sed -n "s/.*installed at '\(.*\)'\.$/\1/p")" \
         && [ -n "$env" ] \
-        && case "$nb" in */templates/*) rm -rf "${env%/envs/*}"; continue ;; esac \
+        && case "$nb" in */templates/*|*/tasks/*) \
+            rm -rf "${env%/envs/*}"; continue ;; esac \
         && $UV run -q --no-project --python "$env/bin/python" \
             --with marimo==0.25.1 -- python -c 'import marimo, stargazer' \
         || exit 1; \

@@ -24,4 +24,4 @@ How a marimo notebook carries its own dependencies and gets a venv of its own. S
 
 - **Notebooks run in pixi's sandbox** (`runtime/launch-notebook.sh`), so a header declares bioconda's tools beside its Python packages.
 - **Every notebook's header points `stargazer-bio` at `/stargazer`** through `[tool.pixi.pypi-dependencies]`, so a sandbox installs the SDK the image was built with. How the image sets that up is in `docs/architecture/runtime.md` and `runtime/Dockerfile`.
-- **The image warms pixi's and uv's caches** with the built-in notebooks' packages and prebuilds each tutorial's environment at the path a hosted pod opens it from, so they open without installing. The built-in headers list `marimo` so the sandbox leaves them unedited.
+- **The image warms pixi's and uv's caches** with the built-in notebooks' packages and, in its `amd64` build, each domain's (the header of its `env.py`), and prebuilds each tutorial's environment at the path a hosted pod opens it from, so they open without installing. The built-in headers list `marimo` so the sandbox leaves them unedited.
