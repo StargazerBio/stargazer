@@ -36,4 +36,6 @@ Gotcha: on `main` before PR 137, a tutorial's tasks run on the published `starga
 - Hosted pod on `ghcr.io/stargazerbio/debug:dispatch-installed-bundle` (`sha256:6eb66a90…`): `dispatch` "On the cluster" of `audit_cohorts` bundled 4 files and submitted run `u8849z8657x4xnhbn6sp`, with no `CodeBundleError` (measured). The run failed while initializing, as the tutorial's own `flyte.run` cells did. The inferred cause is the private `stargazer-core:2026.10.30` (anonymous manifest request: 403).
 - Torn down: dashboard back on its release, then stopped; no active app and no live run in `u-pryce`.
 
+PR 138's commits are merged into `feat/run-modes` (PR 137), since both rewrite `dispatch`: merging 137 lands the fix, and 138 closes then.
+
 Related: [[board]], [[released-sdk-in-notebooks]], [[run-modes]].

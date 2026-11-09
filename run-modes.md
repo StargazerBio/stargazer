@@ -37,16 +37,17 @@ Built on `feat/run-modes`, cut from `main` after PR 134 (the docker path) merged
 
 ### On this machine runs in the kernel
 
-- [ ] **`dispatch`:** "On this machine" is `flyte.with_runcontext(mode="local")`, for every task. `stargazer.notebooks.local_env` and its tests go, with the docker and pixi executors, the pickled call directories, the SDK overlay and the wrapped `LocalController.submit`. `build_image`, which the tasks tier still needs, moves into `cli/docker_task_tests.py`.
-- [ ] **Platforms:** the domain headers go back to `linux-64`, the platform their images run on, and their locks with them.
-- [ ] **Warm cache:** the image's warm-cache step also installs each domain's `env.py` header, so a notebook that lists gatk4 or scanpy builds its environment from local disk.
-- [ ] **Bundle root:** ticket `dispatch-installed-bundle`'s fix (PR 138) merges into this branch, since both rewrite `dispatch`.
-- [ ] **Docs:** the guide leads with the three sentences; `docs/architecture/notebook.md`, `configuration.md` and `runtime.md` for the mechanics.
-- [ ] **Verify:** a sandboxed notebook whose header lists a domain's packages runs an scRNA task and the germline workflow on this machine, in its kernel; a hosted pod does the same for a task whose tool its header lists.
+- [x] **`dispatch`:** "On this machine" is `flyte.with_runcontext(mode="local")`, for every task. `stargazer.notebooks.local_env` and its tests go, with the docker and pixi executors, the pickled call directories, the SDK overlay and the wrapped `LocalController.submit`. `build_image`, which the tasks tier still needs, moves into `cli/docker_task_tests.py`.
+- [x] **Platforms:** the domain headers go back to `linux-64`, the platform their images run on, and their locks with them.
+- [x] **Warm cache:** the image's warm-cache step also installs each domain's `env.py` header, so a notebook that lists gatk4 or scanpy builds its environment from local disk.
+- [x] **Bundle root:** ticket `dispatch-installed-bundle`'s fix (PR 138) merges into this branch, since both rewrite `dispatch`.
+- [x] **Docs:** the guide leads with the three sentences; `docs/architecture/notebook.md`, `configuration.md` and `runtime.md` for the mechanics.
+- [x] **Verify:** a sandboxed notebook whose header lists a domain's packages runs an scRNA task and the germline workflow on this machine, in its kernel; a hosted pod does the same for a task whose tool its header lists.
+      Done, with the hosted pod running the whole germline workflow: Evidence below.
 
 Deferred:
-- The community repo's headers, a PR in StargazerBio/community-notebooks: the germline notebook keeps its tools; the scRNA one asks for `stargazer-bio[bio]`, an extra that's gone, and needs `scanpy` in its place.
-- Building a hosted notebook's environment into its pod image at launch, so it opens without installing (infra; depends on ticket `layered-notebook-image-cache`).
+- The community repo's headers: ticket [[community-kernel-headers]].
+- Building a hosted notebook's environment into its pod image at launch, so it opens without installing: ticket [[prebuilt-notebook-environment]].
 
 ### Kept from the first version
 
@@ -57,46 +58,54 @@ Deferred:
 
 ## Evidence
 
-All on `feat/run-modes`, 2026-11-09, osx-arm64 with docker 29.8.2 and pixi 0.84.1 locally; the tenant as the test account.
+All on `feat/run-modes` at `b10ab00`, 2026-11-09: locally on osx-arm64 with pixi 0.84.1; the tenant as the test account, on `ghcr.io/stargazerbio/debug:run-modes-kernel` (`sha256:9774cbf3ce1bec205a1a2277228c59a02e71202bfa6f453d9788ebe01f08fdd9`). Measured unless it says otherwise.
 
-- **Unit tier:** passes, with `tests/notebooks/test_local_env.py` (routing, env lookup, workspace, overlay, workflows) and `tests/unit/test_task_images.py` (`notebook_image`), each test seen failing first.
-- **Docker fallback:** with the headers on `linux-64` only, `normalize` ran in its image under docker and returned a 59×500 normalized AnnData.
-- **pixi "Here":** `normalize` installed scrna's environment in 54 s the first time, then ran in 7 s.
-- **Sandboxed notebook, local:** the recipe below, run in the header's own environment (`pixi run --script`), 118 s: the kernel was the header's, with the checkout's SDK and neither scanpy nor gatk; `normalize` returned `v1 normalized 59 500`; the germline workflow returned the joint-called `cohort-here` VCF. Stored outputs: the AnnData's shape, raw counts and `log1p(normalize_total)` values check out against the input; the VCF calls `NA12829`, 47 records on `chr17:7658421-7697490`. With `normalize`'s stage changed in the checkout, the rerun returned `stage=normalized_here_edit`.
-- **Hosted pod:** the Tasks tutorial in edit mode on `ghcr.io/stargazerbio/debug:run-modes` (pod and dashboard both): `dispatch(where, samtools_faidx, ...)` "On this machine" from a kernel with no samtools installed gatk's environment in the pod (`envs ['gatk']`) and stored `run_modes_tiny.fa.fai` in the test account's S3 store, reading `chrT\t20\t6\t10\t11`. Torn down after: no active app in `u-pryce`, no live runs; the dashboard redeployed on its release first.
-- **Tasks tier:** gatk and scrna images rebuilt from the relocked headers (see the PR).
-- **After merging `main` (#135):** unit tier 284 passed, tasks tier passed, local `normalize` "Here" returned the same CID, the template's checkout image rebuilt and imports the template, and the hosted check passed again on the rebuilt image with the kernel's SDK now an installed package. `notebook_image()` keeps `stargazer-bio==<version>` on top when installed: `from_pixi_script` can't start from the published `stargazer-core`, which lacks the header's packages anyway.
-- **Not covered:** a workspace notebook created from the release dashboard's Blank seed can't start its kernel on the new image (ticket `unpinned-notebook-python`), so the hosted check used a built-in notebook.
+- **Unit tier:** 280 passed. `test_an_sdk_task_on_this_machine_runs_in_the_kernel` and the `notebook_image` tests were each seen failing first.
+- **Tasks tier:** gatk 20 passed, scrna 15 passed, on images `cli/docker_task_tests.py` now builds itself.
+- **KERNEL-TASK, KERNEL-WORKFLOW:** the recipe's notebook in its header's own environment, exit 0 in 1:15. scanpy wasn't in `sys.modules` before the `normalize` dispatch and was loaded from the kernel's environment after it; `normalize: v1 normalized 59 500 bafybeigsvg…`; `germline: joint_call_gvcfs cohort-kernel ['NA12829'] bafkreifa3mox…`.
+- **KERNEL-STORE:** `v1 shape True counts==input True X==log1p(normalize_total) True`; `cohort-kernel vcf samples ['NA12829'] == source True records 47 contigs ['chr17:7658421-7697490']`.
+- **KERNEL-MISSING:** from a header with neither, `normalize` raised `RuntimeUserError ModuleNotFoundError: No module named 'scanpy'` and `samtools_faidx` raised `RuntimeUserError FileNotFoundError: [Errno 2] No such file or directory: 'samtools'`.
+- **Warm cache:** the image is 2.17 GB against 1.35 GB for `debug:run-modes` (+0.82 GB), and `/opt/pixi-cache` 2.9 GB against 1.5 GB. `pixi install --script` of a header listing both domains' packages: 31 s and 45 conda packages fetched on the old image, 8 s and 3 fetched on the new one, both emulated amd64.
+- **KERNEL-HOSTED:** the workspace notebook `germline-pixi-check`, whose header lists gatk4, samtools and bwa-mem2, opened in Edit on the debug image (the app's served image is the digest above; 1 CPU, 2Gi to 6Gi). With **On this machine**, build `GRCh38_TP53`, sample `NA12829` and cohort `kernel-hosted`, **Run the pipeline** returned "Cohort kernel-hosted: 1 sample(s) on GRCh38_TP53, VCF `bafkreidglsp6z7flklojph3gtwelcy437xpzhaxmwcmjtrz34b3v2hvtk4`" in about 41 s. The cell's log shows the run against `s3://stargazerbio-users` and the account's DSQL index, with `Running:` lines for samtools faidx, gatk CreateSequenceDictionary, bwa-mem2 index and mem, gatk SortSam, MarkDuplicates, HaplotypeCaller, GenomicsDBImport and GenotypeGVCFs. The results section rendered "47 sites across 1 sample(s)", the local run's count. The image has none of those tools on its `PATH` (`command -v` in the image finds none), so they came from the notebook's environment. The project's run list was the same three old runs before and after, so nothing went to the cluster.
+- **Teardown:** dashboard redeployed on its release image, then `teardown` stopped `dashboard` and `nb-germline-pixi-check-edit`; live runs `[]`, no active app in `u-pryce`.
+- **Not reached:** how long the hosted notebook takes to open from the warm cache. It opened in roughly 1.5 to 2 minutes including the pod's pull of the new image (rough); the pod's logs weren't read, as the AWS session had expired. The hosted VCF's file wasn't fetched and compared with its keyvalues; the check there is the rendered site count.
 
-## Verification recipe: SDK tasks and workflows run "Here" in their own environments
+## Verification recipe: "On this machine" runs in the notebook's kernel
 
-A notebook calling SDK tasks lists none of their domain packages: "On this machine" runs each task in its domain's environment, installed with pixi from the domain's `env.py` header and lock, and an SDK workflow's body in the kernel with each task in its own environment. The task runs the kernel's own SDK, so a checkout's edits show up.
+A notebook's header lists what it runs on this machine. `dispatch` set to "On this machine" runs an SDK task, or a workflow and every task it calls, in the kernel's process on what the header installed. A package or tool the header doesn't list fails with an error naming it.
 
 ### Sub-features
 
-- **HERE-TASK**: an scRNA task dispatched "On this machine" returns its real output from a kernel without scanpy.
-- **HERE-WORKFLOW**: the germline workflow dispatched "On this machine" returns the cohort's joint-called VCF from a kernel without gatk.
-- **HERE-EDIT**: an edit to a task in the checkout shows in the next run's output.
-- **HERE-STORE**: the outputs are in the run's index and store, and their files hold what their keyvalues claim.
-- **HERE-HOSTED**: in a hosted pod, a package task dispatched "On this machine" installs its environment in the pod and returns its output.
+- **KERNEL-TASK**: an scRNA task dispatched "On this machine" returns its real output, with scanpy loaded in the kernel.
+- **KERNEL-WORKFLOW**: the germline workflow dispatched "On this machine" returns the cohort's joint-called VCF, its tools the kernel environment's.
+- **KERNEL-STORE**: the outputs are in the run's index and store, and their files hold what their keyvalues claim.
+- **KERNEL-MISSING**: from a header without them, a task fails naming the missing package or tool.
+- **KERNEL-HOSTED**: in a hosted pod, a notebook whose header lists a workflow's tools runs it "On this machine".
 
 ### How to get to it (user POV)
 
-A notebook with `run_location()` in one cell and `await dispatch(where, <SDK task or workflow>, ...)` in another, the control on "On this machine".
+A notebook with `run_location()` in one cell and `await dispatch(where, <SDK task or workflow>, ...)` in another, the control on "On this machine", and the task's packages and tools in the header.
 
 ### Driving it
 
 Preconditions: the repo root as cwd, pixi on the PATH, the run's isolated store exported (the `verify-stargazer` skill's Local notebook block) and `CO=$PWD`.
 
-1. Write the notebook to `${RUN_DIR}/here.py`, its header pointing the SDK at the checkout:
+1. Write the notebook to `${RUN_DIR}/kernel.py`, its header pointing the SDK at the checkout:
 
    ```python
    # /// script
    # requires-python = ">=3.14"
-   # dependencies = ["marimo", "stargazer-bio"]
+   # dependencies = ["marimo", "stargazer-bio", "scanpy>=1.12", "igraph"]
+   #
+   # [tool.pixi.workspace]
+   # channels = ["conda-forge", "bioconda"]
    #
    # [tool.pixi.dependencies]
    # python = "3.14.*"
+   # gatk4 = "4.6.*"
+   # samtools = "1.*"
+   # bwa = "0.7.*"
+   # bwa-mem2 = "2.*"
    #
    # [tool.pixi.pypi-dependencies]
    # stargazer-bio = { path = "<CO>", editable = true }
@@ -106,7 +115,7 @@ Preconditions: the repo root as cwd, pixi on the PATH, the run's isolated store 
    app = marimo.App(width="medium")
 
    with app.setup:
-       import importlib.util, os, shutil, sys
+       import os, shutil, sys
        from pathlib import Path
        import stargazer
        from stargazer.assets import R1, R2, Reference
@@ -129,10 +138,11 @@ Preconditions: the repo root as cwd, pixi on the PATH, the run's isolated store 
 
    @app.cell
    async def _(where):
-       print("kernel:", sys.executable, "stargazer:", stargazer.__file__)
-       print("kernel has scanpy:", importlib.util.find_spec("scanpy") is not None, "gatk:", shutil.which("gatk"))
+       print("kernel:", sys.executable, "pid", os.getpid(), "stargazer:", stargazer.__file__)
+       print("scanpy loaded before:", "scanpy" in sys.modules, "| kernel gatk:", shutil.which("gatk"))
        adata = AnnData(path=str(CHECKOUT / "tests/fixtures/scrna/qc_filtered.h5ad"), sample_id="v1", organism="human")
        norm = await dispatch(where, normalize, adata=adata)
+       print("scanpy loaded after:", "scanpy" in sys.modules, "from", sys.modules["scanpy"].__file__)
        print("normalize:", norm.sample_id, norm.stage, norm.n_obs, norm.n_vars, norm.cid)
        return
 
@@ -147,7 +157,7 @@ Preconditions: the repo root as cwd, pixi on the PATH, the run's isolated store 
        await r1.update(local / "NA12829_TP53_R1.fq.gz")
        await r2.update(local / "NA12829_TP53_R2.fq.gz", mate_cid=r1.cid)
        await r1.update(local / "NA12829_TP53_R1.fq.gz", mate_cid=r2.cid)
-       vcf = await dispatch(where, germline_short_variant_discovery, build="GRCh38", sample_ids=["NA12829"], cohort_id="cohort-here")
+       vcf = await dispatch(where, germline_short_variant_discovery, build="GRCh38", sample_ids=["NA12829"], cohort_id="cohort-kernel")
        print("germline:", vcf.caller, vcf.sample_id, vcf.source_samples, vcf.cid)
        return
 
@@ -156,9 +166,8 @@ Preconditions: the repo root as cwd, pixi on the PATH, the run's isolated store 
        app.run()
    ```
 
-2. Run its cells in its header's environment (marimo's `export` takes no pixi sandbox; `pixi run --script` builds the same environment from the header): `pixi run --script "${RUN_DIR}/here.py" python "${RUN_DIR}/here.py" > "${RUN_DIR}/evidence/plain.log" 2>&1`. Passes (HERE-TASK, HERE-WORKFLOW): exit 0; the log's kernel is under rattler's `cached-envs-v0`, its stargazer is `<CO>/src/stargazer`, `kernel has scanpy: False gatk: None`, then `normalize: v1 normalized 59 500 …` and `germline: joint_call_gvcfs cohort-here ['NA12829'] …`.
-3. HERE-EDIT: `sed -i '' 's/stage="normalized")/stage="normalized_here_edit")/' src/stargazer/tasks/scrna/normalize.py`, rerun step 2 into a fresh store, then `git checkout -- src/stargazer/tasks/scrna/normalize.py`. Passes: `normalize: v1 normalized_here_edit 59 500`.
-4. HERE-STORE: list the run's records and check the files, the AnnData in the run's own scrna environment (`${STARGAZER_LOCAL}/envs/scrna/.pixi/envs/default/bin/python`):
+2. Run its cells in its header's environment (marimo's `export` takes no pixi sandbox; `pixi run --script` builds the same environment from the header): `pixi run --script "${RUN_DIR}/kernel.py" python "${RUN_DIR}/kernel.py" > "${RUN_DIR}/evidence/kernel.log" 2>&1`. Passes (KERNEL-TASK, KERNEL-WORKFLOW): exit 0; the log's kernel is under rattler's `cached-envs-v0`, its stargazer is `<CO>/src/stargazer`, `kernel gatk:` is a path in that environment, `scanpy loaded before: False`, `scanpy loaded after: True from` that environment, then `normalize: v1 normalized 59 500 …` and `germline: joint_call_gvcfs cohort-kernel ['NA12829'] …`.
+3. KERNEL-STORE: list the run's records with the dev environment, and check the files with the notebook's environment's own Python, which has scanpy (`PY=$(ls -d ~/Library/Caches/rattler/cache/cached-envs-v0/kernel-*/envs/default/bin/python | head -1)`): `pixi run python "${RUN_DIR}/assemble.py" | grep -E "^(anndata|variants)" > "${RUN_DIR}/evidence/assembled.tsv"`, then `$PY "${RUN_DIR}/check.py" tests/fixtures/scrna/qc_filtered.h5ad "${RUN_DIR}/evidence/assembled.tsv"`.
 
    ```python
    # assemble.py: one TSV row per output
@@ -167,7 +176,7 @@ Preconditions: the repo root as cwd, pixi on the PATH, the run's isolated store 
    async def main():
        for a in await assemble(asset="anndata", stage="normalized"):
            print("anndata", a.sample_id, a.n_obs, a.n_vars, a.cid, await a.fetch(), sep="\t")
-       for v in await assemble(asset="variants", sample_id="cohort-here"):
+       for v in await assemble(asset="variants", sample_id="cohort-kernel"):
            print("variants", v.sample_id, ",".join(v.source_samples), v.caller, v.cid, await v.fetch(), sep="\t")
    asyncio.run(main())
    ```
@@ -193,42 +202,53 @@ Preconditions: the repo root as cwd, pixi on the PATH, the run's isolated store 
            print(sample, "vcf samples", header, "== source", header == sources.split(","), "records", len(recs), "contigs", sorted({r[0] for r in recs}))
    ```
 
-   Passes: `v1 shape True counts==input True X==log1p(normalize_total) True` and `cohort-here vcf samples ['NA12829'] == source True records 47 contigs ['chr17:7658421-7697490']`; no `env-run-*` left in `$STARGAZER_LOCAL`.
-5. HERE-HOSTED: build the branch's image and push it to `ghcr.io/stargazerbio/debug:<slug>`, deploy the test account's dashboard on it (infra's `verify-dashboard` skill), launch a built-in notebook in edit mode (`POST /launch` with `slug=tasks`, `mode=edit`, `section=tutorials`), and add two cells at its end:
+   Passes: `v1 shape True counts==input True X==log1p(normalize_total) True` and `cohort-kernel vcf samples ['NA12829'] == source True records 47 contigs ['chr17:7658421-7697490']`.
+4. KERNEL-MISSING: a second notebook, `${RUN_DIR}/missing.py`, with the same header minus scanpy, igraph and the four tools, run the same way into a second store (`STARGAZER_LOCAL`, `STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` pointed at fresh paths). Its setup imports `normalize` and `samtools_faidx`, and its one cell is:
 
    ```python
-   from stargazer.notebooks.ui import dispatch, run_location; where = run_location(); where
+   for task, inputs in (
+       (normalize, {"adata": AnnData(path=str(CHECKOUT / "tests/fixtures/scrna/qc_filtered.h5ad"), sample_id="v1", organism="human")}),
+       (samtools_faidx, None),
+   ):
+       if inputs is None:
+           fa = Path(os.environ["STARGAZER_LOCAL"]) / "tiny.fa"; fa.parent.mkdir(parents=True, exist_ok=True)
+           fa.write_text(">chrT\nACGTACGTAC\nGTACGTACGT\n")
+           ref = Reference(build="tiny"); await ref.update(fa)
+           inputs = {"ref": ref}
+       try:
+           await dispatch(where, task, **inputs)
+       except Exception as e:
+           print("MISSING", task.name, type(e).__name__, str(e)[:200].replace("\n", " "))
    ```
 
-   ```python
-   import os, shutil, sys, stargazer; from pathlib import Path; from stargazer.assets import Reference; from stargazer.tasks.general.samtools import samtools_faidx; _fa = Path(os.environ["STARGAZER_LOCAL"]) / "run_modes_tiny.fa"; _fa.parent.mkdir(parents=True, exist_ok=True); _fa.write_text(">chrT\nACGTACGTAC\nGTACGTACGT\n"); _ref = Reference(build="run-modes-tiny"); await _ref.update(_fa); _idx = await dispatch(where, samtools_faidx, ref=_ref); print("RESULT kernel", sys.executable, "| stargazer", stargazer.__file__, "| kernel samtools", shutil.which("samtools"), "| envs", sorted(os.listdir(Path(os.environ["STARGAZER_LOCAL"]) / "envs")), "| fai", _idx.path.path, "=", repr(Path(await _idx.fetch()).read_text()))
-   ```
-
-   Passes: `kernel samtools None | envs ['gatk'] | fai s3://…/run_modes_tiny.fa.fai = 'chrT\t20\t6\t10\t11\n'`. Then redeploy the dashboard on its release, `union_dashboard.py teardown`, deactivate the dashboard, and confirm no active app and no live run.
+   Passes: `MISSING … RuntimeUserError ModuleNotFoundError: No module named 'scanpy'` and `MISSING gatk.samtools_faidx RuntimeUserError FileNotFoundError: [Errno 2] No such file or directory: 'samtools'`.
+5. Warm cache: build the branch's image for amd64 and push it to `ghcr.io/stargazerbio/debug:<slug>`. In it and in the image it's compared with, copy a notebook whose header is step 1's with `stargazer-bio = { path = "/stargazer" }` to `/tmp/w/both.py`, then time `pixi install --script /tmp/w/both.py` and count the entries added to `/opt/pixi-cache/pkgs`. Passes: a handful of packages fetched, against dozens without the domains in the cache.
+6. KERNEL-HOSTED: deploy the test account's dashboard on the debug image (infra's `verify-dashboard` skill). The account's workspace holds `germline-pixi-check`, a germline notebook whose header lists gatk4, samtools and bwa-mem2, and its store holds build `GRCh38_TP53` and sample `NA12829`. Open it in **Edit**, pick **On this machine**, the build, the sample and a fresh cohort name, and press **Run the pipeline**. Passes: the cell reports the cohort with a VCF CID, its log shows `Running:` lines for each tool, and the results section counts 47 sites across 1 sample. `union_dashboard.py check nb-germline-pixi-check-edit` before and after lists the same runs. Then redeploy the dashboard without `STARGAZER_NOTEBOOK_IMAGE`, run `union_dashboard.py teardown`, and confirm no active app and live runs `[]`.
 
 ### Gotchas
 
-- A pixi environment can't be moved or copied between run directories: pixi refuses it as non-relocatable. Let each run install its own; pixi's package cache makes the second install quick.
+- `pixi run --script X python Y` runs X's environment but, for a marimo notebook X, re-ran X rather than Y. Run a second script with the environment's own Python from rattler's `cached-envs-v0`. A second run of the workflow stores a second VCF under the same cohort, with its own CID.
 - marimo's `export` has no pixi sandbox (`--sandbox` is uv's only), so step 2 runs the notebook's cells with `pixi run --script`, which builds the header's environment as the sandbox does.
-- A workspace notebook created from the release dashboard's Blank seed has no pixi Python pin and its kernel never starts on a pixi-sandbox image (ticket `unpinned-notebook-python`); use a built-in notebook for HERE-HOSTED.
-- In the hosted editor, a second browser tab connects as a reader and its cells stay queued; take over the session first. A built-in notebook's added cells aren't saved, so they're gone after a takeover.
+- The domain headers lock for `linux-64` only, so the image's warm cache holds their packages in its amd64 build alone. Measure the cache on that build.
+- In the built-in browser, marimo's page shifts after it's measured: click a button at the coordinates of a fresh screenshot, not by an element reference found earlier.
+- A workspace notebook with no pixi Python pin never starts its kernel on a pixi-sandbox image (ticket `unpinned-notebook-python`); `germline-pixi-check` has the pin.
 - Byte-identical outputs share a CID, and the index keeps one record per CID: use distinct inputs per sample.
 
 ## Run modes today
 
-For reference while planning. Callers:
+Callers:
 
 | Caller | Kernel environment | Where tasks run |
 |---|---|---|
 | Script or IDE from a checkout (`pixi run`) | dev env, editable SDK | in-process, or cluster on images built from source |
 | Script with `stargazer-bio` installed in your own env | your env | in-process, or cluster on the release's images |
-| Notebook locally, `pixi run marimo edit` | dev env | in-process, docker (PR 134), or cluster |
-| Notebook locally, sandboxed | its header | in-process, docker (PR 134), or cluster |
-| Notebook in the stargazer image, `docker run` | its header | in-process only |
-| Notebook hosted | its header | in-process, or cluster |
+| Notebook locally, `pixi run marimo edit` | dev env | in the kernel, or cluster |
+| Notebook locally, sandboxed | its header | in the kernel, or cluster |
+| Notebook in the stargazer image, `docker run` | its header | in the kernel only |
+| Notebook hosted | its header | in the kernel, or cluster |
 | MCP agent (local, or the pod's terminal) | the `mcp` env, editable | cluster, images built from source |
 | A workflow's pod | its task image | children in their own pods |
 
-Executors: in-process (Flyte local mode), the task image under local docker, a Union pod, a devbox pod.
+Executors: in-process (Flyte local mode), a Union pod, a devbox pod.
 
-Related: [[board]], [[local-runs-in-task-image]], [[hosted-local-runs]], [[released-sdk-in-notebooks]], [[notebook-image-digest]], [[marimo-autoadd-headers]], [[pixi-notebook-sandbox]], [[flyte-images]], [[marimo-sandbox]].
+Related: [[board]], [[local-runs-in-task-image]], [[hosted-local-runs]], [[dispatch-installed-bundle]], [[released-sdk-in-notebooks]], [[notebook-image-digest]], [[marimo-autoadd-headers]], [[pixi-notebook-sandbox]], [[flyte-images]], [[marimo-sandbox]].
