@@ -11,7 +11,7 @@
 #
 # [tool.pixi.workspace]
 # channels = ["conda-forge"]
-# platforms = ["linux-64"]
+# platforms = ["linux-64", "osx-arm64"]
 #
 # [tool.pixi.dependencies]
 # python = "3.14.*"
