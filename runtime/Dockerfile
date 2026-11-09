@@ -76,8 +76,8 @@ COPY runtime/launch-notebook.sh runtime/start-local.sh /usr/local/bin/
 # egg-info here. Installed, a kernel's SDK runs its tasks on the images this
 # release published (`released_image()` in config.py), so it builds none.
 # pixi.lock is the MCP server's environment below, editable from this tree,
-# so the runs it starts build their task images here: pixi.lock's `core`
-# environment, or a domain's `env.py` header and the lock beside it in src/.
+# so the runs it starts build their task images here: a domain's `env.py`
+# header and the lock beside it in src/, or a notebook's own header.
 # .dockerignore keeps the MCP server's environment, in .pixi/, out of the
 # source layer of each.
 COPY --chown=flyte:flyte pyproject.toml pixi.lock README.md .dockerignore /stargazer/

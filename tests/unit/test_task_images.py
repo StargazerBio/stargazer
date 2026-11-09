@@ -38,16 +38,6 @@ def test_a_checkout_builds_its_task_image_from_source():
     assert image._layers
 
 
-def test_an_installed_package_runs_its_notebooks_tasks_on_the_released_core_image(
-    installed,
-):
-    """The core image is the published one of the installed version, nothing to build."""
-    image = config.core_image("stargazer-template")
-
-    assert image.uri == f"ghcr.io/stargazerbio/stargazer-core:{VERSION}"
-    assert image._layers == ()
-
-
 TEMPLATE = Path(config.__file__).parent / "notebooks" / "templates" / "basic.py"
 
 

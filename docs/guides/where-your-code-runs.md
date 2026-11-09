@@ -53,6 +53,6 @@ Either way, the SDK your run was submitted with goes on top: your checkout's sou
 
 These work, but the guarantees above don't cover them:
 
-- **Any other image** on your notebook's own `TaskEnvironment`, such as `core_image(...)` with layers added, or `flyte.Image.from_base`.
+- **Any other image** on your notebook's own `TaskEnvironment`, such as `flyte.Image.from_debian_base(...)` with layers added, or `flyte.Image.from_base`.
 - **Domain packages in your header**, to call an SDK task's code directly in your kernel.
 - **An unlocked notebook header.** Its cluster image can resolve differently from one build to the next, so the header alone doesn't pin what a run gets.

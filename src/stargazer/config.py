@@ -6,9 +6,9 @@ os.environ directly rather than importing named values from this module.
 
 Also what every task environment shares: the platform its image is built
 for, the variables and secrets forwarded into its pods, and the image
-recipes, `task_image()` for a domain's, `core_image()` for tasks that need
-only the SDK, and `notebook_image()` for a notebook's own tasks, from its
-header.
+recipes: a domain's tasks build from its `env.py`'s header
+(`task_image()`), and a notebook's own tasks from the notebook's header
+(`notebook_image()`).
 The environments themselves live in their domains' `env.py`
 (`stargazer.tasks.scrna.env`, `stargazer.tasks.gatk.env`).
 
@@ -50,7 +50,6 @@ import os
 import re
 import subprocess
 import sys
-import tomllib
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
@@ -219,7 +218,7 @@ def init_flyte() -> None:
         )
 
 
-def _with_source(image: flyte.Image, *, deps: bool) -> flyte.Image:
+def _with_source(image: flyte.Image) -> flyte.Image:
     """`image` with the checkout's stargazer installed on top, from its source.
 
     A layer of its own, so a source change rebuilds only it; the checkout's
@@ -229,18 +228,19 @@ def _with_source(image: flyte.Image, *, deps: bool) -> flyte.Image:
     cwd, or `src/` in a notebook pod (`init_flyte`). A task pod resolves the
     tasks it calls as installed modules (`stargazer.tasks…`), so the package
     must be the checkout's, wherever the run was submitted from. uv installs
-    into the pixi environment, which the layer below made `VIRTUAL_ENV`.
+    into the pixi environment, which the layer below made `VIRTUAL_ENV`, with
+    any core dependency the checkout has gained since the release the layer
+    below installed.
     """
-    install = ["uv", "pip", "install", "--no-cache", *([] if deps else ["--no-deps"])]
     return (
         image.with_dockerignore(PROJECT_ROOT / ".dockerignore")
         .with_source_folder(PROJECT_ROOT, "/opt/stargazer")
-        .with_commands([" ".join([*install, "/opt/stargazer"])])
+        .with_commands(["uv pip install --no-cache /opt/stargazer"])
     )
 
 
 def released_image(name: str, release: str) -> str:
-    """Where a release publishes a task image or the core image, tagged with its version.
+    """Where a release publishes a task image, tagged with its version.
 
     `release` is the package version as installed (`importlib.metadata`
     normalizes it, so tag `v2026.11.04` publishes `2026.11.4`).
@@ -280,46 +280,7 @@ def task_image(env: str | Path) -> flyte.Image:
     if not _checkout():
         return flyte.Image.from_base(released_image(name, version("stargazer-bio")))
     image = flyte.Image.from_pixi_script(env, name=name, platform=IMAGE_PLATFORM)
-    return _with_source(image, deps=True)
-
-
-def _notebook_marimo() -> str:
-    """pyproject.toml's marimo requirement, from its `dev` group.
-
-    A task a notebook defines runs in a pod that imports the notebook to find
-    it, so the core image installs marimo at the range development runs.
-    """
-    dev = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text())[
-        "dependency-groups"
-    ]["dev"]
-    return next(r for r in dev if isinstance(r, str) and r.startswith("marimo"))
-
-
-def core_image(name: str) -> flyte.Image:
-    """An image for tasks that need only the SDK, a notebook's own: the core environment, then the checkout.
-
-    The core dependencies, at the versions development runs, from
-    pyproject.toml and pixi.lock's `core` environment, so that layer is cached
-    until either changes. marimo comes at the dev group's range, since the
-    tasks it serves are a notebook's own and their pods import the notebook.
-    The checkout goes on top without dependencies, since the environment is
-    its own.
-
-    A release publishes it as `stargazer-core` (`cli/publish_task_images.py`),
-    and an installed package runs on that published image of its own version
-    (`released_image()`), so nothing builds. `name` names the image a checkout
-    builds. A published image takes no layers: to add packages,
-    `.clone(name=..., extendable=True)` it first.
-    """
-    if not _checkout():
-        return flyte.Image.from_base(
-            released_image("stargazer-core", version("stargazer-bio"))
-        )
-    base = flyte.Image.from_debian_base(name=name, platform=IMAGE_PLATFORM)
-    image = base.with_pixi_project(
-        PROJECT_ROOT / "pyproject.toml", environment="core"
-    ).with_pip_packages(_notebook_marimo())
-    return _with_source(image, deps=False)
+    return _with_source(image)
 
 
 # The PEP 723 block, as Flyte's pixi script parser reads it.
@@ -370,4 +331,4 @@ def notebook_image(notebook: str | Path, name: str) -> flyte.Image:
     image = flyte.Image.from_pixi_script(script, name=name, platform=IMAGE_PLATFORM)
     if not _checkout():
         return image.with_pip_packages(f"stargazer-bio=={version('stargazer-bio')}")
-    return _with_source(image, deps=True)
+    return _with_source(image)
