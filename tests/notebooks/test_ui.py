@@ -2,14 +2,17 @@
 
 import importlib.util
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import flyte
 import marimo as mo
-from flyte._initialize import get_init_config
+from flyte._initialize import get_init_config, init_config_context
 from flyte._internal.resolvers.default import DefaultTaskResolver
 
+from stargazer import config
 from stargazer.notebooks.ui import dispatch, run_location
+from stargazer.tasks.general.samtools import samtools_faidx
 
 env = flyte.TaskEnvironment(name="ui_test")
 
@@ -120,3 +123,43 @@ async def test_cluster_run_bundles_from_where_the_task_was_imported(
 
     assert await dispatch(where, module.double, x=2) == 4
     assert submitted == [(tmp_path, ["mod", "my_notebook", "instance", "double"])]
+
+
+async def _bundle_root_of(monkeypatch, task, root):
+    """The code bundle's root a cluster dispatch of `task` submits with, given
+    `root` as the one `init_flyte()` set."""
+    roots = []
+
+    async def submit(task, **inputs):
+        """Record the bundle root the submission sees."""
+        roots.append(get_init_config().root_dir)
+        return _remote_run("chrT")
+
+    _record_modes(
+        monkeypatch, lambda mode, **_: SimpleNamespace(run=SimpleNamespace(aio=submit))
+    )
+    where = mo.ui.radio(options=run_location().options, value="On the cluster")
+    with init_config_context(get_init_config().replace(root_dir=root)):
+        await dispatch(where, task, ref=None)
+    return roots
+
+
+async def test_an_installed_sdk_task_bundles_from_init_flytes_root(
+    monkeypatch, tmp_path
+):
+    """With the SDK installed, a task imported from it keeps the root `init_flyte()`
+    set, the running notebook's folder: its module is in site-packages, which Flyte
+    never bundles, and in the task's image already."""
+    monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
+    workspace = tmp_path / "workspace"
+
+    assert await _bundle_root_of(monkeypatch, samtools_faidx, workspace) == [workspace]
+
+
+async def test_a_checkout_sdk_task_bundles_from_the_checkouts_source(
+    monkeypatch, tmp_path
+):
+    """From a checkout, a task imported from the SDK carries the checkout's source."""
+    source = Path(config.__file__).resolve().parents[1]
+
+    assert await _bundle_root_of(monkeypatch, samtools_faidx, tmp_path) == [source]
