@@ -7,7 +7,7 @@ os.environ directly rather than importing named values from this module.
 Also what every task environment shares: the platform its image is built
 for, the variables and secrets forwarded into its pods, and the image
 recipes, `task_image()` for a domain's and `core_image()` for tasks that need
-only the SDK.
+only the SDK, a notebook's own.
 The environments themselves live in their domains' `env.py`
 (`stargazer.tasks.scrna.env`, `stargazer.tasks.gatk.env`).
 
@@ -47,6 +47,7 @@ import inspect
 import os
 import subprocess
 import sys
+import tomllib
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
@@ -172,23 +173,42 @@ def log_execution() -> str:
     return execution_id
 
 
+def _bundle_root() -> Path:
+    """Where a hosted run's code bundle comes from.
+
+    A checkout's runs carry its source, from the directory holding the
+    `stargazer` package (the MCP server's, editable from the image's
+    `/stargazer`). A notebook's environment installs the SDK as a package,
+    whose tasks a task pod imports from its own image, the same release, so
+    its runs carry only the running notebook's folder (marimo sets
+    `__main__.__file__` to the notebook), where its own tasks are. Not
+    site-packages: Flyte never bundles a file there, and refuses an empty
+    bundle, and an environment links the package's files from the uv cache,
+    which Flyte's bundler resolves on one side of a comparison and not the
+    other.
+    """
+    if _checkout():
+        return Path(__file__).resolve().parents[1]
+    notebook = getattr(sys.modules["__main__"], "__file__", None)
+    return Path(notebook).parent if notebook else Path.cwd()
+
+
 def init_flyte() -> None:
     """Initialize Flyte wherever Stargazer runs.
 
     A hosted notebook pod (`_U_EP_OVERRIDE` set) has no config file, but it
     carries the endpoint, an API key and the owner's org, project and domain,
     which make an in-cluster client for the owner's project. Its runs bundle
-    code from the directory holding the `stargazer` package, where the SDK and
-    the image-baked notebooks' tasks live. Anywhere else the config file
-    decides, as `flyte.init_from_config()` does: with none, runs stay in the
-    caller's own process.
+    code from `_bundle_root()`. Anywhere else the config file decides, as
+    `flyte.init_from_config()` does: with none, runs stay in the caller's own
+    process.
     """
     if not os.environ.get("_U_EP_OVERRIDE"):
         flyte.init_from_config()
         return
     # `init_in_cluster` takes the code bundle's root from the cwd and has no
-    # parameter for it. A pod's cwd is the workspace, which holds no SDK code.
-    with contextlib.chdir(Path(__file__).resolve().parents[1]):
+    # parameter for it.
+    with contextlib.chdir(_bundle_root()):
         flyte.init_in_cluster(
             org=os.environ.get("FLYTE_ORG"),
             project=os.environ.get("FLYTE_PROJECT"),
@@ -217,7 +237,7 @@ def _with_source(image: flyte.Image, *, deps: bool) -> flyte.Image:
 
 
 def released_image(name: str, release: str) -> str:
-    """Where a release publishes the task image `name`, tagged with its version.
+    """Where a release publishes a task image or the core image, tagged with its version.
 
     `release` is the package version as installed (`importlib.metadata`
     normalizes it, so tag `v2026.11.04` publishes `2026.11.4`).
@@ -260,17 +280,40 @@ def task_image(env: str | Path) -> flyte.Image:
     return _with_source(image, deps=True)
 
 
-def core_image(name: str) -> flyte.Image:
-    """An image for tasks that need only the SDK: pixi.lock's `core` environment, then the checkout.
+def _notebook_marimo() -> str:
+    """pyproject.toml's marimo requirement, from its `dev` group.
 
-    The core dependencies alone, at the versions development runs, from
-    pyproject.toml and pixi.lock (`dependencies_only`), so that layer is
-    cached until either changes. The checkout goes on top without
-    dependencies, since the environment is its own. An installed package has
-    neither, so its image installs the same version of the SDK from PyPI.
+    A task a notebook defines runs in a pod that imports the notebook to find
+    it, so the core image installs marimo at the range development runs.
     """
-    base = flyte.Image.from_debian_base(name=name, platform=IMAGE_PLATFORM)
+    dev = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text())[
+        "dependency-groups"
+    ]["dev"]
+    return next(r for r in dev if isinstance(r, str) and r.startswith("marimo"))
+
+
+def core_image(name: str) -> flyte.Image:
+    """An image for tasks that need only the SDK, a notebook's own: the core environment, then the checkout.
+
+    The core dependencies, at the versions development runs, from
+    pyproject.toml and pixi.lock's `core` environment, so that layer is cached
+    until either changes. marimo comes at the dev group's range, since the
+    tasks it serves are a notebook's own and their pods import the notebook.
+    The checkout goes on top without dependencies, since the environment is
+    its own.
+
+    A release publishes it as `stargazer-core` (`cli/publish_task_images.py`),
+    and an installed package runs on that published image of its own version
+    (`released_image()`), so nothing builds. `name` names the image a checkout
+    builds. A published image takes no layers: to add packages,
+    `.clone(name=..., extendable=True)` it first.
+    """
     if not _checkout():
-        return base.with_pip_packages(f"stargazer-bio=={version('stargazer-bio')}")
-    image = base.with_pixi_project(PROJECT_ROOT / "pyproject.toml", environment="core")
+        return flyte.Image.from_base(
+            released_image("stargazer-core", version("stargazer-bio"))
+        )
+    base = flyte.Image.from_debian_base(name=name, platform=IMAGE_PLATFORM)
+    image = base.with_pixi_project(
+        PROJECT_ROOT / "pyproject.toml", environment="core"
+    ).with_pip_packages(_notebook_marimo())
     return _with_source(image, deps=False)

@@ -1,9 +1,11 @@
 # Cuts a Stargazer release from a calendar tag (`v2026.10.28`, a second release
 # that day `v2026.10.28.1`): the package to PyPI as `stargazer-bio`, the
 # notebook image (runtime/Dockerfile) to GHCR under the same tag and `latest`,
-# and each domain's task image to GHCR under the package's version
+# and each domain's task image and the core image (`stargazer-core`, for a
+# notebook's own tasks) to GHCR under the package's version
 # (`stargazer-gatk:2026.10.28`), which is what an installed package of that
-# version runs its tasks on. The tag has to name pyproject.toml's version.
+# version, a notebook's kernel among them, runs its tasks on. The tag has to
+# name pyproject.toml's version.
 # Infra pins one release and takes the package and notebook image from it.
 # Union's nodes pull the images straight from GHCR, which is public.
 name: Release

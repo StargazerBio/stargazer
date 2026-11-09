@@ -8,7 +8,7 @@ For what the notebooks themselves are, see [Notebooks](notebook.md). The launch,
 
 `runtime/Dockerfile` builds it, from the repository root. It holds:
 
-- **The SDK's source at `/stargazer`.** Notebooks don't run in the image's Python: each notebook's PEP 723 header names `stargazer-bio` with `/stargazer` as its source, and marimo's pixi sandbox builds the notebook an environment from that header when it opens, conda packages and PyPI ones. The built-in notebooks are under `/stargazer/src/stargazer/notebooks/`.
+- **The SDK's source at `/stargazer`.** Notebooks don't run in the image's Python: each notebook's PEP 723 header installs `stargazer-bio` from `/stargazer` as a package, not editable, and marimo's pixi sandbox builds the notebook an environment from that header when it opens, conda packages and PyPI ones. So a notebook's kernel runs the image's release, and its tasks run on that release's published task images and core image, with nothing to build. The built-in notebooks are under `/stargazer/src/stargazer/notebooks/`.
 - **pixi**, which builds those environments, newer than the pixi Flyte's image builder uses, since marimo needs its `install --script`.
 - **A warm cache** at `/opt/pixi-cache` and `/opt/uv-cache`, holding the packages the built-in notebooks are built from, the layers of the launcher's marimo that marimo puts over the server and each kernel, and a ready environment for each tutorial at the path a cluster opens it from. A tutorial opens on a cluster without installing anything. Any other notebook builds its environment from the cache, and downloads only what its header adds, such as a tool. An environment links the cache's PyPI files by symlink, since a hardlink to a file in an image layer copies it. The built-in headers list `marimo`, so marimo's sandbox doesn't add it when a notebook opens.
 - **The runtime venv**: `flyte`, the launcher marimo (pinned, and put into every sandbox, so the kernel and the launcher are the same build), `pydantic-ai-slim` with the OpenAI and Anthropic providers for marimo's AI chat and completions, and the proxy's web packages.
@@ -22,7 +22,7 @@ For what the notebooks themselves are, see [Notebooks](notebook.md). The launch,
 
 ## Releases
 
-Stargazer is released by calendar: the tag `v2026.10.28` is version `2026.10.28`, and a second release that day is `2026.10.28.1`. A release publishes the package to PyPI as `stargazer-bio` and the image to `ghcr.io/stargazerbio/stargazer` under the same tag (and `latest`), built from the same commit. So a pod manager pins one release and gets both halves, and a dashboard and the pods it launches agree on the asset keyvalues, the index and this contract.
+Stargazer is released by calendar: the tag `v2026.10.28` is version `2026.10.28`, and a second release that day is `2026.10.28.1`. A release publishes the package to PyPI as `stargazer-bio`, the image to `ghcr.io/stargazerbio/stargazer` under the same tag (and `latest`), and each domain's task image and the core image to GHCR under the package's version, built from the same commit. So a pod manager pins one release and gets both halves, and a dashboard and the pods it launches agree on the asset keyvalues, the index and this contract.
 
 ## The Launch
 

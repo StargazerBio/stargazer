@@ -4,6 +4,7 @@ An installed package has no `pyproject.toml` beside its source, so it can't
 build its images; it runs its tasks on the images its release published.
 """
 
+import sys
 from importlib.metadata import version
 from pathlib import Path
 
@@ -37,9 +38,26 @@ def test_a_checkout_builds_its_task_image_from_source():
     assert image._layers
 
 
-def test_an_installed_package_core_image_installs_its_own_version(installed):
-    """With no pyproject.toml to read, the core image installs the released SDK."""
+def test_an_installed_package_runs_its_notebooks_tasks_on_the_released_core_image(
+    installed,
+):
+    """The core image is the published one of the installed version, nothing to build."""
     image = config.core_image("stargazer-template")
 
-    packages = [p for layer in image._layers for p in getattr(layer, "packages", ())]
-    assert packages == [f"stargazer-bio=={VERSION}"]
+    assert image.uri == f"ghcr.io/stargazerbio/stargazer-core:{VERSION}"
+    assert image._layers == ()
+
+
+def test_a_checkout_bundles_hosted_runs_from_its_source():
+    """A checkout's runs carry the source tree that holds the `stargazer` package."""
+    assert config._bundle_root() == Path(config.__file__).resolve().parents[1]
+
+
+def test_an_installed_package_bundles_hosted_runs_from_the_notebook(
+    installed, monkeypatch, tmp_path
+):
+    """With the SDK in its image, a run carries only the running notebook's folder."""
+    notebook = tmp_path / "workspace" / "analysis.py"
+    monkeypatch.setattr(sys.modules["__main__"], "__file__", str(notebook))
+
+    assert config._bundle_root() == tmp_path / "workspace"

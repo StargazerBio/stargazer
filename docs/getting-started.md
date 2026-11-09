@@ -63,11 +63,11 @@ A notebook lists what it needs in its header, the `# /// script` block at the to
 # samtools = "1.*"
 #
 # [tool.pixi.pypi-dependencies]
-# stargazer-bio = { path = "/stargazer", editable = true }
+# stargazer-bio = { path = "/stargazer" }
 # ///
 ```
 
-Each notebook gets its own environment, so the tool is on that notebook's path. The last line points the SDK at the copy in the image; keep it, and the `python` pin.
+Each notebook gets its own environment, so the tool is on that notebook's path. The last line installs the SDK the image carries, so the notebook runs the image's release and its tasks run on the images that release published; keep it, and the `python` pin.
 
 ## Agents — Claude Code and OpenCode in the Notebook
 
