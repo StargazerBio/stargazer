@@ -1,6 +1,6 @@
 ---
 title: dispatch-installed-bundle
-status: next
+status: doing
 priority: high
 created: 2026-11-09
 ---
