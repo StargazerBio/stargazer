@@ -45,7 +45,7 @@ A file in `/workspace` isn't in the [asset graph](index.md#the-asset-graph) unti
 
 ## Packages and Tools
 
-A notebook lists what it needs in its header, the `# /// script` block at the top, and it installs when the notebook opens, hosted or locally. Python packages go in `dependencies`. Command-line tools, such as samtools or GATK, come from conda: list them under `[tool.pixi.dependencies]`, with bioconda among the channels:
+A notebook lists what it needs in its header, the `# /// script` block at the top, and it installs when the notebook opens, hosted or locally. Python packages go in `dependencies`, each one the notebook imports, even one the SDK brings with it such as `flyte`: the editor writes an unlisted import into the header, pinned to the version installed. Command-line tools, such as samtools or GATK, come from conda: list them under `[tool.pixi.dependencies]`, with bioconda among the channels:
 
 ```python
 # /// script
