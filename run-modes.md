@@ -6,16 +6,17 @@ created: 2026-11-09
 pr: 137
 ---
 
-Stargazer code runs from a script, a notebook (locally, in the stargazer image under docker, or hosted), the MCP agent, or a workflow's pod, and a task's body runs in-process, in its image under docker, or in a cluster pod (Union or the devbox). Which packages each of those needs is hard to explain today: a notebook's header lists a domain's tools only so "On this machine" can run SDK tasks in the kernel, and a notebook's own tasks get their packages from image layers the author adds by hand, beside the header. This ticket settles one happy path that fits in four sentences, conventions for the SDK, and a "your own risk" zone for everything else.
+Stargazer code runs from a script, a notebook (locally, in the stargazer image under docker, or hosted), the MCP agent, or a workflow's pod, and a task's body runs in-process, in its image under docker, or in a cluster pod (Union or the devbox). Which packages each of those needs is hard to explain today: a notebook's header lists a domain's tools only so "On this machine" can run SDK tasks in the kernel, and a notebook's own tasks get their packages from image layers the author adds by hand, beside the header. This ticket settles one happy path that fits in three sentences, conventions for the SDK, and a "your own risk" zone for everything else.
 
 ## The happy path
 
-1. **Every SDK task runs in its domain's environment, wherever it runs.** It's declared once, in the PEP 723 header of `tasks/<domain>/env.py`. The cluster runs it as the task image, docker runs that image, and "Here" installs the same header and lock with pixi.
-2. **A notebook's kernel is its header.** marimo writes it as you import. List what your cells use, nothing else.
-3. **Calling an SDK task from a notebook needs nothing in your header.** "Here" runs it in its own environment on your machine, not in your kernel; "Cluster" in its task image.
-4. **Your notebook's own tasks run in your notebook's environment.** "Here" in your kernel; on the cluster the template builds the image from your notebook's header, so what you installed while experimenting is what the cluster gets.
+1. **An environment is a header.** A PEP 723 block that pixi installs. A domain has one, in `tasks/<domain>/env.py`, locked and published as an image with each release. A notebook has one, at its top, which marimo writes as you import.
+2. **On this machine, everything runs in the notebook's kernel**, so the header lists what you run here: your cells' packages, and the packages and tools of any SDK task you run here.
+3. **On the cluster, each task runs in its environment's image**: an SDK task in its domain's, the notebook's own tasks in one built from the notebook's header. A cluster run of an SDK task needs nothing in the header, since a domain's packages import inside its task bodies.
 
-So the SDK's tasks bring their own environment, and a notebook's tasks use the notebook's. In both cases one header is both the place a task's packages are listed and the source of its image, so the two can't drift: `task_image(__file__)` already builds an SDK task image with `flyte.Image.from_pixi_script` on its `env.py`.
+So "On this machine" is Flyte's local mode and nothing more, and one header is both the place a task's packages are listed and the source of its image: `task_image(__file__)` builds an SDK task image with `flyte.Image.from_pixi_script` on its `env.py`, and `notebook_image(__file__)` a notebook's.
+
+The first version of this ticket had a fourth rule, that calling an SDK task from a notebook needs nothing in the header even on this machine, and kept it by running each SDK task in its domain's environment as a subprocess (pixi, or the task image under docker). It was built, measured and then removed: it took a 434-line module, two executors, a patched Flyte local controller and `osx-arm64` in both domain locks to save a notebook three header lines, and the notebooks that run SDK tasks import the same packages in their own cells anyway.
 
 ## Conventions
 
@@ -25,29 +26,32 @@ So the SDK's tasks bring their own environment, and a notebook's tasks use the n
 ## Your own risk
 
 Supported, not the happy path:
-- Any other `flyte.Image` on a notebook's own `TaskEnvironment` (`core_image(...)` plus layers, `from_base`, anything).
-- Listing a domain's packages in your header and calling SDK tasks in-process in your kernel.
+- Any other `flyte.Image` on a notebook's own `TaskEnvironment` (`from_base`, hand-added layers, anything).
 - An unlocked notebook header, whose cluster image can resolve differently between builds. The run records the image's digest (ticket `notebook-image-digest`), but the header alone doesn't reproduce it.
-- gatk joint calling on Apple silicon. Measured 2026-11-09: GenomicsDBImport and GenotypeGVCFs ran natively in osx-arm64's environment (germline "Here", 47 records), so it's on the happy path for now; anything that stops running natively moves to the task image under docker by dropping the platform from its header.
+- An SDK task run on this machine uses the header's versions of its tools, not its domain's lock. The cluster run is the reproducible one.
+- A tool with no build for your machine (some of bioconda on Apple silicon): run it on the cluster, or open the notebook in the Stargazer image.
 
 ## Plan
 
-Built on `feat/run-modes`, cut from `main` after PR 134 (the docker path) merged, which it reworks, piece by piece in this order.
+Built on `feat/run-modes`, cut from `main` after PR 134 (the docker path) merged, which it removes.
 
+### On this machine runs in the kernel
 
-- [x] **"Here" for SDK tasks:** install the task's `env.py` header and lock with pixi and run the task in it as a subprocess, in a hosted pod too (it has pixi, not docker). Docker runs the same lock containerized, as the task image, for a host the header can't solve on. Reworks PR 134, which runs every package task under docker. Covers ticket `hosted-local-runs`.
-      The environment's SDK must be the kernel's, the way `task_image()` picks it: the header pins the released `stargazer-bio`, so from a checkout the checkout goes on top of the env (editable install or `PYTHONPATH`, as `_with_source` does for the image), or a task edited in a checkout would run as released. From an installed package, the env's `stargazer-bio` is the kernel's version. Either way, inputs and outputs cross between the kernel and the env pickled, so both sides need the same asset classes.
-      Done in `stargazer.notebooks.local_env` (was `local_image`): `executor()` picks pixi where the header lists the host platform and pixi is installed, docker elsewhere, in-process with neither; the workspace is `STARGAZER_LOCAL/envs/<domain>`, installed `--frozen`; the kernel's `stargazer` is linked first on the subprocess's `PYTHONPATH` (`sdk_overlay`). Measured: a sandboxed notebook's kernel without scanpy got a normalized AnnData back, and an edit to `normalize` in the checkout showed in its output; a hosted pod on the tenant installed gatk's environment and ran `samtools_faidx` "Here" (see Evidence).
-- [x] **Platforms:** each `env.py` header lists `osx-arm64` beside `linux-64`, locked by `cli/lock_envs.py`. Apple silicon isn't optimized for: whatever doesn't solve or run natively runs in the task image under docker. That's documented, with no platform-specific code around it.
-      Both headers list `osx-arm64`; the locks' `linux-64` packages are unchanged, and `osx-arm64` was solved with flyte held at pixi.lock's 2.12.4, then relocked without the hold. Everything in both headers solves for osx-arm64; gatk4, samtools, bwa, bwa-mem2 and openjdk 17 run there. No platform-specific code: `configuration.md` says a header lists a platform only where its packages solve and run, with docker elsewhere.
-- [x] **SDK workflows "Here":** the workflow body runs in the caller and each task in its own environment, so a workflow spanning gatk and scRNA works. Flyte 2.12.4's local controller runs children in the caller's process (`direct_dispatch`), so this hooks or wraps it.
-      Done: `stargazer.workflows` modules run in the caller; `LocalController.submit` is wrapped, active only inside `dispatch` (`routed()`), so each package task a workflow calls goes to `run_in_env`. Measured: `scrna_clustering_pipeline` ran its six tasks in the scrna environment from a kernel without scanpy, and the germline workflow ran end to end "Here" (47-record cohort VCF).
+- [ ] **`dispatch`:** "On this machine" is `flyte.with_runcontext(mode="local")`, for every task. `stargazer.notebooks.local_env` and its tests go, with the docker and pixi executors, the pickled call directories, the SDK overlay and the wrapped `LocalController.submit`. `build_image`, which the tasks tier still needs, moves into `cli/docker_task_tests.py`.
+- [ ] **Platforms:** the domain headers go back to `linux-64`, the platform their images run on, and their locks with them.
+- [ ] **Warm cache:** the image's warm-cache step also installs each domain's `env.py` header, so a notebook that lists gatk4 or scanpy builds its environment from local disk.
+- [ ] **Bundle root:** ticket `dispatch-installed-bundle`'s fix (PR 138) merges into this branch, since both rewrite `dispatch`.
+- [ ] **Docs:** the guide leads with the three sentences; `docs/architecture/notebook.md`, `configuration.md` and `runtime.md` for the mechanics.
+- [ ] **Verify:** a sandboxed notebook whose header lists a domain's packages runs an scRNA task and the germline workflow on this machine, in its kernel; a hosted pod does the same for a task whose tool its header lists.
+
+Deferred:
+- The community repo's headers, a PR in StargazerBio/community-notebooks: the germline notebook keeps its tools; the scRNA one asks for `stargazer-bio[bio]`, an extra that's gone, and needs `scanpy` in its place.
+- Building a hosted notebook's environment into its pod image at launch, so it opens without installing (infra; depends on ticket `layered-notebook-image-cache`).
+
+### Kept from the first version
+
 - [x] **Template:** `my_env`, the environment the notebook's own tasks run on, builds from `flyte.Image.from_pixi_script(__file__)`. `main_env`, the pod's `AppEnvironment` on `notebook_base`, is unchanged. The header's `stargazer-bio` comes from `/stargazer`, which resolves only in a pod, so the build reads the header without that line and puts the SDK on top the way `task_image()` does: from a checkout (development), the checkout's source; from an installed package (production, a hosted pod included), the release of the kernel's version from PyPI. marimo's sandbox writes no lock, so the template's image is unlocked (the "your own risk" entry applies to it too).
       Done as `notebook_image()` in `config.py`; the basic template's `my_env` uses it. The build reads a copy of the header without its `[tool.pixi.pypi-dependencies]` `stargazer-bio` line, under `STARGAZER_LOCAL`; Flyte hashes the rendered manifest, so the kernel's and a pod's copies name the same image. Measured on local docker builds: the header as it was fails (`error while canonicalization /stargazer`); the checkout half builds and imports the template; the installed half builds with `stargazer-bio==2026.10.30` on top (that release predates `notebook_image`, so this branch's template can't import there, as expected). Both resolve flyte 2.13.0, unlocked.
-- [x] **Headers:** once "Here" lands, the built-in and community notebooks drop domain packages their cells don't import (germline's gatk4, samtools, bwa-mem2).
-      No built-in notebook lists a domain package: the template's `bcftools` and the execution tutorial's `matplotlib` are used by their own cells. Deferred: the community repo's germline header, a PR in StargazerBio/community-notebooks once this merges.
-- [x] **Docs:** a user guide, "Where your code runs", leading with the four sentences; `docs/architecture/notebook.md` and `configuration.md` for the mechanics.
-      Done: `docs/guides/where-your-code-runs.md` (in `zensical.toml`'s nav), `docs/architecture/notebook.md` (Execution Context, boundary rules, notebook environment) and `configuration.md` (images); the wiki's `flyte-images` page names `notebook_image()`.
 - [x] **No core image:** every notebook's own tasks build from its header, the tutorials included, so there's one image rule for notebooks. `core_image()`, the published `stargazer-core` and its release wiring go; the tutorials' `tutorial_env` uses `notebook_image(__file__)`. A tutorial's first cluster run on a tenant builds its image once per release, cached by tag.
       Done: the Tasks tutorial's `tutorial_env` (imported by Workflows and Execution) uses `notebook_image(__file__, "stargazer-tutorial")`; `core_image()`, `_notebook_marimo()`, the `stargazer-core` publish and its release-workflow mention are gone; pyproject's `core` pixi environment, used only by `core_image()`, is removed and its entries cut from `pixi.lock` (the builder's pixi reads it as up to date; a full relock would have moved flyte to 2.13.0); `_with_source()` lost its `deps` flag. Docs, the wiki's `flyte-images` and AGENTS.md state one rule: an SDK task's image builds from its domain's `env.py` header, a notebook's own task's from the notebook's header. Measured: unit tier 283 passed; the tutorial's checkout image built locally and imports all three tutorials; from a hosted pod on the tenant (debug image), the Execution tutorial's `audit_cohorts` ran on the cluster (run `ulngbp5f75n9blfqwf6w`, SUCCEEDED, 3 `CohortSummary`) on `stargazer-tutorial-0997df0b…`, which Union's builder built from the tutorial's header in 1:01 with the installed release on top (PyPI 2026.10.30 here, as the image's version isn't released yet). `dispatch` "On the cluster" for the same workflow hits a bundling bug from main (ticket `dispatch-installed-bundle`), so the run went through `flyte.run`.
 
