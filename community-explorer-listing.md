@@ -1,6 +1,6 @@
 ---
 title: community-explorer-listing
-status: review
+status: done
 priority: high
 created: 2026-11-03
 pr: 30
@@ -97,5 +97,12 @@ Public/Community off; CL-2 200 with 4 tutorials then scRNA at `c294e000`
 and germline at `352b277f`, no unavailable header; CL-3 `scrna-seq-clustering`
 identical to the pinned file (15967 bytes). Copy deleted, teardown left
 live runs `[]`. Unit tests: 331 passed.
+
+
+## Outcome
+
+Infra PR 30 merged on 2026-11-07. The dashboard's explorer lists the community repo: Featured (the catalog's notebooks at their pinned commits, on by default) and Community (the rest at `main`, behind a filter), read from the repo's archive and raw files rather than GitHub's API. Add to workspace copies a notebook at its commit. The scRNA built-in and the workflows section are gone. Verified on the tenant as the test account (recipe above).
+
+Left: Download source redirects to GitHub, so a browser may open the file instead of saving it (not driven).
 
 Related: [[board]], [[notebooks-in-git]], [[publish-to-git]].

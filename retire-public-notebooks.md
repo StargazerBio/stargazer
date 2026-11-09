@@ -1,10 +1,8 @@
 ---
 title: retire-public-notebooks
-status: backlog
+status: next
 priority: normal
 created: 2026-11-03
-blocked_by:
-  - community-explorer-listing
 ---
 
 Publishing notebooks goes to the community repo now (ticket

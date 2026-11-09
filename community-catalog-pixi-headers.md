@@ -1,6 +1,6 @@
 ---
 title: community-catalog-pixi-headers
-status: review
+status: done
 priority: normal
 created: 2026-11-04
 pr: 30
@@ -30,5 +30,10 @@ With [[pixi-notebook-sandbox]] merged, notebook environments come from pixi, but
   `b2197b2`, and the repo's Notebooks workflow passed on the push. The
   explorer listing from infra PR 30's branch, run locally against GitHub,
   returns both notebooks as Featured at `63e5c10` (measured).
+
+
+## Outcome
+
+Both pieces shipped. The infra docs rode on infra PR 30 (merged 2026-11-07), and the catalog pins moved to `63e5c10` in community-notebooks `b2197b2`. The community notebooks' headers still install `/stargazer` editable and germline still lists its tools: that change follows ticket `run-modes`.
 
 Related: [[board]], [[pixi-notebook-sandbox]], [[germline-notebook]], [[marimo-sandbox]].

@@ -1,6 +1,6 @@
 ---
 title: marimo-autoadd-headers
-status: review
+status: done
 priority: low
 created: 2026-11-04
 pr: 136
@@ -67,5 +67,14 @@ Preconditions: the branch's image pushed as `ghcr.io/stargazerbio/debug:marimo-a
 - H1, measured on the tenant with `ghcr.io/stargazerbio/debug:marimo-autoadd-headers` (sha256:9917d39f…): every Execution cell ran without errors, cluster runs `umvgj796kpjhcrlmfqc9` and `ujkvwvr8j7phl96z8klr` succeeded, and afterwards the tutorial's file in the pod hashed to the branch's (`e3010c8c…`), last modified 17:55:37 UTC (the image build) against cells run at about 18:17.
 - H2 not reached: the notebook the dashboard created from the basic template had the 2026.10.30 release's header (`[tool.uv.sources]`, no pixi section), and its kernel didn't start in about four minutes.
 - Torn down: `union_dashboard.py teardown` stopped `nb-execution-edit` and `dashboard`, live runs `[]`; the test workspace notebook deleted.
+
+
+## Outcome
+
+PR 136 merged on 2026-11-09. The Tasks and Execution tutorials and the basic and blank templates list `flyte` in their headers, unpinned, so marimo's sandbox no longer writes `flyte==<version>` into them. A unit test checks that every built-in notebook's header lists each installed package it imports. Verified in a hosted pod on the tenant: after every cell of the Execution tutorial ran, its file was byte-identical to the branch's (the pod log wasn't read).
+
+Left:
+- New workspace notebooks get the templates' change once infra pins a release that carries it.
+- Ticket `marimo-server-layer-symlinks`.
 
 Related: [[board]], [[notebook-dockerignore]], [[pixi-notebook-sandbox]], [[marimo-sandbox]].
