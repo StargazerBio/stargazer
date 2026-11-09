@@ -1,8 +1,9 @@
 ---
 title: run-modes
-status: next
+status: doing
 priority: normal
 created: 2026-11-09
+pr: 134
 ---
 
 Stargazer code runs from a script, a notebook (locally, in the stargazer image under docker, or hosted), the MCP agent, or a workflow's pod, and a task's body runs in-process, in its image under docker, or in a cluster pod (Union or the devbox). Which packages each of those needs is hard to explain today: a notebook's header lists a domain's tools only so "On this machine" can run SDK tasks in the kernel, and a notebook's own tasks get their packages from image layers the author adds by hand, beside the header. This ticket settles one happy path that fits in four sentences, conventions for the SDK, and a "your own risk" zone for everything else.
@@ -30,6 +31,9 @@ Supported, not the happy path:
 - gatk joint calling on Apple silicon (GenomicsDB has no arm64 build).
 
 ## Plan
+
+Built on PR 134's branch, `feat/local-runs-in-task-image`, which it reworks, piece by piece in this order.
+
 
 - [ ] **"Here" for SDK tasks:** install the task's `env.py` header and lock with pixi and run the task in it as a subprocess, in a hosted pod too (it has pixi, not docker). Docker runs the same lock containerized, as the task image, for a host the header can't solve on. Reworks PR 134, which runs every package task under docker. Covers ticket `hosted-local-runs`.
       The environment's SDK must be the kernel's, the way `task_image()` picks it: the header pins the released `stargazer-bio`, so from a checkout the checkout goes on top of the env (editable install or `PYTHONPATH`, as `_with_source` does for the image), or a task edited in a checkout would run as released. From an installed package, the env's `stargazer-bio` is the kernel's version. Either way, inputs and outputs cross between the kernel and the env pickled, so both sides need the same asset classes.
