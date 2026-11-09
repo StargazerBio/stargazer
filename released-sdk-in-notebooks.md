@@ -1,6 +1,6 @@
 ---
 title: released-sdk-in-notebooks
-status: review
+status: done
 priority: normal
 created: 2026-11-04
 pr: 135
@@ -36,5 +36,15 @@ Before a release: copy the branch (`git archive HEAD | tar -x -C <copy>`), point
 Measured 2026-11-07: run `uzsfhqk5cchgf7jrjb2k` ran on `ghcr.io/stargazerbio/debug:stargazer-core-2026.10.30` and succeeded ("Finished in 32.34s", CIDs equal, 0 errors), with no image build. With the first image, before `_bundle_root()`, the same run failed in Flyte's bundler (the Code bundle finding).
 
 Deferred: `stargazer-core` is a new GHCR package and starts internal, so set it public after the first release that pushes it. The image's MCP server still runs editable from `/stargazer`, so a run an agent starts builds from source.
+
+
+## Outcome
+
+PR 135 merged on 2026-11-09. The built-in notebooks install the image's `/stargazer` as a package, not editable. A hosted kernel's tasks run on the release's published images, `stargazer-core` for SDK-only tasks among them, so a cluster run builds nothing. Verified on Union as the test account before the merge (recipe above).
+
+Left:
+- `ghcr.io/stargazerbio/stargazer-core` is a new GHCR package. It starts internal, so after the first release that publishes it, someone has to make it public once, or Union can't pull it.
+- The image's MCP server still runs the SDK editable from `/stargazer`, so runs an agent starts build their images from source.
+- The community repo's notebooks still name `/stargazer` with `editable = true`. They change in the same community-notebooks PR that [[run-modes]] defers for the germline header.
 
 Related: [[board]], [[release-task-images]], [[pixi-notebook-sandbox]], [[marimo-sandbox]].
