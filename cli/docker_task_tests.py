@@ -30,9 +30,9 @@ from pathlib import Path
 
 import flyte
 import yaml
-from flyte._internal.imagebuild.docker_builder import DockerImageBuilder
 
 from stargazer.config import PROJECT_ROOT
+from stargazer.notebooks.local_image import build_image as build_local_image
 from stargazer.tasks.gatk.env import gatk_env
 from stargazer.tasks.scrna.env import scrna_env
 
@@ -52,19 +52,8 @@ TEST_PACKAGES = ("pytest", "pytest-asyncio")
 
 
 def build_image(image: flyte.Image) -> str:
-    """Build `image` into the local docker store; return its name.
-
-    Skipped when docker already holds it for the image's platform. The name
-    carries a hash of the recipe and the project, not the platform, so an
-    image built for another platform can hold the same name.
-    """
-    inspect = ["docker", "image", "inspect", "--platform", image.platform[0], image.uri]
-    if subprocess.run(inspect, capture_output=True, check=False).returncode != 0:
-        # `flyte.build()` refuses a local build it can't push to a registry;
-        # the builder's own `push=False` loads it into docker instead. Private
-        # API, so an SDK upgrade can move it.
-        asyncio.run(DockerImageBuilder()._build_image(image, push=False))
-    return image.uri
+    """Build `image` into the local docker store unless it holds it; return its name."""
+    return asyncio.run(build_local_image(image))
 
 
 def test_requirements() -> list[str]:

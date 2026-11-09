@@ -22,7 +22,7 @@ The orchestrator every Stargazer task and workflow runs on. The raw sources are 
 
 ## Running tasks
 
-- **`flyte.run(task, **inputs)` runs remotely** by default; `flyte.with_runcontext(mode="local").run(...)` runs in the current process. `with_runcontext` also takes env vars, labels, `overwrite_cache` and more. The run's `url`, `wait()` and `outputs()` follow it. See [[flyte-sdk-examples#Running Tasks]].
+- **`flyte.run(task, **inputs)` runs remotely** by default; `flyte.with_runcontext(mode="local").run(...)` runs in the current process. Local mode has no container option: the local controller (`flyte/_internal/controllers/_local_controller.py`) runs every task, a workflow's children included, in the calling process, whatever its image. The third mode, `hybrid` (the parent locally, its children on the cluster), is marked for testing only. `with_runcontext` also takes env vars, labels, `overwrite_cache` and more. The run's `url`, `wait()` and `outputs()` follow it. See [[flyte-sdk-examples#Running Tasks]].
 - **`flyte.deploy(env)` deploys** an environment's tasks, apps and triggers without running them; the CLI's `flyte run` and `flyte deploy` mirror the SDK.
 - **A deployed task can be called from another run** through `flyte.remote.Task.get(...)`.
 - **Init first.** Stargazer's one init is `init_flyte()` in `config.py`: an in-cluster client in a hosted notebook pod, the config file anywhere else ([[flyte-config]]).
