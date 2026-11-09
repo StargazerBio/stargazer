@@ -1,6 +1,6 @@
 ---
 title: notebook-image-digest
-status: review
+status: done
 priority: normal
 created: 2026-11-02
 pr: 31
@@ -169,5 +169,12 @@ All measured, in project `u-pryce`, as an org admin's Flyte login.
   the manifest bytes `crane` copies verbatim (inferred).
 - Seen in passing: Union's image service (`GetImage`) returns an image's
   `fqin` and build run, no digest, so the registry is the only source.
+
+
+## Outcome
+
+Infra PR 31 merged on 2026-11-09. Notebook pods launch on `<repo>@sha256:<digest>`, resolved when the image is ready, and read it as `STARGAZER_POD_IMAGE`. Verified on the tenant and the devbox (recipe and evidence above). The tenant run predates the rebase onto infra PR 30, which touched one import line.
+
+Left: build or pull on replay lives in ticket [[run-records]], which already plans it.
 
 Related: [[run-records]], [[launch-build-state]], [[shared-image-repository]], [[board]].
