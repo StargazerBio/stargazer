@@ -1,8 +1,9 @@
 ---
 title: provenance-on-every-output
-status: doing
+status: review
 priority: normal
 created: 2026-11-01
+pr: 145
 ---
 
 Every task output should link by CID to the assets it was made from, so the
@@ -44,12 +45,12 @@ it was made from.
 
 ## Pieces
 
-- [ ] Tasks tier tests first: each changed task's output carries its
+- [x] Tasks tier tests first: each changed task's output carries its
       inputs' CIDs, and `assemble(<key>_cid=...)` finds it.
-- [ ] Add the fields and set them in each task.
-- [ ] Germline workflow on the devbox: from the cohort VCF, walk back to
+- [x] Add the fields and set them in each task.
+- [x] Germline workflow on the devbox: from the cohort VCF, walk back to
       the reference by CID alone.
-- [ ] Docs: `docs/architecture/types.md` lists the link fields.
+- [x] Docs: `docs/architecture/types.md` lists the link fields.
 
 ## Plan
 
@@ -62,5 +63,15 @@ On `feat/provenance-on-every-output`. The public tier's cap decides the shape: `
 - **Docs:** `docs/architecture/types.md`, the diagram in `docs/index.md`.
 
 Blast radius: stored records keep their `r1_cid` and `sample_count` as extra keyvalues, which a typed asset carries in `keyvalues`. The community repo's `germline/short-variant-discovery.py` reads `cohort.sample_count` and needs `len(cohort.source_samples)` before the catalog moves to a release with this (ticket [[community-kernel-headers]] is editing it anyway). A cohort's `source_cids` grows with its GVCFs, as `source_samples` does; a public record's value limit hasn't been measured against a large cohort.
+
+## Evidence (2026-11-09)
+
+PR 145. Unit tier 281 passed; tasks tier (`tests/tasks/gatk tests/tasks/general`) 27 passed; devbox `tests/devbox/test_germline.py` 3 passed, its new test walking the index from the cohort's VCF through its GVCF and three BAMs to an R1, with one `reference_cid` on every BAM that is a `Reference` of the run's build (all measured). The new tests were written with the change, so none was seen failing first.
+
+## Verification recipe
+
+LINEAGE: from a cohort's VCF, CID links alone lead to its reads and its reference.
+
+With the devbox up and `FLYTE_IMAGE_REGISTRY=localhost:30000`, from the worktree (its `.flyte` linked): `pixi run pytest -m devbox tests/devbox/test_germline.py`. Passes: `test_cohort_vcf_walks_back_to_its_reference` passes. Fails as on `main`: the VCF has no `source_cids`.
 
 Related: [[board]].
