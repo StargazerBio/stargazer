@@ -1,6 +1,6 @@
 ---
 title: asset-core-tidy
-status: review
+status: done
 priority: normal
 created: 2026-11-09
 pr: 146
@@ -32,5 +32,9 @@ Typed by a cheap worker from the plan, diff read in full. `TestDict` failed firs
 - `pixi run pytest tests/assets tests/unit` passes; the rewritten `TestDict` tests fail on `main` first (`KeyError: 'uri'`).
 - `pixi run python -c "import stargazer; print(stargazer.__version__)"` prints `pyproject.toml`'s version.
 - MCP surface: call `upload_file` then `query_files` on an isolated store and compare the two records' keys.
+
+## Outcome
+
+PR 146 merged 2026-11-10 with no review comments. Shipped: one record shape for an asset (`to_dict()` is the storage record `specialize()` reads) and the registry beside the class. Verified by the assets, unit and notebooks tests and the MCP surface on an isolated store (see Evidence). Nothing left.
 
 Related: [[board]], [[lean-task-bodies]], [[task-environment-factory]].
