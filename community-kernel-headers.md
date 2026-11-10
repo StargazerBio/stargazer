@@ -1,6 +1,6 @@
 ---
 title: community-kernel-headers
-status: doing
+status: review
 priority: normal
 created: 2026-11-09
 ---
@@ -24,4 +24,16 @@ Read at community-notebooks `b2197b2`, not driven. The scRNA notebook needs more
 So the scRNA half is a small rewrite of its environment cell, to be verified "On this machine" and "On the cluster" from the catalog. Left in `next`.
 - The germline notebook reads `cohort.sample_count`, which ticket [[provenance-on-every-output]] removes: use `len(cohort.source_samples)`.
 
-Related: [[board]], [[run-modes]], [[community-catalog-pixi-headers]], [[marimo-autoadd-headers]], [[marimo-sandbox]].
+
+## Evidence (2026-11-10)
+
+Draft PR 5 in StargazerBio/community-notebooks, on `fix/kernel-headers`. Each notebook run through marimo's kernel (`marimo export html`) in its header's pixi environment on macOS, SDK line pointed at a checkout of `main` (`ba777d4`), empty store, "On this machine" (all measured):
+
+- scRNA: exit 0, both demo samples through all six stages (`s1d1` 6307 cells, `s1d3` 7157). The header also needed `scikit-image`: without it `qc_filter` fails in scrublet.
+- Germline, started with `--run` on the demo inputs: exit 0, the cohort cell renders "1 sample(s) on GRCh38_TP53", cohort VCF 47 records.
+
+Not done: "On the cluster" for either notebook, and opening them from the dashboard's catalog in a hosted pod, which is why the PR is a draft. The catalog's pins move after it merges.
+
+Gotchas: run as a script (`python notebook.py`), the scRNA notebook fails with `NameError: name 'preprocess' is not defined` (ticket [[script-mode-own-tasks]]); the kernel runs it. Running the environment's Python directly skips conda's activation, so `gatk` needs `JAVA_HOME=<env>/lib/jvm`.
+
+Related: [[board]], [[run-modes]], [[community-catalog-pixi-headers]], [[marimo-autoadd-headers]], [[marimo-sandbox]], [[script-mode-own-tasks]].
