@@ -8,7 +8,7 @@ Workflows are tasks that compose other tasks into end-to-end pipelines. In Flyte
 - Workflow files live in `src/stargazer/workflows/`, named by analysis type
 - Parallel execution uses `asyncio.gather`
 - Workflows filter assembled assets with `isinstance` checks
-- A workflow, not a task, decides whether work is needed: `prepare_reference` asks the asset graph for the reference's companions and builds only the indexes it lacks, so an index built once, by the user or the reference's publisher, is reused
+- A workflow, not a task, decides whether work is needed: `prepare_reference` fetches the reference, which brings its companions with it, and builds only the indexes that didn't arrive, so an index built once, by the user or the reference's publisher, is reused
 
 ## Available Workflows
 

@@ -116,7 +116,12 @@ async def test_bwa_index_is_not_bwa_mem2(ran, tmp_path):
     ref = await store_reference()
     await store_fai(ref)
     await store_dict(ref)
-    await store_bwa_index(ref, tmp_path, BWA_MEM2_INDEX_EXTENSIONS, aligner="bwa")
+    await store_bwa_index(
+        ref,
+        tmp_path,
+        (".amb", ".ann", ".bwt", ".pac", ".sa"),
+        aligner="bwa",
+    )
 
     await wf.prepare_reference(build="GRCh38")
 

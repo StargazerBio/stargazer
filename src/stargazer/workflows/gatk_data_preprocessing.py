@@ -11,7 +11,6 @@ References:
 spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import R1, R2, Alignment, Reference
 from stargazer.assets.asset import assemble
 from stargazer.config import log_execution
@@ -38,9 +37,9 @@ async def prepare_reference(build: str) -> Reference:
     2. Sequence dictionary (GATK CreateSequenceDictionary)
     3. BWA-MEM2 index (bwa-mem2 index)
 
-    Each index is built only when the reference has no such companion
-    already, the user's own or a public one from its publisher, so an index
-    built once is reused. Each is stored as a companion of the reference, so
+    Each index is built only when fetching the reference doesn't bring one
+    in as a companion, the user's own or a public one from its publisher, so
+    an index built once is reused. Each is stored as a companion of the reference, so
     fetching the reference brings them along.
 
     Args:
@@ -56,19 +55,17 @@ async def prepare_reference(build: str) -> Reference:
         raise ValueError(f"No reference found for build={build!r}")
     ref = refs[0]
 
-    have = await _storage.default_client.companions(ref.cid)
-    if not any(row["keyvalues"].get("asset") == "reference_index" for row in have):
+    # Fetching brings the reference's companions in beside it, so what's
+    # missing on disk is what has to be built.
+    ref_path = await ref.fetch()
+    if not ref_path.with_name(f"{ref_path.name}.fai").exists():
         await samtools_faidx(ref)
-    if not any(row["keyvalues"].get("asset") == "sequence_dict" for row in have):
+    if not ref_path.with_suffix(".dict").exists():
         await create_sequence_dictionary(ref)
-    bwa_names = {ref.path.name + ext for ext in BWA_MEM2_INDEX_EXTENSIONS}
-    bwa_present = {
-        row["name"]
-        for row in have
-        if row["keyvalues"].get("asset") == "aligner_index"
-        and row["keyvalues"].get("aligner") == "bwa-mem2"
-    }
-    if not bwa_names <= bwa_present:
+    if not all(
+        ref_path.with_name(ref_path.name + ext).exists()
+        for ext in BWA_MEM2_INDEX_EXTENSIONS
+    ):
         await bwa_mem2_index(ref)
 
     return ref
