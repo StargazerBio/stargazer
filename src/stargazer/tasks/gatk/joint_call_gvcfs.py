@@ -60,7 +60,7 @@ async def joint_call_gvcfs(
         intervals = await ref.contigs()
     gvcf_paths = [await gvcf.fetch() for gvcf in gvcfs]
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = _storage.get_client().local_dir
 
     with tempfile.TemporaryDirectory() as tmpdir:
         workspace = Path(tmpdir) / f"{cohort_id}_genomicsdb"

@@ -15,7 +15,7 @@ from stargazer.assets import R1, R2, Reference
 from stargazer.assets.asset import Asset, assemble
 from stargazer.config import STARGAZER_ENV_VARS
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils.storage import default_client
+from stargazer.utils.storage import get_client
 
 BUILD = "GRCh38"
 SAMPLE_ID = "NA12829"
@@ -35,7 +35,7 @@ async def produce(n: int, tag: str) -> list[str]:
     """Write n small files and store each as an asset; return their CIDs."""
     cids = []
     for i in range(n):
-        path = Path(default_client.local_dir) / f"probe_{tag}_{i}.txt"
+        path = get_client().local_dir / f"probe_{tag}_{i}.txt"
         path.write_text(f"{tag}:{i}")
         asset = Asset(keyvalues={"asset": "devbox_probe", "tag": tag, "i": str(i)})
         await asset.update(path)
@@ -53,7 +53,7 @@ async def consume(tag: str) -> list[str]:
 @env.task
 async def store_lane_r1(lane: str) -> R1:
     """Store an R1 carrying an extra `lane` key; return it."""
-    path = Path(default_client.local_dir) / f"lane_{lane}.fq"
+    path = get_client().local_dir / f"lane_{lane}.fq"
     path.write_text(f"@{lane}\nACGT\n+\nIIII\n")
     r1 = R1(sample_id=lane)
     r1.keyvalues["lane"] = lane
@@ -85,7 +85,7 @@ async def lane_round_trip(lane: str) -> str:
 
 async def _local_copy(file: File, name: str) -> Path:
     """Download `file` into the cache directory under its original name."""
-    dest = Path(default_client.local_dir) / name
+    dest = get_client().local_dir / name
     dest.parent.mkdir(parents=True, exist_ok=True)
     return Path(await file.download(dest))
 

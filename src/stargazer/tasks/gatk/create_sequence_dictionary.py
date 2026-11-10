@@ -28,7 +28,7 @@ async def create_sequence_dictionary(ref: Reference) -> SequenceDict:
     if not ref_path or not ref_path.exists():
         raise FileNotFoundError(f"Reference file not found at {ref_path}")
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = _storage.get_client().local_dir
     dict_path = output_dir / f"{ref_path.stem}.dict"
     dict_path.unlink(missing_ok=True)
     cmd = [

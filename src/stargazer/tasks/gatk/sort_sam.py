@@ -40,7 +40,7 @@ async def sort_sam(
         )
 
     bam_path = await alignment.fetch()
-    output_dir = _storage.default_client.local_dir
+    output_dir = _storage.get_client().local_dir
     output_bam = output_dir / f"{alignment.sample_id}_sorted_{sort_order}.bam"
 
     cmd = [

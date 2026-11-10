@@ -18,7 +18,7 @@ async def test_contigs_from_the_store(tmp_path, monkeypatch):
     )
 
     pod = make_client(tmp_path / "storage", cache="pod")
-    monkeypatch.setattr(_storage_mod, "default_client", pod)
+    monkeypatch.setattr(_storage_mod, "get_client", lambda: pod)
 
     assert await Reference(cid=ref.cid).contigs() == ["chr1", "chr2"]
 

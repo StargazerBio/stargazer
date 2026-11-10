@@ -65,7 +65,7 @@ async def variant_recalibrator(
     ref_path = await ref.fetch()
     resource_paths = [await r.fetch() for r in resources]
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = _storage.get_client().local_dir
     sample_id = vcf.sample_id or "cohort"
     output_recal = output_dir / f"{sample_id}_{mode.lower()}.recal"
     output_tranches = output_dir / f"{sample_id}_{mode.lower()}.tranches"

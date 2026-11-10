@@ -11,6 +11,7 @@ from stargazer.assets.reads import R1
 from stargazer.assets.reference import Reference, ReferenceIndex
 from stargazer.assets.scrna import AnnData
 from stargazer.assets.variants import Variants
+from stargazer.utils.cid import compute_cid
 
 STORED_ALIGNMENT = {
     "asset": "alignment",
@@ -191,3 +192,31 @@ class TestFetch:
         await ref.fetch()
 
         assert isolated_storage.public.queries == [{"companion_of": ref.cid}]
+
+
+async def test_store_uploads_and_returns_the_typed_asset(tmp_path):
+    """`store` builds the asset from its fields, uploads the file and returns it."""
+    fasta = tmp_path / "ref.fa"
+    fasta.write_bytes(b">chr1\nACGT\n")
+
+    ref = await Reference.store(fasta, build="T")
+
+    assert isinstance(ref, Reference)
+    assert ref.build == "T"
+    assert ref.cid == compute_cid(fasta)
+    assert (await ref.fetch()).read_bytes() == b">chr1\nACGT\n"
+
+
+async def test_store_refuses_an_undeclared_field(tmp_path):
+    """A field the type doesn't declare raises, as it does on assignment."""
+    fasta = tmp_path / "ref.fa"
+    fasta.write_bytes(b">chr1\nACGT\n")
+
+    with pytest.raises(AttributeError, match="no field 'lane'"):
+        await Reference.store(fasta, build="T", lane="3")
+
+
+async def test_store_names_a_missing_file(tmp_path):
+    """Storing a file that isn't there raises `FileNotFoundError` naming it."""
+    with pytest.raises(FileNotFoundError, match="absent.fa"):
+        await Reference.store(tmp_path / "absent.fa", build="T")

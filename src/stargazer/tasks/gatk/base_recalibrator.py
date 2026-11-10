@@ -47,7 +47,7 @@ async def base_recalibrator(
     ref_path = await ref.fetch()
     site_paths = [await site.fetch() for site in known_sites]
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = _storage.get_client().local_dir
     output_recal = output_dir / f"{alignment.sample_id}_bqsr.table"
 
     cmd = [

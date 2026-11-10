@@ -59,7 +59,7 @@ async def combine_gvcfs(
         gvcf_paths.append(await gvcf.fetch())
         sample_ids.append(gvcf.sample_id)
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = _storage.get_client().local_dir
     output_gvcf = output_dir / f"{cohort_id}_combined.g.vcf"
 
     cmd = [

@@ -43,15 +43,12 @@ async def test_apply_vqsr_uses_a_model_built_in_another_pod(
 
     # The second pod shares only the store and the index with the first.
     shutil.rmtree(isolated_storage.local_dir)
-    monkeypatch.setattr(
-        _storage,
-        "default_client",
-        StorageClient(
-            local_dir=tmp_path / "second_pod",
-            store_root=isolated_storage.store_root,
-            index=isolated_storage.index,
-        ),
+    second_pod = StorageClient(
+        local_dir=tmp_path / "second_pod",
+        store_root=isolated_storage.store_root,
+        index=isolated_storage.index,
     )
+    monkeypatch.setattr(_storage, "get_client", lambda: second_pod)
 
     filtered = await apply_vqsr(vcf=vcf, ref=ref, vqsr_model=model)
 

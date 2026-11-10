@@ -45,7 +45,7 @@ async def apply_bqsr(
     if not recal_path or not recal_path.exists():
         raise FileNotFoundError("BQSR recalibration report not found in cache.")
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = _storage.get_client().local_dir
     output_bam = output_dir / f"{alignment.sample_id}_recalibrated.bam"
 
     cmd = [

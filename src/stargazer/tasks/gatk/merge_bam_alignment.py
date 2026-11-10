@@ -42,7 +42,7 @@ async def merge_bam_alignment(
     unmapped_path = await unmapped_bam.fetch()
     ref_path = await ref.fetch()
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = _storage.get_client().local_dir
     output_bam = output_dir / f"{aligned_bam.sample_id}_merged.bam"
 
     cmd = [

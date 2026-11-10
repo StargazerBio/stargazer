@@ -24,7 +24,7 @@ from stargazer.utils.cid import compute_cid
 def client(tmp_path, monkeypatch):
     """The default client, on a store and index right under tmp_path."""
     c = make_client(tmp_path)
-    monkeypatch.setattr(storage_mod, "default_client", c)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: c)
     return c
 
 
@@ -92,7 +92,7 @@ async def test_fetch_downloads_into_cid_dir_with_real_name(
     await aln.update(bam, sample_id="S1")
 
     fresh = make_client(tmp_path, cache="fresh_cache")
-    monkeypatch.setattr(storage_mod, "default_client", fresh)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: fresh)
     local = await aln.fetch()
 
     assert local == tmp_path / "fresh_cache" / aln.cid / "s1.bam"
@@ -122,9 +122,8 @@ async def test_fetch_colocates_companions(client, tmp_path, monkeypatch):
     idx = ReferenceIndex()
     await idx.update(fai, build="T", companion_of=ref.cid)
 
-    monkeypatch.setattr(
-        storage_mod, "default_client", make_client(tmp_path, cache="c2")
-    )
+    pod = make_client(tmp_path, cache="c2")
+    monkeypatch.setattr(storage_mod, "get_client", lambda: pod)
     local = await ref.fetch()
 
     assert (local.parent / "ref.fa.fai").read_bytes() == b"chr1\t4\t6\t4\t5\n"
@@ -148,9 +147,8 @@ async def test_fetch_resolves_a_bare_cid_through_the_index(
     aln = Alignment()
     await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x07"), sample_id="S1")
 
-    monkeypatch.setattr(
-        storage_mod, "default_client", make_client(tmp_path, cache="c3")
-    )
+    pod = make_client(tmp_path, cache="c3")
+    monkeypatch.setattr(storage_mod, "get_client", lambda: pod)
     local = await Alignment(cid=aln.cid).fetch()
 
     assert local.name == "s1.bam"
@@ -174,7 +172,7 @@ async def test_fetch_takes_own_and_publisher_companions_but_no_one_elses(
     monkeypatch.setenv("STARGAZER_OWNER", "me")
     public = FakePublicTier(tmp_path / "gateway")
     c = make_client(tmp_path, public=public, gateway=str(public.gateway))
-    monkeypatch.setattr(storage_mod, "default_client", c)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: c)
     ref = Reference()
     await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
     await AlignerIndex().update(
@@ -190,7 +188,7 @@ async def test_fetch_takes_own_and_publisher_companions_but_no_one_elses(
     public.add("ref.fa.pac", b"other pac", companion_of=ref.cid, _owner="someone")
 
     pod = make_client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
-    monkeypatch.setattr(storage_mod, "default_client", pod)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: pod)
     local = await ref.fetch()
 
     assert _listing(local.parent) == {
@@ -208,7 +206,7 @@ async def test_fetch_fills_in_public_companions_when_the_user_has_none(
     """A private copy of a public reference, with no companions of its own, gets the public ones."""
     public = FakePublicTier(tmp_path / "gateway")
     c = make_client(tmp_path, public=public, gateway=str(public.gateway))
-    monkeypatch.setattr(storage_mod, "default_client", c)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: c)
     ref = Reference()
     await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
     public.add("ref.fa", b">chr1\nACGT\n", asset="reference", _owner="maintainer")
@@ -217,7 +215,7 @@ async def test_fetch_fills_in_public_companions_when_the_user_has_none(
     )
 
     pod = make_client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
-    monkeypatch.setattr(storage_mod, "default_client", pod)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: pod)
     local = await ref.fetch()
 
     assert _listing(local.parent) == {
@@ -234,7 +232,7 @@ async def test_a_companion_stored_later_replaces_the_cached_public_one(
     """The user's own `.bwt`, stored after a fetch linked the public one, is linked on the next."""
     public = FakePublicTier(tmp_path / "gateway")
     c = make_client(tmp_path, public=public, gateway=str(public.gateway))
-    monkeypatch.setattr(storage_mod, "default_client", c)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: c)
     ref = Reference()
     await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
     public.add("ref.fa", b">chr1\nACGT\n", asset="reference", _owner="maintainer")
@@ -301,7 +299,7 @@ async def test_public_companions_come_from_the_parents_publisher(tmp_path, monke
     """Another publisher's index for a public reference isn't mixed in."""
     public = FakePublicTier(tmp_path / "gateway")
     c = make_client(tmp_path, public=public, gateway=str(public.gateway))
-    monkeypatch.setattr(storage_mod, "default_client", c)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: c)
     ref = Reference()
     await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
     public.add("ref.fa", b">chr1\nACGT\n", asset="reference", _owner="maintainer")
@@ -312,7 +310,7 @@ async def test_public_companions_come_from_the_parents_publisher(tmp_path, monke
     public.add("ref.fa.sa", b"other sa", companion_of=ref.cid, _owner="someone")
 
     pod = make_client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
-    monkeypatch.setattr(storage_mod, "default_client", pod)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: pod)
     local = await ref.fetch()
 
     assert _listing(local.parent) == {
@@ -329,7 +327,7 @@ async def test_without_a_public_parent_only_the_callers_public_companions_count(
     monkeypatch.setenv("STARGAZER_OWNER", "me")
     public = FakePublicTier(tmp_path / "gateway")
     c = make_client(tmp_path, public=public, gateway=str(public.gateway))
-    monkeypatch.setattr(storage_mod, "default_client", c)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: c)
     ref = Reference()
     await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
     public.add(
@@ -346,7 +344,7 @@ async def test_query_merges_public_tier(tmp_path, monkeypatch):
 
     public = FakePublicTier()
     c = make_client(tmp_path, public=public)
-    monkeypatch.setattr(storage_mod, "default_client", c)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: c)
     ref = Reference()
     await ref.update(_write(tmp_path / "w" / "x.fa", b">x\n"), build="T")
     public.records = [
@@ -416,7 +414,7 @@ async def test_publish_sends_the_stored_file_and_its_keyvalues(tmp_path, monkeyp
     monkeypatch.setenv("STARGAZER_OWNER", "u1")
     public = FakePublicTier()
     c = make_client(tmp_path, public=public)
-    monkeypatch.setattr(storage_mod, "default_client", c)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: c)
     aln = Alignment()
     await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x07"), sample_id="S1")
     row = await c.index.get(aln.cid)
@@ -448,7 +446,7 @@ async def _reference_with_two_companions(tmp_path) -> tuple[Reference, list[dict
         build="T",
         companion_of=ref.cid,
     )
-    client = storage_mod.default_client
+    client = storage_mod.get_client()
     rows = [await client.index.get(a.cid) for a in (ref, fai, bwt)]
     return ref, rows
 
@@ -459,7 +457,7 @@ async def test_publish_sends_the_assets_companions_with_it(tmp_path, monkeypatch
     monkeypatch.setenv("STARGAZER_OWNER", "u1")
     public = FakePublicTier()
     c = make_client(tmp_path, public=public)
-    monkeypatch.setattr(storage_mod, "default_client", c)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: c)
     ref, rows = await _reference_with_two_companions(tmp_path)
 
     records = await c.publish(ref.cid)
@@ -486,7 +484,7 @@ async def test_publish_refuses_the_set_when_a_companion_is_over_the_limits(
     monkeypatch.setenv("STARGAZER_OWNER", "u1")
     public = FakePublicTier()
     c = make_client(tmp_path, public=public)
-    monkeypatch.setattr(storage_mod, "default_client", c)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: c)
     ref, rows = await _reference_with_two_companions(tmp_path)
     await c.update_metadata(rows[2]["cid"], {f"x{i}": "y" for i in range(9)})
 
@@ -501,7 +499,7 @@ async def test_publish_skips_a_companion_already_public(tmp_path, monkeypatch):
     monkeypatch.setenv("STARGAZER_OWNER", "u1")
     public = FakePublicTier(tmp_path / "gateway")
     c = make_client(tmp_path, public=public)
-    monkeypatch.setattr(storage_mod, "default_client", c)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: c)
     ref, rows = await _reference_with_two_companions(tmp_path)
     public.add("ref.fa.fai", b"chr1\t4\t6\t4\t5\n", **rows[1]["keyvalues"])
 
@@ -537,7 +535,7 @@ async def test_publish_raises_when_the_cid_changes(tmp_path, monkeypatch):
     """A public CID that differs from ours is a bug, not a quiet success."""
     monkeypatch.setenv("STARGAZER_OWNER", "u1")
     c = make_client(tmp_path, public=FakePublicTier(cid="bafyDifferent"))
-    monkeypatch.setattr(storage_mod, "default_client", c)
+    monkeypatch.setattr(storage_mod, "get_client", lambda: c)
     aln = Alignment()
     await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x09"), sample_id="S1")
 
@@ -598,3 +596,12 @@ async def test_upload_skips_bytes_a_row_already_points_at(client, tmp_path):
 
     assert not (tmp_path / "store" / "users" / "local" / "assets" / cid).exists()
     assert (await client.index.get(cid))["uri"] == str(elsewhere)
+
+
+def test_scratch_dir_is_fresh_per_call_under_the_local_dir(client):
+    """Each call makes a new directory under the client's `scratch/`."""
+    first, second = storage_mod.scratch_dir(), storage_mod.scratch_dir()
+
+    assert first != second
+    assert first.is_dir() and second.is_dir()
+    assert first.parent == second.parent == client.local_dir / "scratch"

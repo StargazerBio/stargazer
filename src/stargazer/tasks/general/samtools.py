@@ -28,7 +28,7 @@ async def samtools_faidx(ref: Reference) -> ReferenceIndex:
     if not ref_path or not ref_path.exists():
         raise FileNotFoundError(f"Reference file not found at {ref_path}")
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = _storage.get_client().local_dir
     fai_path = output_dir / f"{ref_path.name}.fai"
     cmd = ["samtools", "faidx", str(ref_path), "--fai-idx", str(fai_path)]
     await _run(cmd, cwd=str(output_dir))

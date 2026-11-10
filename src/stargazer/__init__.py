@@ -12,12 +12,11 @@ spec: [docs/architecture/overview.md](../architecture/overview.md)
 __version__ = "0.1.0"
 
 from stargazer.utils.pinata import PinataClient
-from stargazer.utils.storage import StorageClient, default_client, get_client
+from stargazer.utils.storage import StorageClient, get_client
 
 __all__ = [
     "PinataClient",
     "StorageClient",
     "__version__",
-    "default_client",
     "get_client",
 ]

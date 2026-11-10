@@ -13,7 +13,7 @@ from typing import Any
 from stargazer.config import logger
 
 
-async def _run(
+async def run(
     cmd: Sequence[Any],
     cwd: Path | str | None = None,
 ) -> tuple[str, str]:
@@ -57,3 +57,6 @@ async def _run(
         raise RuntimeError("\n".join(error_parts))
 
     return stdout.decode("utf-8"), stderr.decode("utf-8")
+
+
+_run = run

@@ -65,7 +65,7 @@ async def apply_vqsr(
         raise ValueError(f"VQSRModel {vqsr_model.cid} has no stored tranches file")
     tranches_path = await tranches[0].fetch()
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = _storage.get_client().local_dir
     sample_id = vcf.sample_id or "cohort"
     output_vcf = output_dir / f"{sample_id}_vqsr_{mode.lower()}.vcf"
 

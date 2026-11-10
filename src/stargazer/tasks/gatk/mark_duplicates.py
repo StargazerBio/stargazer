@@ -34,7 +34,7 @@ async def mark_duplicates(alignment: Alignment) -> Alignment:
     """
     logger.info(alignment.to_dict())
     bam_path = await alignment.fetch()
-    output_dir = _storage.default_client.local_dir
+    output_dir = _storage.get_client().local_dir
 
     output_bam = output_dir / f"{alignment.sample_id}_marked_duplicates.bam"
     metrics_file = output_dir / f"{alignment.sample_id}_duplicate_metrics.txt"

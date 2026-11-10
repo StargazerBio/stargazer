@@ -39,7 +39,7 @@ async def bwa_mem2_index(ref: Reference) -> list[AlignerIndex]:
     if not ref_path or not ref_path.exists():
         raise FileNotFoundError(f"Reference file not found at {ref_path}")
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = _storage.get_client().local_dir
     base_name = ref_path.name
 
     prefix = output_dir / base_name
@@ -110,7 +110,7 @@ async def bwa_mem2_mem(
     else:
         rg_string = rf"@RG\tID:{sample_id}\tSM:{sample_id}\tLB:lib\tPL:ILLUMINA"
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = _storage.get_client().local_dir
     output_bam = output_dir / f"{sample_id}_aligned.bam"
 
     cmd = [

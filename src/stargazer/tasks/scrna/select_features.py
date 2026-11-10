@@ -40,7 +40,7 @@ async def select_features(
     sc.pp.highly_variable_genes(ad, **hvg_kwargs)
 
     out_path = (
-        _storage.default_client.local_dir / f"{adata.sample_id}_features_selected.h5ad"
+        _storage.get_client().local_dir / f"{adata.sample_id}_features_selected.h5ad"
     )
     ad.write_h5ad(out_path)
 
