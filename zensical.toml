@@ -11,6 +11,13 @@ extra_javascript = ["javascripts/home-link.js"]
 nav = [
   { "Home" = "index.md" },
   { "Getting Started" = "getting-started.md" },
+  { "Guides" = [
+    { "Writing a Task" = "guides/writing-a-task.md" },
+    { "Writing a Workflow" = "guides/writing-a-workflow.md" },
+    { "Where Your Code Runs" = "guides/where-your-code-runs.md" },
+    { "Using the MCP Server" = "guides/mcp-server.md" },
+    { "Contributing" = "guides/contributing.md" },
+  ]},
   { "Architecture" = [
     { "Overview" = "architecture/overview.md" },
     { "Types & Assets" = "architecture/types.md" },
@@ -21,13 +28,6 @@ nav = [
     { "CLI" = "architecture/cli.md" },
     { "Notebooks" = "architecture/notebook.md" },
     { "Notebook Runtime" = "architecture/runtime.md" },
-  ]},
-  { "Guides" = [
-    { "Writing a Task" = "guides/writing-a-task.md" },
-    { "Writing a Workflow" = "guides/writing-a-workflow.md" },
-    { "Where Your Code Runs" = "guides/where-your-code-runs.md" },
-    { "Using the MCP Server" = "guides/mcp-server.md" },
-    { "Contributing" = "guides/contributing.md" },
   ]},
   { "Reference" = [
     { "Catalog" = "reference/catalog.md" },
