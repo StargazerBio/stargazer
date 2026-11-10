@@ -1,6 +1,6 @@
 ---
 title: run-modes
-status: review
+status: done
 priority: normal
 created: 2026-11-09
 pr: 137
@@ -250,5 +250,9 @@ Callers:
 | A workflow's pod | its task image | children in their own pods |
 
 Executors: in-process (Flyte local mode), a Union pod, a devbox pod.
+
+## Outcome
+
+Shipped in PR 137, merged 2026-11-09: "On this machine" runs every task in the notebook's kernel, the cluster runs each task in its environment's image, and a notebook's own tasks build from its header with `notebook_image()`. Verified as in Evidence above (unit and tasks tiers, a sandboxed notebook locally, the germline workflow in a hosted pod). No comments at merge. Left: tickets [[community-kernel-headers]], [[prebuilt-notebook-environment]] and [[unpinned-notebook-python]].
 
 Related: [[board]], [[local-runs-in-task-image]], [[hosted-local-runs]], [[dispatch-installed-bundle]], [[released-sdk-in-notebooks]], [[notebook-image-digest]], [[marimo-autoadd-headers]], [[pixi-notebook-sandbox]], [[flyte-images]], [[marimo-sandbox]].

@@ -1,6 +1,6 @@
 ---
 title: dispatch-installed-bundle
-status: review
+status: done
 priority: high
 created: 2026-11-09
 pr: 138
@@ -37,5 +37,9 @@ Gotcha: on `main` before PR 137, a tutorial's tasks run on the published `starga
 - Torn down: dashboard back on its release, then stopped; no active app and no live run in `u-pryce`.
 
 PR 138's commits are merged into `feat/run-modes` (PR 137), since both rewrite `dispatch`: merging 137 lands the fix, and 138 closes then.
+
+## Outcome
+
+Shipped with PR 137, merged 2026-11-09 (PR 138's commits were merged into its branch, and 138 closed as merged with it): `dispatch` leaves `init_flyte()`'s root for a task imported from an installed package. Verified as in Evidence above. No comments at merge; nothing left.
 
 Related: [[board]], [[released-sdk-in-notebooks]], [[run-modes]].
