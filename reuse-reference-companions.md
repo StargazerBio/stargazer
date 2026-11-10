@@ -1,8 +1,9 @@
 ---
 title: reuse-reference-companions
-status: doing
+status: review
 priority: normal
 created: 2026-11-01
+pr: 139
 ---
 
 `prepare_reference` (`src/stargazer/workflows/gatk_data_preprocessing.py`)
@@ -36,14 +37,14 @@ repeat, never use a publisher's index. Both can land; they don't overlap.
 
 ## Pieces
 
-- [ ] Test (workflow-level, isolated store): a reference with all three
+- [x] Test (workflow-level, isolated store): a reference with all three
       companions stored runs none of the index tasks; with only the
       `.fai`, runs the other two. Confirm it fails first on the current
       code because the tasks run.
-- [ ] `prepare_reference` checks companions before each index task.
-- [ ] Tasks tier, and the germline workflow on the devbox: second run
+- [x] `prepare_reference` checks companions before each index task.
+- [x] Tasks tier, and the germline workflow on the devbox: second run
       shows no index tasks in the run's graph.
-- [ ] Docs: the workflow's docstring; `docs/architecture/workflows.md` if
+- [x] Docs: the workflow's docstring; `docs/architecture/workflows.md` if
       it grows a convention ("workflows skip work the graph already has").
 
 ## Plan
@@ -59,5 +60,28 @@ On `feat/reuse-reference-companions`.
 The workflow test is in the unit tier (`tests/unit/test_prepare_reference.py`), on the per-test store, with the three index tasks replaced by recorders in the workflow's module, since their tools aren't on the dev machine: what's asserted is which tasks the workflow calls. Cases: no companions (all three), all companions (none), only the `.fai` (the other two), an index short one file (bwa-mem2 only), a `bwa` index (bwa-mem2 only).
 
 The tasks tier is unchanged by this (no task's behavior changes), so the Pieces' "tasks tier" line is the constant's move only.
+
+## Evidence (2026-11-09)
+
+- Unit tier: 285 passed. On the unchanged workflow 4 of the 5 new tests failed because all three index tasks ran (measured).
+- Devbox: `pixi run pytest -m devbox tests/devbox/test_germline.py`, 2 passed in 2:43. Run `rv55z77sw9p6nt7r586l` on the branch has 8 actions and `gatk.prepare_reference` has no children; run `rjrhgvmgs28d6kwrtxmg` from `main` (2026-11-04) has 11, the three index tasks under `gatk.prepare_reference` (measured). The devbox's store held the reference's companions from earlier runs.
+- Not driven: a publisher's index on the public tier, end to end.
+
+## Verification recipe
+
+REUSE-COMPANIONS: a germline run on a reference that already has its `.fai`, `.dict` and BWA-MEM2 index runs none of the index tasks.
+
+1. With the devbox up and `FLYTE_IMAGE_REGISTRY=localhost:30000`, from the worktree (its `.flyte` linked): `pixi run pytest -m devbox tests/devbox/test_germline.py`. Run it twice on a fresh devbox, so the first run stores the companions.
+2. List the latest germline run's actions with their tasks and parents:
+
+   ```python
+   import flyte, flyte.remote as r
+   flyte.init_from_config(".flyte/config.yaml")
+   run = "<run name from `flyte get run`>"
+   for a in r.Action.listall(for_run_name=run):
+       print(a.pb2.metadata.parent or "-", r.ActionDetails.get(run_name=run, name=a.name).task_name)
+   ```
+
+   Passes: no action is `gatk.samtools_faidx`, `gatk.create_sequence_dictionary` or `gatk.bwa_mem2_index`, and the test's cohort VCF checks pass. Fails as on `main`: the three are children of `gatk.prepare_reference`.
 
 Related: [[board]].
