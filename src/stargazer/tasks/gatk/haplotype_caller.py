@@ -7,11 +7,9 @@ GATK HaplotypeCaller in GVCF mode.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import Alignment, Reference, Variants, VariantsIndex
-from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import _run
+from stargazer.utils import run, scratch_dir
 
 
 @gatk_env.task
@@ -33,13 +31,11 @@ async def haplotype_caller(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037225632-HaplotypeCaller
     """
-    logger.info(alignment.to_dict())
-    logger.info(ref.to_dict())
     # fetch() auto-downloads companions (.fai, .dict, .bai)
     bam_path = await alignment.fetch()
     ref_path = await ref.fetch()
 
-    output_dir = _storage.get_client().local_dir
+    output_dir = scratch_dir()
     output_gvcf = output_dir / f"{alignment.sample_id}.g.vcf"
 
     cmd = [
@@ -55,15 +51,9 @@ async def haplotype_caller(
         "GVCF",
     ]
 
-    await _run(cmd, cwd=str(output_dir))
+    await run(cmd, cwd=str(output_dir))
 
-    if not output_gvcf.exists():
-        raise FileNotFoundError(
-            f"HaplotypeCaller did not create output GVCF at {output_gvcf}"
-        )
-
-    gvcf = Variants()
-    await gvcf.update(
+    gvcf = await Variants.store(
         output_gvcf,
         sample_id=alignment.sample_id,
         caller="haplotype_caller",
@@ -76,10 +66,8 @@ async def haplotype_caller(
     # GATK writes the GVCF's index alongside it without being asked.
     idx_path = output_dir / f"{output_gvcf.name}.idx"
     if idx_path.exists():
-        vidx = VariantsIndex()
-        await vidx.update(
+        await VariantsIndex.store(
             idx_path, sample_id=alignment.sample_id, companion_of=gvcf.cid
         )
 
-    logger.info(gvcf.to_dict())
     return gvcf

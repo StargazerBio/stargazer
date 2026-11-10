@@ -6,11 +6,9 @@ Sorts BAM files using GATK SortSam.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import Alignment, AlignmentIndex
-from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import _run
+from stargazer.utils import run, scratch_dir
 
 
 @gatk_env.task
@@ -32,7 +30,6 @@ async def sort_sam(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037056932-SortSam-Picard
     """
-    logger.info(alignment.to_dict())
     valid_sort_orders = ["coordinate", "queryname", "duplicate"]
     if sort_order not in valid_sort_orders:
         raise ValueError(
@@ -40,7 +37,7 @@ async def sort_sam(
         )
 
     bam_path = await alignment.fetch()
-    output_dir = _storage.get_client().local_dir
+    output_dir = scratch_dir()
     output_bam = output_dir / f"{alignment.sample_id}_sorted_{sort_order}.bam"
 
     cmd = [
@@ -57,13 +54,9 @@ async def sort_sam(
     if sort_order == "coordinate":
         cmd.extend(["--CREATE_INDEX", "true"])
 
-    await _run(cmd, cwd=str(output_dir))
+    await run(cmd, cwd=str(output_dir))
 
-    if not output_bam.exists():
-        raise FileNotFoundError(f"SortSam did not create output BAM at {output_bam}")
-
-    sorted_bam = Alignment()
-    await sorted_bam.update(
+    sorted_bam = await Alignment.store(
         output_bam,
         sample_id=alignment.sample_id,
         sorted=sort_order,
@@ -77,14 +70,10 @@ async def sort_sam(
     if sort_order == "coordinate":
         # Picard names the index <name>.bai, not <name>.bam.bai.
         bam_index = output_bam.with_suffix(".bai")
-        if not bam_index.exists():
-            raise FileNotFoundError(f"--CREATE_INDEX did not create {bam_index}")
-        idx = AlignmentIndex()
-        await idx.update(
+        await AlignmentIndex.store(
             bam_index,
             sample_id=alignment.sample_id,
             companion_of=sorted_bam.cid,
         )
 
-    logger.info(sorted_bam.to_dict())
     return sorted_bam

@@ -4,10 +4,9 @@
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.storage as _storage
 from stargazer.assets.scrna import AnnData
-from stargazer.config import logger
 from stargazer.tasks.scrna.env import scrna_env
+from stargazer.utils import scratch_dir
 
 # Mitochondrial prefix, ribosomal prefixes and hemoglobin pattern per organism.
 # Mouse gene symbols are title case, human ones upper case.
@@ -47,7 +46,6 @@ async def qc_filter(
     """
     import scanpy as sc
 
-    logger.info(adata.to_dict())
     patterns = GENE_PATTERNS.get(adata.organism.lower())
     if patterns is None:
         raise ValueError(
@@ -73,14 +71,16 @@ async def qc_filter(
     ad = ad[ad.obs["pct_counts_mt"] < max_pct_mt]
     ad = ad[~ad.obs["predicted_doublet"]]
 
-    out_path = _storage.get_client().local_dir / f"{adata.sample_id}_qc_filtered.h5ad"
+    out_path = scratch_dir() / f"{adata.sample_id}_qc_filtered.h5ad"
     ad.write_h5ad(out_path)
 
-    result = AnnData(
+    result = await AnnData.store(
+        out_path,
         sample_id=adata.sample_id,
         organism=adata.organism,
         source_cid=adata.cid,
+        n_obs=ad.n_obs,
+        n_vars=ad.n_vars,
+        stage="qc_filtered",
     )
-    await result.update(out_path, n_obs=ad.n_obs, n_vars=ad.n_vars, stage="qc_filtered")
-    logger.info(result.to_dict())
     return result

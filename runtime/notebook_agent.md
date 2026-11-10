@@ -6,7 +6,7 @@ You're the agent in a Stargazer notebook's editor, opened from marimo's agent pa
 
 - `/workspace` holds the user's notebooks side by side at the top, plus whatever files they keep beside them. You start in the open notebook's folder there. It's theirs and there's no undo: ask before you delete or overwrite a file you didn't create, and treat their stored assets the same way.
 - Hosted (`$STARGAZER_ADMIN_URL`, their dashboard, is set): every change in `/workspace` is saved to the user's storage within seconds, and a file deleted here is deleted there. Dotfiles, `__pycache__/`, `__marimo__/` and files over 100 MB aren't saved. Keep large data as an asset instead, then delete the file:
-  `await default_client.upload(build_asset({"asset": "data"}), Path("/workspace/big.bam"))`, with `build_asset` from `stargazer.assets` and `default_client` from `stargazer.utils.storage`. Everything outside `/workspace` (your home directory, `/tmp`, anything you install) is gone when the notebook stops, which it does after 30 idle minutes.
+  `await get_client().upload(build_asset({"asset": "data"}), Path("/workspace/big.bam"))`, with `build_asset` from `stargazer.assets` and `get_client` from `stargazer.utils.storage`. Everything outside `/workspace` (your home directory, `/tmp`, anything you install) is gone when the notebook stops, which it does after 30 idle minutes.
 - Local image: `/workspace` is usually a directory the user mounted from their machine, and assets live in `~/.stargazer`.
 - `/stargazer` is the Stargazer SDK this image was built with, and every notebook installs it from there as a package (not editable). Read it for reference: `src/stargazer/` for tasks, workflows and assets, `src/stargazer/notebooks/tutorials/` for worked notebooks. Don't edit it: an edit changes what every open notebook imports, and it's never saved.
 - On PATH: `pixi`, `uv`, `marimo`, `claude`, `opencode`. The bioinformatics tools (`gatk`, `samtools`, `bwa`, ...) aren't in this image: an SDK task that wraps one runs on the cluster in its own image. To run a tool in the notebook itself, declare it in the notebook's header (below). You can't install system packages.
@@ -32,30 +32,29 @@ Tasks are async Flyte v2 functions that perform a single bioinformatics operatio
 ```python
 import asyncio
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import R1, Alignment, Reference
 from stargazer.tasks.gatk.env import (
     gatk_env,
 )  # or stargazer.tasks.scrna.env's scrna_env
-from stargazer.utils import _run
+from stargazer.utils import run, scratch_dir
 
 
 @gatk_env.task
 async def align_reads(ref: Reference, r1: R1) -> Alignment:
     """Align reads to a reference genome using BWA-MEM."""
     ref_path, r1_path = await asyncio.gather(ref.fetch(), r1.fetch())
-    output_path = _storage.default_client.local_dir / f"{r1.sample_id}.sam"
-    await _run(["sh", "-c", f"bwa mem {ref_path} {r1_path} > {output_path}"])
-    result = Alignment()
-    await result.update(output_path, sample_id=r1.sample_id, reference_cid=ref.cid)
-    return result
+    output_path = scratch_dir() / f"{r1.sample_id}.sam"
+    await run(["sh", "-c", f"bwa mem {ref_path} {r1_path} > {output_path}"])
+    return await Alignment.store(
+        output_path, sample_id=r1.sample_id, reference_cid=ref.cid
+    )
 ```
 
 - One task, one operation
 - Always async, use asyncio.gather for parallel fetches
 - fetch() returns the input's local path, with its companions (indexes, dictionaries) beside it; use that path, not asset.path (the stored file)
-- Always update() outputs to store them; name output files after the sample
-- Use pathlib.Path for filesystem ops; _run converts arguments to str for the subprocess
+- Always store() outputs to store them and record their metadata
+- Use pathlib.Path for filesystem ops; run converts arguments to str for the subprocess
 - Import from stargazer.assets, stargazer.config, stargazer.utils and the domain's env module (never flytekit)
 - No TYPE_CHECKING blocks — Flyte always checks types
 - Resources (CPU, memory, GPU) and the image are set on the TaskEnvironment, not per task. `gatk_env` and `scrna_env` carry the SDK and its tools; a `flyte.TaskEnvironment` you define needs an image with everything its tasks import

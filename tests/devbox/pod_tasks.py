@@ -37,8 +37,9 @@ async def produce(n: int, tag: str) -> list[str]:
     for i in range(n):
         path = get_client().local_dir / f"probe_{tag}_{i}.txt"
         path.write_text(f"{tag}:{i}")
-        asset = Asset(keyvalues={"asset": "devbox_probe", "tag": tag, "i": str(i)})
-        await asset.update(path)
+        asset = await Asset.store(
+            path, keyvalues={"asset": "devbox_probe", "tag": tag, "i": str(i)}
+        )
         cids.append(asset.cid)
     return cids
 
@@ -55,9 +56,7 @@ async def store_lane_r1(lane: str) -> R1:
     """Store an R1 carrying an extra `lane` key; return it."""
     path = get_client().local_dir / f"lane_{lane}.fq"
     path.write_text(f"@{lane}\nACGT\n+\nIIII\n")
-    r1 = R1(sample_id=lane)
-    r1.keyvalues["lane"] = lane
-    await r1.update(path)
+    r1 = await R1.store(path, sample_id=lane, keyvalues={"lane": lane})
     return r1
 
 
@@ -93,14 +92,13 @@ async def _local_copy(file: File, name: str) -> Path:
 @env.task
 async def seed(reference: File, r1: File, r2: File) -> dict[str, str]:
     """Store the reference and the paired reads as assets; return their CIDs."""
-    ref = Reference(build=BUILD)
-    await ref.update(await _local_copy(reference, REFERENCE))
+    ref = await Reference.store(await _local_copy(reference, REFERENCE), build=BUILD)
     r1_path = await _local_copy(r1, READS[0])
     r2_path = await _local_copy(r2, READS[1])
-    reads_1, reads_2 = R1(sample_id=SAMPLE_ID), R2(sample_id=SAMPLE_ID)
-    await reads_1.update(r1_path)
-    await reads_2.update(r2_path, mate_cid=reads_1.cid)
-    await reads_1.update(r1_path, mate_cid=reads_2.cid)
+    reads_1 = await R1.store(r1_path, sample_id=SAMPLE_ID)
+    reads_2 = await R2.store(r2_path, sample_id=SAMPLE_ID, mate_cid=reads_1.cid)
+    reads_1.mate_cid = reads_2.cid
+    await get_client().upload(reads_1, r1_path)
     return {"reference": ref.cid, "r1": reads_1.cid, "r2": reads_2.cid}
 
 

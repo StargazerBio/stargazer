@@ -231,19 +231,6 @@ class Asset:
         logger.info(f"Stored {cls._asset_key or 'asset'} {asset.path.name} {asset.cid}")
         return asset
 
-    async def update(self, path: Path, **kwargs) -> None:
-        """Store a local file as this asset, setting fields from kwargs first.
-
-        Sets `cid` and `path` (the stored File) once the file is uploaded and
-        its index row has committed. Raises if either fails.
-        """
-        import stargazer.utils.storage as _storage
-
-        for key, value in kwargs.items():
-            if value is not None:
-                setattr(self, key, value)
-        await _storage.get_client().upload(self, Path(path))
-
 
 async def assemble(**filters: Any) -> list[Asset]:
     """Query storage by keyvalue filters and return specialized assets.

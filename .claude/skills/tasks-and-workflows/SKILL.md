@@ -17,7 +17,7 @@ A task wraps one bioinformatics tool and does one thing. A workflow composes tas
 1. **Async, on a TaskEnvironment.** Every task and workflow is an `async def` decorated with a `TaskEnvironment` from its domain's `env.py` (`gatk_env` in `tasks/gatk/env.py`, `scrna_env` in `tasks/scrna/env.py`). Resources are set on the environment, shared by every task on it, not per task. The devbox node has ~7.75 GiB allocatable and a workflow's pods must fit together in ~6 GiB (the header of `devbox/setup.sh`).
 2. **Assets for I/O.** Inputs and outputs are `Asset` subclasses from `src/stargazer/assets/`, every field with a default.
 3. **Imports.** `import flyte` and `flyte.io`, never `flytekit`; `from stargazer.<module>`, never relative; no `TYPE_CHECKING` blocks. There is no `@workflow` decorator.
-4. **Paths.** `pathlib.Path` throughout; `_run` converts arguments to `str` at the subprocess boundary.
+4. **Paths.** `pathlib.Path` throughout; `run` converts arguments to `str` at the subprocess boundary.
 5. **Docstrings.** The module docstring opens with a `###` heading and ends with a `spec:` line (`docs/architecture/tasks.md` or `workflows.md`). The function docstring says what it does, its args and returns, and for a task the tool's reference URL.
 6. **Exports.** Add it to `__all__` in `src/stargazer/tasks/__init__.py` or `src/stargazer/workflows/__init__.py`, which the MCP registry and the catalog read.
 
@@ -38,11 +38,9 @@ A task wraps one bioinformatics tool and does one thing. A workflow composes tas
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import {InputType}, {OutputType}
-from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env  # or stargazer.tasks.scrna.env's scrna_env
-from stargazer.utils import _run
+from stargazer.utils import run, scratch_dir
 
 
 @gatk_env.task
@@ -59,27 +57,21 @@ async def {action}_{tool}(input_data: {InputType}) -> {OutputType}:
     Reference:
         {URL to tool documentation}
     """
-    logger.info(input_data.to_dict())
     input_path = await input_data.fetch()  # local path, companions beside it
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = scratch_dir()
     output_path = output_dir / f"{input_data.sample_id}_{tool}.{ext}"
-    await _run(["{tool}", "-I", input_path, "-O", output_path], cwd=output_dir)
-    if not output_path.exists():
-        raise FileNotFoundError(f"{tool} did not create {output_path}")
+    await run(["{tool}", "-I", input_path, "-O", output_path], cwd=str(output_dir))
 
-    output = {OutputType}()
-    await output.update(
+    return await {OutputType}.store(
         output_path,
         sample_id=input_data.sample_id,
         tool="{tool}",
         {input_key}_cid=input_data.cid,
     )
-    logger.info(output.to_dict())
-    return output
 ```
 
-`update()` stores the file and sets `cid` and `path`; a task that returns an asset it never updated returns nothing anyone can fetch. Name outputs after the sample: samples fanned out in one process share `local_dir`.
+`store()` stores the file and sets `cid` and `path`; a task that returns an asset it never stored returns nothing anyone can fetch. `scratch_dir()` makes a fresh directory per call, so samples fanned out in one process never write the same file.
 
 ## Workflows
 

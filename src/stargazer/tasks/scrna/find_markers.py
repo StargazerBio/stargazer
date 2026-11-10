@@ -4,10 +4,9 @@
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.storage as _storage
 from stargazer.assets.scrna import AnnData
-from stargazer.config import logger
 from stargazer.tasks.scrna.env import scrna_env
+from stargazer.utils import scratch_dir
 
 
 @scrna_env.task
@@ -32,19 +31,20 @@ async def find_markers(
     """
     import scanpy as sc
 
-    logger.info(adata.to_dict())
     ad = sc.read_h5ad(await adata.fetch())
 
     sc.tl.rank_genes_groups(ad, groupby=groupby, method=method)
 
-    out_path = _storage.get_client().local_dir / f"{adata.sample_id}_markers.h5ad"
+    out_path = scratch_dir() / f"{adata.sample_id}_markers.h5ad"
     ad.write_h5ad(out_path)
 
-    result = AnnData(
+    result = await AnnData.store(
+        out_path,
         sample_id=adata.sample_id,
         organism=adata.organism,
         source_cid=adata.cid,
+        n_obs=ad.n_obs,
+        n_vars=ad.n_vars,
+        stage="annotated",
     )
-    await result.update(out_path, n_obs=ad.n_obs, n_vars=ad.n_vars, stage="annotated")
-    logger.info(result.to_dict())
     return result

@@ -146,9 +146,8 @@ async def make_demo_sheets() -> list[SampleSheet]:
             writer = csv.writer(fh)
             writer.writerow(["sample_id", "organism"])
             writer.writerows(samples)
-        sheet = SampleSheet()
-        await sheet.update(
-            path=csv_path,
+        sheet = await SampleSheet.store(
+            csv_path,
             cohort_id=f"demo_{cohort_id}",
             n_samples=len(samples),
             organism="mixed",

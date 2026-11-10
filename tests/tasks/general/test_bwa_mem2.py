@@ -50,15 +50,12 @@ async def test_bwa_mem2_index():
 
 async def test_bwa_mem2_mem_aligns_against_a_stored_index():
     """bwa_mem2_mem aligns stored mates against a reference indexed in the store."""
-    ref = Reference()
-    await ref.update(GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
+    ref = await Reference.store(GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
     await bwa_mem2_index(ref)
-    r1 = R1()
-    await r1.update(
+    r1 = await R1.store(
         GENERAL_FIXTURES_DIR / "NA12829_TP53_R1.fq.gz", sample_id="NA12829_TP53"
     )
-    r2 = R2()
-    await r2.update(
+    r2 = await R2.store(
         GENERAL_FIXTURES_DIR / "NA12829_TP53_R2.fq.gz", sample_id="NA12829_TP53"
     )
 
@@ -68,7 +65,7 @@ async def test_bwa_mem2_mem_aligns_against_a_stored_index():
     assert ref.cid != ""
     assert r1.cid != ""
     assert bam.reference_cid == ref.cid
-    assert bam.r1_cid == r1.cid
+    assert bam.source_cid == r1.cid
     assert bam.sample_id == "NA12829_TP53"
     assert primary_reads(await bam.fetch()) == 2 * fastq_reads(
         GENERAL_FIXTURES_DIR / "NA12829_TP53_R1.fq.gz"

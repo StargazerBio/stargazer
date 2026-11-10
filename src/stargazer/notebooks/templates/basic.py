@@ -184,9 +184,8 @@ async def _(Path, file_input, tempfile):
     _path = _tmpdir / _f.name
     _path.write_bytes(_f.contents)
 
-    my_asset = MyAsset()
-    await my_asset.update(
-        path=_path,
+    my_asset = await MyAsset.store(
+        _path,
         # TODO: pass values for the fields you declared in §1, e.g.:
         # sample_id="example",
     )
@@ -225,7 +224,7 @@ async def my_task(asset: MyAsset) -> MyAsset:
     local_path = await asset.fetch()  # noqa: F841 — the TODO below reads it
     # TODO: read local_path, write a new file, then either:
     #   1. mutate + re-upload this asset, OR
-    #   2. construct a NEW asset and `await new.update(path=..., **kw)`
+    #   2. construct a NEW asset with `await NewType.store(path, **kw)`
     return asset
 
 

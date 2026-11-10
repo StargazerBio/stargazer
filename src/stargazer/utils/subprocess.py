@@ -57,6 +57,3 @@ async def run(
         raise RuntimeError("\n".join(error_parts))
 
     return stdout.decode("utf-8"), stderr.decode("utf-8")
-
-
-_run = run

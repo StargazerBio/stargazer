@@ -45,9 +45,9 @@
   function snippet(path) {
     return 'from pathlib import Path\n' +
       'from stargazer.assets import build_asset\n' +
-      'from stargazer.utils.storage import default_client\n\n' +
+      'from stargazer.utils.storage import get_client\n\n' +
       '# Set "asset" to the kind of file this is.\n' +
-      'await default_client.upload(build_asset({"asset": "data"}), ' +
+      'await get_client().upload(build_asset({"asset": "data"}), ' +
       'Path(' + JSON.stringify('/workspace/' + path) + '))';
   }
 

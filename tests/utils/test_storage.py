@@ -41,8 +41,7 @@ async def test_upload_stores_by_cid_and_indexes(client, tmp_path):
     bam = _write(tmp_path / "work" / "s1.bam", b"BAM\x01")
     cid = compute_cid(bam)
 
-    aln = Alignment()
-    await aln.update(bam, sample_id="S1")
+    aln = await Alignment.store(bam, sample_id="S1")
 
     uri = f"{tmp_path}/store/users/local/assets/{cid}/s1.bam"
     assert aln.cid == cid
@@ -59,8 +58,7 @@ async def test_upload_stamps_owner(client, tmp_path, monkeypatch):
     monkeypatch.setenv("STARGAZER_OWNER", "387300641116005877")
     bam = _write(tmp_path / "work" / "s1.bam", b"BAM\x02")
 
-    aln = Alignment()
-    await aln.update(bam, sample_id="S1")
+    aln = await Alignment.store(bam, sample_id="S1")
 
     assert "/users/387300641116005877/assets/" in aln.path.path
     [row] = await client.index.query({"asset": "alignment"})
@@ -71,9 +69,7 @@ async def test_upload_stamps_owner(client, tmp_path, monkeypatch):
 async def test_extra_keyvalue_round_trips_through_the_index(client, tmp_path):
     """A typed asset's extra key is stored, matched by assemble, and returned."""
     fq = _write(tmp_path / "work" / "s1_R1.fastq", b"@r\nACGT\n+\nIIII\n")
-    r1 = R1()
-    r1.keyvalues["lane"] = "3"
-    await r1.update(fq, sample_id="S1")
+    r1 = await R1.store(fq, sample_id="S1", keyvalues={"lane": "3"})
 
     [found] = await assemble(asset="r1", lane="3")
 
@@ -88,8 +84,7 @@ async def test_fetch_downloads_into_cid_dir_with_real_name(
 ):
     """A fresh cache downloads to <local_dir>/<cid>/<name> and returns that path."""
     bam = _write(tmp_path / "work" / "s1.bam", b"BAM\x03")
-    aln = Alignment()
-    await aln.update(bam, sample_id="S1")
+    aln = await Alignment.store(bam, sample_id="S1")
 
     fresh = make_client(tmp_path, cache="fresh_cache")
     monkeypatch.setattr(storage_mod, "get_client", lambda: fresh)
@@ -103,8 +98,7 @@ async def test_fetch_downloads_into_cid_dir_with_real_name(
 async def test_fetch_is_a_cache_hit_after_upload(client, tmp_path):
     """An upload seeds the cache, so fetch doesn't need the store."""
     bam = _write(tmp_path / "work" / "s1.bam", b"BAM\x04")
-    aln = Alignment()
-    await aln.update(bam, sample_id="S1")
+    aln = await Alignment.store(bam, sample_id="S1")
     Path(aln.path.path).unlink()
 
     local = await aln.fetch()
@@ -117,10 +111,8 @@ async def test_fetch_colocates_companions(client, tmp_path, monkeypatch):
     """Companions land next to the asset, where tools look for them."""
     fa = _write(tmp_path / "work" / "ref.fa", b">chr1\nACGT\n")
     fai = _write(tmp_path / "work" / "ref.fa.fai", b"chr1\t4\t6\t4\t5\n")
-    ref = Reference()
-    await ref.update(fa, build="T")
-    idx = ReferenceIndex()
-    await idx.update(fai, build="T", companion_of=ref.cid)
+    ref = await Reference.store(fa, build="T")
+    await ReferenceIndex.store(fai, build="T", companion_of=ref.cid)
 
     pod = make_client(tmp_path, cache="c2")
     monkeypatch.setattr(storage_mod, "get_client", lambda: pod)
@@ -144,8 +136,9 @@ async def test_fetch_resolves_a_bare_cid_through_the_index(
     client, tmp_path, monkeypatch
 ):
     """An asset with only a CID finds its file through the index."""
-    aln = Alignment()
-    await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x07"), sample_id="S1")
+    aln = await Alignment.store(
+        _write(tmp_path / "w" / "s1.bam", b"BAM\x07"), sample_id="S1"
+    )
 
     pod = make_client(tmp_path, cache="c3")
     monkeypatch.setattr(storage_mod, "get_client", lambda: pod)
@@ -173,9 +166,10 @@ async def test_fetch_takes_own_and_publisher_companions_but_no_one_elses(
     public = FakePublicTier(tmp_path / "gateway")
     c = make_client(tmp_path, public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "get_client", lambda: c)
-    ref = Reference()
-    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
-    await AlignerIndex().update(
+    ref = await Reference.store(
+        _write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T"
+    )
+    await AlignerIndex.store(
         _write(tmp_path / "w" / "ref.fa.bwt", b"my bwt"),
         aligner="bwa",
         build="T",
@@ -207,8 +201,9 @@ async def test_fetch_fills_in_public_companions_when_the_user_has_none(
     public = FakePublicTier(tmp_path / "gateway")
     c = make_client(tmp_path, public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "get_client", lambda: c)
-    ref = Reference()
-    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
+    ref = await Reference.store(
+        _write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T"
+    )
     public.add("ref.fa", b">chr1\nACGT\n", asset="reference", _owner="maintainer")
     public.add(
         "ref.fa.fai", b"chr1\t4\t6\t4\t5\n", companion_of=ref.cid, _owner="maintainer"
@@ -233,13 +228,14 @@ async def test_a_companion_stored_later_replaces_the_cached_public_one(
     public = FakePublicTier(tmp_path / "gateway")
     c = make_client(tmp_path, public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "get_client", lambda: c)
-    ref = Reference()
-    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
+    ref = await Reference.store(
+        _write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T"
+    )
     public.add("ref.fa", b">chr1\nACGT\n", asset="reference", _owner="maintainer")
     public.add("ref.fa.bwt", b"their bwt", companion_of=ref.cid, _owner="maintainer")
     await ref.fetch()
 
-    await AlignerIndex().update(
+    await AlignerIndex.store(
         _write(tmp_path / "w" / "ref.fa.bwt", b"my bwt"),
         aligner="bwa",
         build="T",
@@ -258,10 +254,11 @@ async def test_fetch_links_the_newest_of_the_users_companions_of_one_name(
     client, tmp_path
 ):
     """Two of the user's own `ref.dict`s: the one stored last is linked."""
-    ref = Reference()
-    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
+    ref = await Reference.store(
+        _write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T"
+    )
     for data in (b"UR:/old", b"UR:/new"):
-        await SequenceDict().update(
+        await SequenceDict.store(
             _write(tmp_path / data.decode()[4:] / "ref.dict", data),
             build="T",
             companion_of=ref.cid,
@@ -280,9 +277,10 @@ async def test_a_companion_named_like_its_asset_leaves_the_asset_alone(
     client, tmp_path
 ):
     """The asset's own cached file keeps its bytes."""
-    ref = Reference()
-    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
-    await AlignerIndex().update(
+    ref = await Reference.store(
+        _write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T"
+    )
+    await AlignerIndex.store(
         _write(tmp_path / "x" / "ref.fa", b"NOT A FASTA"),
         aligner="bwa",
         build="T",
@@ -300,8 +298,9 @@ async def test_public_companions_come_from_the_parents_publisher(tmp_path, monke
     public = FakePublicTier(tmp_path / "gateway")
     c = make_client(tmp_path, public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "get_client", lambda: c)
-    ref = Reference()
-    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
+    ref = await Reference.store(
+        _write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T"
+    )
     public.add("ref.fa", b">chr1\nACGT\n", asset="reference", _owner="maintainer")
     public.add(
         "ref.fa.bwt", b"maintainer bwt", companion_of=ref.cid, _owner="maintainer"
@@ -328,8 +327,9 @@ async def test_without_a_public_parent_only_the_callers_public_companions_count(
     public = FakePublicTier(tmp_path / "gateway")
     c = make_client(tmp_path, public=public, gateway=str(public.gateway))
     monkeypatch.setattr(storage_mod, "get_client", lambda: c)
-    ref = Reference()
-    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
+    ref = await Reference.store(
+        _write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T"
+    )
     public.add(
         "ref.fa.fai", b"chr1\t4\t6\t4\t5\n", companion_of=ref.cid, _owner="someone"
     )
@@ -345,8 +345,7 @@ async def test_query_merges_public_tier(tmp_path, monkeypatch):
     public = FakePublicTier()
     c = make_client(tmp_path, public=public)
     monkeypatch.setattr(storage_mod, "get_client", lambda: c)
-    ref = Reference()
-    await ref.update(_write(tmp_path / "w" / "x.fa", b">x\n"), build="T")
+    ref = await Reference.store(_write(tmp_path / "w" / "x.fa", b">x\n"), build="T")
     public.records = [
         {"cid": "bafyPublic", "name": "pub.fa", "keyvalues": {"asset": "reference"}},
         {
@@ -366,8 +365,9 @@ async def test_query_merges_public_tier(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_delete_removes_row_and_bytes(client, tmp_path):
     """Delete drops the index row and the stored file."""
-    aln = Alignment()
-    await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x05"), sample_id="S1")
+    aln = await Alignment.store(
+        _write(tmp_path / "w" / "s1.bam", b"BAM\x05"), sample_id="S1"
+    )
     stored = Path(aln.path.path)
 
     await client.delete(aln)
@@ -397,8 +397,9 @@ async def test_delete_leaves_the_gateway_alone_for_a_fetched_bundle(client):
 @pytest.mark.asyncio
 async def test_update_metadata_merges_and_stamps_owner(client, tmp_path, monkeypatch):
     """A metadata patch merges onto the row and restamps `_owner`."""
-    aln = Alignment()
-    await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x06"), sample_id="S1")
+    aln = await Alignment.store(
+        _write(tmp_path / "w" / "s1.bam", b"BAM\x06"), sample_id="S1"
+    )
     monkeypatch.setenv("STARGAZER_OWNER", "u1")
 
     row = await client.update_metadata(aln.cid, {"tool": "bwa"})
@@ -415,8 +416,9 @@ async def test_publish_sends_the_stored_file_and_its_keyvalues(tmp_path, monkeyp
     public = FakePublicTier()
     c = make_client(tmp_path, public=public)
     monkeypatch.setattr(storage_mod, "get_client", lambda: c)
-    aln = Alignment()
-    await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x07"), sample_id="S1")
+    aln = await Alignment.store(
+        _write(tmp_path / "w" / "s1.bam", b"BAM\x07"), sample_id="S1"
+    )
     row = await c.index.get(aln.cid)
 
     records = await c.publish(aln.cid)
@@ -432,15 +434,14 @@ async def test_publish_sends_the_stored_file_and_its_keyvalues(tmp_path, monkeyp
 
 async def _reference_with_two_companions(tmp_path) -> tuple[Reference, list[dict]]:
     """A stored reference with a `.fai` and a `.bwt`, and their index rows."""
-    ref = Reference()
-    await ref.update(_write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T")
-    fai = ReferenceIndex()
-    await fai.update(
+    ref = await Reference.store(
+        _write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T"
+    )
+    fai = await ReferenceIndex.store(
         _write(tmp_path / "w" / "ref.fa.fai", b"chr1\t4\t6\t4\t5\n"),
         companion_of=ref.cid,
     )
-    bwt = AlignerIndex()
-    await bwt.update(
+    bwt = await AlignerIndex.store(
         _write(tmp_path / "w" / "ref.fa.bwt", b"bwt"),
         aligner="bwa",
         build="T",
@@ -512,8 +513,9 @@ async def test_publish_skips_a_companion_already_public(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_publish_refuses_without_a_public_tier(client, tmp_path):
     """No Pinata key means nothing to publish to."""
-    aln = Alignment()
-    await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x08"), sample_id="S1")
+    aln = await Alignment.store(
+        _write(tmp_path / "w" / "s1.bam", b"BAM\x08"), sample_id="S1"
+    )
 
     with pytest.raises(ValueError, match="public tier"):
         await client.publish(aln.cid)
@@ -536,8 +538,9 @@ async def test_publish_raises_when_the_cid_changes(tmp_path, monkeypatch):
     monkeypatch.setenv("STARGAZER_OWNER", "u1")
     c = make_client(tmp_path, public=FakePublicTier(cid="bafyDifferent"))
     monkeypatch.setattr(storage_mod, "get_client", lambda: c)
-    aln = Alignment()
-    await aln.update(_write(tmp_path / "w" / "s1.bam", b"BAM\x09"), sample_id="S1")
+    aln = await Alignment.store(
+        _write(tmp_path / "w" / "s1.bam", b"BAM\x09"), sample_id="S1"
+    )
 
     with pytest.raises(ValueError, match="bafyDifferent"):
         await c.publish(aln.cid)
@@ -592,7 +595,7 @@ async def test_upload_skips_bytes_a_row_already_points_at(client, tmp_path):
         }
     )
 
-    await R1().update(_write(tmp_path / "work" / "r1.fq", data), sample_id="S1")
+    await R1.store(_write(tmp_path / "work" / "r1.fq", data), sample_id="S1")
 
     assert not (tmp_path / "store" / "users" / "local" / "assets" / cid).exists()
     assert (await client.index.get(cid))["uri"] == str(elsewhere)

@@ -7,11 +7,10 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 import asyncio
 import shlex
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import R1, R2, AlignerIndex, Alignment, Reference
 from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import _run
+from stargazer.utils import run, scratch_dir
 
 
 @gatk_env.task
@@ -31,36 +30,28 @@ async def bwa_index(ref: Reference) -> list[AlignerIndex]:
     Reference:
         https://bio-bwa.sourceforge.net/bwa.shtml
     """
-    logger.info(ref.to_dict())
     ref_path = await ref.fetch()
 
-    if not ref_path or not ref_path.exists():
-        raise FileNotFoundError(f"Reference file not found at {ref_path}")
-
     index_extensions = [".amb", ".ann", ".bwt", ".pac", ".sa"]
-    output_dir = _storage.get_client().local_dir
+    output_dir = scratch_dir()
     base_name = ref_path.name
 
     prefix = output_dir / base_name
     cmd = ["bwa", "index", "-p", str(prefix), str(ref_path)]
-    _stdout, _stderr = await _run(cmd, cwd=str(output_dir))
+    await run(cmd, cwd=str(output_dir))
 
     indices = []
     for ext in index_extensions:
         index_path = output_dir / f"{base_name}{ext}"
-        if not index_path.exists():
-            raise FileNotFoundError(f"BWA index file {index_path.name} was not created")
-
-        idx = AlignerIndex()
-        await idx.update(
-            index_path,
-            aligner="bwa",
-            build=ref.build,
-            companion_of=ref.cid,
+        indices.append(
+            await AlignerIndex.store(
+                index_path,
+                aligner="bwa",
+                build=ref.build,
+                companion_of=ref.cid,
+            )
         )
-        indices.append(idx)
 
-    logger.info([x.to_dict() for x in indices])
     return indices
 
 
@@ -89,10 +80,6 @@ async def bwa_mem(
     Reference:
         https://bio-bwa.sourceforge.net/bwa.shtml
     """
-    logger.info(ref.to_dict())
-    logger.info(r1.to_dict())
-    if r2:
-        logger.info(r2.to_dict())
     # fetch() downloads ref + companions (aligner indices, .fai, .dict)
     ref_path = await ref.fetch()
     r1_path = await r1.fetch()
@@ -107,7 +94,7 @@ async def bwa_mem(
     else:
         rg_string = rf"@RG\tID:{sample_id}\tSM:{sample_id}\tLB:lib\tPL:ILLUMINA"
 
-    output_dir = _storage.get_client().local_dir
+    output_dir = scratch_dir()
     output_bam = output_dir / f"{sample_id}_aligned.bam"
 
     cmd = [
@@ -146,11 +133,7 @@ async def bwa_mem(
             f"stdout: {stdout_text}\nstderr: {stderr_text}"
         )
 
-    if not output_bam.exists():
-        raise FileNotFoundError(f"BWA-MEM did not create output BAM at {output_bam}")
-
-    bam = Alignment()
-    await bam.update(
+    bam = await Alignment.store(
         output_bam,
         sample_id=sample_id,
         duplicates_marked=False,
@@ -159,5 +142,4 @@ async def bwa_mem(
         source_cid=r1.cid,
     )
 
-    logger.info(bam.to_dict())
     return bam

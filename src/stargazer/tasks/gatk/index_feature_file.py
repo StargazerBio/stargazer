@@ -4,11 +4,9 @@
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import KnownSites, KnownSitesIndex
-from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import _run
+from stargazer.utils import run, scratch_dir
 
 
 @gatk_env.task
@@ -25,23 +23,17 @@ async def index_feature_file(known_sites: KnownSites) -> KnownSitesIndex:
     Returns:
         KnownSitesIndex asset pointing to the generated .idx file
     """
-    logger.info(known_sites.to_dict())
     vcf_path = await known_sites.fetch()
 
-    output_dir = _storage.get_client().local_dir
+    output_dir = scratch_dir()
     idx_path = vcf_path.with_suffix(vcf_path.suffix + ".idx")
 
     if not idx_path.exists():
-        await _run(
+        await run(
             ["gatk", "IndexFeatureFile", "-I", str(vcf_path)],
             cwd=str(output_dir),
         )
 
-    if not idx_path.exists():
-        raise FileNotFoundError(f"IndexFeatureFile did not create index at {idx_path}")
+    index = await KnownSitesIndex.store(idx_path, companion_of=known_sites.cid)
 
-    index = KnownSitesIndex()
-    await index.update(idx_path, companion_of=known_sites.cid)
-
-    logger.info(index.to_dict())
     return index

@@ -209,9 +209,9 @@ def _():
         - **Output is typed**: `-> CohortSummary`. Downstream tasks
           consuming the result get the same guarantee.
         - **Storage is automatic**: `await sheet.fetch()` downloads the
-          CSV and returns its local path; `await summary.update(path=...,
-          **fields)` uploads the new JSON and assigns its CID. No manual
-          path juggling.
+          CSV and returns its local path; `await CohortSummary.store(path,
+          **fields)` uploads the new JSON and returns it with its CID. No
+          manual path juggling.
 
         Defining the task is all this notebook does — the next two
         tutorials feed it inputs and run it.
@@ -241,9 +241,8 @@ async def summarize_cohort(sheet: SampleSheet) -> CohortSummary:
         )
     )
 
-    summary = CohortSummary()
-    await summary.update(
-        path=out_path,
+    summary = await CohortSummary.store(
+        out_path,
         cohort_id=sheet.cohort_id,
         n_samples=len(rows),
         n_organisms=len(organisms),
@@ -263,7 +262,7 @@ def _():
         |--------------|--------------|
         | `@tutorial_env.task` on a function | A unit of work Flyte can run anywhere |
         | Typed `SampleSheet` in, `CohortSummary` out | Self-describing I/O, automatic storage |
-        | `await summary.update(...)` inside the task | Upload + CID assignment in one call |
+        | `await CohortSummary.store(...)` inside the task | Upload + CID assignment in one call |
 
         ### → Next: `workflows.py`
 

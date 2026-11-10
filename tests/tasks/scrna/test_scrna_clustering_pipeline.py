@@ -14,8 +14,7 @@ async def test_pipeline_runs_every_stage_from_a_stored_raw_sample():
     """The pipeline turns a stored raw sample into an annotated result at every stage."""
     import scanpy as sc
 
-    raw = AnnData()
-    await raw.update(
+    await AnnData.store(
         SCRNA_FIXTURES_DIR / "synthetic_200x500.h5ad",
         sample_id="s1",
         stage="raw",

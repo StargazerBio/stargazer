@@ -6,7 +6,6 @@ Builds a recalibration model for VQSR using GATK VariantRecalibrator.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import (
     KnownSites,
     Reference,
@@ -15,9 +14,8 @@ from stargazer.assets import (
     VQSRModelIndex,
     VQSRTranches,
 )
-from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import _run
+from stargazer.utils import run, scratch_dir
 
 _SNP_ANNOTATIONS = ["QD", "MQ", "MQRankSum", "ReadPosRankSum", "FS", "SOR"]
 _INDEL_ANNOTATIONS = ["QD", "FS", "SOR"]
@@ -53,9 +51,6 @@ async def variant_recalibrator(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360035531612-Variant-Quality-Score-Recalibration-VQSR
     """
-    logger.info(vcf.to_dict())
-    logger.info(ref.to_dict())
-    logger.info([x.to_dict() for x in resources])
     if mode not in ("SNP", "INDEL"):
         raise ValueError(f"mode must be 'SNP' or 'INDEL', got {mode!r}")
     if not resources:
@@ -65,7 +60,7 @@ async def variant_recalibrator(
     ref_path = await ref.fetch()
     resource_paths = [await r.fetch() for r in resources]
 
-    output_dir = _storage.get_client().local_dir
+    output_dir = scratch_dir()
     sample_id = vcf.sample_id or "cohort"
     output_recal = output_dir / f"{sample_id}_{mode.lower()}.recal"
     output_tranches = output_dir / f"{sample_id}_{mode.lower()}.tranches"
@@ -103,29 +98,22 @@ async def variant_recalibrator(
     for ann in annotations:
         cmd.extend(["-an", ann])
 
-    _, stderr = await _run(cmd, cwd=str(output_dir))
+    await run(cmd, cwd=str(output_dir))
 
-    if not output_recal.exists():
-        raise FileNotFoundError(
-            f"VariantRecalibrator did not create recal file at {output_recal}. stderr: {stderr}"
-        )
-
-    model = VQSRModel()
-    await model.update(
+    model = await VQSRModel.store(
         output_recal,
         sample_id=sample_id,
         mode=mode,
         build=ref.build,
         variants_cid=vcf.cid,
     )
-    await VQSRModelIndex().update(
+    await VQSRModelIndex.store(
         output_dir / f"{output_recal.name}.idx",
         sample_id=sample_id,
         companion_of=model.cid,
     )
-    await VQSRTranches().update(
+    await VQSRTranches.store(
         output_tranches, sample_id=sample_id, companion_of=model.cid
     )
 
-    logger.info(model.to_dict())
     return model

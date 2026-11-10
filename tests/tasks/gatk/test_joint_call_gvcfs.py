@@ -32,15 +32,14 @@ async def test_joint_call_gvcfs_defaults_to_every_contig():
 
 async def test_joint_call_gvcfs_links_its_output_to_its_input_gvcfs():
     """The joint-called VCF records the GVCF it was made from."""
-    gvcf = Variants()
-    await gvcf.update(
+    gvcf = await Variants.store(
         GATK_FIXTURES_DIR / "NA12829_TP53.g.vcf",
         sample_id="NA12829",
         caller="haplotypecaller",
         variant_type="gvcf",
         build="GRCh38",
     )
-    await VariantsIndex().update(
+    await VariantsIndex.store(
         GATK_FIXTURES_DIR / "NA12829_TP53.g.vcf.idx",
         sample_id="NA12829",
         companion_of=gvcf.cid,

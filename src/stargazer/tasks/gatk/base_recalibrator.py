@@ -6,11 +6,9 @@ Creates BQSR recalibration table using GATK BaseRecalibrator.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import Alignment, BQSRReport, KnownSites, Reference
-from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import _run
+from stargazer.utils import run, scratch_dir
 
 
 @gatk_env.task
@@ -36,9 +34,6 @@ async def base_recalibrator(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360036898312-BaseRecalibrator
     """
-    logger.info(alignment.to_dict())
-    logger.info(ref.to_dict())
-    logger.info([x.to_dict() for x in known_sites])
     if not known_sites:
         raise ValueError("known_sites list cannot be empty for BQSR")
 
@@ -47,7 +42,7 @@ async def base_recalibrator(
     ref_path = await ref.fetch()
     site_paths = [await site.fetch() for site in known_sites]
 
-    output_dir = _storage.get_client().local_dir
+    output_dir = scratch_dir()
     output_recal = output_dir / f"{alignment.sample_id}_bqsr.table"
 
     cmd = [
@@ -63,20 +58,13 @@ async def base_recalibrator(
     for site_path in site_paths:
         cmd.extend(["--known-sites", str(site_path)])
 
-    await _run(cmd, cwd=str(output_dir))
+    await run(cmd, cwd=str(output_dir))
 
-    if not output_recal.exists():
-        raise FileNotFoundError(
-            f"BaseRecalibrator did not create recalibration report at {output_recal}"
-        )
-
-    report = BQSRReport()
-    await report.update(
+    report = await BQSRReport.store(
         output_recal,
         sample_id=alignment.sample_id,
         tool="gatk_base_recalibrator",
         alignment_cid=alignment.cid,
     )
 
-    logger.info(report.to_dict())
     return report

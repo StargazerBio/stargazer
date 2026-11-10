@@ -6,11 +6,9 @@ Applies BQSR recalibration to BAM files using GATK ApplyBQSR.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import Alignment, AlignmentIndex, BQSRReport, Reference
-from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import _run
+from stargazer.utils import run, scratch_dir
 
 
 @gatk_env.task
@@ -34,18 +32,12 @@ async def apply_bqsr(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037055712-ApplyBQSR
     """
-    logger.info(alignment.to_dict())
-    logger.info(ref.to_dict())
-    logger.info(bqsr_report.to_dict())
     # fetch() auto-downloads companions (.fai, .dict, .bai, etc.)
     bam_path = await alignment.fetch()
     ref_path = await ref.fetch()
     recal_path = await bqsr_report.fetch()
 
-    if not recal_path or not recal_path.exists():
-        raise FileNotFoundError("BQSR recalibration report not found in cache.")
-
-    output_dir = _storage.get_client().local_dir
+    output_dir = scratch_dir()
     output_bam = output_dir / f"{alignment.sample_id}_recalibrated.bam"
 
     cmd = [
@@ -61,13 +53,9 @@ async def apply_bqsr(
         str(output_bam),
     ]
 
-    await _run(cmd, cwd=str(output_dir))
+    await run(cmd, cwd=str(output_dir))
 
-    if not output_bam.exists():
-        raise FileNotFoundError(f"ApplyBQSR did not create output BAM at {output_bam}")
-
-    recal_bam = Alignment()
-    await recal_bam.update(
+    recal_bam = await Alignment.store(
         output_bam,
         sample_id=alignment.sample_id,
         sorted="coordinate",
@@ -80,14 +68,10 @@ async def apply_bqsr(
 
     # GATK indexes its BAM output by default, naming it <name>.bai.
     bam_index = output_bam.with_suffix(".bai")
-    if not bam_index.exists():
-        raise FileNotFoundError(f"ApplyBQSR did not create {bam_index}")
-    idx = AlignmentIndex()
-    await idx.update(
+    await AlignmentIndex.store(
         bam_index,
         sample_id=alignment.sample_id,
         companion_of=recal_bam.cid,
     )
 
-    logger.info(recal_bam.to_dict())
     return recal_bam

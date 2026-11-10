@@ -37,11 +37,9 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 import asyncio
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import Alignment, MyOutput, Reference
-from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import _run
+from stargazer.utils import run, scratch_dir
 
 
 @gatk_env.task
@@ -49,30 +47,25 @@ async def my_tool(ref: Reference, alignment: Alignment) -> MyOutput:
     """One-line description of what this task does."""
     ref_path, bam_path = await asyncio.gather(ref.fetch(), alignment.fetch())
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = scratch_dir()
     output_path = output_dir / f"{alignment.sample_id}_my_tool.txt"
-    await _run(["my_tool", "-R", ref_path, "-I", bam_path, "-O", output_path])
-    if not output_path.exists():
-        raise FileNotFoundError(f"my_tool did not create {output_path}")
+    await run(["my_tool", "-R", ref_path, "-I", bam_path, "-O", output_path])
 
-    result = MyOutput()
-    await result.update(
+    return await MyOutput.store(
         output_path, sample_id=alignment.sample_id, alignment_cid=alignment.cid
     )
-    logger.info(result.to_dict())
-    return result
 ```
 
 ## 3. Key Rules
 
 - **One task, one operation** — don't combine multiple tool calls unless there's a good reason, e.g. piping between tools where the intermediate would have little long-term value for re-analysis
 - **Always `fetch()` inputs** — it returns the local path, with companions (indexes, dictionaries) in the same directory
-- **Always `update()` outputs** to store them and record their metadata
+- **Always `store()` outputs** to store them and record their metadata
 - **Use `asyncio.gather`** to fetch multiple inputs in parallel
-- **Write outputs under `_storage.default_client.local_dir`, named after the sample** — samples fanned out in one process share that directory, so a fixed filename lets them overwrite each other
+- **Write outputs under `scratch_dir()`** — a fresh directory per call, so two tasks never write the same file
 - **Pick the environment whose image carries the tool** — `gatk_env` in `src/stargazer/tasks/gatk/env.py` or `scrna_env` in `src/stargazer/tasks/scrna/env.py`, where resources are set too. A new tool goes in that file's header, then `pixi run python cli/lock_envs.py` relocks it (see [Configuration → Container Images](../architecture/configuration.md#container-images))
 - **Import a domain's packages inside the task body** — `import scanpy as sc` in the function, not at the top of the file, so importing the task needs only the core
-- **Use `pathlib.Path`** for all filesystem operations; `_run` converts its arguments to `str` for the subprocess
+- **Use `pathlib.Path`** for all filesystem operations; `run` converts its arguments to `str` for the subprocess
 
 ## 4. Register in the MCP Server
 

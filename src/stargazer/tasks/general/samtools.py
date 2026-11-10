@@ -4,11 +4,9 @@
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import Reference, ReferenceIndex
-from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import _run
+from stargazer.utils import run, scratch_dir
 
 
 @gatk_env.task
@@ -22,27 +20,18 @@ async def samtools_faidx(ref: Reference) -> ReferenceIndex:
     Returns:
         ReferenceIndex asset containing the .fai file
     """
-    logger.info(ref.to_dict())
     ref_path = await ref.fetch()
 
-    if not ref_path or not ref_path.exists():
-        raise FileNotFoundError(f"Reference file not found at {ref_path}")
-
-    output_dir = _storage.get_client().local_dir
+    output_dir = scratch_dir()
     fai_path = output_dir / f"{ref_path.name}.fai"
     cmd = ["samtools", "faidx", str(ref_path), "--fai-idx", str(fai_path)]
-    await _run(cmd, cwd=str(output_dir))
+    await run(cmd, cwd=str(output_dir))
 
-    if not fai_path.exists():
-        raise FileNotFoundError(f"FASTA index file {fai_path.name} was not created")
-
-    faidx = ReferenceIndex()
-    await faidx.update(
+    faidx = await ReferenceIndex.store(
         fai_path,
         build=ref.build,
         tool="samtools_faidx",
         companion_of=ref.cid,
     )
 
-    logger.info(faidx.to_dict())
     return faidx

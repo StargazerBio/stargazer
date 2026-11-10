@@ -157,10 +157,9 @@ class TestFetch:
     async def test_fetch_brings_companions_not_dependents(self, ref_files):
         """A reference's index lands beside it; an alignment made against it doesn't."""
         fasta, fai, bam = ref_files
-        ref = Reference()
-        await ref.update(fasta, build="T")
-        await ReferenceIndex().update(fai, build="T", companion_of=ref.cid)
-        await Alignment().update(bam, sample_id="s1", reference_cid=ref.cid)
+        ref = await Reference.store(fasta, build="T")
+        await ReferenceIndex.store(fai, build="T", companion_of=ref.cid)
+        await Alignment.store(bam, sample_id="s1", reference_cid=ref.cid)
 
         local = await ref.fetch()
 
@@ -172,11 +171,8 @@ class TestFetch:
     async def test_fetch_brings_an_untyped_companion(self, ref_files):
         """`companion_of` alone makes a file a companion, with no class for it."""
         fasta, fai, _ = ref_files
-        ref = Reference()
-        await ref.update(fasta, build="T")
-        await Asset(keyvalues={"asset": "my_index", "companion_of": ref.cid}).update(
-            fai
-        )
+        ref = await Reference.store(fasta, build="T")
+        await Asset.store(fai, keyvalues={"asset": "my_index", "companion_of": ref.cid})
 
         local = await ref.fetch()
 
@@ -185,8 +181,7 @@ class TestFetch:
     async def test_fetch_asks_the_public_tier_once(self, ref_files, isolated_storage):
         """One exact-match query per fetch, not one per companion type."""
         fasta, _, _ = ref_files
-        ref = Reference()
-        await ref.update(fasta, build="T")
+        ref = await Reference.store(fasta, build="T")
         isolated_storage.public = FakePublicTier()
 
         await ref.fetch()

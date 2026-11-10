@@ -43,7 +43,7 @@ Notebooks, the MCP server and the tests connect with `init_flyte()` from `config
 
 ```mermaid
 flowchart TD
-    U([Asset.update path]) --> C("Compute the CID")
+    U([Asset.store path]) --> C("Compute the CID")
     C --> S{Already in the store?}
     S -->|No| P("Put the bytes at users/owner/assets/cid/name") --> R
     S -->|Yes| R("Upsert the index row, stamping _owner")

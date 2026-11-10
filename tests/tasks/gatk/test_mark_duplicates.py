@@ -36,8 +36,7 @@ async def test_mark_duplicates_marks_duplicates():
 
 async def test_mark_duplicates_links_its_output_to_its_input():
     """The marked BAM records the BAM it was made from and its reference."""
-    alignment = Alignment()
-    await alignment.update(
+    alignment = await Alignment.store(
         GATK_FIXTURES_DIR / "NA12829_TP53_merged.bam",
         sample_id="NA12829_TP53_merged",
         sorted="coordinate",
