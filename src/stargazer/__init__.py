@@ -9,7 +9,9 @@ find their inputs by querying that metadata rather than by path.
 spec: [docs/architecture/overview.md](../architecture/overview.md)
 """
 
-__version__ = "0.1.0"
+from importlib.metadata import version
+
+__version__ = version("stargazer-bio")
 
 from stargazer.utils.pinata import PinataClient
 from stargazer.utils.storage import StorageClient, default_client, get_client
