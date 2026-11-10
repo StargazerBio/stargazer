@@ -1,6 +1,6 @@
 ---
 title: marimo-server-layer-symlinks
-status: review
+status: done
 priority: high
 created: 2026-11-07
 pr: 141
@@ -28,5 +28,9 @@ SERVER-SYMLINKS: the editor's assets load on an image whose server layer is rebu
 
 1. Pick an image old enough that its start logs `Installed <n> packages` (any built before the latest release of a package under `marimo[lsp]`). `docker run -d --name sg -p 18080:8080 -v $PWD/runtime/marimo.toml:/home/flyte/.config/marimo/marimo.toml:ro <image>`; wait for `/__sg__/ready`.
 2. `curl -s localhost:18080/ | grep -o '/assets/[^"]*\.js' | head -1`, then `curl -o /dev/null -w '%{http_code}'` that path. Passes: 200, and `docker logs sg` has no `follow_symlink=false`. Fails as on `main` (no mount): 404 and the error.
+
+## Outcome
+
+PR 141 merged 2026-11-10 with no review comments. Shipped: `[server] follow_symlink = true` in `runtime/marimo.toml`, so the editor's assets load however the server layer is linked. Verified on a stale-layer image run locally with the branch's `marimo.toml` mounted (see Evidence). Left: a stale layer still downloads and installs at every start, ticket [[server-layer-drift]]; a hosted pod wasn't driven.
 
 Related: [[board]], [[marimo-autoadd-headers]], [[pixi-notebook-sandbox]], [[marimo-sandbox]].
