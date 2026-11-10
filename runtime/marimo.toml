@@ -4,3 +4,12 @@
 # The agent panel, where Claude Code or OpenCode edits the open notebook.
 [experimental]
 external_agents = true
+
+# The server's marimo is a uv layer over the runtime venv, linked from the
+# image's cache by symlink (UV_LINK_MODE in the Dockerfile). marimo refuses
+# to serve its own frontend from symlinked files unless told to, and the
+# editor page comes up blank. The warmed layer is hardlinked, so this only
+# bites once a release of one of the layer's packages makes uv build it again
+# at start.
+[server]
+follow_symlink = true
