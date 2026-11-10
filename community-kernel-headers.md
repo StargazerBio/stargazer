@@ -22,5 +22,6 @@ Read at community-notebooks `b2197b2`, not driven. The scRNA notebook needs more
 - Its header lacks `flyte`, `scanpy` and `igraph`; the germline one lacks `flyte` only if it imports it (it doesn't today).
 
 So the scRNA half is a small rewrite of its environment cell, to be verified "On this machine" and "On the cluster" from the catalog. Left in `next`.
+- The germline notebook reads `cohort.sample_count`, which ticket [[provenance-on-every-output]] removes: use `len(cohort.source_samples)`.
 
 Related: [[board]], [[run-modes]], [[community-catalog-pixi-headers]], [[marimo-autoadd-headers]], [[marimo-sandbox]].

@@ -1,6 +1,6 @@
 ---
 title: provenance-on-every-output
-status: backlog
+status: doing
 priority: normal
 created: 2026-11-01
 ---
@@ -50,5 +50,17 @@ it was made from.
 - [ ] Germline workflow on the devbox: from the cohort VCF, walk back to
       the reference by CID alone.
 - [ ] Docs: `docs/architecture/types.md` lists the link fields.
+
+## Plan
+
+On `feat/provenance-on-every-output`. The public tier's cap decides the shape: `asset` and `_owner` leave a type 7 fields, and `Alignment` and `Variants` both have 7 today, so each link takes the place of something.
+
+- **`Alignment`:** `r1_cid` becomes `source_cid`, the CID of what the BAM was made from: the R1 reads for an aligner's output, the alignment before it for every later step (the name scRNA's `AnnData` already uses). `reference_cid` is carried through every step, so `assemble(reference_cid=…)` finds every BAM made against a reference.
+- **`Variants`:** `sample_count` goes (it's `len(source_samples)`), and `source_cids` takes its place, a list: the alignment for a GVCF, the GVCFs for a combined or joint-called file, the VCF for a VQSR-filtered one. No `reference_cid`: there's no room, and the reference is one walk away through the alignment. `build` stays as the key people query by.
+- **Tasks:** `sort_sam` and `mark_duplicates` set `source_cid=alignment.cid` and carry `reference_cid`; `merge_bam_alignment` and `apply_bqsr` set `source_cid` and `reference_cid=ref.cid`; `haplotype_caller`, `combine_gvcfs`, `joint_call_gvcfs` and `apply_vqsr` set `source_cids`.
+- **Tests:** each task's test file gets a test that stores its input (with its index as a companion where the tool needs one), runs the task and checks the link, by `assemble(source_cid=…)` for alignments. The devbox germline test walks from the cohort's VCF to the reference by CID.
+- **Docs:** `docs/architecture/types.md`, the diagram in `docs/index.md`.
+
+Blast radius: stored records keep their `r1_cid` and `sample_count` as extra keyvalues, which a typed asset carries in `keyvalues`. The community repo's `germline/short-variant-discovery.py` reads `cohort.sample_count` and needs `len(cohort.source_samples)` before the catalog moves to a release with this (ticket [[community-kernel-headers]] is editing it anyway). A cohort's `source_cids` grows with its GVCFs, as `source_samples` does; a public record's value limit hasn't been measured against a large cohort.
 
 Related: [[board]].
