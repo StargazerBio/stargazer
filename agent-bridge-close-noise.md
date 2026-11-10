@@ -1,6 +1,6 @@
 ---
 title: agent-bridge-close-noise
-status: review
+status: done
 priority: low
 created: 2026-10-30
 pr: 142
@@ -47,5 +47,9 @@ BRIDGE-DROP: a panel client that drops its connection leaves no traceback in the
    ```
 
 3. `docker logs sg 2>&1 | grep -c "Exception in ASGI application"`. Passes: 0. Fails as on `main`: 1, ending in `starlette.websockets.WebSocketDisconnect`.
+
+## Outcome
+
+PR 142 merged 2026-11-10 with no review comments. Shipped: `agent_bridge` closes under `suppress(RuntimeError, WebSocketDisconnect)`, with a unit test of a client that drops mid-session. Verified by the unit tier and a dropped client against an image run locally with the branch's `proxy.py` mounted (see Evidence). Nothing left.
 
 Related: [[agent-mcp]], [[marimo-terminal]], [[board]].
