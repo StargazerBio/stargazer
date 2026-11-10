@@ -1,6 +1,6 @@
 ---
 title: reuse-reference-companions
-status: review
+status: done
 priority: normal
 created: 2026-11-01
 pr: 139
@@ -83,5 +83,9 @@ REUSE-COMPANIONS: a germline run on a reference that already has its `.fai`, `.d
    ```
 
    Passes: no action is `gatk.samtools_faidx`, `gatk.create_sequence_dictionary` or `gatk.bwa_mem2_index`, and the test's cohort VCF checks pass. Fails as on `main`: the three are children of `gatk.prepare_reference`.
+
+## Outcome
+
+PR 139 merged 2026-11-10. Shipped: `prepare_reference` fetches the reference, which brings its companions in beside it, and runs only the index tasks whose files didn't arrive. The review asked that the workflow not call the storage client, which the second commit answered. Verified by the unit tier and two devbox germline runs on an empty store: the first built the indexes (11 actions), the second reused them (8). Left: a publisher's public index wasn't driven end to end; `prepare_reference`'s pod now downloads the reference to see its companions, unmeasured on a full genome.
 
 Related: [[board]].
