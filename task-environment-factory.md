@@ -1,6 +1,6 @@
 ---
 title: task-environment-factory
-status: review
+status: done
 priority: normal
 created: 2026-11-09
 pr: 147
@@ -44,4 +44,8 @@ Left out of PR 147: the one list of domains. `IMAGES` in `cli/docker_task_tests.
 - Unit tier, then the tasks tier (`pixi run python cli/docker_task_tests.py`), which builds both images from the new `env.py` files.
 - A tutorial notebook's task dispatched "On the cluster" on the devbox stores its output where the next cell's `assemble()` finds it.
 
-Related: [[board]], [[asset-core-tidy]], [[lean-task-bodies]], [[flyte-images]].
+## Outcome
+
+Not shipped. PR 147 was closed unmerged on 2026-11-10: the factories hid Flyte's own constructor, and only protected authors who used them. The direction that replaced them is a bare `flyte.TaskEnvironment`, with the pod's variables on the project's settings (ticket `project-pod-env-vars`) and a loud failure when a Stargazer task is missing what it needs (ticket `bare-task-environments`). The branch `refactor/task-environment-factory` is still on origin. The one list of domains for the `cli/` scripts has no ticket; it waits for a third domain.
+
+Related: [[board]], [[asset-core-tidy]], [[project-pod-env-vars]], [[bare-task-environments]], [[lean-task-bodies]], [[flyte-images]].
