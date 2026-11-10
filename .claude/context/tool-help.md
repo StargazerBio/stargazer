@@ -19,10 +19,10 @@ The aligners and samtools, also in `gatk_env`'s image:
 | Tool | Help | Stargazer tasks |
 |------|------|-----------------|
 | bwa | [[bwa]] | `bwa_index`, `bwa_mem` |
-| bwa-mem2 | not captured | `bwa_mem2_index`, `bwa_mem2_mem` |
+| bwa-mem2 | [[bwa-mem2]] | `bwa_mem2_index`, `bwa_mem2_mem` |
 | samtools faidx | [[samtools-faidx]] | `samtools_faidx` |
 
-Their tasks are in `src/stargazer/tasks/general/`. The bwa and samtools pages are the tools' manuals rather than `--help` output.
+Their tasks are in `src/stargazer/tasks/general/`. The bwa and samtools pages are the tools' manuals rather than `--help` output, and the bwa-mem2 page is what its commands print when run with no arguments, since it has no `--help`.
 
 ## Capturing more
 
