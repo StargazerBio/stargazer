@@ -1,8 +1,9 @@
 ---
 title: asset-core-tidy
-status: doing
+status: review
 priority: normal
 created: 2026-11-09
+pr: 146
 ---
 
 The asset base has three small pieces of accidental shape, found in a review of the core (2026-11-09). None changes what an asset is; each removes a second way of saying one thing.
@@ -15,12 +16,16 @@ The asset base has three small pieces of accidental shape, found in a review of 
 
 On `refactor/asset-core-tidy`.
 
-- [ ] `assets/asset.py` holds the registry and both functions: a module-level `ASSET_REGISTRY: dict[str, type[Asset]] = {}` that `__init_subclass__` fills, then `specialize()` and `build_asset()` moved over unchanged. `Asset._registry` goes. `assets/__init__.py` re-exports the same names, so `from stargazer.assets import ASSET_REGISTRY, build_asset, specialize` still works (the infra dashboard and the assets tutorial import them from there). The lazy `from stargazer.assets import specialize` lines in `fetch()` and `assemble()` go; the lazy `stargazer.utils.storage` import stays, since storage imports `Asset`.
-- [ ] `Asset.to_dict()` returns the record shape: `{"cid", "uri", "name", "keyvalues"}`, `uri` being `self.path.path` or `None`. `from_dict()` is deleted: `specialize(asset.to_dict())` is the round trip. Tests in `tests/assets/test_asset.py`'s `TestDict` are rewritten for that: the shape, a typed asset, a bare one and an empty one each round-tripping through `specialize`.
-- [ ] `stargazer.__version__` is `importlib.metadata.version("stargazer-bio")`.
-- [ ] Docs: `docs/architecture/types.md` (the `to_dict()` / `from_dict()` line) and `docs/architecture/mcp-server.md` if it names the `path` key.
+- [x] `assets/asset.py` holds the registry and both functions: a module-level `ASSET_REGISTRY: dict[str, type[Asset]] = {}` that `__init_subclass__` fills, then `specialize()` and `build_asset()` moved over unchanged. `Asset._registry` goes. `assets/__init__.py` re-exports the same names, so `from stargazer.assets import ASSET_REGISTRY, build_asset, specialize` still works (the infra dashboard and the assets tutorial import them from there). The lazy `from stargazer.assets import specialize` lines in `fetch()` and `assemble()` go; the lazy `stargazer.utils.storage` import stays, since storage imports `Asset`.
+- [x] `Asset.to_dict()` returns the record shape: `{"cid", "uri", "name", "keyvalues"}`, `uri` being `self.path.path` or `None`. `from_dict()` is deleted: `specialize(asset.to_dict())` is the round trip. Tests in `tests/assets/test_asset.py`'s `TestDict` are rewritten for that: the shape, a typed asset, a bare one and an empty one each round-tripping through `specialize`.
+- [x] `stargazer.__version__` is `importlib.metadata.version("stargazer-bio")`.
+- [x] Docs: `docs/architecture/types.md` (the `to_dict()` / `from_dict()` line) and `docs/architecture/mcp-server.md` if it names the `path` key.
 
 Assumptions made instead of asked: the MCP wire shape may change without a compatibility shim (project rule); `to_dict` keeps its name because `marshal_output` duck-types on it.
+
+## Evidence (2026-11-09)
+
+Typed by a cheap worker from the plan, diff read in full. `TestDict` failed first on `main`'s code (`KeyError: 'uri'`), then 182 passed across `tests/assets`, `tests/unit` and `tests/notebooks`. On an isolated store, MCP's `upload_file` and `query_files` return the same keys and equal `uri`s. `__version__` is `2026.10.30`. `docs/architecture/mcp-server.md` names no `path` key, so it's unchanged (all measured).
 
 ## Verification recipe
 
