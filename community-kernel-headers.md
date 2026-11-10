@@ -1,10 +1,8 @@
 ---
 title: community-kernel-headers
-status: backlog
+status: next
 priority: normal
 created: 2026-11-09
-blocked_by:
-  - run-modes
 ---
 
 The community notebooks' headers, brought in line with ticket [[run-modes]]: a header lists what the notebook runs on this machine, an SDK task's packages and tools included. A PR in StargazerBio/community-notebooks, then the catalog's pins move to it.
