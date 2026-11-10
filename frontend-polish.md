@@ -14,7 +14,7 @@ A running list of rough edges found while using Stargazer the way a user would: 
 ## Notebooks
 
 ## Docs
-- switch Architecture and Guides in the nav
+- [x] switch Architecture and Guides in the nav (PR 140)
 - 
 
 Related: [[board]].
