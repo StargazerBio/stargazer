@@ -32,15 +32,13 @@ A hosted notebook works the same way: *On this machine* is its pod.
 
 ## On the cluster
 
-Every task runs in a pod of its own, on its environment's image. An SDK task's image is built from its domain's header and lock. Your notebook's own tasks run on an image built from your notebook's header when their environment uses `notebook_image(__file__, ...)`, as the template's does:
+Every task runs in a pod of its own, on its environment's image. An SDK task's image is built from its domain's header and lock. Your notebook's own tasks run on an image built from your notebook's header when their environment comes from `notebook_task_environment(__file__, ...)`, as the template's does:
 
 ```python
-my_env = flyte.TaskEnvironment(
-    name="my-tasks",
-    image=notebook_image(__file__, "my-tasks"),
+my_env = notebook_task_environment(
+    __file__,
+    "my-tasks",
     resources=flyte.Resources(cpu=1, memory="512Mi"),
-    env_vars=STARGAZER_ENV_VARS,
-    secrets=STARGAZER_SECRETS,
 )
 ```
 

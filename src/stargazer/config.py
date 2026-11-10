@@ -8,7 +8,8 @@ Also what every task environment shares: the platform its image is built
 for, the variables and secrets forwarded into its pods, and the image
 recipes: a domain's tasks build from its `env.py`'s header
 (`task_image()`), and a notebook's own tasks from the notebook's header
-(`notebook_image()`).
+(`notebook_image()`). `task_environment()` and `notebook_task_environment()`
+put them together, so an environment gets all of it in one call.
 The environments themselves live in their domains' `env.py`
 (`stargazer.tasks.scrna.env`, `stargazer.tasks.gatk.env`).
 
@@ -332,3 +333,44 @@ def notebook_image(notebook: str | Path, name: str) -> flyte.Image:
     if not _checkout():
         return image.with_pip_packages(f"stargazer-bio=={version('stargazer-bio')}")
     return _with_source(image)
+
+
+def _environment(name: str, image: flyte.Image, kwargs: dict) -> flyte.TaskEnvironment:
+    """A TaskEnvironment on `image` with what every Stargazer pod needs.
+
+    The forwarded variables (where the store and index are, the owner) and
+    the secrets (the public tier's key, the project's API key) are what let
+    a pod read its inputs and store its outputs where the next one finds
+    them. A caller's own `env_vars` and `secrets` are added; the shared
+    variables win, so a pod resolves them like the submitter.
+    """
+    return flyte.TaskEnvironment(
+        name=name,
+        image=image,
+        env_vars={**kwargs.pop("env_vars", {}), **STARGAZER_ENV_VARS},
+        secrets=[*STARGAZER_SECRETS, *kwargs.pop("secrets", [])],
+        **kwargs,
+    )
+
+
+def task_environment(env: str | Path, **kwargs) -> flyte.TaskEnvironment:
+    """A domain's task environment, named after its directory, on `task_image(env)`.
+
+    `env` is the domain's `env.py` (its `__file__`). `kwargs` are
+    `flyte.TaskEnvironment`'s own: `description`, `resources` and the rest.
+    """
+    env = Path(env)
+    return _environment(env.parent.name, task_image(env), kwargs)
+
+
+def notebook_task_environment(
+    notebook: str | Path, name: str, **kwargs
+) -> flyte.TaskEnvironment:
+    """The environment a notebook's own tasks run in, on an image built from its header.
+
+    `notebook` is the notebook's file (its `__file__`) and `name` the
+    environment's; the image (`notebook_image()`) is named `stargazer-<name>`.
+    `kwargs` are `flyte.TaskEnvironment`'s own.
+    """
+    image = notebook_image(notebook, f"stargazer-{name}")
+    return _environment(name, image, kwargs)

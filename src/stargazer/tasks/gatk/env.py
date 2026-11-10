@@ -29,16 +29,13 @@ spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 
 import flyte
 
-from stargazer.config import STARGAZER_ENV_VARS, STARGAZER_SECRETS, task_image
+from stargazer.config import task_environment
 
-gatk_env = flyte.TaskEnvironment(
-    name="gatk",
+gatk_env = task_environment(
+    __file__,
     description="GATK, BWA, and samtools alignment and variant-calling workloads",
-    image=task_image(__file__),
     # A 1Gi request: the germline workflow holds three gatk_env pods at once
     # (workflow, prepare_reference or preprocess_sample, the tool), and three
     # 2Gi requests don't fit the devbox node beside a dashboard.
     resources=flyte.Resources(memory=("1Gi", "6Gi")),
-    env_vars=STARGAZER_ENV_VARS,
-    secrets=STARGAZER_SECRETS,
 )

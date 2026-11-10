@@ -30,14 +30,11 @@ spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 
 import flyte
 
-from stargazer.config import STARGAZER_ENV_VARS, STARGAZER_SECRETS, task_image
+from stargazer.config import task_environment
 
 # Memory-hungry at runtime because scanpy loads full AnnData objects into RAM.
-scrna_env = flyte.TaskEnvironment(
-    name="scrna",
+scrna_env = task_environment(
+    __file__,
     description="scanpy-based single-cell RNA analysis; memory-intensive AnnData workloads",
-    image=task_image(__file__),
     resources=flyte.Resources(memory=("2Gi", "6Gi")),
-    env_vars=STARGAZER_ENV_VARS,
-    secrets=STARGAZER_SECRETS,
 )

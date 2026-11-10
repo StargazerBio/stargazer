@@ -43,11 +43,7 @@ with app.setup:
     import marimo as mo
 
     from stargazer.assets.asset import Asset
-    from stargazer.config import (
-        STARGAZER_ENV_VARS,
-        STARGAZER_SECRETS,
-        notebook_image,
-    )
+    from stargazer.config import notebook_task_environment
     from stargazer.notebooks import notebook_env
 
     # TODO: the dashboard tile's blurb.
@@ -67,12 +63,10 @@ with app.setup:
     # above, so what your cells install while you experiment is what your
     # tasks get on the cluster; a cluster pod imports this notebook to find
     # them. Set their resources here.
-    my_env = flyte.TaskEnvironment(
-        name="template",
-        image=notebook_image(__file__, "stargazer-template"),
+    my_env = notebook_task_environment(
+        __file__,
+        "template",
         resources=flyte.Resources(cpu=1, memory="512Mi"),
-        env_vars=STARGAZER_ENV_VARS,
-        secrets=STARGAZER_SECRETS,
     )
 
 

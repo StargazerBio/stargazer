@@ -42,23 +42,17 @@ with app.setup:
     import marimo as mo
 
     from stargazer.assets.asset import Asset
-    from stargazer.config import (
-        STARGAZER_ENV_VARS,
-        STARGAZER_SECRETS,
-        notebook_image,
-    )
+    from stargazer.config import notebook_task_environment
     from stargazer.notebooks.tutorials.assets import SampleSheet
 
     # Declared in the setup block so `summarize_cohort` can use it and stay
     # importable. A cluster pod imports this module to find the task, on an
     # image built from the header above.
-    tutorial_env = flyte.TaskEnvironment(
-        name="tutorial",
+    tutorial_env = notebook_task_environment(
+        __file__,
+        "tutorial",
         description="Lightweight env for the tutorial notebooks.",
-        image=notebook_image(__file__, "stargazer-tutorial"),
         resources=flyte.Resources(cpu=1, memory="512Mi"),
-        env_vars=STARGAZER_ENV_VARS,
-        secrets=STARGAZER_SECRETS,
     )
 
 
@@ -163,9 +157,11 @@ def _():
 
         We declare a minimal `tutorial_env` in this notebook's setup
         block so it's importable — `summarize_cohort` is decorated with
-        it, and the later tutorials import the same env. Its image is
-        built from this notebook's own header (`notebook_image`), so what
-        the notebook installs is what its tasks get on a cluster.
+        it, and the later tutorials import the same env.
+        `notebook_task_environment` builds its image from this notebook's
+        own header, so what the notebook installs is what its tasks get on
+        a cluster, and forwards the storage settings and secrets its pods
+        need.
         """
     )
 
