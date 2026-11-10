@@ -40,7 +40,7 @@ Subclasses declare `_asset_key`, a unique string naming the kind, plus typed dat
 
 - `fetch()` — downloads self, then every companion into the same directory; returns the local path
 - `update(path, **kwargs)` — sets the given attributes, stores the file, and sets `cid` and `path`
-- `to_dict()` / `from_dict()` — JSON serialization
+- `to_dict()` — the asset as a storage record (`cid`, `uri`, `name`, `keyvalues`), the shape `specialize()` reads
 - `declared_fields()` — the names of the fields a type declares
 
 See the [Catalog](../reference/catalog.md#asset-types) for every registered asset type.

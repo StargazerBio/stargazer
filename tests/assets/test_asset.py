@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from conftest import FakePublicTier
 
+from stargazer.assets import specialize
 from stargazer.assets.alignment import Alignment
 from stargazer.assets.asset import Asset
 from stargazer.assets.reads import R1
@@ -104,17 +105,22 @@ class TestTypedExtras:
 
 
 class TestDict:
-    """`to_dict()` / `from_dict()`, the shape assets cross the MCP wire in."""
+    """`to_dict()` is the storage record shape, which `specialize()` reads back."""
 
-    def test_to_dict_shape(self):
+    def test_to_dict_is_the_record_shape(self):
         data = Alignment(
             cid="abc123", path=Path("/tmp/file.bam"), sample_id="S1"
         ).to_dict()
-        assert (data["cid"], data["path"]) == ("abc123", "/tmp/file.bam")
+        assert set(data) == {"cid", "uri", "name", "keyvalues"}
+        assert (data["cid"], data["uri"], data["name"]) == (
+            "abc123",
+            "/tmp/file.bam",
+            "file.bam",
+        )
         assert data["keyvalues"]["sample_id"] == "S1"
         assert data["keyvalues"]["asset"] == "alignment"
 
-    def test_typed_asset_round_trips(self):
+    def test_typed_asset_round_trips_through_specialize(self):
         original = Alignment(
             cid="bafyA",
             path=Path("/tmp/test.bam"),
@@ -122,23 +128,30 @@ class TestDict:
             duplicates_marked=True,
             keyvalues={"lane": "3"},
         )
-        restored = Alignment.from_dict(original.to_dict())
+        restored = specialize(original.to_dict())
+        assert type(restored) is Alignment
         assert restored.to_keyvalues() == original.to_keyvalues()
-        assert (restored.cid, restored.path) == ("bafyA", original.path)
+        assert (restored.cid, restored.path.path, restored.path.name) == (
+            "bafyA",
+            "/tmp/test.bam",
+            "test.bam",
+        )
 
-    def test_bare_asset_round_trips(self):
+    def test_bare_asset_round_trips_through_specialize(self):
         original = Asset(
             cid="bafy456",
             path=Path("/tmp/sheet.tsv"),
             keyvalues={"asset": "sample_sheet", "sequencer": "novaseq"},
         )
-        restored = Asset.from_dict(original.to_dict())
+        restored = specialize(original.to_dict())
+        assert type(restored) is Asset
         assert restored.keyvalues == original.keyvalues
-        assert (restored.cid, restored.path) == (original.cid, original.path)
+        assert (restored.cid, restored.path.path) == ("bafy456", "/tmp/sheet.tsv")
 
-    def test_empty_asset_round_trips_without_a_path(self):
-        restored = Asset.from_dict(Asset().to_dict())
-        assert (restored.cid, restored.path) == ("", None)
+    def test_empty_asset_has_no_uri(self):
+        data = Asset().to_dict()
+        assert (data["cid"], data["uri"], data["name"]) == ("", None, None)
+        assert specialize(data).path is None
 
 
 class TestFetch:
