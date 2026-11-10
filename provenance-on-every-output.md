@@ -1,6 +1,6 @@
 ---
 title: provenance-on-every-output
-status: review
+status: done
 priority: normal
 created: 2026-11-01
 pr: 145
@@ -73,5 +73,9 @@ PR 145. Unit tier 281 passed; tasks tier (`tests/tasks/gatk tests/tasks/general`
 LINEAGE: from a cohort's VCF, CID links alone lead to its reads and its reference.
 
 With the devbox up and `FLYTE_IMAGE_REGISTRY=localhost:30000`, from the worktree (its `.flyte` linked): `pixi run pytest -m devbox tests/devbox/test_germline.py`. Passes: `test_cohort_vcf_walks_back_to_its_reference` passes. Fails as on `main`: the VCF has no `source_cids`.
+
+## Outcome
+
+PR 145 merged 2026-11-10 with no review comments. Shipped: `Alignment.source_cid` and a carried `reference_cid`, `Variants.source_cids` in place of `sample_count`, set by every GATK task. Verified by the unit and tasks tiers and the devbox germline test's walk from the cohort's VCF to its reference (see Evidence). Left: the community repo's `germline/short-variant-discovery.py` still reads `cohort.sample_count`, to change with [[community-kernel-headers]]; a public record's value limit against a large cohort's `source_cids` is unmeasured.
 
 Related: [[board]].

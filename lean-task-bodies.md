@@ -4,9 +4,7 @@ status: backlog
 priority: normal
 created: 2026-11-09
 blocked_by:
-  - provenance-on-every-output
   - reuse-reference-companions
-  - untested-tasks
 ---
 
 A task body should read as: fetch inputs, run the tool, store the output. Today each of the ~25 tasks carries the same ceremony around those three lines, found in a review of the core (2026-11-09; counts are `grep` over `src/stargazer/tasks`):

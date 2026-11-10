@@ -1,6 +1,6 @@
 ---
 title: untested-tasks
-status: review
+status: done
 priority: normal
 created: 2026-11-01
 pr: 140
@@ -23,5 +23,9 @@ On `test/untested-tasks`. Tests only, all in the tasks tier, so each runs in its
 ## Evidence (2026-11-09)
 
 `pixi run python cli/docker_task_tests.py` on the four files: 6 passed in the gatk image, 2 passed in the scrna image (measured). Tests of existing behavior, so none was seen failing first.
+
+## Outcome
+
+PR 140 merged 2026-11-10 with no review comments. Shipped: tasks-tier tests for `bwa_mem`, `bwa_mem2_mem`, `index_feature_file` and `scrna_clustering_pipeline`. Verified by the tasks tier in its images (6 passed in gatk's, 2 in scrna's, measured 2026-11-09). Nothing left.
 
 Related: [[board]].
