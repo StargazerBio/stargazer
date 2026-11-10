@@ -326,6 +326,33 @@ def test_agent_bridge_closes_when_the_agent_exits(owner_client, monkeypatch):
         ws.receive_text()
 
 
+class _DroppedPanel:
+    """A panel connection whose client hung up without a close frame."""
+
+    async def accept(self) -> None:
+        """Accept, as starlette's WebSocket does."""
+
+    async def receive(self) -> dict:
+        """The disconnect message starlette hands over when the client is gone."""
+        return {"type": "websocket.disconnect", "code": 1006}
+
+    async def send_text(self, text: str) -> None:
+        """Drop what the agent prints."""
+
+    async def close(self, code: int = 1000) -> None:
+        """Raise as starlette does on a socket the client already dropped."""
+        raise WebSocketDisconnect(code=1006)
+
+
+async def test_agent_bridge_returns_when_the_panel_hung_up(monkeypatch):
+    """A client that drops the connection ends the bridge without an error."""
+    monkeypatch.setitem(
+        proxy.AGENT_COMMANDS, "claude", [sys.executable, "-c", _FAKE_AGENT]
+    )
+
+    await proxy.agent_bridge(_DroppedPanel(), "claude")
+
+
 # ---------------------------------------------------------------------------
 # Forwarding path — HTML injection, streaming, query passthrough
 # ---------------------------------------------------------------------------

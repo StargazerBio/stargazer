@@ -94,6 +94,7 @@ import websockets
 from fastapi import FastAPI, Request, Response, WebSocket
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from starlette.background import BackgroundTask
+from starlette.websockets import WebSocketDisconnect
 
 MARIMO_HOST = "127.0.0.1"
 MARIMO_HTTP_PORT = 8081
@@ -729,7 +730,7 @@ async def agent_bridge(websocket: WebSocket, name: str) -> None:
         if agent.returncode is None:
             agent.kill()
         await agent.wait()
-        with suppress(RuntimeError):
+        with suppress(RuntimeError, WebSocketDisconnect):
             await websocket.close()
 
 
