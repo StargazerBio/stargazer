@@ -26,7 +26,8 @@ async def mark_duplicates(alignment: Alignment) -> Alignment:
         alignment: Input BAM asset (should be coordinate sorted)
 
     Returns:
-        Alignment asset with duplicates marked
+        Alignment asset with duplicates marked, linked to its input alignment
+        and reference
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037052812-MarkDuplicates-Picard
@@ -66,6 +67,8 @@ async def mark_duplicates(alignment: Alignment) -> Alignment:
         duplicates_marked=True,
         bqsr_applied=alignment.bqsr_applied,
         tool="gatk_mark_duplicates",
+        reference_cid=alignment.reference_cid,
+        source_cid=alignment.cid,
     )
 
     # Picard names the index <name>.bai, not <name>.bam.bai.

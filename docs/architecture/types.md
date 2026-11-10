@@ -53,6 +53,8 @@ A companion is a file a tool expects beside another, such as an index or a seque
 
 `companion_of` is the only link `fetch()` follows. Fields like `reference_cid` and `source_cid` are provenance: `assemble(reference_cid=…)` finds every alignment made against a reference, and `fetch()` leaves them behind.
 
+Every task output records what it was made from. An `Alignment` records its `source_cid` (the reads, or the alignment before it) and its `reference_cid`. A `Variants` records its `source_cids` (the alignment, or the GVCFs or VCF it was made from). From a cohort's VCF, the links lead back through each BAM to the reads and the reference.
+
 ## Assembly
 
 `assemble(**filters)` queries the asset graph by keyvalue, deduplicates by CID, and returns a flat `list[Asset]` of specialized subclass instances. Every filter must match exactly; a list value matches any of its entries. Workflows filter the result with `isinstance` to pick out the types they need ([Writing a Workflow](../guides/writing-a-workflow.md)).

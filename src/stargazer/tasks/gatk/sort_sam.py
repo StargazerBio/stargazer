@@ -26,7 +26,8 @@ async def sort_sam(
         sort_order: Sort order - one of "coordinate", "queryname", "duplicate"
 
     Returns:
-        Alignment asset with sorted BAM file
+        Alignment asset with the sorted BAM, linked to its input alignment
+        and reference
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037056932-SortSam-Picard
@@ -69,6 +70,8 @@ async def sort_sam(
         duplicates_marked=alignment.duplicates_marked,
         bqsr_applied=alignment.bqsr_applied,
         tool="gatk_sort_sam",
+        reference_cid=alignment.reference_cid,
+        source_cid=alignment.cid,
     )
 
     if sort_order == "coordinate":

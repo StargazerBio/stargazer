@@ -55,6 +55,7 @@ async def test_apply_vqsr_uses_a_model_built_in_another_pod(
 
     filtered = await apply_vqsr(vcf=vcf, ref=ref, vqsr_model=model)
 
+    assert filtered.source_cids == [vcf.cid]
     lines = (await filtered.fetch()).read_text().splitlines()
     filters = Counter(line.split("\t")[6] for line in lines if line[0] != "#")
     assert filters == {".": 25, "PASS": 7, "VQSRTrancheINDEL90.00to100.00": 14}

@@ -39,7 +39,7 @@ async def joint_call_gvcfs(
         cohort_id: Sample ID label for the output VCF (default: "cohort")
 
     Returns:
-        Joint-genotyped Variants asset (VCF)
+        Joint-genotyped Variants asset (VCF), linked to the input GVCFs
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360035535932
@@ -115,8 +115,8 @@ async def joint_call_gvcfs(
         caller="joint_call_gvcfs",
         variant_type="vcf",
         build=ref.build,
-        sample_count=len(source_samples),
         source_samples=source_samples,
+        source_cids=[g.cid for g in gvcfs],
     )
 
     idx_path = output_dir / f"{output_vcf.name}.idx"

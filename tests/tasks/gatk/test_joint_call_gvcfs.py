@@ -5,7 +5,7 @@ Tests for joint_call_gvcfs task.
 import pytest
 from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
 
-from stargazer.assets import Reference, Variants
+from stargazer.assets import Reference, Variants, VariantsIndex
 from stargazer.tasks.gatk.joint_call_gvcfs import joint_call_gvcfs
 
 
@@ -28,3 +28,26 @@ async def test_joint_call_gvcfs_defaults_to_every_contig():
     records = [line.split("\t") for line in lines if not line.startswith("#")]
     assert header.split("\t")[9:] == ["NA12829"]
     assert {r[0] for r in records} == {"chr17:7658421-7697490"}
+
+
+async def test_joint_call_gvcfs_links_its_output_to_its_input_gvcfs():
+    """The joint-called VCF records the GVCF it was made from."""
+    gvcf = Variants()
+    await gvcf.update(
+        GATK_FIXTURES_DIR / "NA12829_TP53.g.vcf",
+        sample_id="NA12829",
+        caller="haplotypecaller",
+        variant_type="gvcf",
+        build="GRCh38",
+    )
+    await VariantsIndex().update(
+        GATK_FIXTURES_DIR / "NA12829_TP53.g.vcf.idx",
+        sample_id="NA12829",
+        companion_of=gvcf.cid,
+    )
+    ref = Reference(path=GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
+
+    result = await joint_call_gvcfs(gvcfs=[gvcf], ref=ref, cohort_id="cohort")
+
+    assert gvcf.cid != ""
+    assert result.source_cids == [gvcf.cid]

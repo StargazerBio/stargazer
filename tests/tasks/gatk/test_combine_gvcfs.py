@@ -5,7 +5,7 @@ Tests for combine_gvcfs task.
 import pytest
 from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
 
-from stargazer.assets import Reference, Variants
+from stargazer.assets import Reference, Variants, VariantsIndex
 from stargazer.tasks.gatk.combine_gvcfs import combine_gvcfs
 
 SAMPLE_GVCFS = {
@@ -47,7 +47,7 @@ async def test_combine_gvcfs_merges_samples():
     assert result.sample_id == "test_family"
     assert result.variant_type == "gvcf"
     assert result.caller == "combine_gvcfs"
-    assert result.sample_count == 3
+    assert len(result.source_samples) == 3
     assert set(result.source_samples) == set(sample_ids)
     assert result.path is not None
     assert (await result.fetch()).exists()
@@ -88,5 +88,31 @@ async def test_combine_gvcfs_single_sample():
 
     assert isinstance(result, Variants)
     assert result.variant_type == "gvcf"
-    assert result.sample_count == 1
+    assert len(result.source_samples) == 1
     assert result.source_samples == [sample_id]
+
+
+async def test_combine_gvcfs_links_its_output_to_its_input_gvcf():
+    """The combined GVCF records the GVCF it was made from."""
+    sample_id = "NA12829"
+
+    gvcf = Variants()
+    await gvcf.update(
+        GATK_FIXTURES_DIR / "NA12829_TP53.g.vcf",
+        sample_id=sample_id,
+        caller="haplotypecaller",
+        variant_type="gvcf",
+        build="GRCh38",
+    )
+    await VariantsIndex().update(
+        GATK_FIXTURES_DIR / "NA12829_TP53.g.vcf.idx",
+        sample_id=sample_id,
+        companion_of=gvcf.cid,
+    )
+
+    result = await combine_gvcfs(
+        gvcfs=[gvcf], ref=make_ref(), cohort_id="linked_cohort"
+    )
+
+    assert gvcf.cid != ""
+    assert result.source_cids == [gvcf.cid]

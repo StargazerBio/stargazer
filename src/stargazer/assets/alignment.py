@@ -14,9 +14,11 @@ from stargazer.assets.asset import Asset
 class Alignment(Asset):
     """BAM/CRAM alignment file asset.
 
-    Carries reference_cid and r1_cid for provenance (PROV entity derivation).
-    The format is the file name's extension. Fields are kept to what fits a
-    new public file's 9 metadata keys with the asset type and owner.
+    `source_cid` is the CID of the asset this BAM was made from: the R1 reads
+    for an aligner's output, the input alignment for every later step.
+    `reference_cid` is carried through every step. The format is the file
+    name's extension. Fields are kept to what fits a new public file's 9
+    metadata keys with the asset type and owner.
     """
 
     _asset_key: ClassVar[str] = "alignment"
@@ -26,7 +28,7 @@ class Alignment(Asset):
     bqsr_applied: bool = False
     tool: str = ""
     reference_cid: str = ""
-    r1_cid: str = ""
+    source_cid: str = ""
 
 
 @dataclass

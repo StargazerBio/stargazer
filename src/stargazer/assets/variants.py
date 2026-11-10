@@ -12,7 +12,13 @@ from stargazer.assets.asset import Asset
 
 @dataclass
 class Variants(Asset):
-    """VCF/GVCF variant call file asset."""
+    """VCF/GVCF variant call file asset.
+
+    `source_cids` names what it was made from: the alignment for a
+    single-sample GVCF, the input GVCFs for a combined GVCF or joint-called
+    VCF, the input VCF for a VQSR-filtered one. The sample count is
+    `len(source_samples)`.
+    """
 
     _asset_key: ClassVar[str] = "variants"
     sample_id: str = ""
@@ -20,8 +26,8 @@ class Variants(Asset):
     variant_type: str = ""
     build: str = ""
     vqsr_mode: str = ""
-    sample_count: int = 0
     source_samples: list = None
+    source_cids: list = None
 
 
 @dataclass

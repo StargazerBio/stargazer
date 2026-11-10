@@ -5,7 +5,7 @@ Tests for sort_sam task.
 import pytest
 from conftest import GATK_FIXTURES_DIR
 
-from stargazer.assets import Alignment
+from stargazer.assets import Alignment, assemble
 from stargazer.tasks.gatk.sort_sam import sort_sam
 
 
@@ -31,6 +31,27 @@ async def test_sort_sam_sorts_bam():
     assert bam.exists()
     # Downstream tools read the index from beside the BAM.
     assert (bam.parent / "NA12829_TP53_merged_sorted_coordinate.bai").exists()
+
+
+async def test_sort_sam_links_its_output_to_its_input():
+    """The sorted BAM records the BAM it was made from and its reference."""
+    alignment = Alignment()
+    await alignment.update(
+        GATK_FIXTURES_DIR / "NA12829_TP53_merged.bam",
+        sample_id="NA12829_TP53_merged",
+        tool="bwa_mem",
+        reference_cid="bafyreference",
+    )
+
+    sorted_bam = await sort_sam(alignment=alignment, sort_order="coordinate")
+
+    assert alignment.cid != ""
+    assert (sorted_bam.source_cid, sorted_bam.reference_cid) == (
+        alignment.cid,
+        "bafyreference",
+    )
+    found = await assemble(asset="alignment", source_cid=alignment.cid)
+    assert [a.cid for a in found] == [sorted_bam.cid]
 
 
 @pytest.mark.asyncio

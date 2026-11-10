@@ -43,7 +43,7 @@ async def apply_vqsr(
         truth_sensitivity_filter_level: VQSLOD filter threshold (optional)
 
     Returns:
-        Variants asset with VQSR-filtered VCF
+        Variants asset with the VQSR-filtered VCF, linked to the input VCF
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360035531612-Variant-Quality-Score-Recalibration-VQSR
@@ -106,8 +106,8 @@ async def apply_vqsr(
         variant_type="vcf",
         vqsr_mode=mode,
         build=ref.build,
-        sample_count=len(source_samples),
         source_samples=source_samples,
+        source_cids=[vcf.cid],
     )
 
     idx_path = output_dir / f"{output_vcf.name}.idx"

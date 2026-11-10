@@ -55,3 +55,32 @@ def test_cohort_vcf_found_from_another_pod(cohort, devbox_run):
     assert got["samples"] == [pod_tasks.SAMPLE_ID]
     assert got["contigs"] == ["chr17:7658421-7697490"]
     assert got["records"] > 0
+
+
+def test_cohort_vcf_walks_back_to_its_reference(cohort, index_query):
+    """From the cohort's VCF, CID links alone lead to the reference it was called against."""
+    _, vcf = cohort
+
+    # One query: each call opens its own port-forward.
+    by_cid = {
+        row["cid"]: row
+        for row in index_query({"asset": ["variants", "alignment", "r1", "reference"]})
+    }
+    (gvcf_cid,) = vcf.source_cids
+    (alignment_cid,) = json.loads(by_cid[gvcf_cid]["keyvalues"]["source_cids"])
+
+    tools = []
+    reference_cids = set()
+    kv = by_cid[alignment_cid]["keyvalues"]
+    while kv["asset"] == "alignment":
+        tools.append(kv["tool"])
+        reference_cids.add(kv["reference_cid"])
+        kv = by_cid[kv["source_cid"]]["keyvalues"]
+
+    assert tools == ["gatk_mark_duplicates", "gatk_sort_sam", ""]
+    assert kv["asset"] == "r1"
+    assert len(reference_cids) == 1
+    (reference_cid,) = reference_cids
+    assert reference_cid
+    assert by_cid[reference_cid]["keyvalues"]["asset"] == "reference"
+    assert by_cid[reference_cid]["keyvalues"]["build"] == pod_tasks.BUILD

@@ -28,8 +28,8 @@ async def apply_bqsr(
         bqsr_report: Recalibration table from base_recalibrator
 
     Returns:
-        Alignment asset with recalibrated BAM file; its index is stored as an
-        AlignmentIndex
+        Alignment asset with the recalibrated BAM, linked to its input
+        alignment and reference; its index is stored as an AlignmentIndex
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037055712-ApplyBQSR
@@ -75,6 +75,7 @@ async def apply_bqsr(
         bqsr_applied=True,
         tool="gatk_apply_bqsr",
         reference_cid=ref.cid,
+        source_cid=alignment.cid,
     )
 
     # GATK indexes its BAM output by default, naming it <name>.bai.
