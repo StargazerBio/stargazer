@@ -2,7 +2,7 @@
 ### GATK Best Practices: Data Pre-processing for Variant Discovery
 
 Implements:
-1. Reference preparation — FASTA index, sequence dictionary, BWA-MEM2 index
+1. Reference preparation — FASTA index, sequence dictionary, BWA-MEM2 index, each built only if the reference lacks it
 2. Sample preprocessing — align, sort, mark duplicates
 
 References:
@@ -11,6 +11,7 @@ References:
 spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
+import stargazer.utils.storage as _storage
 from stargazer.assets import R1, R2, Alignment, Reference
 from stargazer.assets.asset import assemble
 from stargazer.config import log_execution
@@ -23,6 +24,7 @@ from stargazer.tasks import (
     sort_sam,
 )
 from stargazer.tasks.gatk.env import gatk_env
+from stargazer.tasks.general.bwa_mem2 import BWA_MEM2_INDEX_EXTENSIONS
 
 
 @gatk_env.task
@@ -30,13 +32,16 @@ async def prepare_reference(build: str) -> Reference:
     """
     Prepare reference genome for alignment and variant calling.
 
-    Assembles the reference FASTA from storage and creates its indices:
+    Assembles the reference FASTA from storage and creates the indices it
+    lacks:
     1. FASTA index (samtools faidx)
     2. Sequence dictionary (GATK CreateSequenceDictionary)
     3. BWA-MEM2 index (bwa-mem2 index)
 
-    Each is stored as a companion of the reference, so fetching the
-    reference brings them along.
+    Each index is built only when the reference has no such companion
+    already, the user's own or a public one from its publisher, so an index
+    built once is reused. Each is stored as a companion of the reference, so
+    fetching the reference brings them along.
 
     Args:
         build: Reference genome build identifier (e.g. "GRCh38")
@@ -51,9 +56,20 @@ async def prepare_reference(build: str) -> Reference:
         raise ValueError(f"No reference found for build={build!r}")
     ref = refs[0]
 
-    await samtools_faidx(ref)
-    await create_sequence_dictionary(ref)
-    await bwa_mem2_index(ref)
+    have = await _storage.default_client.companions(ref.cid)
+    if not any(row["keyvalues"].get("asset") == "reference_index" for row in have):
+        await samtools_faidx(ref)
+    if not any(row["keyvalues"].get("asset") == "sequence_dict" for row in have):
+        await create_sequence_dictionary(ref)
+    bwa_names = {ref.path.name + ext for ext in BWA_MEM2_INDEX_EXTENSIONS}
+    bwa_present = {
+        row["name"]
+        for row in have
+        if row["keyvalues"].get("asset") == "aligner_index"
+        and row["keyvalues"].get("aligner") == "bwa-mem2"
+    }
+    if not bwa_names <= bwa_present:
+        await bwa_mem2_index(ref)
 
     return ref
 
