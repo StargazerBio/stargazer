@@ -28,7 +28,8 @@ async def merge_bam_alignment(
         ref: Reference FASTA asset
 
     Returns:
-        Alignment asset with merged BAM file
+        Alignment asset with the merged BAM, linked to the aligned BAM
+        and reference
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037226472-MergeBamAlignment-Picard
@@ -86,6 +87,8 @@ async def merge_bam_alignment(
         duplicates_marked=aligned_bam.duplicates_marked,
         bqsr_applied=aligned_bam.bqsr_applied,
         tool="gatk_merge_bam_alignment",
+        reference_cid=ref.cid,
+        source_cid=aligned_bam.cid,
     )
 
     # Picard names the index <name>.bai, not <name>.bam.bai.

@@ -31,7 +31,8 @@ async def combine_gvcfs(
         cohort_id: Identifier for the combined cohort (default: "cohort")
 
     Returns:
-        Variants asset with combined multi-sample GVCF
+        Variants asset with the combined multi-sample GVCF, linked to the
+        input GVCFs
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037053272-CombineGVCFs
@@ -88,8 +89,8 @@ async def combine_gvcfs(
         caller="combine_gvcfs",
         variant_type="gvcf",
         build=ref.build,
-        sample_count=len(sample_ids),
         source_samples=sample_ids,
+        source_cids=[g.cid for g in gvcfs],
     )
 
     # GATK writes the GVCF's index alongside it without being asked.

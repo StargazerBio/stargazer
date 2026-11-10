@@ -156,7 +156,7 @@ async def bwa_mem(
         duplicates_marked=False,
         bqsr_applied=False,
         reference_cid=ref.cid,
-        r1_cid=r1.cid,
+        source_cid=r1.cid,
     )
 
     logger.info(bam.to_dict())

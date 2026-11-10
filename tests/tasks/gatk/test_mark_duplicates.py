@@ -5,7 +5,7 @@ Tests for mark_duplicates task.
 import pytest
 from conftest import GATK_FIXTURES_DIR
 
-from stargazer.assets import Alignment
+from stargazer.assets import Alignment, assemble
 from stargazer.tasks.gatk.mark_duplicates import mark_duplicates
 
 
@@ -32,3 +32,25 @@ async def test_mark_duplicates_marks_duplicates():
     assert bam.exists()
     # Downstream tools read the index from beside the BAM.
     assert (bam.parent / "NA12829_TP53_merged_marked_duplicates.bai").exists()
+
+
+async def test_mark_duplicates_links_its_output_to_its_input():
+    """The marked BAM records the BAM it was made from and its reference."""
+    alignment = Alignment()
+    await alignment.update(
+        GATK_FIXTURES_DIR / "NA12829_TP53_merged.bam",
+        sample_id="NA12829_TP53_merged",
+        sorted="coordinate",
+        tool="gatk_merge_bam_alignment",
+        reference_cid="bafyreference",
+    )
+
+    marked = await mark_duplicates(alignment=alignment)
+
+    assert alignment.cid != ""
+    assert (marked.source_cid, marked.reference_cid) == (
+        alignment.cid,
+        "bafyreference",
+    )
+    found = await assemble(asset="alignment", source_cid=alignment.cid)
+    assert [a.cid for a in found] == [marked.cid]

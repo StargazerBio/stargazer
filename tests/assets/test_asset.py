@@ -9,6 +9,7 @@ from stargazer.assets.alignment import Alignment
 from stargazer.assets.asset import Asset
 from stargazer.assets.reads import R1
 from stargazer.assets.reference import Reference, ReferenceIndex
+from stargazer.assets.scrna import AnnData
 from stargazer.assets.variants import Variants
 
 STORED_ALIGNMENT = {
@@ -19,7 +20,7 @@ STORED_ALIGNMENT = {
     "bqsr_applied": "false",
     "tool": "",
     "reference_cid": "",
-    "r1_cid": "",
+    "source_cid": "",
     "lane": "3",
 }
 
@@ -42,18 +43,23 @@ class TestDeclaredFields:
 
     def test_unset_fields_read_as_their_types_empty_value(self):
         assert (Alignment().duplicates_marked, Alignment().sorted) == (False, "")
-        assert (Variants().sample_count, Variants().source_samples) == (0, None)
+        assert (Variants().source_cids, Variants().source_samples) == (None, None)
 
 
 class TestKeyvalues:
     """Fields are stored as strings; non-str ones as JSON."""
 
     def test_non_str_fields_encode_as_json_and_decode_back(self):
-        kv = Variants(sample_count=3, source_samples=["A", "B"]).to_keyvalues()
+        kv = AnnData(n_obs=3).to_keyvalues()
 
-        assert (kv["sample_count"], kv["source_samples"]) == ("3", '["A", "B"]')
-        restored = Variants.from_keyvalues(kv)
-        assert (restored.sample_count, restored.source_samples) == (3, ["A", "B"])
+        assert kv["n_obs"] == "3"
+        assert AnnData.from_keyvalues(kv).n_obs == 3
+
+    def test_source_cids_encode_as_a_json_array_and_round_trip(self):
+        kv = Variants(source_cids=["a", "b"]).to_keyvalues()
+
+        assert kv["source_cids"] == '["a", "b"]'
+        assert Variants.from_keyvalues(kv).source_cids == ["a", "b"]
 
     def test_bare_asset_keyvalues_pass_through(self):
         kv = {"asset": "sample_sheet", "sequencer": "novaseq", "lanes": "4"}

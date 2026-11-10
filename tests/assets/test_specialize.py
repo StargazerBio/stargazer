@@ -43,11 +43,9 @@ def test_non_str_fields_are_decoded():
     aln = specialize(
         record(asset="alignment", duplicates_marked="true", bqsr_applied="false")
     )
-    vcf = specialize(
-        record(asset="variants", sample_count="3", source_samples='["S1", "S2"]')
-    )
+    adata = specialize(record(asset="anndata", n_obs="3"))
     assert (aln.duplicates_marked, aln.bqsr_applied) == (True, False)
-    assert (vcf.sample_count, vcf.source_samples) == (3, ["S1", "S2"])
+    assert adata.n_obs == 3
 
 
 def test_undeclared_keyvalues_kept_as_extras():
@@ -75,13 +73,11 @@ def test_missing_asset_key_is_a_bare_asset():
 def test_malformed_value_falls_back_to_a_bare_asset():
     """Strict at upload, graceful at query: a registered-key record whose non-str
     field doesn't JSON-parse degrades to a bare Asset with its keyvalues intact."""
-    result = specialize(
-        record("Qmbad", asset="variants", sample_id="S1", sample_count="three")
-    )
+    result = specialize(record("Qmbad", asset="anndata", sample_id="S1", n_obs="three"))
     assert type(result) is Asset
     assert result.cid == "Qmbad"
     assert result.keyvalues == {
-        "asset": "variants",
+        "asset": "anndata",
         "sample_id": "S1",
-        "sample_count": "three",
+        "n_obs": "three",
     }

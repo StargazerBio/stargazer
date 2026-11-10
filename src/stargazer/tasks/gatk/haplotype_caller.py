@@ -27,7 +27,8 @@ async def haplotype_caller(
         ref: Reference FASTA asset with sequence dictionary
 
     Returns:
-        Variants asset containing the per-sample GVCF
+        Variants asset containing the per-sample GVCF, linked to its input
+        alignment
 
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037225632-HaplotypeCaller
@@ -68,8 +69,8 @@ async def haplotype_caller(
         caller="haplotype_caller",
         variant_type="gvcf",
         build=ref.build,
-        sample_count=1,
         source_samples=[alignment.sample_id],
+        source_cids=[alignment.cid],
     )
 
     # GATK writes the GVCF's index alongside it without being asked.

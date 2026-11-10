@@ -51,7 +51,7 @@ flowchart LR
     FAI("ReferenceIndex") -->|companion_of| REF
     R1("R1\nsample_id=NA12878")
     ALN("Alignment\nsample_id=NA12878") -->|reference_cid| REF
-    ALN -->|r1_cid| R1
+    ALN -->|source_cid| R1
 ```
 
 A `companion_of` link means "belongs beside", the way an index belongs beside its FASTA, and `fetch()` brings companions along into the same directory. An `<asset>_cid` link means "made from", and `assemble(reference_cid=ref.cid)` finds everything made from that reference.
