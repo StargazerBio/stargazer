@@ -1,6 +1,6 @@
 ---
 title: reuse-reference-companions
-status: backlog
+status: doing
 priority: normal
 created: 2026-11-01
 ---
@@ -45,5 +45,19 @@ repeat, never use a publisher's index. Both can land; they don't overlap.
       shows no index tasks in the run's graph.
 - [ ] Docs: the workflow's docstring; `docs/architecture/workflows.md` if
       it grows a convention ("workflows skip work the graph already has").
+
+## Plan
+
+On `feat/reuse-reference-companions`.
+
+`prepare_reference` asks `default_client.companions(ref.cid)` once and runs:
+
+- `samtools_faidx` unless a companion has `asset == "reference_index"`;
+- `create_sequence_dictionary` unless one has `asset == "sequence_dict"`;
+- `bwa_mem2_index` unless, for each of the index's five extensions, a companion with `asset == "aligner_index"` and `aligner == "bwa-mem2"` is named `<fasta name><ext>`. An index missing a file, or a `bwa` index, doesn't count. The extensions become `BWA_MEM2_INDEX_EXTENSIONS` in `tasks/general/bwa_mem2.py`, which the task and the workflow share.
+
+The workflow test is in the unit tier (`tests/unit/test_prepare_reference.py`), on the per-test store, with the three index tasks replaced by recorders in the workflow's module, since their tools aren't on the dev machine: what's asserted is which tasks the workflow calls. Cases: no companions (all three), all companions (none), only the `.fai` (the other two), an index short one file (bwa-mem2 only), a `bwa` index (bwa-mem2 only).
+
+The tasks tier is unchanged by this (no task's behavior changes), so the Pieces' "tasks tier" line is the constant's move only.
 
 Related: [[board]].
