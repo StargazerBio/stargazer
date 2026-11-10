@@ -82,6 +82,8 @@ spec: [docs/architecture/runtime.md](../docs/architecture/runtime.md)
 import asyncio
 import json
 import os
+import sys
+import tomllib
 from contextlib import asynccontextmanager, suppress
 from functools import cache
 from pathlib import Path
@@ -320,6 +322,63 @@ def hydrate() -> None:
     place, empty for a new user or an unconfigured store.
     """
     asyncio.run(hydrate_async())
+
+
+def pin_python(notebook: str | Path) -> None:
+    """Pin a notebook header's Python to the image's own minor version.
+
+    pixi's sandbox takes conda-forge's newest Python for a header that doesn't
+    pin one, which marimo's own packages may not support yet, so the kernel
+    never starts. The launch script runs this before marimo. Headers written
+    before the pixi sandbox and notebooks from elsewhere have no pin.
+    """
+    path = Path(notebook)
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8", newline="")
+    lines = text.splitlines(keepends=True)
+    start = next(
+        (i for i, line in enumerate(lines) if line.rstrip("\r\n") == "# /// script"),
+        None,
+    )
+    if start is None:
+        pin = f'# python = "{sys.version_info.major}.{sys.version_info.minor}.*"\n'
+        path.write_text(
+            "# /// script\n# [tool.pixi.dependencies]\n" + pin + "# ///\n" + text,
+            encoding="utf-8",
+            newline="",
+        )
+        return
+    end = next(
+        (i for i in range(start + 1, len(lines)) if lines[i].rstrip("\r\n") == "# ///"),
+        None,
+    )
+    if end is None:
+        return
+    content = "".join(
+        line[2:] if line.startswith("# ") else line.removeprefix("#")
+        for line in lines[start + 1 : end]
+    )
+    try:
+        parsed = tomllib.loads(content)
+    except tomllib.TOMLDecodeError:
+        return
+    if "python" in parsed.get("tool", {}).get("pixi", {}).get("dependencies", {}):
+        return
+    pin = f'# python = "{sys.version_info.major}.{sys.version_info.minor}.*"\n'
+    table = next(
+        (
+            i
+            for i in range(start + 1, end)
+            if lines[i].rstrip("\r\n") == "# [tool.pixi.dependencies]"
+        ),
+        None,
+    )
+    if table is not None:
+        lines.insert(table + 1, pin)
+    else:
+        lines[end:end] = ["#\n", "# [tool.pixi.dependencies]\n", pin]
+    path.write_text("".join(lines), encoding="utf-8", newline="")
 
 
 def _seed_from_disk() -> None:

@@ -8,19 +8,21 @@
 # Run locally, the image's entrypoint (start-local.sh) passes the Assets
 # tutorial, with the rest of its notebooks beside it in /workspace.
 #
-# Four things happen on startup:
+# Five things happen on startup:
 #
 #   1. Hydrate: copy the owner's whole workspace from the workspace store into
 #      /workspace, and their agent sign-ins into the home directory, via the
 #      proxy module's `hydrate()`. A new user, or a deploy
 #      without a store, starts with an empty dir. The session then cd's into
 #      /workspace so marimo, its terminal and its agent all work there.
-#   2. Start marimo on 127.0.0.1:8081 in pixi's sandbox mode (the notebook's
+#   2. Pin the header's Python to the image's own minor version when it pins
+#      none, so pixi's sandbox doesn't take conda-forge's newest and fail.
+#   3. Start marimo on 127.0.0.1:8081 in pixi's sandbox mode (the notebook's
 #      PEP 723 header drives its environment, conda and PyPI packages both),
 #      watching the notebook's file in edit mode.
-#   3. In edit mode, start the `stargazer` MCP server on 127.0.0.1:8000, which
+#   4. In edit mode, start the `stargazer` MCP server on 127.0.0.1:8000, which
 #      the proxy hands to each agent session in marimo's agent panel.
-#   4. Start the reverse proxy on 0.0.0.0:8080 (the public port).
+#   5. Start the reverse proxy on 0.0.0.0:8080 (the public port).
 #      It also writes changed files back to the store on an interval.
 #
 # Pending workspace edits are saved one last time before Knative idles the pod
@@ -62,6 +64,12 @@ cd "${WORKSPACE_DIR}" 2>/dev/null || true
 if [[ "${NOTEBOOK_PATH}" == "${WORKSPACE_DIR}/"* && ! -e "${NOTEBOOK_PATH}" ]]; then
   export SG_UNSAVED_NOTEBOOK="${NOTEBOOK_PATH#"${WORKSPACE_DIR}/"}"
 fi
+
+# A header that doesn't pin Python gets conda-forge's newest in pixi's
+# sandbox, which marimo's own packages may not have builds for, and the
+# kernel never starts. A failure here leaves the notebook as it is.
+python -c "import sys, sg_proxy; sg_proxy.pin_python(sys.argv[1])" "${NOTEBOOK_PATH}" \
+  || echo "warning: could not check the notebook's Python version" >&2
 
 # `--watch` brings the agent's edits to the open notebook into the editor,
 # which otherwise keeps its own copy and saves it back over them.
