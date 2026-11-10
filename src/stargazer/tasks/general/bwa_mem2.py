@@ -13,6 +13,8 @@ from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
 from stargazer.utils import _run
 
+BWA_MEM2_INDEX_EXTENSIONS = (".0123", ".amb", ".ann", ".bwt.2bit.64", ".pac")
+
 
 @gatk_env.task
 async def bwa_mem2_index(ref: Reference) -> list[AlignerIndex]:
@@ -37,7 +39,6 @@ async def bwa_mem2_index(ref: Reference) -> list[AlignerIndex]:
     if not ref_path or not ref_path.exists():
         raise FileNotFoundError(f"Reference file not found at {ref_path}")
 
-    index_extensions = [".0123", ".amb", ".ann", ".bwt.2bit.64", ".pac"]
     output_dir = _storage.default_client.local_dir
     base_name = ref_path.name
 
@@ -46,7 +47,7 @@ async def bwa_mem2_index(ref: Reference) -> list[AlignerIndex]:
     await _run(cmd, cwd=str(output_dir))
 
     indices = []
-    for ext in index_extensions:
+    for ext in BWA_MEM2_INDEX_EXTENSIONS:
         index_path = output_dir / f"{base_name}{ext}"
         if not index_path.exists():
             raise FileNotFoundError(

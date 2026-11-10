@@ -2,7 +2,7 @@
 ### GATK Best Practices: Data Pre-processing for Variant Discovery
 
 Implements:
-1. Reference preparation — FASTA index, sequence dictionary, BWA-MEM2 index
+1. Reference preparation — FASTA index, sequence dictionary, BWA-MEM2 index, each built only if the reference lacks it
 2. Sample preprocessing — align, sort, mark duplicates
 
 References:
@@ -23,6 +23,7 @@ from stargazer.tasks import (
     sort_sam,
 )
 from stargazer.tasks.gatk.env import gatk_env
+from stargazer.tasks.general.bwa_mem2 import BWA_MEM2_INDEX_EXTENSIONS
 
 
 @gatk_env.task
@@ -30,13 +31,16 @@ async def prepare_reference(build: str) -> Reference:
     """
     Prepare reference genome for alignment and variant calling.
 
-    Assembles the reference FASTA from storage and creates its indices:
+    Assembles the reference FASTA from storage and creates the indices it
+    lacks:
     1. FASTA index (samtools faidx)
     2. Sequence dictionary (GATK CreateSequenceDictionary)
     3. BWA-MEM2 index (bwa-mem2 index)
 
-    Each is stored as a companion of the reference, so fetching the
-    reference brings them along.
+    Each index is built only when fetching the reference doesn't bring one
+    in as a companion, the user's own or a public one from its publisher, so
+    an index built once is reused. Each is stored as a companion of the reference, so
+    fetching the reference brings them along.
 
     Args:
         build: Reference genome build identifier (e.g. "GRCh38")
@@ -51,9 +55,18 @@ async def prepare_reference(build: str) -> Reference:
         raise ValueError(f"No reference found for build={build!r}")
     ref = refs[0]
 
-    await samtools_faidx(ref)
-    await create_sequence_dictionary(ref)
-    await bwa_mem2_index(ref)
+    # Fetching brings the reference's companions in beside it, so what's
+    # missing on disk is what has to be built.
+    ref_path = await ref.fetch()
+    if not ref_path.with_name(f"{ref_path.name}.fai").exists():
+        await samtools_faidx(ref)
+    if not ref_path.with_suffix(".dict").exists():
+        await create_sequence_dictionary(ref)
+    if not all(
+        ref_path.with_name(ref_path.name + ext).exists()
+        for ext in BWA_MEM2_INDEX_EXTENSIONS
+    ):
+        await bwa_mem2_index(ref)
 
     return ref
 
