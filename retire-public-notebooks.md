@@ -19,4 +19,8 @@ Publishing notebooks goes to the community repo now (ticket
 Waits on [[community-explorer-listing]], so the explorer still lists
 notebooks once the public ones are gone.
 
+## Notes (2026-11-09)
+
+Not started. The order matters and its first steps aren't this repo's: infra still imports `Notebook` from `stargazer.assets` in `app/notebooks.py`, `app/assets.py`, `app/public_notebooks.py`, `app/admin_app.py` and `app/community_listing.py` (the new listing builds its rows as `Notebook` assets), so the type can't leave the SDK until infra stops using it. Migrating and then deleting the public records, and dropping the App's permission, need the user's go-ahead.
+
 Related: [[board]], [[notebooks-in-git]], [[public-notebooks]].
