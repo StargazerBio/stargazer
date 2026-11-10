@@ -1,14 +1,14 @@
 # gatk BaseRecalibrator
 
 ```
-Using GATK jar /opt/gatk/gatk-package-4.6.1.0-local.jar
+Using GATK jar /opt/pixi-project/.pixi/envs/default/share/gatk4-4.6.2.0-0/gatk-package-4.6.2.0-local.jar
 Running:
-    java -Dsamjdk.use_async_io_read_samtools=false -Dsamjdk.use_async_io_write_samtools=true -Dsamjdk.use_async_io_write_tribble=false -Dsamjdk.compression_level=2 -jar /opt/gatk/gatk-package-4.6.1.0-local.jar BaseRecalibrator --help
+    java -Dsamjdk.use_async_io_read_samtools=false -Dsamjdk.use_async_io_write_samtools=true -Dsamjdk.use_async_io_write_tribble=false -Dsamjdk.compression_level=2 -jar /opt/pixi-project/.pixi/envs/default/share/gatk4-4.6.2.0-0/gatk-package-4.6.2.0-local.jar BaseRecalibrator --help
 USAGE: BaseRecalibrator [arguments]
 
 First pass of the Base Quality Score Recalibration (BQSR) -- Generates recalibration table based on various
 user-specified covariates (such as read group, reported quality score, machine cycle, and nucleotide context).
-Version:4.6.1.0
+Version:4.6.2.0
 
 Required Arguments:
 

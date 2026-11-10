@@ -1,13 +1,13 @@
 # gatk AnalyzeCovariates
 
 ```
-Using GATK jar /opt/gatk/gatk-package-4.6.1.0-local.jar
+Using GATK jar /opt/pixi-project/.pixi/envs/default/share/gatk4-4.6.2.0-0/gatk-package-4.6.2.0-local.jar
 Running:
-    java -Dsamjdk.use_async_io_read_samtools=false -Dsamjdk.use_async_io_write_samtools=true -Dsamjdk.use_async_io_write_tribble=false -Dsamjdk.compression_level=2 -jar /opt/gatk/gatk-package-4.6.1.0-local.jar AnalyzeCovariates --help
+    java -Dsamjdk.use_async_io_read_samtools=false -Dsamjdk.use_async_io_write_samtools=true -Dsamjdk.use_async_io_write_tribble=false -Dsamjdk.compression_level=2 -jar /opt/pixi-project/.pixi/envs/default/share/gatk4-4.6.2.0-0/gatk-package-4.6.2.0-local.jar AnalyzeCovariates --help
 USAGE: AnalyzeCovariates [arguments]
 
 Evaluate and compare base quality score recalibration (BQSR) tables
-Version:4.6.1.0
+Version:4.6.2.0
 
 Optional Arguments:
 
