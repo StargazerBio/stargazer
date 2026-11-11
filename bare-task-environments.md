@@ -1,6 +1,6 @@
 ---
 title: bare-task-environments
-status: backlog
+status: doing
 priority: normal
 created: 2026-11-10
 blocked_by:

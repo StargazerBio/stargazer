@@ -1,6 +1,6 @@
 ---
 title: project-pod-env-vars
-status: backlog
+status: doing
 priority: normal
 created: 2026-11-10
 ---
