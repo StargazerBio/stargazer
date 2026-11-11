@@ -16,7 +16,8 @@
 #      without a store, starts with an empty dir. The session then cd's into
 #      /workspace so marimo, its terminal and its agent all work there.
 #   2. Pin the header's Python to the image's own minor version when it pins
-#      none, so pixi's sandbox doesn't take conda-forge's newest and fail.
+#      none, so pixi's sandbox doesn't take conda-forge's newest and fail, and
+#      copy an old header's uv source for the SDK to where pixi reads it.
 #   3. Start marimo on 127.0.0.1:8081 in pixi's sandbox mode (the notebook's
 #      PEP 723 header drives its environment, conda and PyPI packages both),
 #      watching the notebook's file in edit mode.
@@ -67,9 +68,11 @@ fi
 
 # A header that doesn't pin Python gets conda-forge's newest in pixi's
 # sandbox, which marimo's own packages may not have builds for, and the
-# kernel never starts. A failure here leaves the notebook as it is.
-python -c "import sys, sg_proxy; sg_proxy.pin_python(sys.argv[1])" "${NOTEBOOK_PATH}" \
-  || echo "warning: could not check the notebook's Python version" >&2
+# kernel never starts. A header saved before the pixi sandbox sources the
+# SDK only in `[tool.uv.sources]`, which pixi doesn't read, so its kernel
+# would install the SDK from PyPI. A failure here leaves the notebook as it is.
+python -c "import sys, sg_proxy; sg_proxy.pin_python(sys.argv[1]); sg_proxy.use_image_sdk(sys.argv[1])" "${NOTEBOOK_PATH}" \
+  || echo "warning: could not check the notebook's header" >&2
 
 # `--watch` brings the agent's edits to the open notebook into the editor,
 # which otherwise keeps its own copy and saves it back over them.
