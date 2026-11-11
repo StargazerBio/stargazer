@@ -82,6 +82,8 @@ spec: [docs/architecture/runtime.md](../docs/architecture/runtime.md)
 import asyncio
 import json
 import os
+import sys
+import tomllib
 from contextlib import asynccontextmanager, suppress
 from functools import cache
 from pathlib import Path
@@ -320,6 +322,108 @@ def hydrate() -> None:
     place, empty for a new user or an unconfigured store.
     """
     asyncio.run(hydrate_async())
+
+
+def _script_header(lines: list[str]) -> tuple[int, int, dict] | None:
+    """Find a notebook's PEP 723 header: its opening and closing line indexes
+    and its parsed TOML, or None when it has none, it's unclosed or it doesn't
+    parse.
+    """
+    start = next(
+        (i for i, line in enumerate(lines) if line.rstrip("\r\n") == "# /// script"),
+        None,
+    )
+    if start is None:
+        return None
+    end = next(
+        (i for i in range(start + 1, len(lines)) if lines[i].rstrip("\r\n") == "# ///"),
+        None,
+    )
+    if end is None:
+        return None
+    content = "".join(
+        line[2:] if line.startswith("# ") else line.removeprefix("#")
+        for line in lines[start + 1 : end]
+    )
+    try:
+        return start, end, tomllib.loads(content)
+    except tomllib.TOMLDecodeError:
+        return None
+
+
+def _add_to_table(
+    lines: list[str], start: int, end: int, table: str, entry: str
+) -> None:
+    """Put `entry` first in the header's `[table]`, adding the table before the
+    header's close when it has none.
+    """
+    found = next(
+        (i for i in range(start + 1, end) if lines[i].rstrip("\r\n") == f"# [{table}]"),
+        None,
+    )
+    if found is not None:
+        lines.insert(found + 1, entry)
+    else:
+        lines[end:end] = ["#\n", f"# [{table}]\n", entry]
+
+
+def pin_python(notebook: str | Path) -> None:
+    """Pin a notebook header's Python to the image's own minor version.
+
+    pixi's sandbox takes conda-forge's newest Python for a header that doesn't
+    pin one, which marimo's own packages may not support yet, so the kernel
+    never starts. The launch script runs this before marimo. Headers written
+    before the pixi sandbox and notebooks from elsewhere have no pin.
+    """
+    path = Path(notebook)
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8", newline="")
+    lines = text.splitlines(keepends=True)
+    pin = f'# python = "{sys.version_info.major}.{sys.version_info.minor}.*"\n'
+    if not any(line.rstrip("\r\n") == "# /// script" for line in lines):
+        path.write_text(
+            "# /// script\n# [tool.pixi.dependencies]\n" + pin + "# ///\n" + text,
+            encoding="utf-8",
+            newline="",
+        )
+        return
+    found = _script_header(lines)
+    if found is None:
+        return
+    start, end, parsed = found
+    if "python" in parsed.get("tool", {}).get("pixi", {}).get("dependencies", {}):
+        return
+    _add_to_table(lines, start, end, "tool.pixi.dependencies", pin)
+    path.write_text("".join(lines), encoding="utf-8", newline="")
+
+
+def use_image_sdk(notebook: str | Path) -> None:
+    """Copy a header's `[tool.uv.sources]` path for `stargazer-bio` to
+    `[tool.pixi.pypi-dependencies]`.
+
+    Headers saved before the pixi sandbox point `stargazer-bio` at the image's
+    SDK in `[tool.uv.sources]`, which pixi doesn't read, so such a notebook's
+    kernel would install the SDK from PyPI instead. The launch script runs this
+    before marimo.
+    """
+    path = Path(notebook)
+    if not path.exists():
+        return
+    lines = path.read_text(encoding="utf-8", newline="").splitlines(keepends=True)
+    found = _script_header(lines)
+    if found is None:
+        return
+    start, end, parsed = found
+    tool = parsed.get("tool", {})
+    source = tool.get("uv", {}).get("sources", {}).get("stargazer-bio")
+    if not isinstance(source, dict) or not isinstance(source.get("path"), str):
+        return
+    if "stargazer-bio" in tool.get("pixi", {}).get("pypi-dependencies", {}):
+        return
+    entry = f"# stargazer-bio = {{ path = {json.dumps(source['path'])} }}\n"
+    _add_to_table(lines, start, end, "tool.pixi.pypi-dependencies", entry)
+    path.write_text("".join(lines), encoding="utf-8", newline="")
 
 
 def _seed_from_disk() -> None:
