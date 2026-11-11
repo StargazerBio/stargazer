@@ -5,12 +5,14 @@ Sets environment variable defaults at import time. Consumers read
 os.environ directly rather than importing named values from this module.
 
 Also what every task environment shares: the platform its image is built
-for, the variables and secrets forwarded into its pods, and the image
-recipes: a domain's tasks build from its `env.py`'s header
-(`task_image()`), and a notebook's own tasks from the notebook's header
-(`notebook_image()`).
+for, the secrets forwarded into its pods, and the image recipes: a domain's
+tasks build from its `env.py`'s header (`task_image()`), and a notebook's
+own tasks from the notebook's header (`notebook_image()`).
 The environments themselves live in their domains' `env.py`
 (`stargazer.tasks.scrna.env`, `stargazer.tasks.gatk.env`).
+The variables a pod needs reach a hosted project's task pods from the
+project's settings; `STARGAZER_ENV_VARS` forwards the submitter's for a
+cluster whose projects don't carry them (the devbox).
 
 `init_flyte()` is the one Flyte init for notebooks, the MCP server and the
 tests: an in-cluster client in a hosted notebook pod, the config file anywhere
@@ -28,6 +30,8 @@ Rules:
 - STARGAZER_INDEX_URL: The asset index — a SQLite file path, a
   `postgresql://` URL (the devbox's), or a `dsql://` URL naming a user's
   table on Aurora DSQL (Union's). Defaults to ~/.stargazer/index.db.
+  A cluster task with either at its local default raises
+  (`require_cluster_storage()`).
 - STARGAZER_OWNER: The Union subject that owns new assets (their folder in
   the store, and `_owner`). Unset locally.
 - STARGAZER_API_KEY_SECRET: The Flyte secret holding the project's API key.
@@ -67,14 +71,18 @@ os.environ.setdefault(
 )
 os.environ.setdefault("STARGAZER_LOCAL", str(Path.home() / ".stargazer" / "local"))
 
+# The local defaults: a store and index on this machine's disk.
+_LOCAL_STORAGE = {
+    "STARGAZER_STORE_ROOT": str(Path.home() / ".stargazer" / "store"),
+    "STARGAZER_INDEX_URL": str(Path.home() / ".stargazer" / "index.db"),
+}
+
 # Storage locations set explicitly (a deploy, a pod's env) are forwarded into
-# task pods; the local defaults below are not, since a pod can't use them.
-_STORAGE_KEYS = ("STARGAZER_STORE_ROOT", "STARGAZER_INDEX_URL")
+# task pods; the local defaults aren't, since a pod can't use them.
+_STORAGE_KEYS = tuple(_LOCAL_STORAGE)
 _EXPLICIT_STORAGE = {k: os.environ[k] for k in _STORAGE_KEYS if os.environ.get(k)}
-os.environ.setdefault("STARGAZER_STORE_ROOT", str(Path.home() / ".stargazer" / "store"))
-os.environ.setdefault(
-    "STARGAZER_INDEX_URL", str(Path.home() / ".stargazer" / "index.db")
-)
+for _key, _default in _LOCAL_STORAGE.items():
+    os.environ.setdefault(_key, _default)
 
 # Every Stargazer image is built for x86_64 only, the architecture Union runs.
 # GATK's GenomicsDB ships an x86_64-only native library, so an arm64 build
@@ -89,7 +97,7 @@ logger.add(sys.stderr, level="INFO")
 
 
 def _stargazer_env_vars() -> dict[str, str]:
-    """env_vars forwarded into task pods via the TaskEnvironments.
+    """The submitter's variables, for a TaskEnvironment on a cluster whose projects don't carry them.
 
     The spec serializes from the submitting process. STARGAZER_OWNER rides
     along when set (hosted workspaces), so a pod stores outputs in the
@@ -113,6 +121,33 @@ def _stargazer_env_vars() -> dict[str, str]:
 
 
 STARGAZER_ENV_VARS = _stargazer_env_vars()
+
+
+def require_cluster_storage() -> None:
+    """Refuse to store on a cluster pod's own disk.
+
+    A pod's disk goes with the pod, so an asset stored there is gone before
+    the next task looks for it. Flyte's task context says whether this is a
+    cluster pod; a local run, and anything outside a task, keeps the local
+    defaults.
+
+    Raises:
+        RuntimeError: in a cluster task whose store or index is the local
+            default, naming the variables that are missing.
+    """
+    ctx = flyte.ctx()
+    if not ctx or not ctx.is_in_cluster():
+        return
+    missing = [k for k, default in _LOCAL_STORAGE.items() if os.environ[k] == default]
+    if missing:
+        raise RuntimeError(
+            f"{' and '.join(missing)} not set in this task's pod, so it would "
+            "store assets on its own disk, where no other task can find them. "
+            "A hosted project's settings give them to every task pod; on a "
+            "cluster that doesn't, pass env_vars=STARGAZER_ENV_VARS "
+            "(stargazer.config) to the task's TaskEnvironment."
+        )
+
 
 STARGAZER_SECRETS = [flyte.Secret(key="PINATA_JWT", as_env_var="PINATA_JWT")]
 

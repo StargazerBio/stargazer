@@ -30,6 +30,25 @@ env = flyte.TaskEnvironment(
 )
 
 
+# No storage settings: what a pod sees on a cluster that gives it none, when
+# its run isn't given the session's either.
+bare_env = flyte.TaskEnvironment(
+    name="sg_devbox_bare",
+    image=gatk_env.image,
+    resources=flyte.Resources(cpu=1, memory=("256Mi", "512Mi")),
+)
+
+
+@bare_env.task
+async def bare_store(tag: str) -> str:
+    """Store one small file as an asset; return its CID."""
+    path = Path(default_client.local_dir) / f"bare_{tag}.txt"
+    path.write_text(tag)
+    asset = Asset(keyvalues={"asset": "devbox_probe", "tag": tag})
+    await asset.update(path)
+    return asset.cid
+
+
 @env.task
 async def produce(n: int, tag: str) -> list[str]:
     """Write n small files and store each as an asset; return their CIDs."""

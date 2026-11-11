@@ -39,12 +39,13 @@ my_env = flyte.TaskEnvironment(
     name="my-tasks",
     image=notebook_image(__file__, "my-tasks"),
     resources=flyte.Resources(cpu=1, memory="512Mi"),
-    env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,
 )
 ```
 
 Either way, the SDK your run was submitted with goes on top: your checkout's source, or the release you have installed.
+
+The environment needs nothing else of Stargazer's. A hosted project gives every task pod where its store and index are and who owns its outputs. `secrets=STARGAZER_SECRETS` lets the task publish assets and start other tasks; a task that does neither can leave it off. A task that starts another task without it fails when the platform refuses the child's launch. Leaving `image=` off a task defined in a notebook fails on the cluster when the pod imports the notebook, since the default image has neither marimo nor Stargazer. On a local devbox cluster, also pass `env_vars=STARGAZER_ENV_VARS` (from `stargazer.config`): without it, a task that stores an asset stops with an error naming the two missing variables.
 
 ## At your own risk
 

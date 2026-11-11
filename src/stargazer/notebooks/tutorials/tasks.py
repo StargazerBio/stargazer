@@ -43,7 +43,6 @@ with app.setup:
 
     from stargazer.assets.asset import Asset
     from stargazer.config import (
-        STARGAZER_ENV_VARS,
         STARGAZER_SECRETS,
         notebook_image,
     )
@@ -57,7 +56,6 @@ with app.setup:
         description="Lightweight env for the tutorial notebooks.",
         image=notebook_image(__file__, "stargazer-tutorial"),
         resources=flyte.Resources(cpu=1, memory="512Mi"),
-        env_vars=STARGAZER_ENV_VARS,
         secrets=STARGAZER_SECRETS,
     )
 
