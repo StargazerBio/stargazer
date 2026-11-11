@@ -19,7 +19,7 @@ On `fix/unpinned-notebook-python`: the launch pins Python when a header doesn't,
 - [x] `pin_python()` in `runtime/proxy.py`, with unit tests in `tests/unit/test_pin_python.py`: a header with no `python` under `[tool.pixi.dependencies]` gets one at the runtime's own minor version, in that table, in a new table before the header's close, or in a new header. A pinned header, one that doesn't parse and a missing file are left alone.
 - [x] `launch-notebook.sh` runs it after hydrate, before marimo.
 - [x] `docs/architecture/runtime.md`.
-- [ ] The ticket's check: an old-seed notebook's kernel starts on a pod.
+- [x] The ticket's check: an old-seed notebook's kernel starts on a pod.
 
 ## Evidence (2026-11-09)
 
@@ -27,7 +27,14 @@ On `fix/unpinned-notebook-python`: the launch pins Python when a header doesn't,
 - `ghcr.io/stargazerbio/debug:dispatch-installed-bundle` run locally on a workspace notebook with release 2026.10.30's Blank header, with the two commands marimo's sandbox makes. As built: `pixi install --script` gives Python 3.15.2 and `uv run --python <env> --with marimo==0.25.1` fails building `loro` with the PyO3 error. With the branch's `proxy.py` and `launch-notebook.sh` mounted: the launch added the pin to the workspace file, the environment is Python 3.14.10 and the marimo layer imports (measured).
 - Not reached: the kernel starting in the editor. In local containers the editor's kernel started for no notebook, with or without the change, and the cause wasn't found. PR 143 is a draft until an old-seed notebook is opened on the tenant.
 
-Left out: a notebook that didn't hydrate (marimo creates its blank after the pin runs), and an old header's SDK source, ticket [[old-header-sdk-source]].
+## Evidence (2026-11-11)
+
+Driven with the verification recipe below on `ghcr.io/stargazerbio/debug:unpinned-notebook-python` (`sha256:9123ba01…`), which also carries [[old-header-sdk-source]].
+
+- Locally in the image (measured): an untouched old header gets Python 3.15.2 and `stargazer-bio` from PyPI; after the launch step, Python 3.14.10 and `stargazer-bio` from `file:///stargazer`.
+- On the tenant as the test account (measured): a Blank notebook from the 2026.10.30 dashboard was stored with the old header. Opened in edit, the kernel reached Ready and ran a cell that printed `3.14.10 2026.10.30 {"url":"file:///stargazer",...}`, and the file in `/workspace` held both pixi tables beside the untouched `[tool.uv.sources]` (KERNEL, PIN, SDK). Torn down after: dashboard back on its release image, every app stopped, no live runs.
+
+Left out: a notebook that didn't hydrate (marimo creates its blank after the pin runs), and an old header's SDK source, ticket [[old-header-sdk-source]], since done on the same branch.
 
 ## Verification recipe: an old-seed notebook on a pod
 

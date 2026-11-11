@@ -14,6 +14,6 @@ On `fix/unpinned-notebook-python` beside the Python pin (PR 143), since it's the
 
 - [x] `use_image_sdk()` in `runtime/proxy.py`, sharing `pin_python`'s header parsing: a header whose `[tool.uv.sources]` gives `stargazer-bio` a path gets the same path under `[tool.pixi.pypi-dependencies]`. A header pixi already sources, one with no uv source or a non-path one, and a missing file are left alone. Unit tests in `tests/unit/test_pin_python.py`.
 - [x] `launch-notebook.sh` runs it after `pin_python`; `docs/architecture/runtime.md`.
-- [ ] The check in [[unpinned-notebook-python]]'s verification recipe (SDK).
+- [x] The check in [[unpinned-notebook-python]]'s verification recipe (SDK), 2026-11-11: on the tenant, an old Blank notebook's kernel has `stargazer-bio` from `file:///stargazer` (measured); its evidence is in that ticket.
 
 Related: [[board]], [[unpinned-notebook-python]], [[pixi-notebook-sandbox]], [[marimo-sandbox]].
