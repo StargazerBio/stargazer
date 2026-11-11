@@ -15,7 +15,7 @@ from stargazer.assets import (
     VQSRTranches,
 )
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import run, scratch_dir
+from stargazer.utils import run, temp_dir
 
 _SNP_ANNOTATIONS = ["QD", "MQ", "MQRankSum", "ReadPosRankSum", "FS", "SOR"]
 _INDEL_ANNOTATIONS = ["QD", "FS", "SOR"]
@@ -60,7 +60,7 @@ async def variant_recalibrator(
     ref_path = await ref.fetch()
     resource_paths = [await r.fetch() for r in resources]
 
-    output_dir = scratch_dir()
+    output_dir = temp_dir()
     sample_id = vcf.sample_id or "cohort"
     output_recal = output_dir / f"{sample_id}_{mode.lower()}.recal"
     output_tranches = output_dir / f"{sample_id}_{mode.lower()}.tranches"

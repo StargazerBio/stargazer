@@ -6,7 +6,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 from stargazer.assets import KnownSites, KnownSitesIndex
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import run, scratch_dir
+from stargazer.utils import run, temp_dir
 
 
 @gatk_env.task
@@ -25,7 +25,7 @@ async def index_feature_file(known_sites: KnownSites) -> KnownSitesIndex:
     """
     vcf_path = await known_sites.fetch()
 
-    output_dir = scratch_dir()
+    output_dir = temp_dir()
     idx_path = vcf_path.with_suffix(vcf_path.suffix + ".idx")
 
     if not idx_path.exists():

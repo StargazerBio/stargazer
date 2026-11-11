@@ -11,7 +11,7 @@ from pathlib import Path
 
 from stargazer.assets import Reference, Variants, VariantsIndex
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import run, scratch_dir
+from stargazer.utils import run, temp_dir
 
 
 @gatk_env.task
@@ -55,7 +55,7 @@ async def combine_gvcfs(
         gvcf_paths.append(await gvcf.fetch())
         sample_ids.append(gvcf.sample_id)
 
-    output_dir = scratch_dir()
+    output_dir = temp_dir()
     output_gvcf = output_dir / f"{cohort_id}_combined.g.vcf"
 
     cmd = [

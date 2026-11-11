@@ -6,7 +6,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 from stargazer.assets import Reference, SequenceDict
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import run, scratch_dir
+from stargazer.utils import run, temp_dir
 
 
 @gatk_env.task
@@ -22,7 +22,7 @@ async def create_sequence_dictionary(ref: Reference) -> SequenceDict:
     """
     ref_path = await ref.fetch()
 
-    output_dir = scratch_dir()
+    output_dir = temp_dir()
     dict_path = output_dir / f"{ref_path.stem}.dict"
     dict_path.unlink(missing_ok=True)
     cmd = [

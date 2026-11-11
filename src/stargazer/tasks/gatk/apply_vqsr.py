@@ -14,7 +14,7 @@ from stargazer.assets import (
     assemble,
 )
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import run, scratch_dir
+from stargazer.utils import run, temp_dir
 
 _DEFAULT_FILTER_LEVEL = {"SNP": 99.5, "INDEL": 99.0}
 
@@ -60,7 +60,7 @@ async def apply_vqsr(
         raise ValueError(f"VQSRModel {vqsr_model.cid} has no stored tranches file")
     tranches_path = await tranches[0].fetch()
 
-    output_dir = scratch_dir()
+    output_dir = temp_dir()
     sample_id = vcf.sample_id or "cohort"
     output_vcf = output_dir / f"{sample_id}_vqsr_{mode.lower()}.vcf"
 

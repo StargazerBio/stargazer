@@ -25,7 +25,7 @@ All defaults are set in `config.py`. If a variable is set (even to an empty stri
 |----------|---------|---------|
 | `STARGAZER_STORE_ROOT` | Object-store root: a directory or a bucket URI | `~/.stargazer/store` |
 | `STARGAZER_INDEX_URL` | Index: a SQLite file path, a `postgresql://` URL, or a `dsql://` URL | `~/.stargazer/index.db` |
-| `STARGAZER_LOCAL` | Scratch space for task outputs, and the download cache | `~/.stargazer/local` |
+| `STARGAZER_LOCAL` | Temp space for task outputs, and the download cache | `~/.stargazer/local` |
 | `STARGAZER_OWNER` | Owner of new assets: their folder in the store, and `_owner` | unset → `local` |
 | `PINATA_JWT` | Turns on the public tier | unset |
 | `PINATA_GATEWAY` | IPFS gateway for public downloads | The project's dedicated gateway |

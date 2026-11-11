@@ -6,7 +6,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 from stargazer.assets.scrna import AnnData
 from stargazer.tasks.scrna.env import scrna_env
-from stargazer.utils import scratch_dir
+from stargazer.utils import temp_dir
 
 
 @scrna_env.task
@@ -35,7 +35,7 @@ async def find_markers(
 
     sc.tl.rank_genes_groups(ad, groupby=groupby, method=method)
 
-    out_path = scratch_dir() / f"{adata.sample_id}_markers.h5ad"
+    out_path = temp_dir() / f"{adata.sample_id}_markers.h5ad"
     ad.write_h5ad(out_path)
 
     result = await AnnData.store(

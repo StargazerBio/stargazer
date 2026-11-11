@@ -6,7 +6,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 from stargazer.assets import Reference, ReferenceIndex
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import run, scratch_dir
+from stargazer.utils import run, temp_dir
 
 
 @gatk_env.task
@@ -22,7 +22,7 @@ async def samtools_faidx(ref: Reference) -> ReferenceIndex:
     """
     ref_path = await ref.fetch()
 
-    output_dir = scratch_dir()
+    output_dir = temp_dir()
     fai_path = output_dir / f"{ref_path.name}.fai"
     cmd = ["samtools", "faidx", str(ref_path), "--fai-idx", str(fai_path)]
     await run(cmd, cwd=str(output_dir))

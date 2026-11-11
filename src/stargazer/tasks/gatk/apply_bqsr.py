@@ -8,7 +8,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 from stargazer.assets import Alignment, AlignmentIndex, BQSRReport, Reference
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import run, scratch_dir
+from stargazer.utils import run, temp_dir
 
 
 @gatk_env.task
@@ -37,7 +37,7 @@ async def apply_bqsr(
     ref_path = await ref.fetch()
     recal_path = await bqsr_report.fetch()
 
-    output_dir = scratch_dir()
+    output_dir = temp_dir()
     output_bam = output_dir / f"{alignment.sample_id}_recalibrated.bam"
 
     cmd = [

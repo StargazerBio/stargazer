@@ -10,7 +10,7 @@ import shlex
 from stargazer.assets import R1, R2, AlignerIndex, Alignment, Reference
 from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import run, scratch_dir
+from stargazer.utils import run, temp_dir
 
 BWA_MEM2_INDEX_EXTENSIONS = (".0123", ".amb", ".ann", ".bwt.2bit.64", ".pac")
 
@@ -34,7 +34,7 @@ async def bwa_mem2_index(ref: Reference) -> list[AlignerIndex]:
     """
     ref_path = await ref.fetch()
 
-    output_dir = scratch_dir()
+    output_dir = temp_dir()
     base_name = ref_path.name
 
     prefix = output_dir / base_name
@@ -94,7 +94,7 @@ async def bwa_mem2_mem(
     else:
         rg_string = rf"@RG\tID:{sample_id}\tSM:{sample_id}\tLB:lib\tPL:ILLUMINA"
 
-    output_dir = scratch_dir()
+    output_dir = temp_dir()
     output_bam = output_dir / f"{sample_id}_aligned.bam"
 
     cmd = [

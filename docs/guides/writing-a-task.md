@@ -39,7 +39,7 @@ import asyncio
 
 from stargazer.assets import Alignment, MyOutput, Reference
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import run, scratch_dir
+from stargazer.utils import run, temp_dir
 
 
 @gatk_env.task
@@ -47,7 +47,7 @@ async def my_tool(ref: Reference, alignment: Alignment) -> MyOutput:
     """One-line description of what this task does."""
     ref_path, bam_path = await asyncio.gather(ref.fetch(), alignment.fetch())
 
-    output_dir = scratch_dir()
+    output_dir = temp_dir()
     output_path = output_dir / f"{alignment.sample_id}_my_tool.txt"
     await run(["my_tool", "-R", ref_path, "-I", bam_path, "-O", output_path])
 
@@ -62,7 +62,7 @@ async def my_tool(ref: Reference, alignment: Alignment) -> MyOutput:
 - **Always `fetch()` inputs** — it returns the local path, with companions (indexes, dictionaries) in the same directory
 - **Always `store()` outputs** to store them and record their metadata
 - **Use `asyncio.gather`** to fetch multiple inputs in parallel
-- **Write outputs under `scratch_dir()`** — a fresh directory per call, so two tasks never write the same file
+- **Write outputs under `temp_dir()`** — a fresh directory per call, so two tasks never write the same file
 - **Pick the environment whose image carries the tool** — `gatk_env` in `src/stargazer/tasks/gatk/env.py` or `scrna_env` in `src/stargazer/tasks/scrna/env.py`, where resources are set too. A new tool goes in that file's header, then `pixi run python cli/lock_envs.py` relocks it (see [Configuration → Container Images](../architecture/configuration.md#container-images))
 - **Import a domain's packages inside the task body** — `import scanpy as sc` in the function, not at the top of the file, so importing the task needs only the core
 - **Use `pathlib.Path`** for all filesystem operations; `run` converts its arguments to `str` for the subprocess

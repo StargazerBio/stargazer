@@ -36,14 +36,14 @@ from stargazer.assets import R1, Alignment, Reference
 from stargazer.tasks.gatk.env import (
     gatk_env,
 )  # or stargazer.tasks.scrna.env's scrna_env
-from stargazer.utils import run, scratch_dir
+from stargazer.utils import run, temp_dir
 
 
 @gatk_env.task
 async def align_reads(ref: Reference, r1: R1) -> Alignment:
     """Align reads to a reference genome using BWA-MEM."""
     ref_path, r1_path = await asyncio.gather(ref.fetch(), r1.fetch())
-    output_path = scratch_dir() / f"{r1.sample_id}.sam"
+    output_path = temp_dir() / f"{r1.sample_id}.sam"
     await run(["sh", "-c", f"bwa mem {ref_path} {r1_path} > {output_path}"])
     return await Alignment.store(
         output_path, sample_id=r1.sample_id, reference_cid=ref.cid

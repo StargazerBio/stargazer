@@ -40,7 +40,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 from stargazer.assets import {InputType}, {OutputType}
 from stargazer.tasks.gatk.env import gatk_env  # or stargazer.tasks.scrna.env's scrna_env
-from stargazer.utils import run, scratch_dir
+from stargazer.utils import run, temp_dir
 
 
 @gatk_env.task
@@ -59,7 +59,7 @@ async def {action}_{tool}(input_data: {InputType}) -> {OutputType}:
     """
     input_path = await input_data.fetch()  # local path, companions beside it
 
-    output_dir = scratch_dir()
+    output_dir = temp_dir()
     output_path = output_dir / f"{input_data.sample_id}_{tool}.{ext}"
     await run(["{tool}", "-I", input_path, "-O", output_path], cwd=str(output_dir))
 
@@ -71,7 +71,7 @@ async def {action}_{tool}(input_data: {InputType}) -> {OutputType}:
     )
 ```
 
-`store()` stores the file and sets `cid` and `path`; a task that returns an asset it never stored returns nothing anyone can fetch. `scratch_dir()` makes a fresh directory per call, so samples fanned out in one process never write the same file.
+`store()` stores the file and sets `cid` and `path`; a task that returns an asset it never stored returns nothing anyone can fetch. `temp_dir()` makes a fresh directory per call, so samples fanned out in one process never write the same file.
 
 ## Workflows
 

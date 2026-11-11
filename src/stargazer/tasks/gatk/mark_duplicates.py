@@ -8,7 +8,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 from stargazer.assets import Alignment, AlignmentIndex, DuplicateMetrics
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import run, scratch_dir
+from stargazer.utils import run, temp_dir
 
 
 @gatk_env.task
@@ -31,7 +31,7 @@ async def mark_duplicates(alignment: Alignment) -> Alignment:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037052812-MarkDuplicates-Picard
     """
     bam_path = await alignment.fetch()
-    output_dir = scratch_dir()
+    output_dir = temp_dir()
 
     output_bam = output_dir / f"{alignment.sample_id}_marked_duplicates.bam"
     metrics_file = output_dir / f"{alignment.sample_id}_duplicate_metrics.txt"

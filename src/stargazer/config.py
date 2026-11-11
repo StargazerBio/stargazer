@@ -20,7 +20,7 @@ Rules:
 - PINATA_JWT: No default — absence means no public tier (Pinata) at all.
 - PINATA_GATEWAY: IPFS gateway for public downloads. Defaults to the project's
   dedicated Pinata gateway.
-- STARGAZER_LOCAL: Scratch space for task outputs and the download cache.
+- STARGAZER_LOCAL: Temp space for task outputs and the download cache.
   Defaults to ~/.stargazer/local.
 - STARGAZER_STORE_ROOT: Where asset bytes are stored — a local directory or a
   bucket URI (e.g. `s3://stargazerbio-users`). Defaults

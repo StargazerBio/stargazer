@@ -601,10 +601,10 @@ async def test_upload_skips_bytes_a_row_already_points_at(client, tmp_path):
     assert (await client.index.get(cid))["uri"] == str(elsewhere)
 
 
-def test_scratch_dir_is_fresh_per_call_under_the_local_dir(client):
-    """Each call makes a new directory under the client's `scratch/`."""
-    first, second = storage_mod.scratch_dir(), storage_mod.scratch_dir()
+def test_temp_dir_is_fresh_per_call_under_the_local_dir(client):
+    """Each call makes a new directory under the client's `temp/`."""
+    first, second = storage_mod.temp_dir(), storage_mod.temp_dir()
 
     assert first != second
     assert first.is_dir() and second.is_dir()
-    assert first.parent == second.parent == client.local_dir / "scratch"
+    assert first.parent == second.parent == client.local_dir / "temp"

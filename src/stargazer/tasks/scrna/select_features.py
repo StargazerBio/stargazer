@@ -6,7 +6,7 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 from stargazer.assets.scrna import AnnData
 from stargazer.tasks.scrna.env import scrna_env
-from stargazer.utils import scratch_dir
+from stargazer.utils import temp_dir
 
 
 @scrna_env.task
@@ -37,7 +37,7 @@ async def select_features(
         hvg_kwargs["batch_key"] = batch_key
     sc.pp.highly_variable_genes(ad, **hvg_kwargs)
 
-    out_path = scratch_dir() / f"{adata.sample_id}_features_selected.h5ad"
+    out_path = temp_dir() / f"{adata.sample_id}_features_selected.h5ad"
     ad.write_h5ad(out_path)
 
     result = await AnnData.store(

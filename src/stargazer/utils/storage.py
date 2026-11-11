@@ -25,7 +25,7 @@ Where asset bytes and metadata live, and the local cache in front of them.
   file of that name.
 
 `get_client()` is the process-wide client, built from the environment on its
-first call; `scratch_dir()` hands a task a fresh directory for its outputs.
+first call; `temp_dir()` hands a task a fresh directory for its outputs.
 
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
@@ -123,7 +123,7 @@ class StorageClient:
         """Wire the client.
 
         Args:
-            local_dir: Scratch space for task outputs and the download cache
+            local_dir: Temp space for task outputs and the download cache
             store_root: Object-store root (a local directory or a bucket URI)
             index: The asset index
             public: Pinata client for the public tier, or None for none
@@ -443,13 +443,13 @@ def get_client() -> StorageClient:
     )
 
 
-def scratch_dir() -> Path:
-    """A fresh directory for one task's outputs, under `<local_dir>/scratch/`.
+def temp_dir() -> Path:
+    """A fresh directory for one task's outputs, under `<local_dir>/temp/`.
 
     Each call makes a new one, so two tasks in one process never write the
     same file. Nothing removes them: a pod's disk goes with the pod, and a
     local `STARGAZER_LOCAL` is the user's to clear.
     """
-    root = get_client().local_dir / "scratch"
+    root = get_client().local_dir / "temp"
     root.mkdir(parents=True, exist_ok=True)
     return Path(tempfile.mkdtemp(dir=root))
