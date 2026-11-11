@@ -96,15 +96,14 @@ async def test_combine_gvcfs_links_its_output_to_its_input_gvcf():
     """The combined GVCF records the GVCF it was made from."""
     sample_id = "NA12829"
 
-    gvcf = Variants()
-    await gvcf.update(
+    gvcf = await Variants.store(
         GATK_FIXTURES_DIR / "NA12829_TP53.g.vcf",
         sample_id=sample_id,
         caller="haplotypecaller",
         variant_type="gvcf",
         build="GRCh38",
     )
-    await VariantsIndex().update(
+    await VariantsIndex.store(
         GATK_FIXTURES_DIR / "NA12829_TP53.g.vcf.idx",
         sample_id=sample_id,
         companion_of=gvcf.cid,

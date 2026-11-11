@@ -7,7 +7,7 @@ Maintenance scripts. Run them from the repo root.
 Uploads files to Pinata's public network with keyvalue metadata. **Anyone can
 read what it uploads**: use it for shared data such as reference genomes and
 demo bundles. A user's own files go to the object store through
-`Asset.update()` instead.
+`Asset.store()` instead.
 
 **Usage:**
 

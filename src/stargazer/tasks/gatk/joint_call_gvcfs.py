@@ -11,11 +11,9 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 import tempfile
 from pathlib import Path
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import Reference, Variants, VariantsIndex
-from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import _run
+from stargazer.utils import run, temp_dir
 
 
 @gatk_env.task
@@ -44,8 +42,6 @@ async def joint_call_gvcfs(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360035535932
     """
-    logger.info([x.to_dict() for x in gvcfs])
-    logger.info(ref.to_dict())
     if not gvcfs:
         raise ValueError("At least one GVCF must be provided")
     for gvcf in gvcfs:
@@ -60,7 +56,7 @@ async def joint_call_gvcfs(
         intervals = await ref.contigs()
     gvcf_paths = [await gvcf.fetch() for gvcf in gvcfs]
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = temp_dir()
 
     with tempfile.TemporaryDirectory() as tmpdir:
         workspace = Path(tmpdir) / f"{cohort_id}_genomicsdb"
@@ -81,12 +77,7 @@ async def joint_call_gvcfs(
         for interval in intervals:
             import_cmd.extend(["-L", interval])
 
-        await _run(import_cmd, cwd=tmpdir)
-
-        if not workspace.exists():
-            raise FileNotFoundError(
-                f"GenomicsDBImport did not create workspace at {workspace}"
-            )
+        await run(import_cmd, cwd=tmpdir)
 
         output_vcf = output_dir / f"{cohort_id}_genotyped.vcf"
         genotype_cmd = [
@@ -100,16 +91,10 @@ async def joint_call_gvcfs(
             str(output_vcf),
         ]
 
-        _, stderr = await _run(genotype_cmd, cwd=tmpdir)
-
-    if not output_vcf.exists():
-        raise FileNotFoundError(
-            f"GenotypeGVCFs did not create output VCF at {output_vcf}. stderr: {stderr}"
-        )
+        await run(genotype_cmd, cwd=tmpdir)
 
     source_samples = [g.sample_id for g in gvcfs]
-    vcf = Variants()
-    await vcf.update(
+    vcf = await Variants.store(
         output_vcf,
         sample_id=cohort_id,
         caller="joint_call_gvcfs",
@@ -121,8 +106,6 @@ async def joint_call_gvcfs(
 
     idx_path = output_dir / f"{output_vcf.name}.idx"
     if idx_path.exists():
-        vidx = VariantsIndex()
-        await vidx.update(idx_path, sample_id=cohort_id, companion_of=vcf.cid)
+        await VariantsIndex.store(idx_path, sample_id=cohort_id, companion_of=vcf.cid)
 
-    logger.info(vcf.to_dict())
     return vcf

@@ -6,11 +6,9 @@ Marks duplicate reads in BAM files using GATK MarkDuplicates.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import Alignment, AlignmentIndex, DuplicateMetrics
-from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import _run
+from stargazer.utils import run, temp_dir
 
 
 @gatk_env.task
@@ -32,9 +30,8 @@ async def mark_duplicates(alignment: Alignment) -> Alignment:
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037052812-MarkDuplicates-Picard
     """
-    logger.info(alignment.to_dict())
     bam_path = await alignment.fetch()
-    output_dir = _storage.default_client.local_dir
+    output_dir = temp_dir()
 
     output_bam = output_dir / f"{alignment.sample_id}_marked_duplicates.bam"
     metrics_file = output_dir / f"{alignment.sample_id}_duplicate_metrics.txt"
@@ -52,15 +49,9 @@ async def mark_duplicates(alignment: Alignment) -> Alignment:
         "true",
     ]
 
-    await _run(cmd, cwd=str(output_dir))
+    await run(cmd, cwd=str(output_dir))
 
-    if not output_bam.exists():
-        raise FileNotFoundError(
-            f"MarkDuplicates did not create output BAM at {output_bam}"
-        )
-
-    marked_bam = Alignment()
-    await marked_bam.update(
+    marked_bam = await Alignment.store(
         output_bam,
         sample_id=alignment.sample_id,
         sorted="coordinate",
@@ -73,23 +64,18 @@ async def mark_duplicates(alignment: Alignment) -> Alignment:
 
     # Picard names the index <name>.bai, not <name>.bam.bai.
     bam_index = output_bam.with_suffix(".bai")
-    if not bam_index.exists():
-        raise FileNotFoundError(f"--CREATE_INDEX did not create {bam_index}")
-    idx = AlignmentIndex()
-    await idx.update(
+    await AlignmentIndex.store(
         bam_index,
         sample_id=alignment.sample_id,
         companion_of=marked_bam.cid,
     )
 
     if metrics_file.exists():
-        metrics = DuplicateMetrics()
-        await metrics.update(
+        await DuplicateMetrics.store(
             metrics_file,
             sample_id=alignment.sample_id,
             tool="gatk_mark_duplicates",
             alignment_cid=marked_bam.cid,
         )
 
-    logger.info(marked_bam.to_dict())
     return marked_bam

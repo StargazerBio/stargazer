@@ -58,7 +58,7 @@ async def fetch_bundle(bundle_name: str) -> list[dict]:
     from stargazer.assets.asset import Asset
 
     manifest = _load_manifest(bundle_name)
-    client = _storage.default_client
+    client = _storage.get_client()
     results = []
 
     for entry in manifest["files"]:

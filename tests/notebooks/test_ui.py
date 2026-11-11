@@ -81,11 +81,10 @@ async def test_an_sdk_task_on_this_machine_runs_in_the_kernel(monkeypatch, tmp_p
         commands.append(cmd[:2])
         Path(cmd[-1]).write_text("chrT\t20\t6\t10\t11\n")
 
-    monkeypatch.setattr(samtools_tasks, "_run", samtools)
+    monkeypatch.setattr(samtools_tasks, "run", samtools)
     fasta = tmp_path / "tiny.fa"
     fasta.write_text(">chrT\nACGTACGTAC\nGTACGTACGT\n")
-    ref = Reference(build="tiny")
-    await ref.update(fasta)
+    ref = await Reference.store(fasta, build="tiny")
 
     index = await dispatch(run_location(), samtools_faidx, ref=ref)
 

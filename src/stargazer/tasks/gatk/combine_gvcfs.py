@@ -9,11 +9,9 @@ spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 
 from pathlib import Path
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import Reference, Variants, VariantsIndex
-from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import _run
+from stargazer.utils import run, temp_dir
 
 
 @gatk_env.task
@@ -37,8 +35,6 @@ async def combine_gvcfs(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037053272-CombineGVCFs
     """
-    logger.info([x.to_dict() for x in gvcfs])
-    logger.info(ref.to_dict())
     if not gvcfs:
         raise ValueError("gvcfs list cannot be empty")
 
@@ -59,7 +55,7 @@ async def combine_gvcfs(
         gvcf_paths.append(await gvcf.fetch())
         sample_ids.append(gvcf.sample_id)
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = temp_dir()
     output_gvcf = output_dir / f"{cohort_id}_combined.g.vcf"
 
     cmd = [
@@ -74,16 +70,9 @@ async def combine_gvcfs(
     for gvcf_path in gvcf_paths:
         cmd.extend(["-V", str(gvcf_path)])
 
-    _stdout, stderr = await _run(cmd, cwd=str(output_dir))
+    await run(cmd, cwd=str(output_dir))
 
-    if not output_gvcf.exists():
-        raise FileNotFoundError(
-            f"CombineGVCFs did not create output GVCF at {output_gvcf}. "
-            f"stderr: {stderr}"
-        )
-
-    combined_vcf = Variants()
-    await combined_vcf.update(
+    combined_vcf = await Variants.store(
         output_gvcf,
         sample_id=cohort_id,
         caller="combine_gvcfs",
@@ -96,8 +85,8 @@ async def combine_gvcfs(
     # GATK writes the GVCF's index alongside it without being asked.
     idx_path = output_dir / f"{output_gvcf.name}.idx"
     if idx_path.exists():
-        vidx = VariantsIndex()
-        await vidx.update(idx_path, sample_id=cohort_id, companion_of=combined_vcf.cid)
+        await VariantsIndex.store(
+            idx_path, sample_id=cohort_id, companion_of=combined_vcf.cid
+        )
 
-    logger.info(combined_vcf.to_dict())
     return combined_vcf

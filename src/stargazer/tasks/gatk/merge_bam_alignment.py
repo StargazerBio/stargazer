@@ -6,11 +6,9 @@ Merges aligned BAM with unmapped BAM using GATK MergeBamAlignment.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import Alignment, AlignmentIndex, Reference
-from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import _run
+from stargazer.utils import run, temp_dir
 
 
 @gatk_env.task
@@ -34,15 +32,12 @@ async def merge_bam_alignment(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360037226472-MergeBamAlignment-Picard
     """
-    logger.info(aligned_bam.to_dict())
-    logger.info(unmapped_bam.to_dict())
-    logger.info(ref.to_dict())
     # fetch() auto-downloads companions (.fai, .dict for ref)
     aligned_path = await aligned_bam.fetch()
     unmapped_path = await unmapped_bam.fetch()
     ref_path = await ref.fetch()
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = temp_dir()
     output_bam = output_dir / f"{aligned_bam.sample_id}_merged.bam"
 
     cmd = [
@@ -72,15 +67,9 @@ async def merge_bam_alignment(
         "-1",
     ]
 
-    await _run(cmd, cwd=str(output_dir))
+    await run(cmd, cwd=str(output_dir))
 
-    if not output_bam.exists():
-        raise FileNotFoundError(
-            f"MergeBamAlignment did not create output BAM at {output_bam}"
-        )
-
-    merged_bam = Alignment()
-    await merged_bam.update(
+    merged_bam = await Alignment.store(
         output_bam,
         sample_id=aligned_bam.sample_id,
         sorted="coordinate",
@@ -93,14 +82,10 @@ async def merge_bam_alignment(
 
     # Picard names the index <name>.bai, not <name>.bam.bai.
     bam_index = output_bam.with_suffix(".bai")
-    if not bam_index.exists():
-        raise FileNotFoundError(f"--CREATE_INDEX did not create {bam_index}")
-    idx = AlignmentIndex()
-    await idx.update(
+    await AlignmentIndex.store(
         bam_index,
         sample_id=aligned_bam.sample_id,
         companion_of=merged_bam.cid,
     )
 
-    logger.info(merged_bam.to_dict())
     return merged_bam

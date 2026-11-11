@@ -73,7 +73,7 @@ Three things hold for every test, so none of them is set up per test:
 
 - **Flyte is initialized once.** A session-scoped autouse fixture calls `init_flyte()` (`stargazer.config`).
 - **No public tier.** `PINATA_JWT` is stripped before anything imports `stargazer`, so no storage client can reach Pinata. The pinata tier's own conftest sets it back from `tests/.secrets/pinata_jwt` for each of its tests.
-- **An empty store per test.** `isolated_storage` (autouse) points `stargazer.utils.storage.default_client` at a `StorageClient` whose store, index and cache live under the test's `tmp_path`, and unsets `STARGAZER_OWNER`. Nothing reads or writes `~/.stargazer`. A test that needs its own client builds one with `make_client(root, cache, public, gateway)`, and `FakePublicTier` stands in for Pinata's public network (records in memory, bytes served from a local gateway directory). The devbox tier replaces this fixture with a no-op: its tests store on the devbox.
+- **An empty store per test.** `isolated_storage` (autouse) patches `stargazer.utils.storage.get_client` to return a per-test `StorageClient` whose store, index and cache live under the test's `tmp_path`, and unsets `STARGAZER_OWNER`. Nothing reads or writes `~/.stargazer`. A test that needs its own client builds one with `make_client(root, cache, public, gateway)`, and `FakePublicTier` stands in for Pinata's public network (records in memory, bytes served from a local gateway directory). The devbox tier replaces this fixture with a no-op: its tests store on the devbox.
 
 ## Task Test Template
 
@@ -112,8 +112,8 @@ async def test_{task_name}_missing_input_fails():
 A task test calls the task directly and awaits it, which runs the function in this process and returns its value.
 
 - **Inputs come from fixture files.** An asset built with a local `path` and no CID is used in place by `fetch()`, so the fixture never has to be stored first. The fixture directories are `GENERAL_FIXTURES_DIR`, `GATK_FIXTURES_DIR` and `SCRNA_FIXTURES_DIR` in `conftest.py`.
-- **Outputs go through real storage.** `update()` stores them in the test's own empty store and index, so a test can `fetch()` them back, or `assemble()` for them.
-- **Stored inputs are stored by the test.** An input that has to be a stored record, with a real CID and companions that come along on `fetch()`, is stored with `update()` in the test's own store first, as `tests/assets/test_asset.py`'s `TestFetch` does.
+- **Outputs go through real storage.** `store()` stores them in the test's own empty store and index, so a test can `fetch()` them back, or `assemble()` for them.
+- **Stored inputs are stored by the test.** An input that has to be a stored record, with a real CID and companions that come along on `fetch()`, is stored with `store()` in the test's own store first, as `tests/assets/test_asset.py`'s `TestFetch` does.
 - **`asyncio_mode = "auto"`** is set in `pyproject.toml`; the `@pytest.mark.asyncio` marker is optional.
 
 Task tests run in the task's image:

@@ -39,8 +39,7 @@ async def test_haplotype_caller_links_its_gvcf_to_its_alignment():
     """The GVCF records the alignment it was made from, before and after storage."""
     sample_id = "NA12829_TP53"
 
-    alignment = Alignment()
-    await alignment.update(
+    alignment = await Alignment.store(
         GATK_FIXTURES_DIR / "NA12829_TP53_recalibrated.bam",
         sample_id=sample_id,
         sorted="coordinate",
@@ -48,7 +47,7 @@ async def test_haplotype_caller_links_its_gvcf_to_its_alignment():
         bqsr_applied=True,
         tool="gatk_apply_bqsr",
     )
-    await AlignmentIndex().update(
+    await AlignmentIndex.store(
         GATK_FIXTURES_DIR / "NA12829_TP53_recalibrated.bai",
         sample_id=sample_id,
         companion_of=alignment.cid,

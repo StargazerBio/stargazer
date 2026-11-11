@@ -21,7 +21,7 @@ import dataclasses
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar, get_type_hints
+from typing import Any, ClassVar, Self, get_type_hints
 
 from flyte.io import File
 
@@ -197,7 +197,7 @@ class Asset:
         """
         import stargazer.utils.storage as _storage
 
-        client = _storage.default_client
+        client = _storage.get_client()
         local = await client.download(self)
         if self.cid:
             for record in await client.companions(self.cid):
@@ -205,18 +205,24 @@ class Asset:
                     await client.download(specialize(record), local.parent)
         return local
 
-    async def update(self, path: Path, **kwargs) -> None:
-        """Store a local file as this asset, setting fields from kwargs first.
+    @classmethod
+    async def store(cls, path: Path, **fields: Any) -> Self:
+        """Store a local file as a new asset of this type and return it.
 
-        Sets `cid` and `path` (the stored File) once the file is uploaded and
-        its index row has committed. Raises if either fails.
+        `fields` are assigned as attributes first, so one the type doesn't
+        declare raises. The asset comes back with its `cid` and `path` (the
+        stored File) set, once the file is uploaded and its index row has
+        committed. Raises if either fails, `FileNotFoundError` when `path`
+        isn't there.
         """
         import stargazer.utils.storage as _storage
 
-        for key, value in kwargs.items():
-            if value is not None:
-                setattr(self, key, value)
-        await _storage.default_client.upload(self, Path(path))
+        asset = cls()
+        for name, value in fields.items():
+            setattr(asset, name, value)
+        await _storage.get_client().upload(asset, Path(path))
+        logger.info(f"Stored {cls._asset_key or 'asset'} {asset.path.name} {asset.cid}")
+        return asset
 
 
 def specialize(record: dict) -> Asset:
@@ -311,5 +317,5 @@ async def assemble(**filters: Any) -> list[Asset]:
     """
     import stargazer.utils.storage as _storage
 
-    records = await _storage.default_client.query(filters)
+    records = await _storage.get_client().query(filters)
     return [specialize(r) for r in records]

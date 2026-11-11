@@ -24,15 +24,17 @@ Where asset bytes and metadata live, and the local cache in front of them.
   its asset's directory is relinked when a later fetch picks a different
   file of that name.
 
-`get_client()` builds a client from the environment; `default_client` is the
-lazily built process-wide instance (`_LazyClient`).
+`get_client()` is the process-wide client, built from the environment on its
+first call; `temp_dir()` hands a task a fresh directory for its outputs.
 
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
 
 import asyncio
+import functools
 import os
 import shutil
+import tempfile
 from pathlib import Path
 
 import aiofiles
@@ -121,7 +123,7 @@ class StorageClient:
         """Wire the client.
 
         Args:
-            local_dir: Scratch space for task outputs and the download cache
+            local_dir: Temp space for task outputs and the download cache
             store_root: Object-store root (a local directory or a bucket URI)
             index: The asset index
             public: Pinata client for the public tier, or None for none
@@ -421,8 +423,13 @@ class StorageClient:
         return await self.index.merge(cid, _stamp_owner(dict(keyvalues)))
 
 
+@functools.cache
 def get_client() -> StorageClient:
-    """Build a storage client from the environment.
+    """The process's storage client, built from the environment on first call.
+
+    Built on first call and not at import because Flyte injects `PINATA_JWT`
+    just before a task runs, and a client built earlier would miss it and
+    silently drop the public tier.
 
     `STARGAZER_STORE_ROOT`, `STARGAZER_INDEX_URL` and `STARGAZER_LOCAL` pick
     the store, the index and the cache; `PINATA_JWT` turns on the public
@@ -441,24 +448,13 @@ def get_client() -> StorageClient:
     )
 
 
-class _LazyClient:
-    """Lazy singleton proxy for the storage client.
+def temp_dir() -> Path:
+    """A fresh directory for one task's outputs, under `<local_dir>/temp/`.
 
-    PINATA_JWT is injected by Flyte just before a task runs, so building the
-    client at import would miss it and silently drop the public tier.
+    Each call makes a new one, so two tasks in one process never write the
+    same file. Nothing removes them: a pod's disk goes with the pod, and a
+    local `STARGAZER_LOCAL` is the user's to clear.
     """
-
-    _instance: StorageClient | None = None
-
-    def _resolve(self) -> StorageClient:
-        """Construct the real client on first use and memoize it."""
-        if self._instance is None:
-            self._instance = get_client()
-        return self._instance
-
-    def __getattr__(self, name: str):
-        """Proxy every attribute access to the lazily-resolved client."""
-        return getattr(self._resolve(), name)
-
-
-default_client: StorageClient = _LazyClient()  # type: ignore[assignment]
+    root = get_client().local_dir / "temp"
+    root.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(dir=root))

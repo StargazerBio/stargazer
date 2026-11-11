@@ -21,7 +21,7 @@ flowchart TD
 | Field | Type | Purpose |
 |-------|------|---------|
 | `cid` | `str` | IPFS CID of the file, computed locally from its bytes |
-| `path` | `flyte.io.File \| None` | Where the stored file lives (set by `update()`); assigning a local `Path` wraps it in a File |
+| `path` | `flyte.io.File \| None` | Where the stored file lives (set by `store()`); assigning a local `Path` wraps it in a File |
 | `keyvalues` | `dict[str, str]` | On a typed subclass, the **extra keys** its class doesn't declare; on a bare `Asset`, all of its metadata |
 
 Subclasses declare `_asset_key`, a unique string naming the kind, plus typed dataclass fields with defaults (`Alignment` declares `sample_id`, `duplicates_marked`, `bqsr_applied`). See [Writing a Task](../guides/writing-a-task.md) for a worked declaration. Subclasses auto-register by `_asset_key`; registration happens when the module imports, so a class defined in user code is returned by `assemble()` in any process that imports it. Assigning a field a typed subclass doesn't declare raises `AttributeError`, catching metadata typos at write time.
@@ -39,7 +39,7 @@ Subclasses declare `_asset_key`, a unique string naming the kind, plus typed dat
 ### Core Methods
 
 - `fetch()` — downloads self, then every companion into the same directory; returns the local path
-- `update(path, **kwargs)` — sets the given attributes, stores the file, and sets `cid` and `path`
+- `store(path, **kwargs)` — a classmethod that builds the asset, sets the given attributes, stores the file, sets `cid` and `path`, and returns it
 - `to_dict()` — the asset as a storage record (`cid`, `uri`, `name`, `keyvalues`), the shape `specialize()` reads
 - `declared_fields()` — the names of the fields a type declares
 
@@ -65,4 +65,4 @@ Records come back through `specialize(record)`, which is graceful at query time:
 
 `utils/storage.py` defines `StorageClient`, the one storage interface. Bytes go to the object store, metadata to the index (one row per CID), public data joins queries from Pinata when `PINATA_JWT` is set, and a local cache sits in front of downloads. The CID comes from `utils/cid.py`, which builds the same UnixFS DAG Pinata does, so identity never depends on where a file is stored. Locations and settings are in [Configuration](configuration.md).
 
-Tasks never call storage directly. All storage interaction flows through `Asset.fetch()`, `Asset.update()` and `assemble()`.
+Tasks never call storage directly. All storage interaction flows through `Asset.fetch()`, `Asset.store()` and `assemble()`.

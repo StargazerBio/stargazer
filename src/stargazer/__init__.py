@@ -14,12 +14,11 @@ from importlib.metadata import version
 __version__ = version("stargazer-bio")
 
 from stargazer.utils.pinata import PinataClient
-from stargazer.utils.storage import StorageClient, default_client, get_client
+from stargazer.utils.storage import StorageClient, get_client
 
 __all__ = [
     "PinataClient",
     "StorageClient",
     "__version__",
-    "default_client",
     "get_client",
 ]

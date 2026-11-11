@@ -35,8 +35,7 @@ async def test_sort_sam_sorts_bam():
 
 async def test_sort_sam_links_its_output_to_its_input():
     """The sorted BAM records the BAM it was made from and its reference."""
-    alignment = Alignment()
-    await alignment.update(
+    alignment = await Alignment.store(
         GATK_FIXTURES_DIR / "NA12829_TP53_merged.bam",
         sample_id="NA12829_TP53_merged",
         tool="bwa_mem",

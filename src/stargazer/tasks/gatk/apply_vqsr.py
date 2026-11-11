@@ -6,7 +6,6 @@ Applies VQSR recalibration to a VCF using GATK ApplyVQSR.
 spec: [docs/architecture/tasks.md](../architecture/tasks.md)
 """
 
-import stargazer.utils.storage as _storage
 from stargazer.assets import (
     Reference,
     Variants,
@@ -14,9 +13,8 @@ from stargazer.assets import (
     VQSRModel,
     assemble,
 )
-from stargazer.config import logger
 from stargazer.tasks.gatk.env import gatk_env
-from stargazer.utils import _run
+from stargazer.utils import run, temp_dir
 
 _DEFAULT_FILTER_LEVEL = {"SNP": 99.5, "INDEL": 99.0}
 
@@ -48,9 +46,6 @@ async def apply_vqsr(
     Reference:
         https://gatk.broadinstitute.org/hc/en-us/articles/360035531612-Variant-Quality-Score-Recalibration-VQSR
     """
-    logger.info(vcf.to_dict())
-    logger.info(ref.to_dict())
-    logger.info(vqsr_model.to_dict())
     mode = vqsr_model.mode or "SNP"
     if mode not in ("SNP", "INDEL"):
         raise ValueError(f"VQSRModel mode must be 'SNP' or 'INDEL', got {mode!r}")
@@ -65,7 +60,7 @@ async def apply_vqsr(
         raise ValueError(f"VQSRModel {vqsr_model.cid} has no stored tranches file")
     tranches_path = await tranches[0].fetch()
 
-    output_dir = _storage.default_client.local_dir
+    output_dir = temp_dir()
     sample_id = vcf.sample_id or "cohort"
     output_vcf = output_dir / f"{sample_id}_vqsr_{mode.lower()}.vcf"
 
@@ -90,16 +85,10 @@ async def apply_vqsr(
         str(output_vcf),
     ]
 
-    _, stderr = await _run(cmd, cwd=str(output_dir))
-
-    if not output_vcf.exists():
-        raise FileNotFoundError(
-            f"ApplyVQSR did not create output VCF at {output_vcf}. stderr: {stderr}"
-        )
+    await run(cmd, cwd=str(output_dir))
 
     source_samples = vcf.source_samples or [sample_id]
-    filtered_vcf = Variants()
-    await filtered_vcf.update(
+    filtered_vcf = await Variants.store(
         output_vcf,
         sample_id=sample_id,
         caller="apply_vqsr",
@@ -112,8 +101,8 @@ async def apply_vqsr(
 
     idx_path = output_dir / f"{output_vcf.name}.idx"
     if idx_path.exists():
-        vidx = VariantsIndex()
-        await vidx.update(idx_path, sample_id=sample_id, companion_of=filtered_vcf.cid)
+        await VariantsIndex.store(
+            idx_path, sample_id=sample_id, companion_of=filtered_vcf.cid
+        )
 
-    logger.info(filtered_vcf.to_dict())
     return filtered_vcf

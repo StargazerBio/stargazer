@@ -187,7 +187,7 @@ async def test_publish_puts_an_asset_and_its_companion_on_the_public_network(
             index=SqliteIndex(tmp_path / "pod-index.db"),
             public=PinataClient(),
         )
-        monkeypatch.setattr(storage_mod, "default_client", pod)
+        monkeypatch.setattr(storage_mod, "get_client", lambda: pod)
         local = await Asset(cid=parent.cid).fetch()
         assert (local.parent / companion_file.name).read_text() == (
             f"stargazer companion {tag}\n"

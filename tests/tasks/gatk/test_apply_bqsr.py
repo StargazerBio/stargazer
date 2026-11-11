@@ -61,15 +61,14 @@ async def test_apply_bqsr_links_its_output_to_its_input():
     """The recalibrated BAM records the BAM it was made from."""
     sample_id = "NA12829_TP53_markdup"
 
-    alignment = Alignment()
-    await alignment.update(
+    alignment = await Alignment.store(
         GATK_FIXTURES_DIR / "NA12829_TP53_markdup.bam",
         sample_id=sample_id,
         sorted="coordinate",
         duplicates_marked=True,
         tool="gatk_mark_duplicates",
     )
-    await AlignmentIndex().update(
+    await AlignmentIndex.store(
         GATK_FIXTURES_DIR / "NA12829_TP53_markdup.bai",
         sample_id=sample_id,
         companion_of=alignment.cid,

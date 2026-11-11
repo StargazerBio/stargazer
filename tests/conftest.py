@@ -158,7 +158,7 @@ def isolated_storage(tmp_path, monkeypatch):
     """Point the default storage client at an empty per-test store, index and cache."""
     monkeypatch.delenv("STARGAZER_OWNER", raising=False)
     client = make_client(tmp_path / "storage")
-    monkeypatch.setattr(_storage_mod, "default_client", client)
+    monkeypatch.setattr(_storage_mod, "get_client", lambda: client)
     return client
 
 

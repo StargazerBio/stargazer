@@ -109,7 +109,7 @@ def _():
         - **`cid`** — a content identifier. Same bytes anywhere → same
           CID. This is the asset's *identity*, independent of where it
           physically lives. CIDs are IPFS hashes (`bafk…` / `bafy…`).
-        - **`path`** — where the stored file lives, set by `update()`.
+        - **`path`** — where the stored file lives, set by `store()`.
           `fetch()` downloads it and returns the local path, so a
           workflow can refer to data before it has been downloaded.
         - **Typed dataclass fields** — `sample_id`, `organism`,
@@ -345,17 +345,18 @@ def _():
     """Section 4 — persist to storage."""
     mo.md(
         """
-        ## 4. Persist via `update()`
+        ## 4. Persist via `store()`
 
-        `Asset.update(path, **kwargs)` is the canonical "write this to
+        `Asset.store(path, **kwargs)` is the canonical "write this to
         storage" call:
 
-        1. Sets any field kwargs on the asset
+        1. Builds the asset and sets any field kwargs on it
         2. Works out the file's content ID (`cid`) from its bytes
         3. Uploads the file to your storage (a folder on this machine
            by default, the cloud bucket on a hosted deploy) and records
            the asset's metadata so it can be found later
-        4. Sets `self.cid`, and `self.path` to the stored file
+        4. Sets the asset's `cid`, and its `path` to the stored file,
+           and returns it
 
         We'll write a tiny CSV to a temp file and push it through.
         """
@@ -377,9 +378,8 @@ async def _():
         _w.writerow(["s1d1", "human", "PBMC"])
         _w.writerow(["s1d3", "human", "PBMC"])
 
-    uploaded_sheet = SampleSheet()
-    await uploaded_sheet.update(
-        path=csv_path,
+    uploaded_sheet = await SampleSheet.store(
+        csv_path,
         cohort_id="assets_demo",
         n_samples=2,
         organism="human",
@@ -388,7 +388,7 @@ async def _():
     mo.md(
         f"""
         Wrote `{csv_path.name}` to a temp dir and called
-        `update()`. The asset now has both an identity and a location:
+        `store()`. The asset now has both an identity and a location:
 
         - `uploaded_sheet.cid` → `{uploaded_sheet.cid}`
         - `uploaded_sheet.path` → `{uploaded_sheet.path.path}`
@@ -520,9 +520,12 @@ def _():
         can still be tagged with one:
 
         ```python
-        sheet = SampleSheet()
-        sheet.keyvalues["lab"] = "tutorial_lab"
-        await sheet.update(path, cohort_id="extras_demo", ...)
+        sheet = await SampleSheet.store(
+            path,
+            cohort_id="extras_demo",
+            keyvalues={"lab": "tutorial_lab"},
+            ...
+        )
 
         await assemble(asset="sample_sheet", lab="tutorial_lab")
         ```
@@ -545,10 +548,12 @@ async def _():
     _csv = _Path(_tempfile.mkdtemp(prefix="stargazer_extras_")) / "extras.csv"
     _csv.write_text("sample_id,organism,tissue\ns2d1,mouse,liver\n")
 
-    tagged_sheet = SampleSheet()
-    tagged_sheet.keyvalues["lab"] = "tutorial_lab"
-    await tagged_sheet.update(
-        path=_csv, cohort_id="extras_demo", n_samples=1, organism="mouse"
+    tagged_sheet = await SampleSheet.store(
+        _csv,
+        cohort_id="extras_demo",
+        n_samples=1,
+        organism="mouse",
+        keyvalues={"lab": "tutorial_lab"},
     )
 
     _found = await _assemble(asset="sample_sheet", lab="tutorial_lab")
@@ -624,7 +629,7 @@ def _():
         | `Asset` base + `_asset_key` | A typed, registered, queryable file |
         | `cid` vs `path` | Identity vs location, decoupled |
         | `to_keyvalues()` / `from_keyvalues()` | Round-trip across a flat-string storage boundary |
-        | `update(path, **kwargs)` | Single call: set fields, upload, get a CID |
+        | `store(path, **kwargs)` | Single call: set fields, upload, get a CID |
         | `assemble(**filters)` | Discovery by metadata, not folders |
         | `companion_of` and `<parent>_cid` | The asset graph's edges: belongs beside, made from |
         | Extras in `keyvalues` | Your own queryable keys on any asset |

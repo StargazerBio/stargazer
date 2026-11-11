@@ -24,14 +24,14 @@ def ran(monkeypatch):
 
 async def store_reference():
     """Store the fixture reference and return it."""
-    ref = Reference()
-    await ref.update(GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38")
-    return ref
+    return await Reference.store(
+        GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa", build="GRCh38"
+    )
 
 
 async def store_fai(ref):
     """Store the fixture `.fai` as a companion of `ref`."""
-    await ReferenceIndex().update(
+    await ReferenceIndex.store(
         GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa.fai",
         build="GRCh38",
         tool="samtools_faidx",
@@ -41,7 +41,7 @@ async def store_fai(ref):
 
 async def store_dict(ref):
     """Store the fixture `.dict` as a companion of `ref`."""
-    await SequenceDict().update(
+    await SequenceDict.store(
         GENERAL_FIXTURES_DIR / "GRCh38_TP53.dict",
         build="GRCh38",
         tool="gatk_CreateSequenceDictionary",
@@ -54,7 +54,7 @@ async def store_bwa_index(ref, tmp_path, extensions, aligner="bwa-mem2"):
     for ext in extensions:
         path = tmp_path / f"GRCh38_TP53.fa{ext}"
         path.write_bytes(ext.encode())
-        await AlignerIndex().update(
+        await AlignerIndex.store(
             path,
             aligner=aligner,
             build="GRCh38",

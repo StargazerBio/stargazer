@@ -53,8 +53,7 @@ async def test_merge_bam_alignment_links_its_output_to_the_aligned_bam():
     """The merged BAM records the aligned BAM it was made from."""
     sample_id = "NA12829_TP53_merge"
 
-    aligned_bam = Alignment()
-    await aligned_bam.update(
+    aligned_bam = await Alignment.store(
         GATK_FIXTURES_DIR / "NA12829_TP53_bwa_aligned.bam",
         sample_id=sample_id,
         tool="bwa_mem",
