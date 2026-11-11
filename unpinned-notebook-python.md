@@ -29,4 +29,42 @@ On `fix/unpinned-notebook-python`: the launch pins Python when a header doesn't,
 
 Left out: a notebook that didn't hydrate (marimo creates its blank after the pin runs), and an old header's SDK source, ticket [[old-header-sdk-source]].
 
+## Verification recipe: an old-seed notebook on a pod
+
+A workspace notebook created from a seed that predates the pixi sandbox (uv-style header: `requires-python`, `[tool.uv.sources]`, no pixi tables) opens in the editor, its kernel starts on the image's Python, and it imports the image's SDK rather than PyPI's.
+
+### Sub-features
+
+- **PIN**: the launch adds `python = "<image minor>.*"` under `[tool.pixi.dependencies]`.
+- **SDK**: the launch copies the `[tool.uv.sources]` path for `stargazer-bio` into `[tool.pixi.pypi-dependencies]`.
+- **KERNEL**: the editor's kernel starts and runs a cell.
+
+### How to get to it (user POV)
+
+The dashboard's Workspace section: create a notebook from Blank, open it in edit.
+
+### Driving it
+
+Preconditions: an infra checkout whose `stargazer-bio` pin is a release with a uv-style Blank seed (2026.10.30), with `.flyte/union.yaml` linked and `tenant.env` loaded; the built-in browser signed in to the console as the test account.
+
+1. From the stargazer worktree: `docker buildx build --platform linux/amd64 -f runtime/Dockerfile -t ghcr.io/stargazerbio/debug:unpinned-notebook-python --push .`
+2. From infra: `STARGAZER_NOTEBOOK_IMAGE=ghcr.io/stargazerbio/debug:unpinned-notebook-python uv run python .claude/skills/verify-dashboard/scripts/union_dashboard.py deploy`. `check <dashboard app>` shows the debug image's digest.
+3. In the dashboard, create a Blank workspace notebook under a fresh name and open it in edit. Passes **KERNEL**: the kernel leaves "Starting kernel…" and a cell runs.
+4. In a cell:
+
+   ```python
+   import sys, importlib.metadata as md
+   dist = md.distribution("stargazer-bio")
+   (sys.version, dist.version, dist.read_text("direct_url.json"),
+    open(__file__).read().split("# ///\n")[0])
+   ```
+
+   Passes **PIN**: Python is the image's minor (3.14), and the header shows the pin. Passes **SDK**: `direct_url.json` names `file:///stargazer` (a PyPI install has none) and the header shows the `[tool.pixi.pypi-dependencies]` entry beside the untouched `[tool.uv.sources]`.
+5. `union_dashboard.py teardown`; its live runs print `[]`.
+
+### Gotchas
+
+- In local containers the editor's kernel didn't start for any notebook, with or without the change (2026-11-09), so KERNEL is only reachable on the tenant.
+- A workspace notebook is a copy of its seed at creation: an existing old notebook works too, a new one needs the old pin in infra.
+
 Related: [[board]], [[pixi-notebook-sandbox]], [[run-modes]], [[marimo-sandbox]].
