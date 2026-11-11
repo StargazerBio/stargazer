@@ -35,6 +35,7 @@ From most general to most specific, and the more specific wins:
 ## In Stargazer
 
 - **The environments are in their domains' `env.py`** (`tasks/gatk/env.py`'s `gatk_env`, `tasks/scrna/env.py`'s `scrna_env`), with comments on how each is sized; how they're built is in [[flyte-images]]. The rules for adding one, and the devbox's memory budget, are in `AGENTS.md`.
+- **A Stargazer environment sets `image` and `secrets` and no `env_vars`**, because a hosted project's `environment_variables` setting reaches every task pod. The devbox doesn't apply that setting to task pods (measured 2026-11-10), so the domain environments keep `env_vars=STARGAZER_ENV_VARS`.
 
 ## Related
 

@@ -31,7 +31,7 @@ All defaults are set in `config.py`. If a variable is set (even to an empty stri
 | `PINATA_GATEWAY` | IPFS gateway for public downloads | The project's dedicated gateway |
 | `STARGAZER_API_KEY_SECRET` | The Flyte secret holding the project's API key (needed on a cluster with a login, such as Union) | unset |
 
-`STARGAZER_STORE_ROOT` and `STARGAZER_INDEX_URL` are forwarded into task pods only when set explicitly. A pod can't use the local default store or index, so a remote run submitted locally with the defaults has nowhere shared to write.
+A hosted project's settings carry the store, index, owner and key secret's name to every task pod, so an environment passes no variables. `STARGAZER_ENV_VARS` forwards the submitter's explicitly-set ones for a cluster whose projects don't (the devbox), and the domain environments pass it for that reason. A cluster task whose store or index is still the local default raises on first use of the storage client instead of storing on the pod's disk.
 
 Where images are pushed is Flyte's own setting, `FLYTE_IMAGE_REGISTRY`; Stargazer sets none. Set it in the environment of whatever targets a cluster that needs one (the devbox's is `localhost:30000`), never in a config file a Union run might also find.
 

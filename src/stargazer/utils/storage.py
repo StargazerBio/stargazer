@@ -40,7 +40,7 @@ import aiohttp
 import flyte.storage
 from flyte.io import File
 
-import stargazer.config  # ensure env var defaults are set  # noqa: F401
+import stargazer.config  # also sets the env defaults
 from stargazer.assets.asset import Asset
 from stargazer.utils.cid import compute_cid
 from stargazer.utils.index import SqlIndex, make_index
@@ -427,7 +427,12 @@ def get_client() -> StorageClient:
     `STARGAZER_STORE_ROOT`, `STARGAZER_INDEX_URL` and `STARGAZER_LOCAL` pick
     the store, the index and the cache; `PINATA_JWT` turns on the public
     tier.
+
+    Raises:
+        RuntimeError: in a cluster task with no store or index set
+            (`stargazer.config.require_cluster_storage`)
     """
+    stargazer.config.require_cluster_storage()
     return StorageClient(
         local_dir=Path(os.environ["STARGAZER_LOCAL"]),
         store_root=os.environ["STARGAZER_STORE_ROOT"],

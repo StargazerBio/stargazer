@@ -38,6 +38,8 @@ scrna_env = flyte.TaskEnvironment(
     description="scanpy-based single-cell RNA analysis; memory-intensive AnnData workloads",
     image=task_image(__file__),
     resources=flyte.Resources(memory=("2Gi", "6Gi")),
+    # For the devbox, whose projects' settings don't reach task pods; a
+    # hosted project's settings carry these.
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,
 )
