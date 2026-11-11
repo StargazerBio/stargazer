@@ -10,6 +10,7 @@ import subprocess
 import time
 import uuid
 
+import flyte
 import psycopg
 import pytest
 
@@ -49,6 +50,17 @@ def test_indexed_in_postgres(tag, index_query):
             f"/assets/{row['cid']}/{row['name']}"
         )
         assert row["keyvalues"]["_owner"] == STORAGE["STARGAZER_OWNER"]
+
+
+def test_a_pod_given_no_store_refuses_to_store():
+    """Its own disk goes with the pod, so the task stops, naming what's missing."""
+    started = flyte.run(pod_tasks.bare_store, tag=uuid.uuid4().hex[:8])
+    print(f"bare_store: {started.url}")
+    started.wait()
+    with pytest.raises(
+        Exception, match="STARGAZER_STORE_ROOT and STARGAZER_INDEX_URL not set"
+    ):
+        started.raise_for_status()
 
 
 def test_extra_keyvalue_travels_between_pods(devbox_run):

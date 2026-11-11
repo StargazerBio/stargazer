@@ -39,6 +39,8 @@ gatk_env = flyte.TaskEnvironment(
     # (workflow, prepare_reference or preprocess_sample, the tool), and three
     # 2Gi requests don't fit the devbox node beside a dashboard.
     resources=flyte.Resources(memory=("1Gi", "6Gi")),
+    # For the devbox, whose projects' settings don't reach task pods; a
+    # hosted project's settings carry these.
     env_vars=STARGAZER_ENV_VARS,
     secrets=STARGAZER_SECRETS,
 )

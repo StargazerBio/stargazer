@@ -2,12 +2,14 @@
 
 from pathlib import Path
 
+import flyte
 import pytest
 from conftest import FakePublicTier, make_client
 from flyte.io import File
 from flyte.types import TypeEngine
 
 import stargazer.utils.storage as storage_mod
+from stargazer import config
 from stargazer.assets import (
     R1,
     AlignerIndex,
@@ -18,6 +20,7 @@ from stargazer.assets import (
     assemble,
 )
 from stargazer.utils.cid import compute_cid
+from stargazer.utils.storage import get_client
 
 
 @pytest.fixture
@@ -608,3 +611,57 @@ def test_temp_dir_is_fresh_per_call_under_the_local_dir(client):
     assert first != second
     assert first.is_dir() and second.is_dir()
     assert first.parent == second.parent == client.local_dir / "temp"
+
+
+class _Ctx:
+    """Stands in for Flyte's task context."""
+
+    def __init__(self, in_cluster):
+        """A fake context; `in_cluster` is what `is_in_cluster` returns."""
+        self.in_cluster = in_cluster
+
+    def is_in_cluster(self):
+        """Whether the task runs in a cluster."""
+        return self.in_cluster
+
+
+class TestClusterStorage:
+    """A cluster pod must be told where the store and index are."""
+
+    @pytest.fixture(autouse=True)
+    def uncached_client(self):
+        """`get_client()` keeps its first client: start and leave each test without one."""
+        get_client.cache_clear()
+        yield
+        get_client.cache_clear()
+
+    def test_cluster_task_with_local_defaults_is_refused(self, monkeypatch, tmp_path):
+        """Its own disk goes with the pod: naming both variables beats losing the asset."""
+        monkeypatch.setattr(flyte, "ctx", lambda: _Ctx(in_cluster=True))
+        monkeypatch.setenv("STARGAZER_LOCAL", str(tmp_path / "local"))
+        for key, default in config._LOCAL_STORAGE.items():
+            monkeypatch.setenv(key, default)
+        with pytest.raises(RuntimeError) as err:
+            get_client()
+        assert "STARGAZER_STORE_ROOT and STARGAZER_INDEX_URL not set" in str(err.value)
+        assert "env_vars=STARGAZER_ENV_VARS" in str(err.value)
+
+    def test_cluster_task_with_a_store_and_index_gets_its_client(
+        self, monkeypatch, tmp_path
+    ):
+        """Set explicitly, they're used."""
+        monkeypatch.setattr(flyte, "ctx", lambda: _Ctx(in_cluster=True))
+        monkeypatch.setenv("STARGAZER_LOCAL", str(tmp_path / "local"))
+        monkeypatch.setenv("STARGAZER_STORE_ROOT", str(tmp_path / "store"))
+        monkeypatch.setenv("STARGAZER_INDEX_URL", str(tmp_path / "index.db"))
+        assert get_client().store_root == str(tmp_path / "store")
+
+    def test_local_run_keeps_the_local_defaults(self, monkeypatch, tmp_path):
+        """A local task's disk is the user's own."""
+        monkeypatch.setattr(flyte, "ctx", lambda: _Ctx(in_cluster=False))
+        monkeypatch.setenv("STARGAZER_LOCAL", str(tmp_path / "local"))
+        monkeypatch.setenv(
+            "STARGAZER_STORE_ROOT", config._LOCAL_STORAGE["STARGAZER_STORE_ROOT"]
+        )
+        monkeypatch.setenv("STARGAZER_INDEX_URL", str(tmp_path / "index.db"))
+        assert get_client().store_root == config._LOCAL_STORAGE["STARGAZER_STORE_ROOT"]
