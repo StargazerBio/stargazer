@@ -81,6 +81,13 @@ WATCH=()
 
 # `-q`: marimo's banner advertises its own port, 8081, which only the proxy
 # can reach.
+# marimo layers the launcher's version over the server and each kernel with
+# `uv run --with`, whose dependencies are unpinned. Resolved as of the image's
+# warm step (runtime/Dockerfile), they match the warmed layers, which uv would
+# otherwise download and install again at every start once any of them has a
+# newer release. pixi ignores the setting, so the notebook's own environment
+# resolves as it always does.
+UV_EXCLUDE_NEWER="$(cat /opt/uv-exclude-newer)" \
 marimo -q "${MODE}" --sandbox=pixi "${WATCH[@]}" "${NOTEBOOK_PATH}" \
   --port 8081 --host 127.0.0.1 --headless --no-token &
 

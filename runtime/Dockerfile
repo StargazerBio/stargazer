@@ -132,7 +132,13 @@ ENV PATH="/opt/venv/bin:${PATH}" \
     UV_LINK_MODE="symlink" \
     DISABLE_AUTOUPDATER="1"
 
-RUN install -d -o flyte -g flyte /opt/pixi-cache /opt/uv-cache
+# The warm step below writes its date to /opt/uv-exclude-newer, and the launch
+# script resolves marimo's layers as of that date, so they match the warmed ones
+# when a package in them has had a release since. The terminal drops the
+# setting, so what a user installs with uv there isn't held back.
+RUN install -d -o flyte -g flyte /opt/pixi-cache /opt/uv-cache \
+    && install -o flyte -g flyte -m 644 /dev/null /opt/uv-exclude-newer \
+    && echo 'unset UV_EXCLUDE_NEWER' >> /home/flyte/.bashrc
 USER flyte
 
 # A warm cache, so a notebook's environment starts from local disk and only
@@ -147,9 +153,11 @@ USER flyte
 # `env.py` header: a notebook that runs a domain's tasks in its kernel lists
 # those packages in its own header. The domains are locked for linux-64, the
 # cluster's platform, so only that build of this image holds them. Within this
-# layer hardlinks cost nothing.
+# layer hardlinks cost nothing. The marimo layers resolve as of this step's
+# date, which the launch script reuses (above).
 RUN export PIXI_NO_HARD_LINKS=false PIXI_NO_REF_LINKS=false \
-        UV_LINK_MODE=hardlink \
+        UV_LINK_MODE=hardlink UV_EXCLUDE_NEWER="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    && echo "$UV_EXCLUDE_NEWER" > /opt/uv-exclude-newer \
     && UV="pixi exec --spec uv>=0.12 uv" \
     && VIRTUAL_ENV=/opt/venv $UV run -q --active --no-project \
         --python /opt/venv/bin/python --with "marimo[lsp]==0.25.1" \
