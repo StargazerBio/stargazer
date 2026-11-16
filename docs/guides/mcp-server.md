@@ -29,17 +29,19 @@ For remote access, run `stargazer --http` and connect over streamable HTTP (port
 
 ## Running a Task (Ad-hoc)
 
-Use `run_task` for experimentation. Provide filters to select assets and inputs for scalar parameters:
+Use `run_task` for experimentation. Every parameter goes in `inputs` by name: an asset parameter takes the CID of a stored file of its type, a list of assets takes a list of CIDs, and the rest take plain values. Find the CIDs with `query_files`:
 
 ```
+query_files(keyvalues={"asset": "reference", "build": "GRCh38_TP53"})
+query_files(keyvalues={"sample_id": "NA12829", "asset": ["r1", "r2"]})
+
 run_task(
-    task_name="samtools_faidx",
-    filters={"asset": "reference", "build": "GRCh38_TP53"},
-    inputs={}
+    task_name="bwa_mem2_mem",
+    inputs={"ref": "bafkrei…", "r1": "bafkrei…", "r2": "bafkrei…"}
 )
 ```
 
-The server calls `assemble(**filters)`, matches assets to task parameters by `_asset_key`, and executes the task. Every filter must match each asset it returns, so one filter set can only fill parameters whose assets share those keys: a reference (`build`) and a sample's reads (`sample_id`) never both match `{"build": ..., "sample_id": ...}`. Run a multi-asset pipeline through its workflow.
+`list_tasks(category="task")` lists each task's parameters and their types. Optional parameters can be left out. A CID that isn't in your storage, or is a file of another type than its parameter takes, is refused with the parameter's name. A public file is stored first with `fetch_resource_bundle` or `upload_file`.
 
 ## Running a Workflow (Reproducible)
 

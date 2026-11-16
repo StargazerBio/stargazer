@@ -52,7 +52,7 @@ The MCP server runs over stdio from a source install with the `mcp` extra; any M
 
 The server exposes two execution paths:
 
-- **`run_task`** — ad-hoc experimentation; the server assembles assets from filters
+- **`run_task`** — ad-hoc experimentation; each asset parameter takes a CID
 - **`run_workflow`** — reproducible pipelines; workflows handle their own assembly
 
 See [MCP Server](mcp-server.md) for the full server specification.
