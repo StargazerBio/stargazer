@@ -14,7 +14,6 @@ spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
 from stargazer.assets import R1, R2, Reference, Variants
-from stargazer.assets.asset import assemble
 from stargazer.tasks.gatk.env import gatk_env
 from stargazer.tasks import bwa_mem2_mem, haplotype_caller, mark_duplicates, sort_sam
 
@@ -22,12 +21,9 @@ from stargazer.tasks import bwa_mem2_mem, haplotype_caller, mark_duplicates, sor
 @gatk_env.task
 async def my_pipeline(build: str, sample_id: str) -> Variants:
     """One-line description of the pipeline."""
-    refs = await assemble(build=build, asset="reference")
-    ref = next(a for a in refs if isinstance(a, Reference))
-
-    reads = await assemble(sample_id=sample_id, asset=["r1", "r2"])
-    r1 = next(a for a in reads if isinstance(a, R1))
-    r2 = next((a for a in reads if isinstance(a, R2)), None)
+    ref = await Reference.find(build=build)
+    r1 = await R1.find(sample_id=sample_id)
+    r2 = await R2.find(sample_id=sample_id, required=False)
 
     alignment = await bwa_mem2_mem(ref=ref, r1=r1, r2=r2)
     alignment = await sort_sam(alignment=alignment)
@@ -39,9 +35,8 @@ The reference needs its indexes before it can be aligned against; `prepare_refer
 
 ## 2. Key Rules
 
-- **Accept scalar parameters only** — workflows handle their own assembly via `assemble()`, this keeps the workflow interface flexible for the MCP server while allowing you to create a strong contract with respect to the types *between* tasks
-- **One `assemble()` per kind of input** — every filter must match each asset it returns, so a reference (which has a `build`, no `sample_id`) and a sample's reads (the reverse) are queried separately
-- **Filter with `isinstance`** — not string matching on asset keys
+- **Accept scalar parameters only** — workflows look up their own inputs, this keeps the workflow interface flexible for the MCP server while allowing you to create a strong contract with respect to the types *between* tasks
+- **One `find()` per input** — `Reference.find(build=...)` returns the newest stored `Reference` matching every filter and raises when there's none; `required=False` returns `None` instead, for an optional input like `R2`. `find_all()` returns every match, newest first, and `assemble()` queries across types
 - **Use `asyncio.gather`** for independent tasks that can run in parallel, such as one branch per sample
 - **Workflows are tasks** — in Flyte v2, there's no separate decorator; decorate with the environment whose image runs the workflow body
 

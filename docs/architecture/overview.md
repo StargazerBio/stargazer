@@ -34,7 +34,7 @@ See [Tasks](tasks.md) for the task model.
 
 ## Workflows
 
-Workflows are tasks that call other tasks. They accept scalar parameters, call `assemble()` to query the asset graph for their inputs, and orchestrate the pipeline. Parallel execution uses `asyncio.gather`.
+Workflows are tasks that call other tasks. They accept scalar parameters, look up their inputs in the asset graph with each type's `find()`, and orchestrate the pipeline. Parallel execution uses `asyncio.gather`.
 
 See [Workflows](workflows.md) for the workflow model.
 

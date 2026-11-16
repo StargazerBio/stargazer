@@ -8,7 +8,8 @@ passed between tasks always points somewhere every pod can read.
 `fetch()` makes a local copy, with its companions beside it, and returns
 its path. A companion is any asset whose `companion_of` keyvalue holds
 another asset's CID: an index or a sequence dictionary that tools expect
-beside the file it names.
+beside the file it names. `find()` and `find_all()` look up one type's
+stored assets by keyvalue; `assemble()` queries across types.
 
 Keyvalues a type doesn't declare ride along as `keyvalues`, its extras. A
 task that builds a new asset from an input copies only the fields it sets, so
@@ -224,6 +225,37 @@ class Asset:
         logger.info(f"Stored {cls._asset_key or 'asset'} {asset.path.name} {asset.cid}")
         return asset
 
+    @classmethod
+    async def find_all(cls, **filters: Any) -> list[Self]:
+        """Every stored asset of this type matching `filters`, newest first.
+
+        `assemble()` with `asset` set to this type's key, so `filters` match
+        as they do there. A record that doesn't parse as this type is left
+        out. The user's own assets come before public ones.
+        """
+        assets = await assemble(asset=cls._asset_key, **filters)
+        return [a for a in assets if isinstance(a, cls)]
+
+    @classmethod
+    async def find(cls, required: bool = True, **filters: Any) -> Self | None:
+        """The newest stored asset of this type matching `filters`.
+
+        With more than one match, the newest wins (the first of
+        `find_all()`). Returns None when nothing matches and `required` is
+        False.
+
+        Raises:
+            ValueError: when nothing matches and `required` is True, naming
+                the type and the filters.
+        """
+        found = await cls.find_all(**filters)
+        if found:
+            return found[0]
+        if required:
+            shown = ", ".join(f"{k}={v!r}" for k, v in filters.items())
+            raise ValueError(f"No {cls.__name__} found for {shown}")
+        return None
+
 
 def specialize(record: dict) -> Asset:
     """Construct a typed Asset subclass from a raw storage record.
@@ -308,12 +340,12 @@ async def assemble(**filters: Any) -> list[Asset]:
     Returns:
         Flat list of specialized Asset subclass instances.
 
-    Examples:
-        assets = await assemble(build="GRCh38", asset="reference")
-        ref = next(a for a in assets if isinstance(a, Reference))
+    For one type's assets, `Asset.find()` and `Asset.find_all()` say it in
+    a line; `assemble()` is for queries that span types.
 
-        assets = await assemble(sample_id="NA12878", asset=["r1", "r2"])
-        r1 = next(a for a in assets if isinstance(a, R1))
+    Examples:
+        assets = await assemble(build="GRCh38")  # the reference and its indexes
+        produced = await assemble(reference_cid=ref.cid)  # what it was used for
     """
     import stargazer.utils.storage as _storage
 
