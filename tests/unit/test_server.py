@@ -1,4 +1,5 @@
-"""Tests for the MCP server's `run_task`: asset parameters taken by CID.
+"""Tests for the MCP server's tools: `run_task`'s asset parameters taken by
+CID, and the refusals every tool passes on to the client.
 
 `_execute` (the `flyte.run` call) is swapped for one that returns the keyword
 arguments it would run the task with, so these check what reaches the task
@@ -6,10 +7,12 @@ without the tools it runs. A refusal is a `ToolError`, the one exception whose
 message the MCP server passes on to the client.
 """
 
+import aiohttp
 import pytest
 from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
 from mcp.server.mcpserver.exceptions import ToolError
 
+import stargazer.utils.storage as _storage
 from stargazer import server
 from stargazer.assets import R1, Alignment, KnownSites, Reference
 
@@ -142,3 +145,63 @@ async def test_run_workflow_refuses_an_unknown_workflow_by_name():
     """An unknown workflow is a ToolError naming it."""
     with pytest.raises(ToolError, match=r"Unknown workflow: 'nope'"):
         await server.run_workflow("nope", {})
+
+
+UNKNOWN_CID = "bafkreiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+FASTA = str(GENERAL_FIXTURES_DIR / "GRCh38_TP53.fa")
+
+
+class TestRefusalsReachTheClient:
+    """A bad call to a storage or bundle tool is a ToolError carrying its reason."""
+
+    async def test_upload_without_an_asset_key(self):
+        """keyvalues with no `asset` key are refused, naming the registered keys."""
+        with pytest.raises(ToolError, match=r"must include 'asset'.*'reference'"):
+            await server.upload_file(FASTA, {"build": "GRCh38_TP53"})
+
+    async def test_upload_with_a_field_that_does_not_parse(self):
+        """A typed field whose value isn't JSON is refused, naming the field."""
+        with pytest.raises(ToolError, match=r"duplicates_marked takes JSON \(bool\)"):
+            await server.upload_file(
+                FASTA, {"asset": "alignment", "duplicates_marked": "maybe"}
+            )
+
+    async def test_upload_of_a_missing_file(self):
+        """A path with no file behind it is refused, naming the path."""
+        with pytest.raises(ToolError, match=r"No such file.*nope\.fa"):
+            await server.upload_file(
+                str(GENERAL_FIXTURES_DIR / "nope.fa"),
+                {"asset": "reference", "build": "x"},
+            )
+
+    async def test_update_of_a_cid_not_in_the_index(self):
+        """Updating a CID the index doesn't hold is refused, naming the CID."""
+        with pytest.raises(ToolError, match=rf"No index row for cid {UNKNOWN_CID}"):
+            await server.update_file(UNKNOWN_CID, {"asset": "reference", "build": "x"})
+
+    async def test_update_without_an_asset_key(self):
+        """An update patch is validated like an upload."""
+        with pytest.raises(ToolError, match=r"must include 'asset'"):
+            await server.update_file(UNKNOWN_CID, {"build": "x"})
+
+    async def test_publish_without_a_public_tier(self):
+        """Publishing with no public tier configured is refused, saying so."""
+        with pytest.raises(ToolError, match=r"no public tier to publish to"):
+            await server.publish_file(UNKNOWN_CID)
+
+    async def test_fetch_of_an_unknown_bundle(self):
+        """An unknown bundle name is refused, naming the available ones."""
+        with pytest.raises(ToolError, match=r"Bundle 'nope' not found. Available: \["):
+            await server.fetch_resource_bundle("nope")
+
+    async def test_download_the_gateway_refuses(self, monkeypatch):
+        """A CID in neither the index nor the gateway is refused, naming the CID."""
+
+        async def _refuse(url, dest):
+            raise aiohttp.ClientResponseError(None, (), status=403, message="Forbidden")
+
+        monkeypatch.setattr(_storage, "_fetch_http", _refuse)
+        with pytest.raises(
+            ToolError, match=rf"{UNKNOWN_CID} isn't in your storage.*403"
+        ):
+            await server.download_file(UNKNOWN_CID)

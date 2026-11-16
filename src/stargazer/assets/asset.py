@@ -151,9 +151,9 @@ class Asset:
         """Reconstruct from a storage keyvalues dict.
 
         str fields are assigned directly; all other types are deserialized
-        with json.loads (raising ``json.JSONDecodeError`` on values that
-        don't parse — callers that must tolerate malformed records catch it,
-        see ``specialize()``). On a typed class, every key that isn't
+        with json.loads (raising ``json.JSONDecodeError``, naming the field
+        and its type, on values that don't parse — callers that must tolerate
+        malformed records catch it, see ``specialize()``). On a typed class, every key that isn't
         ``asset`` or a declared field becomes an extra in ``keyvalues``.
         Bare Asset receives the keyvalues verbatim.
         """
@@ -161,11 +161,21 @@ class Asset:
             return cls(cid=cid, path=path, keyvalues=dict(kv))
         hints = get_type_hints(cls)
         declared = cls.declared_fields()
-        kwargs = {
-            name: value if hints.get(name) is str else json.loads(value)
-            for name, value in kv.items()
-            if name in declared
-        }
+        kwargs = {}
+        for name, value in kv.items():
+            if name not in declared:
+                continue
+            hint = hints.get(name)
+            if hint is str:
+                kwargs[name] = value
+                continue
+            try:
+                kwargs[name] = json.loads(value)
+            except json.JSONDecodeError as exc:
+                type_name = getattr(hint, "__name__", hint)
+                raise json.JSONDecodeError(
+                    f"{name} takes JSON ({type_name}), got {value!r}", exc.doc, exc.pos
+                ) from exc
         extras = {k: v for k, v in kv.items() if k not in declared and k != "asset"}
         return cls(cid=cid, path=path, keyvalues=extras, **kwargs)
 

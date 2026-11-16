@@ -18,9 +18,12 @@ import json
 import os
 import sys
 import types as _types
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, get_args, get_origin
 
+import aiohttp
 import flyte
 from mcp.server import MCPServer
 
@@ -36,6 +39,20 @@ from stargazer.assets.asset import Asset, specialize
 from stargazer.config import init_flyte
 from stargazer.marshal import marshal_output
 from stargazer.registry import TaskInfo, TaskRegistry
+
+
+@contextmanager
+def _refusals() -> Iterator[None]:
+    """Re-raise the storage layer's refusals as ToolErrors, keeping their message.
+
+    `build_asset()`, the storage client and the bundles refuse a call the
+    caller can fix (a missing `asset` key, a CID not in the index, no public
+    tier, a path with no file) with a `ValueError` or `FileNotFoundError`.
+    """
+    try:
+        yield
+    except (ValueError, FileNotFoundError) as exc:
+        raise ToolError(str(exc)) from exc
 
 
 def _asset_class(hint: Any) -> tuple[type[Asset], bool] | None:
@@ -108,8 +125,10 @@ async def upload_file(path: str, keyvalues: dict[str, str]) -> dict:
 
     When displaying results, always show a table with the CID and all keyvalues.
     """
-    comp = build_asset(keyvalues)
-    await _storage.get_client().upload(comp, Path(path))
+    client = _storage.get_client()
+    with _refusals():
+        comp = build_asset(keyvalues)
+        await client.upload(comp, Path(path))
     result = comp.to_dict()
     if type(comp) is Asset:
         result["note"] = (
@@ -126,7 +145,14 @@ async def download_file(cid: str) -> str:
     A CID that isn't in your index is treated as public and fetched from the
     IPFS gateway.
     """
-    return str(await _storage.get_client().download(Asset(cid=cid)))
+    client = _storage.get_client()
+    try:
+        return str(await client.download(Asset(cid=cid)))
+    except aiohttp.ClientResponseError as exc:
+        raise ToolError(
+            f"{cid} isn't in your storage, and the public gateway refused it "
+            f"({exc.status} {exc.message})"
+        ) from exc
 
 
 @mcp.tool()
@@ -150,8 +176,10 @@ async def update_file(cid: str, keyvalues: dict[str, str]) -> dict:
 
     When displaying results, always show a table with the CID and all keyvalues.
     """
-    build_asset(keyvalues)  # validate the patch (raises ValueError on bad input)
-    return await _storage.get_client().update_metadata(cid, keyvalues)
+    client = _storage.get_client()
+    with _refusals():
+        build_asset(keyvalues)
+        return await client.update_metadata(cid, keyvalues)
 
 
 @mcp.tool()
@@ -169,7 +197,9 @@ async def publish_file(cid: str) -> list[dict]:
     the file itself first. When displaying results, always show a table with
     the CID, name and all keyvalues of each.
     """
-    return await _storage.get_client().publish(cid)
+    client = _storage.get_client()
+    with _refusals():
+        return await client.publish(cid)
 
 
 # ---------------------------------------------------------------------------
@@ -204,7 +234,8 @@ async def fetch_resource_bundle(bundle_name: str) -> list[dict]:
         List of fetched files with cid, name, keyvalues, local path, and
         whether each was already cached.
     """
-    return await _bundles.fetch_bundle(bundle_name)
+    with _refusals():
+        return await _bundles.fetch_bundle(bundle_name)
 
 
 # ---------------------------------------------------------------------------

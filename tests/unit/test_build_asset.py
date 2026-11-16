@@ -9,6 +9,7 @@ are rejected everywhere.
 
 import pytest
 from conftest import FakePublicTier
+from mcp.server.mcpserver.exceptions import ToolError
 
 from stargazer.assets import Asset, build_asset
 from stargazer.assets.alignment import Alignment
@@ -123,7 +124,7 @@ class TestUploadFileTool:
     async def test_underscore_key_rejected(self, isolated_storage, tmp_path):
         f = tmp_path / "x.bam"
         f.write_bytes(b"BAM")
-        with pytest.raises(ValueError, match="stamped automatically"):
+        with pytest.raises(ToolError, match=r"\['_owner'\] are stamped automatically"):
             await upload_file(str(f), {"asset": "alignment", "_owner": "me"})
         assert await isolated_storage.index.query({}) == []
 
