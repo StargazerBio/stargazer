@@ -8,9 +8,9 @@ What runs in a notebook's pod is covered in [Notebook Runtime](runtime.md).
 
 ## Execution Context
 
-Notebooks call `stargazer.config.init_flyte()` at startup. Opened locally, it reads `.flyte/config.yaml`; in a hosted notebook it connects to the user's own project on the cluster the notebook runs on. Whether a run goes to a cluster or stays in the notebook's own process is decided where it's started, never in the task: the same task runs either way. So one notebook spans an exploratory scratchpad (run on its own machine) to a production workflow interface (run on a cluster).
+A notebook imports what it uses from `stargazer` directly: the `Asset` base, the asset types, `assemble()`, `fetch_bundle()` and `init_flyte()`. Flyte is initialized by `init_flyte()`: opened locally, it reads `.flyte/config.yaml`; in a hosted notebook it connects to the user's own project on the cluster the notebook runs on. `dispatch()` calls it on its first run when nothing has, so a notebook that runs its tasks through `dispatch()` never calls it; one that calls `flyte.run` directly calls it first. Whether a run goes to a cluster or stays in the notebook's own process is decided where it's started, never in the task: the same task runs either way. So one notebook spans an exploratory scratchpad (run on its own machine) to a production workflow interface (run on a cluster).
 
-`stargazer.notebooks.ui` provides `run_location()`, a switch between *On this machine* (the default) and *On the cluster*, and `dispatch()`, which runs a task or workflow wherever the switch is set and returns its result. The Execution tutorial introduces both.
+`stargazer.notebooks.ui` provides `run_location()`, a switch between *On this machine* (the default) and *On the cluster*, and `dispatch()`, which runs a task or workflow wherever the switch is set and returns its result. The Execution tutorial introduces both. They aren't in the package root, which never imports marimo.
 
 *On this machine* runs a task, and every task it calls, in the notebook's kernel, so **the notebook's header lists what its local runs import and call**, an SDK task's packages and tools included. *On the cluster* runs each task in its environment's image, whatever the header holds. [Where Your Code Runs](../guides/where-your-code-runs.md) is the user's view.
 

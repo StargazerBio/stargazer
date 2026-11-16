@@ -41,7 +41,7 @@ with app.setup:
     import flyte
     import marimo as mo
 
-    from stargazer.assets.asset import Asset
+    from stargazer import Asset
     from stargazer.config import (
         STARGAZER_SECRETS,
         notebook_image,

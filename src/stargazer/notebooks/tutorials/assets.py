@@ -34,7 +34,7 @@ with app.setup:
 
     import marimo as mo
 
-    from stargazer.assets.asset import Asset
+    from stargazer import Asset
 
 
 @app.cell
@@ -163,7 +163,7 @@ def _():
 @app.cell
 def _():
     """Inspect an existing Asset class to ground the abstraction."""
-    from stargazer.assets.scrna import AnnData
+    from stargazer import AnnData
 
     _rows = [
         {
@@ -422,7 +422,7 @@ def _():
 @app.cell
 async def _(uploaded_sheet):
     """Query for our newly uploaded sheet."""
-    from stargazer.assets.asset import assemble
+    from stargazer import assemble
 
     found = await assemble(asset="sample_sheet", cohort_id="assets_demo")
     _hit = next((_a for _a in found if _a.cid == uploaded_sheet.cid), None)
@@ -543,7 +543,7 @@ async def _():
     import tempfile as _tempfile
     from pathlib import Path as _Path
 
-    from stargazer.assets.asset import assemble as _assemble
+    from stargazer import assemble as _assemble
 
     _csv = _Path(_tempfile.mkdtemp(prefix="stargazer_extras_")) / "extras.csv"
     _csv.write_text("sample_id,organism,tissue\ns2d1,mouse,liver\n")

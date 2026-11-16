@@ -32,7 +32,7 @@ Tasks are async Flyte v2 functions that perform a single bioinformatics operatio
 ```python
 import asyncio
 
-from stargazer.assets import R1, Alignment, Reference
+from stargazer import R1, Alignment, Reference
 from stargazer.tasks.gatk.env import (
     gatk_env,
 )  # or stargazer.tasks.scrna.env's scrna_env
@@ -55,7 +55,7 @@ async def align_reads(ref: Reference, r1: R1) -> Alignment:
 - fetch() returns the input's local path, with its companions (indexes, dictionaries) beside it; use that path, not asset.path (the stored file)
 - Always store() outputs to store them and record their metadata
 - Use pathlib.Path for filesystem ops; run converts arguments to str for the subprocess
-- Import from stargazer.assets, stargazer.config, stargazer.utils and the domain's env module (never flytekit)
+- Import the asset types, `Asset`, `assemble` and `init_flyte` from `stargazer`, helpers from `stargazer.utils`, and the environment from the domain's env module (never flytekit)
 - No TYPE_CHECKING blocks — Flyte always checks types
 - Resources (CPU, memory, GPU) and the image are set on the TaskEnvironment, not per task. `gatk_env` and `scrna_env` carry the SDK and its tools; a `flyte.TaskEnvironment` you define needs an image with everything its tasks import
 
@@ -67,7 +67,7 @@ Assets are dataclasses with typed fields, stored as flat keyvalues. Each subclas
 from dataclasses import dataclass
 from typing import ClassVar
 
-from stargazer.assets.asset import Asset
+from stargazer import Asset
 
 
 @dataclass
@@ -86,8 +86,7 @@ class MyOutput(Asset):
 Workflows are just tasks that call other tasks. No separate decorator.
 
 ```python
-from stargazer.assets import R1, Alignment, Reference
-from stargazer.assets.asset import assemble
+from stargazer import R1, Alignment, Reference, assemble
 
 
 @gatk_env.task
@@ -111,8 +110,8 @@ The call site picks where a task or workflow runs; the code doesn't change.
 
 - `await my_pipeline(...)` runs it in the notebook's own process, with no Flyte run record.
 - `flyte.with_runcontext(mode="local").run(my_pipeline, build=..., sample_id=...)` runs it locally through Flyte's runtime (typed I/O, caching) and blocks; `.outputs()` holds the result.
-- `flyte.run(my_pipeline, ...)` submits it to the backend `init_flyte()` (from `stargazer.config`) connected to, which in a hosted notebook is the user's own project, and returns a run at once: `.url` links to the console, `.wait()` blocks, `.outputs()` holds the result. With no backend configured it runs in-process instead, and its `url` is a local path.
+- `flyte.run(my_pipeline, ...)` submits it to the backend `init_flyte()` (from `stargazer`) connected to, so call that first, which in a hosted notebook is the user's own project, and returns a run at once: `.url` links to the console, `.wait()` blocks, `.outputs()` holds the result. With no backend configured it runs in-process instead, and its `url` is a local path.
 - `flyte.with_runcontext(mode="remote").run(...)` insists on the cluster: with no backend it raises instead of running locally.
 - A cluster run imports the notebook in a fresh pod, which runs the setup block and the `@app.function` / `@app.class_definition` cells but not regular cells. So a task or workflow bound for the cluster, with its environment and asset types, has to be defined there; one defined in a regular cell can't be found. Its environment needs an image with whatever its module imports (stargazer, marimo); with none, the pod runs Flyte's base image.
-- `dispatch(where, my_pipeline, ...)` from `stargazer.notebooks.ui` runs it where a `run_location()` control says, waits, and returns its output. Use it for a workspace notebook's own tasks: it bundles the run's code from the directory the task's module was imported from, which is `/workspace` for a notebook there. `flyte.run` bundles from the SDK's directory, so in a hosted notebook it finds only the SDK's tasks and the image's notebooks'.
+- `dispatch(where, my_pipeline, ...)` from `stargazer.notebooks.ui` runs it where a `run_location()` control says, waits, and returns its output. It calls `init_flyte()` itself the first time, if nothing has. Use it for a workspace notebook's own tasks: it bundles the run's code from the directory the task's module was imported from, which is `/workspace` for a notebook there. `flyte.run` bundles from the SDK's directory, so in a hosted notebook it finds only the SDK's tasks and the image's notebooks'.
 - Wherever it runs, what a run stores lands in the user's storage and index, so `assemble()` finds it from the notebook afterwards.

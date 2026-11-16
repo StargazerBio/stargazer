@@ -40,7 +40,7 @@ def _():
     import marimo as mo
     import matplotlib.pyplot as plt
 
-    from stargazer.config import init_flyte
+    from stargazer import init_flyte
 
     init_flyte()
 
@@ -260,6 +260,8 @@ def _(mo):
                 **On this machine** and a cluster run while it's set to
                 **On the cluster**. Either way it waits for the run and
                 hands back the result, as awaiting the workflow would.
+                It also initializes Flyte the first time it runs, so a
+                notebook that only dispatches never calls `init_flyte()`.
 
                 Change the control and the cell below runs again, wherever
                 you picked.
