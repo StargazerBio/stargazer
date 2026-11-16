@@ -70,4 +70,4 @@ MCP tools accept and return JSON. Asset dataclasses serialize via `to_dict()`. T
 
 ## Error Handling
 
-A tool that raises returns an MCP error result carrying the exception's message: an unknown task or workflow names the available ones, and a `run_task` input that can't fill its parameter names the parameter. The server keeps running.
+A tool that raises returns an MCP error result, and the server keeps running. `run_task` and `run_workflow` refuse a bad call with a `ToolError`, whose message reaches the client: an unknown task or workflow names the available ones, and a `run_task` input that can't fill its parameter names the parameter. Any other exception reaches the client as a bare "Error executing tool", its message and traceback kept in the server's log.

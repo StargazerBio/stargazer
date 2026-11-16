@@ -2,11 +2,13 @@
 
 `_execute` (the `flyte.run` call) is swapped for one that returns the keyword
 arguments it would run the task with, so these check what reaches the task
-without the tools it runs.
+without the tools it runs. A refusal is a `ToolError`, the one exception whose
+message the MCP server passes on to the client.
 """
 
 import pytest
 from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
+from mcp.server.mcpserver.exceptions import ToolError
 
 from stargazer import server
 from stargazer.assets import R1, Alignment, KnownSites, Reference
@@ -89,7 +91,7 @@ async def test_run_task_refuses_a_single_cid_for_a_list_parameter(ref):
     alignment = await Alignment.store(
         GATK_FIXTURES_DIR / "NA12829_TP53_markdup.bam", sample_id="NA12829"
     )
-    with pytest.raises(TypeError, match=r"known_sites: expected a list of CIDs"):
+    with pytest.raises(ToolError, match=r"known_sites: expected a list of CIDs"):
         await server.run_task(
             "base_recalibrator",
             {"alignment": alignment.cid, "ref": ref.cid, "known_sites": mills.cid},
@@ -98,21 +100,21 @@ async def test_run_task_refuses_a_single_cid_for_a_list_parameter(ref):
 
 async def test_run_task_refuses_a_cid_not_in_the_index(ref):
     """An unknown CID is refused, naming the parameter and the CID."""
-    with pytest.raises(ValueError, match=r"r1: no asset with CID 'bafkreinotthere'"):
+    with pytest.raises(ToolError, match=r"r1: no asset with CID 'bafkreinotthere'"):
         await server.run_task("bwa_mem2_mem", {"ref": ref.cid, "r1": "bafkreinotthere"})
 
 
 async def test_run_task_refuses_a_cid_of_the_wrong_type(ref, r1):
     """An R1's CID given for `ref` is refused, naming both types."""
     with pytest.raises(
-        TypeError, match=r"ref takes a Reference, but CID .* is of type R1"
+        ToolError, match=r"ref takes a Reference, but CID .* is of type R1"
     ):
         await server.run_task("bwa_mem2_mem", {"ref": r1.cid, "r1": r1.cid})
 
 
 async def test_run_task_refuses_a_missing_required_parameter(ref):
     """A required parameter left out is refused by name."""
-    with pytest.raises(ValueError, match=r"'r1'"):
+    with pytest.raises(ToolError, match=r"'r1'"):
         await server.run_task("bwa_mem2_mem", {"ref": ref.cid})
 
 
@@ -132,5 +134,11 @@ async def test_run_task_passes_scalars_through():
 
 async def test_run_task_refuses_an_unknown_input(ref):
     """An input the task has no parameter for is refused by name."""
-    with pytest.raises(ValueError, match=r"no parameter 'reference'"):
+    with pytest.raises(ToolError, match=r"no parameter 'reference'"):
         await server.run_task("samtools_faidx", {"reference": ref.cid})
+
+
+async def test_run_workflow_refuses_an_unknown_workflow_by_name():
+    """An unknown workflow is a ToolError naming it."""
+    with pytest.raises(ToolError, match=r"Unknown workflow: 'nope'"):
+        await server.run_workflow("nope", {})

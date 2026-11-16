@@ -24,6 +24,11 @@ from typing import Any, get_args, get_origin
 import flyte
 from mcp.server import MCPServer
 
+# MCPServer passes only a ToolError's message on to the client; any other
+# exception reaches it as a bare "Error executing tool", its text kept in the
+# server's log. So a refusal the caller has to act on is a ToolError.
+from mcp.server.mcpserver.exceptions import ToolError
+
 import stargazer.bundles as _bundles
 import stargazer.utils.storage as _storage
 from stargazer.assets import build_asset
@@ -53,16 +58,16 @@ def _asset_class(hint: Any) -> tuple[type[Asset], bool] | None:
 async def _asset_by_cid(param: str, cid: Any, cls: type[Asset]) -> Asset:
     """The asset the index holds under `cid`, specialized, checked to be a `cls`."""
     if not isinstance(cid, str):
-        raise TypeError(f"{param}: expected a CID string, got {cid!r}")
+        raise ToolError(f"{param}: expected a CID string, got {cid!r}")
     row = await _storage.get_client().index.get(cid)
     if row is None:
-        raise ValueError(
+        raise ToolError(
             f"{param}: no asset with CID {cid!r} in your index. Store it "
             "first (upload_file, or fetch_resource_bundle for a public file)."
         )
     asset = specialize(row)
     if not isinstance(asset, cls):
-        raise TypeError(
+        raise ToolError(
             f"{param} takes a {cls.__name__}, but CID {cid!r} is of type "
             f"{type(asset).__name__}"
         )
@@ -247,21 +252,21 @@ async def run_task(task_name: str, inputs: dict | None = None) -> dict:
     info = _registry.get(task_name)
     if info is None:
         available = [t.name for t in _registry.list_tasks(category="task")]
-        raise ValueError(f"Unknown task: {task_name!r}. Available: {available}")
+        raise ToolError(f"Unknown task: {task_name!r}. Available: {available}")
     if info.category != "task":
-        raise ValueError(f"{task_name!r} is a workflow — use run_workflow instead.")
+        raise ToolError(f"{task_name!r} is a workflow — use run_workflow instead.")
 
     inputs = inputs or {}
     params = {p.name: p for p in info.params}
     unknown = sorted(set(inputs) - set(params))
     if unknown:
-        raise ValueError(
+        raise ToolError(
             f"{task_name!r} has no parameter {unknown[0]!r}. "
             f"Its parameters: {list(params)}"
         )
     missing = [p.name for p in info.params if p.required and p.name not in inputs]
     if missing:
-        raise ValueError(f"{task_name!r} requires {missing[0]!r}")
+        raise ToolError(f"{task_name!r} requires {missing[0]!r}")
 
     kwargs = {}
     for name, value in inputs.items():
@@ -270,7 +275,7 @@ async def run_task(task_name: str, inputs: dict | None = None) -> dict:
             kwargs[name] = value
         elif asset[1]:
             if not isinstance(value, list):
-                raise TypeError(f"{name}: expected a list of CIDs, got {value!r}")
+                raise ToolError(f"{name}: expected a list of CIDs, got {value!r}")
             kwargs[name] = [await _asset_by_cid(name, cid, asset[0]) for cid in value]
         else:
             kwargs[name] = await _asset_by_cid(name, value, asset[0])
@@ -300,9 +305,9 @@ async def run_workflow(workflow_name: str, inputs: dict) -> dict:
     info = _registry.get(workflow_name)
     if info is None:
         available = [t.name for t in _registry.list_tasks(category="workflow")]
-        raise ValueError(f"Unknown workflow: {workflow_name!r}. Available: {available}")
+        raise ToolError(f"Unknown workflow: {workflow_name!r}. Available: {available}")
     if info.category != "workflow":
-        raise ValueError(f"{workflow_name!r} is a task — use run_task instead.")
+        raise ToolError(f"{workflow_name!r} is a task — use run_task instead.")
 
     return await _execute(info, dict(inputs))
 
