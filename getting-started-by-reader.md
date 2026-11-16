@@ -1,6 +1,6 @@
 ---
 title: getting-started-by-reader
-status: review
+status: done
 priority: normal
 created: 2026-11-16
 pr: 151
@@ -28,5 +28,9 @@ The docs' first pages serve several readers at once, and the main one, a researc
 From the worktree: `pixi run zensical build --clean` reports no issues; every `docs/**/*.md` appears in `zensical.toml`'s nav; every relative link and anchor in the touched pages resolves against `site/`; `pixi run zensical serve` and read Getting Started (four sections in its table of contents) and the overview diagram (Surfaces on top, notebooks first). All passed for PR 151.
 
 The README is out of scope: it's the user's.
+
+## Outcome
+
+Shipped in PR 151 (merge `ddffd40`): Getting Started is the researcher's four sections; Packages and Tools moved to Where Your Code Runs, Agents got its own guide, source install and docs preview went to Contributing; the overview leads with its surfaces. Verified by a clean docs build, the nav and link checks and the rendered pages. No comments on the PR, nothing left.
 
 Related: [[board]], [[frontend-polish]].

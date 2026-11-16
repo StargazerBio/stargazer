@@ -1,11 +1,8 @@
 ---
 title: drop-notebook-asset
-status: backlog
+status: next
 priority: normal
 created: 2026-11-16
-blocked_by:
-  - retire-public-notebooks
-  - sdk-front-door
 ---
 
 Notebooks are published to the community repo, and the public tier holds none (ticket [[retire-public-notebooks]]), so the SDK's `Notebook` asset type has no use left. It goes: `src/stargazer/assets/notebook.py`, its export from `stargazer.assets` and from the package root (which PR 150, ticket [[sdk-front-door]], adds), the root test's list of types, `docs/architecture/types.md` and any other doc naming published notebooks as assets.

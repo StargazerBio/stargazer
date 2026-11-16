@@ -1,6 +1,6 @@
 ---
 title: sdk-front-door
-status: review
+status: done
 priority: high
 created: 2026-11-16
 pr: 150
@@ -52,5 +52,9 @@ Preconditions: the skill's Local notebook exports (`RUN_DIR`, the three `STARGAZ
 - Storing before any init is the same as storing after: `init_from_config()` (devbox) and `init_in_cluster()` both leave Flyte's storage config `None`, so `flyte.storage` falls back to `S3.auto()` either way.
 
 Run 2026-11-16 (`~/.stargazer/verify-runs/sdk-front-door-20261116-131842/evidence/`): ROOT 12 passed; TUT exit 0 ×4 with both `True`s; TPL-LOCAL CID `bafkreick6y2dfypenb5l37a55z5ds2gpbsuphj7br22hqnvvllwnmbbmqq` stored and returned in one row; CLUSTER devbox run `rv9hpcnbnzv7smglzbrx` SUCCEEDED, `42 (remote)`. Tasks tier 47 passed (30 gatk, 17 scrna). Not driven: the hosted notebook pod, which needs a debug image and a dashboard deploy.
+
+## Outcome
+
+Shipped in PR 150 (merge `ddb12ff`): the package root exports `Asset`, every asset type, `assemble`, `fetch_bundle` and `init_flyte`; the storage clients live in `stargazer.utils`; `dispatch` initializes Flyte on first use; the template, tutorials and agent instructions use the short imports. Verified by the unit and tasks tiers, the four tutorials headless, the template in the browser pane and a dispatch on the devbox (evidence above). No comments on the PR. Left: the template opened from the hosted dashboard (not driven); the community notebooks, ticket [[community-short-imports]].
 
 Related: [[board]], [[bare-task-environments]], [[lean-task-bodies]], [[asset-find]].

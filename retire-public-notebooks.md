@@ -1,6 +1,6 @@
 ---
 title: retire-public-notebooks
-status: review
+status: done
 priority: normal
 created: 2026-11-03
 pr: 33
@@ -81,5 +81,9 @@ dashboard page, `teardown`).
 - Tenant: the test account's dashboard deployed from `413e19c` but not
   driven. Neither the built-in browser nor Chrome had a GitHub session for
   the console's sign-in. Teardown: `stopped: ['dashboard']`, `live runs: []`.
+
+## Outcome
+
+Shipped in infra PR 33 (merge `43c7c5c`): the explorer's public listing leaves out notebooks, `/workspace/copy` has no public section, `app/public_notebooks.py` is gone and no `app/` module imports `Notebook`. The public tier held no notebooks, so nothing was migrated or deleted. Verified by infra's unit tier (also without the type) and the routes against real Pinata and GitHub (evidence above). No comments on the PR. Left: the SDK side, ticket [[drop-notebook-asset]]; the `stargazer-workspaces` App's Pull requests permission, the user's to drop; the explorer on the tenant, not driven.
 
 Related: [[board]], [[drop-notebook-asset]], [[notebooks-in-git]], [[public-notebooks]].

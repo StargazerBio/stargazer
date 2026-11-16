@@ -1,6 +1,6 @@
 ---
 title: run-task-by-cid
-status: review
+status: done
 priority: low
 created: 2026-11-16
 pr: 152
@@ -132,5 +132,9 @@ Passes when: exit 0; the wrong-type call prints `ref takes a Reference, but CID 
 ## Evidence (2026-11-16, PR 152)
 
 Measured, in `stargazer-gatk:78c8ea591c41cacb1ec68cade764588b` built from the branch: C2 and C3 refused with the messages above; `bwa_mem2_index` stored 5 companions; `bwa_mem2_mem` stored `NA12829_aligned.bam` with `sample_id=NA12829`, `reference_cid` = ref, `source_cid` = R1; flagstat 15992 primary, 99.91% mapped, 99.65% properly paired; one `@SQ chr17:7658421-7697490`. Unit tier: 9 new tests in `tests/unit/test_server.py`, each seen failing first.
+
+## Outcome
+
+Shipped in PR 152 (merge `6a6de31`): `run_task` takes each asset parameter as a CID from the user's index; refusals in `run_task` and `run_workflow` reach the client as `ToolError`s. Verified by the unit tier and a `bwa_mem2_mem` run by CIDs over a stdio MCP client in the gatk image (evidence above). No comments on the PR. Left: the other MCP tools' errors, ticket [[mcp-tool-errors-reach-client]].
 
 Related: [[board]], [[skills-replace-mcp]], [[agent-mcp]]., [[mcp-tool-errors-reach-client]].

@@ -1,6 +1,6 @@
 ---
 title: server-layer-drift
-status: review
+status: done
 priority: low
 created: 2026-11-09
 pr: 153
@@ -48,5 +48,9 @@ Preconditions: an image built from the branch whose warm date is older than a re
 
 - `uv run --with` caches its layer keyed on the resolution, so any one changed version (ruff alone, 10 MiB) rebuilds the whole layer: 43 packages, all but the changed ones from cache.
 - An image only drifts once a dependency has a release after its build, so a freshly built image shows nothing; backdate the warm date to reproduce.
+
+## Outcome
+
+Shipped in PR 153 (merge `cea2e03`): the image records its build date and the launch sets `UV_EXCLUDE_NEWER` from it on marimo's command only, so the server and kernel layers resolve to the warmed versions. Verified with `docker run` before and after (43 and 25 packages installed at start before, none after). No comments on the PR. Left: the tenant, not checked.
 
 Related: [[board]], [[marimo-server-layer-symlinks]], [[marimo-sandbox]].
