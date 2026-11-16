@@ -27,10 +27,10 @@ Returns a catalog of registered tasks with name, category, description, paramete
 
 | Tool | Description | Inputs |
 |------|-------------|--------|
-| `run_task` | Execute a single task (ad-hoc) | `task_name: str, filters: dict, inputs: dict \| None` |
+| `run_task` | Execute a single task (ad-hoc) | `task_name: str, inputs: dict \| None` |
 | `run_workflow` | Execute a named workflow (reproducible) | `workflow_name: str, inputs: dict` |
 
-**`run_task`** is for experimentation — it accepts `filters`, calls `assemble(**filters)` to gather assets, and distributes them to task parameters by matching `_asset_key` to type hints. Scalars and paths are passed via `inputs`.
+**`run_task`** is for experimentation — every parameter goes in `inputs` by name. A parameter whose type hint is an asset type takes a CID, which the server looks up in the user's index and specializes; a `list[Asset]` parameter takes a list of CIDs. A CID the index doesn't hold, or whose asset isn't the parameter's type, is refused naming the parameter, as is an input the task has no parameter for and a required one left out. Other parameters pass through as JSON values. A CID that is only public is stored first, with `upload_file` or `fetch_resource_bundle`.
 
 **`run_workflow`** is for production — it passes scalar `inputs` straight through. Workflows handle their own assembly internally.
 
@@ -70,4 +70,4 @@ MCP tools accept and return JSON. Asset dataclasses serialize via `to_dict()`. T
 
 ## Error Handling
 
-A tool that raises returns an MCP error result carrying the exception's message: an unknown task or workflow names the available ones, and a task whose asset parameter matched nothing names the filters it tried. The server keeps running.
+A tool that raises returns an MCP error result carrying the exception's message: an unknown task or workflow names the available ones, and a `run_task` input that can't fill its parameter names the parameter. The server keeps running.

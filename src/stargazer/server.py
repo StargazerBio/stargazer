@@ -27,38 +27,46 @@ from mcp.server import MCPServer
 import stargazer.bundles as _bundles
 import stargazer.utils.storage as _storage
 from stargazer.assets import build_asset
-from stargazer.assets.asset import Asset, assemble
+from stargazer.assets.asset import Asset, specialize
 from stargazer.config import init_flyte
 from stargazer.marshal import marshal_output
 from stargazer.registry import TaskInfo, TaskRegistry
 
 
-def _asset_key_for_hint(hint: Any) -> str | None:
-    """Extract the _asset_key from a type hint, if it's an Asset type.
+def _asset_class(hint: Any) -> tuple[type[Asset], bool] | None:
+    """The Asset class a parameter's hint takes, and whether it takes a list.
 
-    Handles plain Asset subclasses, list[Asset], and unions containing Assets.
-    Returns None for non-Asset hints (scalars, Path, etc.).
+    Handles `Asset`, `list[Asset]` and `Asset | None`. None for any other
+    hint (scalars, dicts, lists of scalars).
     """
-    if isinstance(hint, type) and issubclass(hint, Asset) and hint._asset_key:
-        return hint._asset_key
-
-    origin = get_origin(hint)
-    args = get_args(hint)
-
-    if origin is list and args:
-        inner = args[0]
-        if isinstance(inner, type) and issubclass(inner, Asset) and inner._asset_key:
-            return inner._asset_key
-
-    if isinstance(hint, _types.UnionType) and args:
-        for arg in args:
-            if arg is type(None):
-                continue
-            key = _asset_key_for_hint(arg)
-            if key:
-                return key
-
+    if isinstance(hint, type) and issubclass(hint, Asset):
+        return hint, False
+    args = [a for a in get_args(hint) if a is not type(None)]
+    if get_origin(hint) is list and args:
+        inner = _asset_class(args[0])
+        return (inner[0], True) if inner and not inner[1] else None
+    if isinstance(hint, _types.UnionType) and len(args) == 1:
+        return _asset_class(args[0])
     return None
+
+
+async def _asset_by_cid(param: str, cid: Any, cls: type[Asset]) -> Asset:
+    """The asset the index holds under `cid`, specialized, checked to be a `cls`."""
+    if not isinstance(cid, str):
+        raise TypeError(f"{param}: expected a CID string, got {cid!r}")
+    row = await _storage.get_client().index.get(cid)
+    if row is None:
+        raise ValueError(
+            f"{param}: no asset with CID {cid!r} in your index. Store it "
+            "first (upload_file, or fetch_resource_bundle for a public file)."
+        )
+    asset = specialize(row)
+    if not isinstance(asset, cls):
+        raise TypeError(
+            f"{param} takes a {cls.__name__}, but CID {cid!r} is of type "
+            f"{type(asset).__name__}"
+        )
+    return asset
 
 
 # ---------------------------------------------------------------------------
@@ -213,24 +221,24 @@ def list_tasks(category: str | None = None) -> list[dict]:
 
 
 @mcp.tool()
-async def run_task(task_name: str, filters: dict, inputs: dict | None = None) -> dict:
+async def run_task(task_name: str, inputs: dict | None = None) -> dict:
     """Run a single task by name for ad-hoc experimentation.
 
-    Use this for testing individual tools in isolation. Asset parameters
-    are assembled from storage using the provided filters — one call to
-    assemble() resolves all required assets, and every filter must match
-    each asset, so assets with different keys (a reference's build, a
-    sample's sample_id) can't be filled from one call. Scalar and Path
-    parameters are passed separately via inputs.
+    Every parameter goes in inputs by name. A parameter whose type is an
+    asset (Reference, R1, Alignment...) takes the CID of a stored file of
+    that type, found with query_files; a list of assets (list[KnownSites])
+    takes a list of CIDs. Other parameters take their values as JSON.
+    Optional parameters can be left out. A CID that isn't in your storage,
+    or is the wrong type for its parameter, is refused.
+
+        run_task("bwa_mem2_mem", {"ref": "bafk…", "r1": "bafk…", "r2": "bafk…"})
 
     For reproducible pipeline runs, use run_workflow instead.
 
     Args:
         task_name: Name of the task (from list_tasks with category="task").
-        filters: Keyvalue filters for assemble() to resolve asset parameters
-                 (e.g. {"asset": "reference", "build": "GRCh38"}); a list
-                 value matches any of its entries.
-        inputs: Optional scalar/Path keyword arguments (str, int, bool, list[str]).
+        inputs: The task's keyword arguments: CIDs for asset parameters,
+                values for the rest.
 
     Returns:
         Serialized task output. Single outputs returned directly,
@@ -244,27 +252,28 @@ async def run_task(task_name: str, filters: dict, inputs: dict | None = None) ->
         raise ValueError(f"{task_name!r} is a workflow — use run_workflow instead.")
 
     inputs = inputs or {}
-    assets = await assemble(**filters) if filters else []
+    params = {p.name: p for p in info.params}
+    unknown = sorted(set(inputs) - set(params))
+    if unknown:
+        raise ValueError(
+            f"{task_name!r} has no parameter {unknown[0]!r}. "
+            f"Its parameters: {list(params)}"
+        )
+    missing = [p.name for p in info.params if p.required and p.name not in inputs]
+    if missing:
+        raise ValueError(f"{task_name!r} requires {missing[0]!r}")
 
     kwargs = {}
-    for p in info.params:
-        asset_key = _asset_key_for_hint(p.type_hint)
-        if asset_key:
-            matched = [a for a in assets if a._asset_key == asset_key]
-            if not matched and p.required:
-                raise ValueError(
-                    f"Task {task_name!r} requires {p.name} ({asset_key}) "
-                    f"but no matching asset found for filters: {filters}"
-                )
-            if matched:
-                kwargs[p.name] = (
-                    matched if get_origin(p.type_hint) is list else matched[-1]
-                )
-        elif p.name in inputs:
-            value = inputs[p.name]
-            if p.type_hint is Path and isinstance(value, str):
-                value = Path(value)
-            kwargs[p.name] = value
+    for name, value in inputs.items():
+        asset = _asset_class(params[name].type_hint)
+        if asset is None or value is None:
+            kwargs[name] = value
+        elif asset[1]:
+            if not isinstance(value, list):
+                raise TypeError(f"{name}: expected a list of CIDs, got {value!r}")
+            kwargs[name] = [await _asset_by_cid(name, cid, asset[0]) for cid in value]
+        else:
+            kwargs[name] = await _asset_by_cid(name, value, asset[0])
 
     return await _execute(info, kwargs)
 
