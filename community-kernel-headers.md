@@ -72,4 +72,8 @@ Preconditions: the devbox up and set up, `FLYTE_IMAGE_REGISTRY=localhost:30000`,
 - On `main` before ticket [[lean-task-bodies]] the seed task uses `default_client` and `AnnData().update(...)`.
 - A notebook file with a hyphen in its name can't be imported by the driver; copy it under an underscore name.
 
-Related: [[board]], [[run-modes]], [[community-catalog-pixi-headers]], [[marimo-autoadd-headers]], [[marimo-sandbox]], [[script-mode-own-tasks]], [[lean-task-bodies]].
+## Notes (2026-11-16)
+
+PR 5 is merged in community-notebooks (`002bc8e`). `catalog.yaml` on its `main` still pins both notebooks at `63e5c101`, the commit before the fix, so Featured serves the old scRNA notebook (measured, `git show origin/main:catalog.yaml`). Moving the pins is what's left; ticket [[catalog-at-main]] weighs dropping them.
+
+Related: [[board]], [[run-modes]], [[community-catalog-pixi-headers]], [[marimo-autoadd-headers]], [[marimo-sandbox]], [[script-mode-own-tasks]], [[lean-task-bodies]], [[catalog-at-main]].
