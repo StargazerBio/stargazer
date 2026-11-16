@@ -3,6 +3,8 @@ title: asset-find
 status: backlog
 priority: normal
 created: 2026-11-16
+blocked_by:
+  - sdk-front-door
 ---
 
 Asking the asset graph for one asset of a type takes four lines everywhere it's done: `assemble(...)`, filter by `isinstance`, raise if empty, take `[0]`. It's written out four times in `workflows/gatk_data_preprocessing.py` and `workflows/scrna_clustering.py` (read 2026-11-16), and again in the tutorials. A classmethod beside `Asset.store` (ticket [[lean-task-bodies]]) says it in one:
