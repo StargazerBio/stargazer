@@ -1,8 +1,9 @@
 ---
 title: sdk-front-door
-status: doing
+status: review
 priority: high
 created: 2026-11-16
+pr: 150
 ---
 
 A researcher's notebook should import what it needs from `stargazer`, and its setup block should hold only what they'd change. From an architectural scan of `main` (2026-11-16):
