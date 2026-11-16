@@ -1,6 +1,6 @@
 ---
 title: sdk-front-door
-status: backlog
+status: next
 priority: high
 created: 2026-11-16
 blocked_by:
