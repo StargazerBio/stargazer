@@ -1,6 +1,6 @@
 ---
 title: retire-public-notebooks
-status: next
+status: doing
 priority: normal
 created: 2026-11-03
 ---
