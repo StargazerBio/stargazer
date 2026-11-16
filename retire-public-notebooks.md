@@ -46,13 +46,7 @@ delete. (The key in the main checkout's `.env` is stale: Pinata answers 401.)
       `public` section, `app/public_notebooks.py` goes, and no `app/` module
       imports `Notebook` from `stargazer.assets` (entries build their
       keyvalues with `app.notebooks.notebook_keyvalues`).
-- [ ] After infra PR 33 merges: remove `Notebook` from the stargazer SDK
-      (`src/stargazer/assets/notebook.py`, its export from
-      `stargazer.assets`, `docs/architecture/types.md` and any other doc
-      naming published notebooks as assets), on its own branch, cut once
-      `sdk-front-door` (which changes `src/stargazer/__init__.py`) has
-      merged. Infra's pin can then move to the release that drops it; RP-5
-      shows infra runs without the type.
+- [ ] Remove `Notebook` from the SDK: its own PR, ticket [[drop-notebook-asset]].
 - [ ] Drop the `stargazer-workspaces` GitHub App's Pull requests write
       permission: a GitHub settings change the user makes.
 - [ ] Drive the explorer on the tenant as the test account (see below).
@@ -88,4 +82,4 @@ dashboard page, `teardown`).
   driven. Neither the built-in browser nor Chrome had a GitHub session for
   the console's sign-in. Teardown: `stopped: ['dashboard']`, `live runs: []`.
 
-Related: [[board]], [[notebooks-in-git]], [[public-notebooks]].
+Related: [[board]], [[drop-notebook-asset]], [[notebooks-in-git]], [[public-notebooks]].
