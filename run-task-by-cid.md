@@ -1,6 +1,6 @@
 ---
 title: run-task-by-cid
-status: backlog
+status: doing
 priority: low
 created: 2026-11-16
 ---
