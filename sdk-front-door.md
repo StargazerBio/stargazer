@@ -13,11 +13,11 @@ A researcher's notebook should import what it needs from `stargazer`, and its se
 
 ## Plan
 
-- [ ] `stargazer/__init__.py` exports `Asset`, `assemble`, `fetch_bundle`, `init_flyte` and the asset types; the storage clients stay importable from `stargazer.utils`. Check the import layers (`src/stargazer/ruff.toml`) allow it, and that infra's imports of the old names still resolve or are changed in the same pin bump.
-- [ ] `dispatch` and `run_location` import marimo, which the core doesn't depend on, so they can't be imported eagerly at the root. Settle: leave them at `stargazer.notebooks.ui`, or expose them through a module `__getattr__`.
-- [ ] `dispatch` initializes Flyte on first use when nothing has, so a notebook doesn't call `init_flyte()` itself. It stays public for SDK users.
-- [ ] The templates, tutorials and `runtime/notebook_agent.md` use the short imports. The community notebooks follow in their own repo.
-- [ ] Docs: the guides' examples, `docs/architecture/notebook.md`.
+- [x] `stargazer/__init__.py` exports `Asset`, `assemble`, `fetch_bundle`, `init_flyte` and the asset types; the storage clients stay importable from `stargazer.utils`. Check the import layers (`src/stargazer/ruff.toml`) allow it, and that infra's imports of the old names still resolve or are changed in the same pin bump.
+- [x] `dispatch` and `run_location` import marimo, which the core doesn't depend on, so they can't be imported eagerly at the root. Settle: leave them at `stargazer.notebooks.ui`, or expose them through a module `__getattr__`. They stay at `stargazer.notebooks.ui`.
+- [x] `dispatch` initializes Flyte on first use when nothing has, so a notebook doesn't call `init_flyte()` itself. It stays public for SDK users.
+- [x] The templates, tutorials and `runtime/notebook_agent.md` use the short imports. The community notebooks follow in their own repo.
+- [x] Docs: the guides' examples, `docs/architecture/notebook.md`. The task and workflow guides describe modules inside the package, which keep importing from the defining submodule; the root is the top layer.
 
 Verify by opening the basic template from the image, hosted and locally, and running its workflow both ways.
 
