@@ -1,6 +1,6 @@
 ---
 title: lean-task-bodies
-status: review
+status: done
 priority: normal
 created: 2026-11-09
 pr: 148
@@ -40,5 +40,9 @@ STORED-LINES: a workflow's pods log one `Stored <type> <name> <cid>` line per ou
 
 1. With the devbox up and `FLYTE_IMAGE_REGISTRY=localhost:30000`, from the worktree (its `.flyte` linked): `pixi run pytest -m devbox tests/devbox/test_germline.py`. Passes: all pass.
 2. For the newest run with more than five actions, `flyte --config .flyte/config.yaml get logs <run> <action>` for each action, joined onto one line (the log wraps), then `grep -oE "Stored +[a-z_]+ +[^ ]+"`. Passes: one line per output file (alignments and their indexes, the duplicate metrics, the GVCF and the cohort VCF with their indexes). Fails as on `main`: no `Stored` line, and a `to_dict()` dump per input and output.
+
+## Outcome
+
+Shipped in PR 148 (merge `8dfb177`): `Asset.store`, `temp_dir()`, `run`, a `Stored` log line per output and a cached `get_client()`; `update()`, `_LazyClient` and the hand logging are gone. Verified by the unit, tasks and devbox tiers and the germline run's STORED-LINES check above. No comments on the PR, nothing left.
 
 Related: [[board]], [[asset-core-tidy]], [[task-environment-factory]], [[provenance-on-every-output]].

@@ -1,11 +1,9 @@
 ---
 title: bare-task-environments
-status: review
+status: done
 priority: normal
 created: 2026-11-10
 pr: 149
-blocked_by:
-  - project-pod-env-vars
 ---
 
 A task environment in Stargazer should read like one from the Flyte docs. Decided 2026-11-10, in place of the factories of ticket `task-environment-factory` (PR 147):
@@ -37,5 +35,11 @@ A task environment in Stargazer should read like one from the Flyte docs. Decide
 - Tenant, as the test account: the template notebook's task with no `env_vars`, "On the cluster", stores an output the next cell's `assemble()` finds; the same task without `secrets=` that starts a child fails with the named error.
 
 Run 2026-11-10: devbox `test_a_pod_given_no_store_refuses_to_store` fails before (`rqqv7p89b2sgrh7ckthl` succeeded) and passes after (`rmm76bckg6psglnd7crh` raises the named error). Tenant, from a checkout in `u-pryce`: a bare environment stores in one pod (`u9rm87fd5vkb9cpgcjtc`) and assembles in the next (`usltp9xzdd7xfndfbt6f`). The template notebook through the dashboard, and the missing-`secrets=` child launch, aren't driven: they need the branch in a notebook image.
+
+## Outcome
+
+Shipped in PR 149 (merge `1180842`). A cluster task with no store or index raises naming the variables (`require_cluster_storage()`, called by `get_client()`), and the template and tasks tutorial notebooks pass no `env_vars`; the two domain `env.py` files keep `STARGAZER_ENV_VARS` for the devbox. Verified on the devbox (the reproduction fails before and raises the named error after) and on the tenant from a checkout (a bare environment stores in one pod and assembles in the next), per the evidence above. No comments on the PR.
+
+Left: the template notebook driven "On the cluster" through the dashboard, and the missing-`secrets=` child launch, both waiting on a notebook image with the change. Other projects need the variables in their settings first (ticket [[pod-env-vars-upgrade]]).
 
 Related: [[board]], [[project-pod-env-vars]], [[task-environment-factory]], [[flyte-task-environments]].

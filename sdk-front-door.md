@@ -3,9 +3,6 @@ title: sdk-front-door
 status: next
 priority: high
 created: 2026-11-16
-blocked_by:
-  - bare-task-environments
-  - lean-task-bodies
 ---
 
 A researcher's notebook should import what it needs from `stargazer`, and its setup block should hold only what they'd change. From an architectural scan of `main` (2026-11-16):

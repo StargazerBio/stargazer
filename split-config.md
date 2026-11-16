@@ -3,8 +3,6 @@ title: split-config
 status: backlog
 priority: low
 created: 2026-11-16
-blocked_by:
-  - bare-task-environments
 ---
 
 `src/stargazer/config.py` (334 lines on `main`, 2026-11-16) does five jobs: the env var defaults, the logger, `init_flyte()`, the image recipes (`task_image`, `notebook_image`, `_with_source`, `released_image`, the header regex) and `log_execution()`. Its docstring lists them. Importing it for a logger pulls in `flyte` and the image code.

@@ -1,6 +1,6 @@
 ---
 title: unpinned-notebook-python
-status: review
+status: done
 priority: high
 created: 2026-11-09
 pr: 143
@@ -73,5 +73,9 @@ Preconditions: an infra checkout whose `stargazer-bio` pin is a release with a u
 
 - In local containers the editor's kernel didn't start for any notebook, with or without the change (2026-11-09), so KERNEL is only reachable on the tenant.
 - A workspace notebook is a copy of its seed at creation: an existing old notebook works too, a new one needs the old pin in infra.
+
+## Outcome
+
+Shipped in PR 143 (merge `e03ac22`) with [[old-header-sdk-source]]: the launch pins Python in a header that pins none. Verified on the tenant as the test account with the recipe above (KERNEL, PIN, SDK all measured). No comments on the PR. Left: a notebook that didn't hydrate isn't pinned, since marimo creates it after the launch step; no ticket, as nothing has hit it.
 
 Related: [[board]], [[pixi-notebook-sandbox]], [[run-modes]], [[marimo-sandbox]].

@@ -1,6 +1,6 @@
 ---
 title: project-pod-env-vars
-status: review
+status: done
 priority: normal
 created: 2026-11-10
 pr: 32
@@ -27,5 +27,11 @@ This ticket is the infra repo's half. The SDK's half is ticket `bare-task-enviro
 As the test account on the tenant: a notebook task on a bare `flyte.TaskEnvironment(name=..., image=notebook_image(...))`, with no `env_vars`, dispatched "On the cluster", returns its `STARGAZER_OWNER`, `STARGAZER_INDEX_URL` and `STARGAZER_STORE_ROOT`, and they equal the notebook kernel's. Then a task that stores an asset in one pod and assembles it in the next.
 
 Run 2026-11-10 on the tenant with tasks submitted from a checkout, not a notebook: before, `STARGAZER_OWNER` unset and the store under `/root/.stargazer` (`urwsv2mwp7flmm687dsb`); after, the four variables (`ucts6jp6qfs25lrlx8tg`), a store in one pod (`u9rm87fd5vkb9cpgcjtc`) and an `assemble()` in the next (`usltp9xzdd7xfndfbt6f`). A run started seconds after the settings write still had the old variables (`u6r7d2fpk6fx5gqdjjlm`). The notebook path isn't driven yet.
+
+## Outcome
+
+Shipped in infra PR 32 (merge `1c270d2`): `app.deploy.stargazer_env` yields the variables for both the notebook deploy env and the project's `environment_variables` setting. Verified on the tenant in `u-pryce` from a checkout (runs above); the devbox doesn't apply project settings and keeps the forwarded variables. No comments on the PR.
+
+Left: `./stargazer-users upgrade` for every project other than `u-pryce` (not confirmed run; ticket [[pod-env-vars-upgrade]]), and the notebook path of the recipe above.
 
 Related: [[board]], [[bare-task-environments]], [[task-environment-factory]], [[flyte-task-environments]].

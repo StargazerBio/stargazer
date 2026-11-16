@@ -1,6 +1,6 @@
 ---
 title: community-kernel-headers
-status: review
+status: done
 priority: normal
 created: 2026-11-09
 ---
@@ -75,5 +75,11 @@ Preconditions: the devbox up and set up, `FLYTE_IMAGE_REGISTRY=localhost:30000`,
 ## Notes (2026-11-16)
 
 PR 5 is merged in community-notebooks (`002bc8e`). `catalog.yaml` on its `main` still pins both notebooks at `63e5c101`, the commit before the fix, so Featured serves the old scRNA notebook (measured, `git show origin/main:catalog.yaml`). Moving the pins is what's left; ticket [[catalog-at-main]] weighs dropping them.
+
+## Outcome
+
+Shipped in community-notebooks PR 5 (merge `002bc8e`): both headers list what they run, and the scRNA notebook's environment cell builds from its header. Verified "On this machine" through marimo's kernel and "On the cluster" on the devbox, per the evidence above. No comments on the PR.
+
+Left: `catalog.yaml` still pins both notebooks at `63e5c101`, so Featured serves the old files until the pins move or ticket [[catalog-at-main]] drops them.
 
 Related: [[board]], [[run-modes]], [[community-catalog-pixi-headers]], [[marimo-autoadd-headers]], [[marimo-sandbox]], [[script-mode-own-tasks]], [[lean-task-bodies]], [[catalog-at-main]].
