@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import flyte
+import flyte._initialize as flyte_init
 import marimo as mo
 from flyte._initialize import get_init_config, init_config_context
 from flyte._internal.resolvers.default import DefaultTaskResolver
@@ -186,3 +187,22 @@ async def test_a_checkout_sdk_task_bundles_from_the_checkouts_source(
     source = Path(config.__file__).resolve().parents[1]
 
     assert await _bundle_root_of(monkeypatch, samtools_faidx, tmp_path) == [source]
+
+
+async def test_dispatch_initializes_flyte_when_nothing_has(monkeypatch):
+    """A notebook that never called `init_flyte()` dispatches all the same:
+    the first dispatch initializes Flyte, the way `init_flyte()` does."""
+    monkeypatch.setattr(flyte_init, "_init_config", None)
+
+    assert await dispatch(run_location(), add_one, x=1) == 2
+    assert flyte_init.is_initialized()
+
+
+async def test_dispatch_keeps_an_initialization_already_made(monkeypatch):
+    """A notebook that initialized Flyte itself keeps its own configuration."""
+    own = get_init_config().replace(project="my-own-project")
+    monkeypatch.setattr(flyte_init, "_init_config", own)
+
+    await dispatch(run_location(), add_one, x=1)
+
+    assert get_init_config().project == "my-own-project"

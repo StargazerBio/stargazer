@@ -37,7 +37,7 @@ Where images are pushed is Flyte's own setting, `FLYTE_IMAGE_REGISTRY`; Stargaze
 
 ## Connecting to Flyte
 
-Notebooks, the MCP server and the tests connect with `init_flyte()` from `config.py`. Locally it reads `.flyte/config.yaml`, and with no config file runs stay in the caller's own process. A hosted notebook pod has no config file, so it connects to the owner's project on its own cluster, with the project's API key. Every task environment declares that key's secret, so the tasks a pod starts can start their own children. A cluster without a login, such as the devbox, has no key and declares none.
+Notebooks, the MCP server and the tests connect with `init_flyte()` from `config.py`, exported at the package root; a notebook's first `dispatch()` calls it when nothing has. Locally it reads `.flyte/config.yaml`, and with no config file runs stay in the caller's own process. A hosted notebook pod has no config file, so it connects to the owner's project on its own cluster, with the project's API key. Every task environment declares that key's secret, so the tasks a pod starts can start their own children. A cluster without a login, such as the devbox, has no key and declares none.
 
 ## Writing and reading
 

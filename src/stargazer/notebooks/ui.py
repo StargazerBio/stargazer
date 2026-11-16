@@ -20,6 +20,8 @@ already in its image, so its run carries the running notebook's folder. The
 task has to be importable there, which a task defined in a regular cell isn't:
 it goes in an `@app.function`.
 
+`dispatch()` initializes Flyte the first time it runs, if nothing has.
+
 A module of its own rather than part of the package `__init__`, because it
 imports marimo and the dashboard imports `stargazer.notebooks` without it.
 
@@ -31,9 +33,9 @@ from pathlib import Path
 
 import flyte
 import marimo as mo
-from flyte._initialize import get_init_config, init_config_context
+from flyte._initialize import get_init_config, init_config_context, is_initialized
 
-from stargazer.config import _checkout
+from stargazer.config import _checkout, init_flyte
 
 
 def run_location() -> mo.ui.radio:
@@ -61,7 +63,12 @@ async def dispatch(location: mo.ui.radio, task: flyte.TaskTemplate, /, **inputs)
     `task` declares. "On this machine" is Flyte's local mode: the task, and
     every task it calls, runs in this process, so the notebook's environment
     has to hold what they import and the tools they call.
+
+    The first dispatch in a process that hasn't initialized Flyte calls
+    `init_flyte()`, so a notebook needn't; one that has keeps its own.
     """
+    if not is_initialized():
+        init_flyte()
     runner = flyte.with_runcontext(mode=location.value)
     if location.value == "local":
         run = await runner.run.aio(task, **inputs)
