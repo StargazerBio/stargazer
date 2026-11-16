@@ -1,15 +1,19 @@
 # Architecture Overview
 
-Stargazer is organized around four layers:
+Stargazer is organized in layers, with the surfaces people work in on top:
 
 ```mermaid
 flowchart TD
-    MCP("MCP Server\ninterface — tools and resources")
+    subgraph S["Surfaces"]
+        NB("Notebooks\nthe primary surface, hosted or local")
+        SDK("Your own code\nSDK tasks and workflows imported in an IDE")
+        MCP("MCP Server\ntools and resources for agents")
+    end
     WF("Workflows\ncomposition — tasks orchestrated into pipelines")
     T("Tasks\nexecution — atomic bioinformatics operations")
     A[("Asset graph\ntyped metadata + content-addressed files")]
 
-    MCP --> WF --> T --> A
+    NB & SDK & MCP --> WF --> T --> A
 ```
 
 The layers are enforced on imports: a module imports from its own layer or the ones below it, never above, and the lint run on every commit rejects an import that breaks this. In code, bottom up: storage (`assets`, `utils`), `tasks`, `workflows`, then the surfaces over them (the MCP server with its `registry`, and the notebooks).
@@ -34,7 +38,17 @@ Workflows are tasks that call other tasks. They accept scalar parameters, call `
 
 See [Workflows](workflows.md) for the workflow model.
 
-## MCP Server
+## Surfaces
+
+The marimo notebook is the primary user surface. The hosted app serves a per-user dashboard: the user's Workspace of notebooks, and an asset explorer where Stargazer's Tutorials and the community notebooks sit beside the user's data and the public tier. Notebooks are also where new tasks are prototyped before being promoted into the SDK. See [Notebooks](notebook.md) for the taxonomy, user archetypes, and promotion paths, and [Notebook Runtime](runtime.md) for what runs in a notebook's pod.
+
+For local use, the same image hosted notebooks run on, **`stargazer`**, opens a Marimo notebook in edit mode for running pipelines and exploring data locally, with Claude Code or OpenCode in its agent panel — see [Notebook Runtime](runtime.md).
+
+The SDK is a surface of its own: `stargazer-bio` installs as a package, and a workflow written in an IDE imports its tasks directly ([Writing a Workflow](../guides/writing-a-workflow.md)).
+
+The MCP server runs over stdio from a source install with the `mcp` extra; any MCP client connects to `stargazer`. In the notebook, the agents in its agent panel have its tools. Tasks and workflows can also be managed directly via the [Flyte CLI](cli.md#flyte-cli). Source contributors install natively — see [Contributing](../guides/contributing.md).
+
+### MCP Server
 
 The server exposes two execution paths:
 
@@ -42,14 +56,6 @@ The server exposes two execution paths:
 - **`run_workflow`** — reproducible pipelines; workflows handle their own assembly
 
 See [MCP Server](mcp-server.md) for the full server specification.
-
-## Interface
-
-The marimo notebook is the primary user surface. The hosted app serves a per-user dashboard: the user's Workspace of notebooks, and an asset explorer where Stargazer's Tutorials and the community notebooks sit beside the user's data and the public tier. Notebooks are also where new tasks are prototyped before being promoted into the SDK. See [Notebooks](notebook.md) for the taxonomy, user archetypes, and promotion paths, and [Notebook Runtime](runtime.md) for what runs in a notebook's pod.
-
-For local use, the same image hosted notebooks run on, **`stargazer`**, opens a Marimo notebook in edit mode for running pipelines and exploring data locally, with Claude Code or OpenCode in its agent panel — see [Notebook Runtime](runtime.md).
-
-The MCP server runs over stdio from a source install with the `mcp` extra; any MCP client connects to `stargazer`. In the notebook, the agents in its agent panel have its tools. Tasks and workflows can also be managed directly via the [Flyte CLI](cli.md#flyte-cli). Source contributors install natively — see [Contributing](../guides/contributing.md).
 
 ## Configuration
 

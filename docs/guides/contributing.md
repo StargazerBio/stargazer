@@ -17,6 +17,8 @@ This needs [pixi](https://pixi.prefix.dev/latest/installation/) and Docker. You 
 
 What each kind of task runs with, the bioinformatics tools (gatk, bwa, bwa-mem2, samtools) and scanpy among them, isn't in it: those are in the task images, and their tests run there (see [Running Tests](#running-tests)).
 
+Without pixi, a checkout installs with `uv pip install -e ".[mcp]"` on Python 3.14+, which puts the `stargazer` MCP server on your path ([Using the MCP Server](mcp-server.md#connecting-a-client)). A task run in your own process needs its domain's packages installed beside it; a run on a cluster gets them from the task's image.
+
 ## Running on the Devbox
 
 Use `flyte start devbox` to run a local Flyte cluster, much closer to production than a local run. See the [official devbox docs](https://www.union.ai/docs/v2/flyte/user-guide/run-modes/running-devbox/). After every fresh devbox, run `devbox/setup.sh` from the repo root to apply the cluster-side fixes, which also starts the Postgres server that holds the devbox's asset index. Stargazer's pods are x86_64, so on Apple silicon they run emulated (keep Docker Desktop's Rosetta setting on). Then point image builds at the devbox's registry:
@@ -80,6 +82,15 @@ Every change goes through a pull request — nothing is committed directly to `m
 2. Commit as you go, one change per worktree.
 3. When tests pass and the change works on its real surface, push and open a PR with `gh pr create --base main`. Say what changed and why, how you verified it, and anything deferred.
 4. A maintainer reviews and merges. Address feedback with further commits on the same branch, then remove the worktree (`git worktree remove`) and `git pull` in your main checkout.
+
+## Previewing the Docs
+
+```bash
+pixi run python docs/gen_catalog.py
+pixi run zensical serve
+```
+
+The first command regenerates the catalog and API reference pages, and the second serves the site at `http://localhost:8000`, rebuilding as you edit. Every page under `docs/` needs an entry in `nav` in `zensical.toml`.
 
 ## Building Images
 
