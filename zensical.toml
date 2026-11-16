@@ -15,6 +15,7 @@ nav = [
     { "Writing a Task" = "guides/writing-a-task.md" },
     { "Writing a Workflow" = "guides/writing-a-workflow.md" },
     { "Where Your Code Runs" = "guides/where-your-code-runs.md" },
+    { "Agents in the Notebook" = "guides/notebook-agents.md" },
     { "Using the MCP Server" = "guides/mcp-server.md" },
     { "Contributing" = "guides/contributing.md" },
   ]},

@@ -8,19 +8,31 @@ So a header is the one place a task's packages are listed, and the image a clust
 
 ## Your notebook's header
 
-A notebook that sends the SDK's scRNA-seq tasks to the cluster and plots what comes back lists only what its cells import:
+A notebook lists what it needs in its header, the `# /// script` block at the top, and it installs when the notebook opens, hosted or locally. Python packages go in `dependencies`, each one the notebook imports, even one the SDK brings with it such as `flyte`: the editor writes an unlisted import into the header, pinned to the version installed. Command-line tools, such as samtools or GATK, come from conda: list them under `[tool.pixi.dependencies]`, with bioconda among the channels:
 
 ```python
 # /// script
 # requires-python = ">=3.14"
-# dependencies = ["marimo", "stargazer-bio", "matplotlib"]
+# dependencies = [
+#   "marimo",
+#   "stargazer-bio",
+# ]
+#
+# [tool.pixi.workspace]
+# channels = ["conda-forge", "bioconda"]
 #
 # [tool.pixi.dependencies]
 # python = "3.14.*"
+# samtools = "1.*"
+#
+# [tool.pixi.pypi-dependencies]
+# stargazer-bio = { path = "/stargazer" }
 # ///
 ```
 
-To run those tasks on this machine too, add what they import, here `"scanpy"`, with `"igraph"` for Leiden clustering. The header of the domain's `env.py` (`src/stargazer/tasks/scrna/env.py`) is the full list. A command-line tool goes under `[tool.pixi.dependencies]`, with bioconda among the channels ([Getting Started](../getting-started.md#packages-and-tools) shows one): the alignment and GATK tasks call `gatk4`, `samtools`, `bwa` and `bwa-mem2`.
+Each notebook gets its own environment, so the tool is on that notebook's path. The last line installs the SDK the image carries, so the notebook runs the image's release and its tasks run on the images that release published; keep it, and the `python` pin.
+
+What the header lists depends on where its tasks run. A notebook that sends the SDK's scRNA-seq tasks to the cluster and plots what comes back lists only what its cells import, here `matplotlib` beside the two above. To run those tasks on this machine too, add what they import, here `"scanpy"`, with `"igraph"` for Leiden clustering. The header of the domain's `env.py` (`src/stargazer/tasks/scrna/env.py`) is the full list. The alignment and GATK tasks call the tools `gatk4`, `samtools`, `bwa` and `bwa-mem2`.
 
 ## On this machine
 
