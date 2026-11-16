@@ -9,4 +9,9 @@
 # directly and lists each ban for its directory. This one covers the rest of the
 # SDK (the package root, bundles/ and notebooks/), the top layer, which bans
 # nothing.
+#
+# The package root re-exports names from the layers below it for notebooks and
+# user code. A module below the root imports from the submodule that defines a
+# name, never `from stargazer import ...`: TID251 can't ban that, since banning
+# `stargazer` bans every submodule with it.
 extend = "../../pyproject.toml"
