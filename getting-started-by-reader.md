@@ -1,6 +1,6 @@
 ---
 title: getting-started-by-reader
-status: backlog
+status: doing
 priority: normal
 created: 2026-11-16
 ---
