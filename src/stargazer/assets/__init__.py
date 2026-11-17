@@ -17,7 +17,6 @@ from stargazer.assets.asset import (
     build_asset,
     specialize,
 )
-from stargazer.assets.notebook import Notebook
 from stargazer.assets.reads import R1, R2
 from stargazer.assets.reference import (
     AlignerIndex,
@@ -49,7 +48,6 @@ __all__ = [
     "DuplicateMetrics",
     "KnownSites",
     "KnownSitesIndex",
-    "Notebook",
     "Reference",
     "ReferenceIndex",
     "SequenceDict",
