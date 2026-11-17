@@ -1,6 +1,6 @@
 ---
 title: infra-sdk-pin-bump
-status: review
+status: done
 priority: normal
 created: 2026-11-16
 pr: 36
@@ -16,5 +16,9 @@ With a shim for the first, 387 passed and only the second failed. The bump also 
 A PR in infra once a release carries these: bump the pin, fix the fixture and the template test, drop the dead skip, run infra's unit tier and its dashboard check on the tenant.
 
 Infra PR 36 bumps to `2026.11.16`, which carries PRs 148 to 153 but not 155, so the `NOTEBOOK_KEY` skip stays until the bump to a release with ticket [[drop-notebook-asset]] in it. Unit tier 388 passed; on the tenant, the test account's dashboard served `2026.11.16-0bcf4d9`, and the Assets tutorial launched on `v2026.11.16`'s digest and ran with no failed cell (measured).
+
+## Outcome
+
+Shipped in infra PR 36 (merged 2026-11-17, `98c05f7`): infra pins `stargazer-bio==2026.11.16`, with the storage fixture and template test fixed. Verified by the unit tier (388 passed) and the test account's dashboard serving the release, its Assets tutorial running on `v2026.11.16`'s digest. Left: the `NOTEBOOK_KEY` skip in `/assets/schema` goes with the next bump, to a release carrying [[drop-notebook-asset]]. The PR had no review comments.
 
 Related: [[board]], [[drop-notebook-asset]], [[lean-task-bodies]], [[sdk-front-door]].

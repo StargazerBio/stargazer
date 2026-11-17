@@ -1,6 +1,6 @@
 ---
 title: dashboard-routers
-status: review
+status: done
 priority: low
 created: 2026-11-16
 pr: 34
@@ -34,5 +34,9 @@ Verify with the `verify-dashboard` skill on the devbox: every route in the table
 ## Verification recipe
 
 From the infra worktree: dump `asgi_app.routes` (walk `original_router` on included routers) on `main` and on the branch, and diff. Run `uv run pytest`. Then `uv run python devbox/dashboard.py` and curl each route in the app_internals route table.
+
+## Outcome
+
+Shipped in infra PR 34 (merged 2026-11-17, `b728bcd`): the dashboard's routes split into `app/workspace.py`, `app/launch.py`, `app/settings.py` and `app/route_helpers.py`, behavior unchanged. Verified by an identical route-table dump before and after, the unit tier, and every route family driven on the devbox and on the tenant as the test account (Evidence above). Nothing left; the PR had no review comments.
 
 Related: [[board]], [[header-declared-pod]].

@@ -4,6 +4,8 @@ status: review
 priority: high
 created: 2026-11-17
 pr: 38
+blocked_by:
+  - retire-stargazer-login-project
 ---
 
 The free tier's guardrail on spend. Cost reports ([[project-costs-daily]]) arrive a day late, so a runaway workload could run for up to 24 hours before anyone sees it. Infra PR 35 (`feat/eula`) puts a terms-of-use gate on every dashboard whose terms say the workspace is free during the alpha within its project's limits on CPU, memory, GPUs and concurrent runs; this sets those limits. PR 35 merged first, so they should roll out soon after.
@@ -17,7 +19,7 @@ Infra's onboarding (`stargazer-users`, `stargazer_users/`) sets the limits on ev
 - [x] Notebook pods (apps, which Union's settings don't cap): the dashboard clamps each pod's resources to the per-pod caps and refuses a launch past `LIMIT_NOTEBOOKS` running notebooks
 - [x] `onboard`, `upgrade` and `resume` ensure the limits; re-running is a no-op when they're right
 - [x] Verified on the tenant as the test account (infra PR 38 has the evidence)
-- [ ] Once this merges: `./stargazer-users upgrade` with the admin's AWS session, to give every existing project its limits (PR 35, the terms, merged first)
+- [ ] Once this merges: `./stargazer-users upgrade` with the admin's AWS session, to give every existing project its limits (PR 35, the terms, merged first); it waits on [[retire-stargazer-login-project]], since `upgrade` deploys the login app first
 
 ## What the limits don't stop
 
@@ -33,4 +35,4 @@ As an org admin (`FLYTE_API_KEY` from `~/.flyte/stargazer-upgrade.env`), in the 
 4. Notebooks: onboard with `STARGAZER_LIMIT_NOTEBOOKS=1`, open the dashboard as the test account, click Edit on one notebook and then Run on another. Expect the second refused with 422. Read `App.get("nb-<slug>-<mode>").pb2.spec.container.resources` for the clamp.
 5. Bring the limits back to `tenant.env`'s with `upgrade_user`, and stop the notebooks and the test account's dashboard.
 
-Related: [[board]], [[project-costs-daily]].
+Related: [[board]], [[project-costs-daily]], [[retire-stargazer-login-project]].

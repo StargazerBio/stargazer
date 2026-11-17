@@ -1,6 +1,6 @@
 ---
 title: ungated-login
-status: review
+status: done
 priority: normal
 created: 2026-11-17
 pr: 37
@@ -23,5 +23,9 @@ Every user can see a `stargazer` project next to their own, and it holds nothing
 - [ ] On the tenant after merge: delete the old login app in `stargazer` (it holds the `login` subdomain), unassign and delete `stargazer-login`, archive `stargazer`, then `upgrade`
 
 Infra PR 37 (`feat/ungated-login`). Verified as the test account with the branch's app deployed into `admin` as `login-check`: signed in → the `u-pryce` dashboard; no or bad cookies → 302 to `<console>/login?redirect_url=…`; that sign-in returned to the app.
+
+## Outcome
+
+Shipped in infra PR 37 (merged 2026-11-17, `f448982`): the login app is ungated, identifies visitors from their console session, and is served from `admin`; onboarding no longer makes the `stargazer` project or the `stargazer-login` policy. Verified on the tenant as the test account with the branch's app as `login-check` (above). Left: the tenant cleanup after merge, now ticket [[retire-stargazer-login-project]]. The PR had no review comments.
 
 Related: [[board]], [[login-redirect]], [[login-starts-dashboard]]
