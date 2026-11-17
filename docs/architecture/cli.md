@@ -21,6 +21,4 @@ For stdio, the client spawns `stargazer` as a subprocess and communicates over s
 
 All Stargazer tasks and workflows are standard Flyte v2 entities and can be managed directly through the Flyte CLI without the MCP server — registering, running, and inspecting tasks and workflows, plus a local TUI (`flyte start tui`) for browsing and launching them interactively. See the [Flyte CLI reference](https://www.union.ai/docs/v2/flyte/api-reference/flyte-cli/) for the full command set.
 
-## What Users Get
-
-Regardless of client, users have the storage tools, the bundle tools, discovery of every registered task and workflow through `list_tasks`, their execution through `run_task` and `run_workflow`, and the `stargazer://config` resource. The MCP server handles discovery and type serialization; the client handles LLM interaction and rendering.
+Whatever the client, the MCP server handles discovery and type serialization and the client handles the model and rendering. The tools themselves are in [Using the MCP Server](../guides/mcp-server.md).

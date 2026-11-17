@@ -1,6 +1,6 @@
 # Writing a Task
 
-This guide walks through adding a new bioinformatics task to Stargazer.
+Adding a bioinformatics task to the SDK, from its output type to its test.
 
 ## 1. Define the Asset Type (if needed)
 

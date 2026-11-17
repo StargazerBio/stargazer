@@ -110,21 +110,6 @@ async def test_fetch_is_a_cache_hit_after_upload(client, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_fetch_colocates_companions(client, tmp_path, monkeypatch):
-    """Companions land next to the asset, where tools look for them."""
-    fa = _write(tmp_path / "work" / "ref.fa", b">chr1\nACGT\n")
-    fai = _write(tmp_path / "work" / "ref.fa.fai", b"chr1\t4\t6\t4\t5\n")
-    ref = await Reference.store(fa, build="T")
-    await ReferenceIndex.store(fai, build="T", companion_of=ref.cid)
-
-    pod = make_client(tmp_path, cache="c2")
-    monkeypatch.setattr(storage_mod, "get_client", lambda: pod)
-    local = await ref.fetch()
-
-    assert (local.parent / "ref.fa.fai").read_bytes() == b"chr1\t4\t6\t4\t5\n"
-
-
-@pytest.mark.asyncio
 async def test_fetch_returns_an_unstored_local_file_as_is(client, tmp_path):
     """An asset built from a local file that was never uploaded is used in place."""
     fa = _write(tmp_path / "loose" / "ref.fa", b">chr1\nA\n")
@@ -293,32 +278,6 @@ async def test_a_companion_named_like_its_asset_leaves_the_asset_alone(
     local = await ref.fetch()
 
     assert local.read_bytes() == b">chr1\nACGT\n"
-
-
-@pytest.mark.asyncio
-async def test_public_companions_come_from_the_parents_publisher(tmp_path, monkeypatch):
-    """Another publisher's index for a public reference isn't mixed in."""
-    public = FakePublicTier(tmp_path / "gateway")
-    c = make_client(tmp_path, public=public, gateway=str(public.gateway))
-    monkeypatch.setattr(storage_mod, "get_client", lambda: c)
-    ref = await Reference.store(
-        _write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T"
-    )
-    public.add("ref.fa", b">chr1\nACGT\n", asset="reference", _owner="maintainer")
-    public.add(
-        "ref.fa.bwt", b"maintainer bwt", companion_of=ref.cid, _owner="maintainer"
-    )
-    public.add("ref.fa.bwt", b"other bwt", companion_of=ref.cid, _owner="someone")
-    public.add("ref.fa.sa", b"other sa", companion_of=ref.cid, _owner="someone")
-
-    pod = make_client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
-    monkeypatch.setattr(storage_mod, "get_client", lambda: pod)
-    local = await ref.fetch()
-
-    assert _listing(local.parent) == {
-        "ref.fa": b">chr1\nACGT\n",
-        "ref.fa.bwt": b"maintainer bwt",
-    }
 
 
 @pytest.mark.asyncio

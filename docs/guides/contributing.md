@@ -1,6 +1,6 @@
 # Contributing
 
-Stargazer has multiple contributor shapes — researchers writing notebooks, agent users driving the MCP server, code authors adding tasks, image maintainers publishing releases. Notebook authoring and the first step of task promotion both happen in the hosted notebook (see [Notebooks → Promotion](../architecture/notebook.md#promotion)); this guide covers working on the source itself — the SDK, the notebook runtime, and the images — natively against the repo.
+Working on Stargazer's own source: the SDK, the notebook runtime and the images. Moving a task from a notebook into the SDK starts in [Notebooks → Promotion](../architecture/notebook.md#promotion).
 
 ## Setup
 
@@ -58,7 +58,7 @@ Outside its tier a test is deselected, never skipped, and inside it a missing to
 pixi run ruff check --fix . && pixi run ruff format .
 ```
 
-Pre-commit runs `ruff` (lint and format) and `docstr-coverage` (a docstring on every module, class and function in `src/`), regenerates the catalog and API reference, builds the docs, checks the MCP server imports, and runs the unit tests.
+Pre-commit runs these too, along with `docstr-coverage` (a docstring on every module, class and function in `src/`), a regeneration of the catalog and API reference, the docs build, a check that the image locks are current, an MCP server import check and the unit tests.
 
 Ruff is pinned twice — `rev:` in `.pre-commit-config.yaml` and the `ruff` entry in `pyproject.toml`'s dev group. **Bump both together**, or the commit hook and `pixi run ruff` will enforce different rules. Deliberate rule exceptions live in `[tool.ruff.lint]` in `pyproject.toml`, each with the reason.
 

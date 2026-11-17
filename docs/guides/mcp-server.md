@@ -1,14 +1,16 @@
 # Using the MCP Server
 
-This guide covers interacting with Stargazer through the MCP server.
+The MCP server gives any MCP client Stargazer's storage, its bundles and every task and workflow.
 
 ## Connecting a Client
 
-Any MCP host that supports stdio or streamable HTTP transport works (see [CLI Interface](../architecture/cli.md) for the supported-client matrix). The server needs the `mcp` extra, so install the package with it from a checkout:
+Any MCP host that supports stdio or streamable HTTP transport works (see [CLI Interface](../architecture/cli.md) for the supported-client matrix). The server needs the `mcp` extra:
 
 ```bash
-uv pip install -e ".[mcp]"
+pip install "stargazer-bio[mcp]"
 ```
+
+From a checkout, `uv pip install -e ".[mcp]"` does the same with your source.
 
 For stdio, point the client at the `stargazer` command:
 

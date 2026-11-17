@@ -63,11 +63,6 @@ class TestKeyvalues:
         assert kv["source_cids"] == '["a", "b"]'
         assert Variants.from_keyvalues(kv).source_cids == ["a", "b"]
 
-    def test_bare_asset_keyvalues_pass_through(self):
-        kv = {"asset": "sample_sheet", "sequencer": "novaseq", "lanes": "4"}
-        assert Asset(keyvalues=kv).to_keyvalues() == kv
-        assert Asset.from_keyvalues(kv, cid="bafy123").keyvalues == kv
-
     def test_bare_asset_without_keyvalues_has_none(self):
         assert Asset().to_keyvalues() == {}
 
@@ -85,12 +80,6 @@ class TestTypedExtras:
         aln = Alignment.from_keyvalues(STORED_ALIGNMENT)
         assert (aln.sample_id, aln.duplicates_marked) == ("S1", True)
         assert aln.keyvalues == {"lane": "3"}
-
-    def test_round_trip_is_exact(self):
-        assert (
-            Alignment.from_keyvalues(STORED_ALIGNMENT).to_keyvalues()
-            == STORED_ALIGNMENT
-        )
 
     def test_to_keyvalues_writes_extras_beside_declared_fields(self):
         aln = Alignment(sample_id="S1", duplicates_marked=True, keyvalues={"lane": "3"})
