@@ -1,6 +1,6 @@
 ---
 title: asset-find
-status: review
+status: done
 priority: normal
 created: 2026-11-16
 pr: 156
@@ -134,5 +134,8 @@ except Exception as e:  # noqa: BLE001
 
 - `tests/tasks/scrna/test_scrna_clustering_pipeline.py` pinned the old error text; it now matches the message `find()` raises.
 
+## Outcome
+
+Shipped in PR 156 (merge `a14174a`): `Asset.find()` and `Asset.find_all()`, used by the workflows, the Assets tutorial and the writing-a-workflow guide. Verified as under Evidence: F1–F5, including the germline workflow on the devbox and the scRNA pipeline in its image. Nothing left. No review comments.
 
 Related: [[board]], [[lean-task-bodies]], [[sdk-front-door]].

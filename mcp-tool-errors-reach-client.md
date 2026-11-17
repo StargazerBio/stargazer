@@ -1,6 +1,6 @@
 ---
 title: mcp-tool-errors-reach-client
-status: review
+status: done
 priority: low
 created: 2026-11-16
 pr: 154
@@ -112,5 +112,9 @@ Passes when: exit 0, every line `is_error=True`, and each carries its reason aft
 ## Evidence (2026-11-16, PR 154)
 
 Measured with the recipe above: on `origin/main` (`cea2e03`) R1–R11 all returned only `Error executing tool <name>`; on the branch each returned the message listed under "Passes when", exit 0. Unit tier 329 passed; 8 new tests in `tests/unit/test_server.py` each seen failing first with the plain `ValueError`/`FileNotFoundError`/`JSONDecodeError`/`ClientResponseError`.
+
+## Outcome
+
+Shipped in PR 154 (merge `f802cd0`), not yet in a release: the storage and bundle tools raise a caller's refusals as `ToolError`s, `download_file` names the CID and gateway status, and `from_keyvalues` names a field whose typed value doesn't parse. Verified over stdio with the recipe above: R1–R11 each returned its reason, where `origin/main` returned only `Error executing tool <name>`; unit tier 329 passed. Left: the stdout noise at server start, ticket [[mcp-stdio-stdout-noise]], now unblocked. No review comments.
 
 Related: [[board]], [[run-task-by-cid]], [[mcp-stdio-stdout-noise]].

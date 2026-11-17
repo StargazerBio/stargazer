@@ -1,6 +1,6 @@
 ---
 title: drop-notebook-asset
-status: review
+status: done
 priority: normal
 created: 2026-11-16
 pr: 155
@@ -19,5 +19,9 @@ PR 155, `refactor/drop-notebook-asset`.
 - Infra main `43c7c5c`: no `Notebook` import from stargazer; explorer `asset=notebook` entries are dicts from `notebook_keyvalues`, never through the SDK registry. RP-5 on the pinned 2026.10.30: 388 passed (3 runs).
 - Infra unit tier against this branch's SDK: errors at setup on branch and `origin/main` alike (infra conftest patches `storage.default_client`, gone on main). With an alias shim: 387 passed, 1 failed, identical on both (`test_basic_template_declares_an_environment_on_notebook_base`, template drift).
 - Infra at its pin bump: drop the dead `NOTEBOOK_KEY` skip in `/assets/schema`; fix the `default_client` fixture and the basic-template test, both unrelated drift.
+
+## Outcome
+
+Shipped in PR 155 (merge `91c1248`): the `Notebook` asset type and its exports are gone, and stored `asset=notebook` records read back as a bare `Asset`. Verified as under Evidence: unit tier 319 passed, notebook smoke 23 passed, the docs build clean. Left: at infra's next pin bump, drop the dead `NOTEBOOK_KEY` skip in `/assets/schema` and fix the `default_client` fixture and the basic-template test. No review comments.
 
 Related: [[board]], [[retire-public-notebooks]], [[sdk-front-door]].
