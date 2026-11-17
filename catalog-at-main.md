@@ -1,6 +1,6 @@
 ---
 title: catalog-at-main
-status: review
+status: done
 priority: normal
 created: 2026-11-16
 pr: 7
@@ -22,4 +22,8 @@ For the MVP, the least it takes is moving the pins to a commit that runs on the 
 
 StargazerBio/community-notebooks PR 7, branch `fix/catalog-at-main`: both pins move to `a58cdfc` (PR 6's merge). Measured with the dashboard's own path: at `63e5c10` the scRNA notebook is missing `stargazer.config.scrna_env` on `stargazer-bio==2026.11.16`, and at `a58cdfc` both notebooks' imports resolve; infra's `community_listing.listing()` with the new catalog lists both as Featured from their raw files. The redesign above (Featured at `main`, kept working by CI) stays open: at merge it becomes its own `maybe` ticket.
 
-Related: [[board]], [[community-kernel-headers]], [[retire-public-notebooks]].
+## Outcome
+
+Shipped in StargazerBio/community-notebooks PR 7 (merge `713530d`): both featured pins at `a58cdfc`, where both notebooks' imports resolve on `stargazer-bio==2026.11.16` and infra's `community_listing.listing()` lists them as Featured from their raw files (measured, as above). The notebooks themselves weren't rerun: their files are identical to PR 6's head, which ran both end to end on that release. No review comments. Left: Featured at `main` kept working by CI instead of pins, ticket [[featured-follows-main]].
+
+Related: [[board]], [[featured-follows-main]], [[community-kernel-headers]], [[retire-public-notebooks]].
