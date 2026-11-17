@@ -19,6 +19,7 @@ Reworked twice after review: first onto Union's own controls, then down to the q
 - [x] One org-scoped Union queue per project (Union refuses project-scoped queues), set as its `run.default_queue`. It holds runs (`LIMIT_RUNS`) and actions (`LIMIT_ACTIONS`) at once, and the totals its running actions request: CPU and memory (`max_resources`), and GPUs of one allowed type (`max_accelerators` `nvidia_gpu/<type>`, 1 `nvidia-a10g` by default; a limit of 0 is refused, since a queue can't cap at 0). `greedy_capacity`
 - [x] No per-task cap, so a user chooses between many small tasks and a few big ones
 - [x] GPUs capped by type: a queue counts a typed request only against its own type's cap and leaves unnamed types uncapped, so the project's `task_resource.default_accelerator` gives untyped requests the allowed type, and the admin keeps the GPU node pools to that type. Measured: two `A10G:1` and two untyped `gpu=1` tasks ran one at a time, each charged `nvidia_gpu/nvidia-a10g`
+- [x] Notebooks held to the same CPU, memory and GPU totals by the dashboard, apart from tasks, since queues don't hold apps: every launch sums the requests of the owner's open `nb-*` apps (desired state started or active) plus the new pod's, and refuses past a total (`app/notebook_budget.py`). Several small notebooks or one large GPU one. Measured against real app specs on u-pryce; a refusal through the dashboard page isn't verified yet (the test account's terms gate)
 - [x] `flyteplugins-union` 0.16, the first whose class-wide GPU cap the server accepts
 - [x] `onboard`, `upgrade` and `resume` ensure the limits; re-running is a no-op when they're right
 - [x] Verified on the tenant as the test account (infra PR 38 has the evidence)
@@ -26,7 +27,7 @@ Reworked twice after review: first onto Union's own controls, then down to the q
 
 ## Not held by the queue
 
-Measured on `u-pryce`, 2026-11-17: a run that names another queue (`queue="default"`) skips the project's queue, and apps, notebook pods included, don't go through queues. Both are handled by hand if they're abused. The project key can't change its queue or settings (`ACTION_ADMINISTER_PROJECT`, `ACTION_MANAGE_QUEUE`). Which GPU types exist is the tenant's node pools, which the admin chooses: today `awsg52xlarge` (one A10G each) beside the CPU pool `awsr7i2xlarge`. A pool offering another GPU type would leave that type uncapped.
+Measured on `u-pryce`, 2026-11-17: a run that names another queue (`queue="default"`) skips the project's queue, and apps don't go through queues: dashboard launches are held to the notebook totals, but an app deployed straight with the project's key isn't. Both are handled by hand if they're abused. The project key can't change its queue or settings (`ACTION_ADMINISTER_PROJECT`, `ACTION_MANAGE_QUEUE`). Which GPU types exist is the tenant's node pools, which the admin chooses: today `awsg52xlarge` (one A10G each) beside the CPU pool `awsr7i2xlarge`. A pool offering another GPU type would leave that type uncapped.
 
 ## Verification recipe
 
@@ -35,6 +36,7 @@ As an org admin (`FLYTE_API_KEY` from `~/.flyte/stargazer-upgrade.env`), in the 
 1. Set small limits on `app.config.LIMIT_*` (e.g. 4 runs, 3 CPU total) and call `ensure_project_limits("u-pryce")`; read back `Queue.get("u-pryce")` and the project's `local_overrides()`. A second call should log no writes.
 2. Total cap: wait a minute, submit two tasks of 2 CPU each on an SDK-built image (`flyte.Image.from_debian_base()`) sleeping 90 s, and poll `Queue.details("u-pryce")`: expect `in_flight_resources` cpu `2000m` of `3000m` and the second QUEUED until the first finishes. The release notebook image can't run tasks: a task pod there starts the notebook server instead.
 3. No per-task cap: a task asking for 6 CPU / 8Gi reports `cpu.max=600000 100000` from its cgroup.
-4. Put the limits back to `tenant.env`'s and check no runs are live.
+4. Notebook totals: with `config.FLYTE_PROJECT = "u-pryce"`, serve two small apps named `nb-<x>-edit` (any image; a failed pod still counts by desired state) and call `notebook_budget.refusal("x", "edit", flyte.Resources(cpu=1))` with `config.LIMIT_CPU = "2"`: expect the "needs 1 CPU ... 2 of your 2" refusal, and None at 3. Through the dashboard: launch notebooks until one is refused with that message (needs the test account's terms accepted). Delete the apps after.
+5. Put the limits back to `tenant.env`'s and check no runs are live.
 
 Related: [[board]], [[project-costs-daily]], [[retire-stargazer-login-project]].
