@@ -1,6 +1,6 @@
 ---
 title: mcp-stdio-stdout-noise
-status: backlog
+status: maybe
 priority: low
 created: 2026-11-16
 blocked_by:

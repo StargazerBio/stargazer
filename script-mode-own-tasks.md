@@ -1,6 +1,6 @@
 ---
 title: script-mode-own-tasks
-status: backlog
+status: maybe
 priority: low
 created: 2026-11-10
 ---

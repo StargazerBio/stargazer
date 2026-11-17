@@ -1,6 +1,6 @@
 ---
 title: catalog-at-main
-status: maybe
+status: backlog
 priority: normal
 created: 2026-11-16
 ---
@@ -14,5 +14,7 @@ The idea: the catalog lists paths, and Featured is those paths at `main`. What k
 What would go in infra: reading each pinned file from the archive or its raw URL at a commit, and the split between a Featured listing at pins and a Community one at `main` (`app/community_listing.py`); a catalog entry becomes a flag on a notebook in one listing.
 
 To settle: the pin is also the review record ("the commit its maintainers reviewed"). Whether a notebook changing under Featured without a second look is acceptable in a repo with no review on publish.
+
+For the MVP, the least it takes is moving the pins to a commit that runs on the release; the redesign can wait.
 
 Related: [[board]], [[community-kernel-headers]], [[retire-public-notebooks]].
