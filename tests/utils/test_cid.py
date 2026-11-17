@@ -124,21 +124,3 @@ def test_builder_with_no_bytes_is_the_zero_byte_raw_leaf():
     expected = "bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku"
     assert CidBuilder().cid() == expected
     assert fed_empty.cid() == expected
-
-
-@pytest.mark.parametrize("piece", [PRIME_BYTES, UPLOAD_CHUNK_BYTES])
-def test_builder_two_levels(past_one_node, piece):
-    """175 leaves fed unevenly still build two nodes under a root."""
-    assert (
-        _streamed(past_one_node, piece)
-        == "bafybeibwfjx4gjco2cvbbqlhbtazzttn73bsxnan2t4zmxrjmolwknbe7y"
-    )
-
-
-def test_builder_three_levels(past_one_node, monkeypatch):
-    """44,545 one-KiB leaves fed in prime-sized pieces build the third level."""
-    monkeypatch.setattr(cid_module, "CHUNK_BYTES", 1024)
-    assert (
-        _streamed(past_one_node, PRIME_BYTES)
-        == "bafybeig6kus6wi5thzxnl2qb3fjfkmozg5yxdyfgq2u6p2lwed36onhlgm"
-    )

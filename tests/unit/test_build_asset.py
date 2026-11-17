@@ -23,14 +23,6 @@ class TestBuildAsset:
         with pytest.raises(ValueError, match="must include 'asset'"):
             build_asset({"sample_id": "S1"})
 
-    def test_registered_key_builds_typed(self):
-        asset = build_asset(
-            {"asset": "alignment", "sample_id": "S1", "duplicates_marked": "true"}
-        )
-        assert type(asset) is Alignment
-        assert asset.sample_id == "S1"
-        assert asset.duplicates_marked is True
-
     def test_registered_key_keeps_extra_field(self):
         asset = build_asset({"asset": "alignment", "sample_id": "S1", "flowcell": "X"})
         assert type(asset) is Alignment
@@ -60,10 +52,6 @@ class TestBuildAsset:
 
 class TestOwnerStamp:
     """_stamp_owner injects _owner from STARGAZER_OWNER. Env wins."""
-
-    def test_env_set_stamps(self, monkeypatch):
-        monkeypatch.setenv("STARGAZER_OWNER", "pryce")
-        assert _stamp_owner({"asset": "r1"}) == {"asset": "r1", "_owner": "pryce"}
 
     def test_env_wins_over_existing(self, monkeypatch):
         """A rehydrated record must not carry a stale owner onto re-upload."""

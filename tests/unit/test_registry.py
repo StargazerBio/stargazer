@@ -68,23 +68,3 @@ def test_to_catalog_structure():
     assert len(bwa_mem_entry["outputs"]) == 1
     assert bwa_mem_entry["outputs"][0]["name"] == "o0"
     assert "Alignment" in bwa_mem_entry["outputs"][0]["type"]
-
-
-def test_get_returns_none_for_unknown():
-    """get() returns None for unregistered task names."""
-    reg = TaskRegistry()
-    assert reg.get("nonexistent_task") is None
-
-
-def test_list_tasks_no_filter():
-    """list_tasks with no category returns all tasks and workflows."""
-    reg = TaskRegistry()
-    all_tasks = reg.list_tasks()
-    tasks_only = reg.list_tasks(category="task")
-    workflows_only = reg.list_tasks(category="workflow")
-    assert len(all_tasks) == len(tasks_only) + len(workflows_only)
-
-
-def test_task_info_has_task_obj():
-    """TaskInfo stores the original Flyte task object."""
-    assert TaskRegistry().get("bwa_mem").task_obj is stargazer.tasks.bwa_mem

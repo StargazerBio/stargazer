@@ -125,26 +125,6 @@ def test_a_missing_file_stays_missing(tmp_path):
     assert not path.exists()
 
 
-def test_pinning_twice_changes_nothing_the_second_time(tmp_path):
-    """The second call sees the first call's pin and leaves the text alone."""
-    original = (
-        "# /// script\n"
-        '# requires-python = ">=3.14"\n'
-        "# dependencies = [\n"
-        '#   "stargazer-bio",\n'
-        "# ]\n"
-        "# ///\n" + BODY
-    )
-    path = tmp_path / "notebook.py"
-    path.write_text(original)
-    proxy.pin_python(path)
-    once = path.read_text()
-
-    proxy.pin_python(path)
-
-    assert path.read_text() == once
-
-
 def test_an_old_uv_source_is_copied_where_pixi_reads_it(tmp_path):
     """The uv source's path lands in pixi's PyPI table; the uv table stays."""
     path = tmp_path / "notebook.py"

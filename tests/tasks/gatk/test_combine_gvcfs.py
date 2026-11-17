@@ -1,6 +1,4 @@
-"""
-Tests for combine_gvcfs task.
-"""
+"""Tests for the combine_gvcfs task."""
 
 import pytest
 from conftest import GATK_FIXTURES_DIR, GENERAL_FIXTURES_DIR
@@ -75,23 +73,6 @@ async def test_combine_gvcfs_rejects_vcf_input():
         )
 
 
-@pytest.mark.asyncio
-async def test_combine_gvcfs_single_sample():
-    """Test that combine_gvcfs works with a single sample (edge case)."""
-    sample_id = "NA12829"
-    gvcf = make_gvcf(sample_id)
-    ref = make_ref()
-
-    result = await combine_gvcfs(
-        gvcfs=[gvcf], ref=ref, cohort_id="single_sample_cohort"
-    )
-
-    assert isinstance(result, Variants)
-    assert result.variant_type == "gvcf"
-    assert len(result.source_samples) == 1
-    assert result.source_samples == [sample_id]
-
-
 async def test_combine_gvcfs_links_its_output_to_its_input_gvcf():
     """The combined GVCF records the GVCF it was made from."""
     sample_id = "NA12829"
@@ -113,5 +94,5 @@ async def test_combine_gvcfs_links_its_output_to_its_input_gvcf():
         gvcfs=[gvcf], ref=make_ref(), cohort_id="linked_cohort"
     )
 
-    assert gvcf.cid != ""
+    assert result.source_samples == [sample_id]
     assert result.source_cids == [gvcf.cid]
