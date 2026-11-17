@@ -27,7 +27,9 @@ Verify with the `verify-dashboard` skill on the devbox: every route in the table
 - Route table (method, path, name, response class/model, status, params, dependencies) dumped from `asgi_app.routes`, included routers walked, before and after: 27 rows, identical (measured).
 - Unit tier 388 passed before and after; all 70 top-level definitions moved verbatim (AST comparison against `main`) (measured).
 - Every test patch takes effect: bypassing each patched name at its call site fails tests. `_serve` fails 1 test, as it does on `main` (measured).
-- Devbox: this branch deployed, and every route family was driven with curl (page, health, static, assets list, workspace create/setup/download/copy/publish 503/delete/cleanup, settings and the explorer default, launch of a tutorial and of a workspace notebook, status, stop). The dashboard was stopped afterwards (measured). Union tenant not driven: a pure refactor (inferred).
+- Devbox: this branch deployed, and every route family was driven with curl (page, health, static, assets list, workspace create/setup/download/copy/publish 503/delete/cleanup, settings and the explorer default, launch of a tutorial and of a workspace notebook, status, stop). The dashboard was stopped afterwards (measured).
+
+**Union tenant (measured, 2026-11-16):** the branch deployed as the test account's dashboard (image built on Union in 1:53). Signed in through the console's GitHub login, the page rendered its Workspace and Assets sections, and `fetch` from the page answered on every route family: `/health` 200; `/assets/schema`, `/assets/list` (mine, featured) 200; `/settings/explorer-default` DELETE then POST of the same filter 200, a bad filter 400; `/workspace/create` 200, `/workspace/setup` and `/workspace/download` 200, `/workspace/copy` of a tutorial 200 and from `public` 400; `/launch` (run) 202, `/launch/status` listed the notebook running once its app was up, and its URL served the marimo page; `/stop` 200 and the status emptied; `/workspace/delete` 200 for both test notebooks; `/workspace/cleanup` 200. Teardown: `stopped: [dashboard]`, `live runs: []`.
 
 ## Verification recipe
 
