@@ -58,7 +58,7 @@ Outside its tier a test is deselected, never skipped, and inside it a missing to
 pixi run ruff check --fix . && pixi run ruff format .
 ```
 
-Pre-commit runs these too, along with `docstr-coverage` (a docstring on every module, class and function in `src/`), the docs build, an MCP server import check and the unit tests.
+Pre-commit runs these too, along with `docstr-coverage` (a docstring on every module, class and function in `src/`), a regeneration of the catalog and API reference, the docs build, a check that the image locks are current, an MCP server import check and the unit tests.
 
 Ruff is pinned twice — `rev:` in `.pre-commit-config.yaml` and the `ruff` entry in `pyproject.toml`'s dev group. **Bump both together**, or the commit hook and `pixi run ruff` will enforce different rules. Deliberate rule exceptions live in `[tool.ruff.lint]` in `pyproject.toml`, each with the reason.
 

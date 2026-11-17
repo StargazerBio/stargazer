@@ -38,6 +38,18 @@ def test_the_root_exports_every_asset_type():
     assert missing == []
 
 
+def test_the_root_leaves_the_storage_clients_to_utils():
+    """The storage clients a notebook never touches are in `stargazer.utils`, not
+    the root."""
+    left = [
+        name
+        for name in ("PinataClient", "StorageClient", "get_client")
+        if hasattr(stargazer, name)
+    ]
+
+    assert left == []
+
+
 def test_importing_the_root_leaves_marimo_unimported():
     """The dashboard imports the package without marimo installed, so the root
     mustn't import it."""

@@ -182,6 +182,33 @@ async def test_fetch_takes_own_and_publisher_companions_but_no_one_elses(
 
 
 @pytest.mark.asyncio
+async def test_fetch_fills_in_public_companions_when_the_user_has_none(
+    tmp_path, monkeypatch
+):
+    """A private copy of a public reference, with no companions of its own, gets the public ones."""
+    public = FakePublicTier(tmp_path / "gateway")
+    c = make_client(tmp_path, public=public, gateway=str(public.gateway))
+    monkeypatch.setattr(storage_mod, "get_client", lambda: c)
+    ref = await Reference.store(
+        _write(tmp_path / "w" / "ref.fa", b">chr1\nACGT\n"), build="T"
+    )
+    public.add("ref.fa", b">chr1\nACGT\n", asset="reference", _owner="maintainer")
+    public.add(
+        "ref.fa.fai", b"chr1\t4\t6\t4\t5\n", companion_of=ref.cid, _owner="maintainer"
+    )
+
+    pod = make_client(tmp_path, cache="pod", public=public, gateway=str(public.gateway))
+    monkeypatch.setattr(storage_mod, "get_client", lambda: pod)
+    local = await ref.fetch()
+
+    assert _listing(local.parent) == {
+        "ref.fa": b">chr1\nACGT\n",
+        "ref.fa.fai": b"chr1\t4\t6\t4\t5\n",
+    }
+    assert public.queries == [{"companion_of": ref.cid}]
+
+
+@pytest.mark.asyncio
 async def test_a_companion_stored_later_replaces_the_cached_public_one(
     tmp_path, monkeypatch
 ):
