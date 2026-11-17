@@ -6,7 +6,7 @@ created: 2026-11-17
 pr: 38
 ---
 
-The free tier's guardrail on spend. Cost reports ([[project-costs-daily]]) arrive a day late, so a runaway workload could run for up to 24 hours before anyone sees it. Infra PR 35 (`feat/eula`) puts a terms-of-use gate on every dashboard whose terms say the workspace is free during the alpha within its project's limits on CPU, memory, GPUs and concurrent runs; this sets those limits, and has to land before that PR deploys.
+The free tier's guardrail on spend. Cost reports ([[project-costs-daily]]) arrive a day late, so a runaway workload could run for up to 24 hours before anyone sees it. Infra PR 35 (`feat/eula`) puts a terms-of-use gate on every dashboard whose terms say the workspace is free during the alpha within its project's limits on CPU, memory, GPUs and concurrent runs; this sets those limits. PR 35 merged first, so they should roll out soon after.
 
 Infra's onboarding (`stargazer-users`, `stargazer_users/`) sets the limits on every user project, from `STARGAZER_LIMIT_*` in `tenant.env`, and `upgrade` brings existing projects to them. Branch `feat/project-limits` in infra.
 
@@ -17,7 +17,7 @@ Infra's onboarding (`stargazer-users`, `stargazer_users/`) sets the limits on ev
 - [x] Notebook pods (apps, which Union's settings don't cap): the dashboard clamps each pod's resources to the per-pod caps and refuses a launch past `LIMIT_NOTEBOOKS` running notebooks
 - [x] `onboard`, `upgrade` and `resume` ensure the limits; re-running is a no-op when they're right
 - [x] Verified on the tenant as the test account (infra PR 38 has the evidence)
-- [ ] Before PR 35 deploys: `./stargazer-users upgrade` with the admin's AWS session, to give every existing project its limits
+- [ ] Once this merges: `./stargazer-users upgrade` with the admin's AWS session, to give every existing project its limits (PR 35, the terms, merged first)
 
 ## What the limits don't stop
 
