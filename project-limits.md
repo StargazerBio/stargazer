@@ -16,8 +16,9 @@ Infra's onboarding (`stargazer-users`, `stargazer_users/`) sets the limits on ev
 
 Reworked twice after review: first onto Union's own controls, then down to the queue alone, with abuse handled by hand rather than in code.
 
-- [x] One org-scoped Union queue per project (Union refuses project-scoped queues), set as its `run.default_queue`. It holds runs (`LIMIT_RUNS`) and actions (`LIMIT_ACTIONS`) at once, and the totals its running actions request: CPU and memory (`max_resources`), and NVIDIA GPUs (`max_accelerators` `nvidia_gpu`, 1 by default; a limit of 0 is refused, since a queue can't cap at 0). `greedy_capacity`
+- [x] One org-scoped Union queue per project (Union refuses project-scoped queues), set as its `run.default_queue`. It holds runs (`LIMIT_RUNS`) and actions (`LIMIT_ACTIONS`) at once, and the totals its running actions request: CPU and memory (`max_resources`), and GPUs of one allowed type (`max_accelerators` `nvidia_gpu/<type>`, 1 `nvidia-a10g` by default; a limit of 0 is refused, since a queue can't cap at 0). `greedy_capacity`
 - [x] No per-task cap, so a user chooses between many small tasks and a few big ones
+- [x] GPUs capped by type: a queue counts a typed request only against its own type's cap and leaves unnamed types uncapped, so the project's `task_resource.default_accelerator` gives untyped requests the allowed type, and the admin keeps the GPU node pools to that type. Measured: two `A10G:1` and two untyped `gpu=1` tasks ran one at a time, each charged `nvidia_gpu/nvidia-a10g`
 - [x] `flyteplugins-union` 0.16, the first whose class-wide GPU cap the server accepts
 - [x] `onboard`, `upgrade` and `resume` ensure the limits; re-running is a no-op when they're right
 - [x] Verified on the tenant as the test account (infra PR 38 has the evidence)
@@ -25,7 +26,7 @@ Reworked twice after review: first onto Union's own controls, then down to the q
 
 ## Not held by the queue
 
-Measured on `u-pryce`, 2026-11-17: a run that names another queue (`queue="default"`) skips the project's queue, and apps, notebook pods included, don't go through queues. Both are handled by hand if they're abused. The project key can't change its queue or settings (`ACTION_ADMINISTER_PROJECT`, `ACTION_MANAGE_QUEUE`). Which GPU types exist is the tenant's node pools, Union's: today `awsg52xlarge` (one A10G each) beside the CPU pool `awsr7i2xlarge`; a queue can cap a type's count but not forbid one.
+Measured on `u-pryce`, 2026-11-17: a run that names another queue (`queue="default"`) skips the project's queue, and apps, notebook pods included, don't go through queues. Both are handled by hand if they're abused. The project key can't change its queue or settings (`ACTION_ADMINISTER_PROJECT`, `ACTION_MANAGE_QUEUE`). Which GPU types exist is the tenant's node pools, which the admin chooses: today `awsg52xlarge` (one A10G each) beside the CPU pool `awsr7i2xlarge`. A pool offering another GPU type would leave that type uncapped.
 
 ## Verification recipe
 
