@@ -1,6 +1,6 @@
 ---
 name: tasks-and-workflows
-description: "Write or change any Stargazer task or workflow: where it lives, its TaskEnvironment and image, assets as I/O, async composition with assemble() and asyncio.gather, docstrings and exports. Use when adding or changing anything in src/stargazer/tasks/ or src/stargazer/workflows/."
+description: "Write or change any Stargazer task or workflow: where it lives, its TaskEnvironment and image, assets as I/O, async composition with find() and asyncio.gather, docstrings and exports. Use when adding or changing anything in src/stargazer/tasks/ or src/stargazer/workflows/."
 ---
 
 # Tasks and workflows
@@ -76,7 +76,7 @@ async def {action}_{tool}(input_data: {InputType}) -> {OutputType}:
 ## Workflows
 
 - **Where:** one module per pipeline in `src/stargazer/workflows/`, named for the pipeline; related workflows can share a module.
-- **Scalar inputs, asset outputs.** A workflow takes scalars (a build, sample IDs) and `assemble()`s its assets, so the MCP server and a test can run it by name. Call `assemble()` once per kind of input: every filter must match each asset returned, so a reference (`build`) and a sample's reads (`sample_id`) take separate calls.
+- **Scalar inputs, asset outputs.** A workflow takes scalars (a build, sample IDs) and looks up its assets, so the MCP server and a test can run it by name. One `Type.find(**filters)` per input: the newest stored asset of that type matching every filter, raising when there's none (`required=False` returns `None`, for an optional input). `find_all()` returns every match; `assemble()` is for queries across types.
 - **Composition.** `await` dependent steps in order; `asyncio.gather()` independent ones, never dependent ones. Break a long pipeline into sub-workflows.
 - **Testing:** say which tier can run it end to end (a GATK workflow needs the devbox).
 
@@ -95,7 +95,6 @@ spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 import asyncio
 
 from stargazer.assets import {InputType}, {OutputType}
-from stargazer.assets.asset import assemble
 from stargazer.config import log_execution
 from stargazer.tasks.gatk.env import gatk_env  # or stargazer.tasks.scrna.env's scrna_env
 from stargazer.tasks import {task1}, {task2}
@@ -107,19 +106,14 @@ async def {pipeline_name}(build: str, sample_ids: list[str]) -> list[{OutputType
     {What the pipeline does}.
 
     Args:
-        build: Reference genome build to assemble the inputs for
+        build: Reference genome build to look up the inputs for
         sample_ids: Samples to run, in parallel
 
     Returns:
         {Description of workflow outputs}
     """
     log_execution()
-    assets = await assemble(build=build, asset="{input_key}")
-    inputs = [a for a in assets if isinstance(a, {InputType})]
-    if not inputs:
-        raise ValueError(f"No {input_key} found for build={build!r}")
-
-    prepared = await {task1}(inputs[0])
+    prepared = await {task1}(await {InputType}.find(build=build))
     return list(
         await asyncio.gather(*[{task2}(prepared, sample_id=s) for s in sample_ids])
     )

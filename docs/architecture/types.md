@@ -57,9 +57,11 @@ Every task output records what it was made from. An `Alignment` records its `sou
 
 ## Assembly
 
-`assemble(**filters)` queries the asset graph by keyvalue, deduplicates by CID, and returns a flat `list[Asset]` of specialized subclass instances. Every filter must match exactly; a list value matches any of its entries. Workflows filter the result with `isinstance` to pick out the types they need ([Writing a Workflow](../guides/writing-a-workflow.md)).
+`assemble(**filters)` queries the asset graph by keyvalue, deduplicates by CID, and returns a flat `list[Asset]` of specialized subclass instances. Every filter must match exactly; a list value matches any of its entries.
 
 Records come back through `specialize(record)`, which is graceful at query time: an unregistered key, or a record whose values don't parse against its class, falls back to a bare `Asset` instead of raising, so one malformed record can't crash an `assemble()`.
+
+For one type, `Type.find_all(**filters)` is `assemble()` narrowed to that type's key and class, newest first, and `Type.find(**filters)` is its newest match: with several, the newest wins, and with none it raises a `ValueError` naming the type and the filters, or returns `None` when `required=False`. Workflows look up their inputs this way ([Writing a Workflow](../guides/writing-a-workflow.md)).
 
 ## Storage Layer
 

@@ -48,5 +48,7 @@ async def test_pipeline_runs_every_stage_from_a_stored_raw_sample():
 
 async def test_pipeline_names_a_missing_sample():
     """A sample with no stored raw AnnData is named in the error."""
-    with pytest.raises(ValueError, match="No raw AnnData found for sample_id='nope'"):
+    with pytest.raises(
+        ValueError, match="No AnnData found for sample_id='nope', stage='raw'"
+    ):
         await scrna_clustering_pipeline(sample_id="nope")

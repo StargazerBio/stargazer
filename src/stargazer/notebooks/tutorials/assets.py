@@ -406,15 +406,20 @@ async def _():
 
 @app.cell
 def _():
-    """Section 5 — discover via assemble()."""
+    """Section 5 — discover via find() and assemble()."""
     mo.md(
         """
-        ## 5. Discover with `assemble()`
+        ## 5. Discover with `find()` and `assemble()`
 
-        `assemble(**filters)` queries storage by keyvalue filters,
-        deduplicates by CID, and returns specialized subclass instances
-        — the registry from earlier earns its keep here. No file path
+        `SampleSheet.find(**filters)` queries storage by keyvalue filters
+        and returns the newest `SampleSheet` that matches, raising when
+        none does (`required=False` returns `None` instead).
+        `find_all()` returns every match, newest first. No file path
         conventions, no folder scanning.
+
+        `assemble(**filters)` asks across types: every asset matching
+        the filters, each rebuilt as its own subclass — the registry
+        from earlier earns its keep here.
         """
     )
 
@@ -424,23 +429,22 @@ async def _(uploaded_sheet):
     """Query for our newly uploaded sheet."""
     from stargazer import assemble
 
-    found = await assemble(asset="sample_sheet", cohort_id="assets_demo")
-    _hit = next((_a for _a in found if _a.cid == uploaded_sheet.cid), None)
+    found = await SampleSheet.find(cohort_id="assets_demo")
+    everything = await assemble(cohort_id="assets_demo")
 
     mo.md(
         f"""
         ```python
-        found = await assemble(
-            asset="sample_sheet", cohort_id="assets_demo"
-        )
+        found = await SampleSheet.find(cohort_id="assets_demo")
+        everything = await assemble(cohort_id="assets_demo")
         ```
 
-        - Returned `{len(found)}` asset(s)
-        - Each is a `{type(_hit).__name__ if _hit else "—"}` (note: a
-          real subclass, not a generic `Asset`) — that's `specialize()`
-          using the registry to pick the right Python class.
-        - `found[0].cid == uploaded_sheet.cid` → **{_hit is not None}**
-        - `isinstance(found[0], SampleSheet)` → **{isinstance(_hit, SampleSheet) if _hit else False}**
+        - `found` is a `{type(found).__name__}` (note: a real subclass,
+          not a generic `Asset`) — that's `specialize()` using the
+          registry to pick the right Python class.
+        - `found.cid == uploaded_sheet.cid` → **{found.cid == uploaded_sheet.cid}**
+        - `assemble()` returned `{len(everything)}` asset(s) of types
+          `{sorted({type(_a).__name__ for _a in everything})}`
 
         From this point a downstream task can take the `SampleSheet`
         as a typed argument and call `await sheet.fetch()`, which
@@ -527,7 +531,7 @@ def _():
             ...
         )
 
-        await assemble(asset="sample_sheet", lab="tutorial_lab")
+        await SampleSheet.find_all(lab="tutorial_lab")
         ```
 
         A typo in a *declared* field still fails loudly
@@ -543,8 +547,6 @@ async def _():
     import tempfile as _tempfile
     from pathlib import Path as _Path
 
-    from stargazer import assemble as _assemble
-
     _csv = _Path(_tempfile.mkdtemp(prefix="stargazer_extras_")) / "extras.csv"
     _csv.write_text("sample_id,organism,tissue\ns2d1,mouse,liver\n")
 
@@ -556,13 +558,13 @@ async def _():
         keyvalues={"lab": "tutorial_lab"},
     )
 
-    _found = await _assemble(asset="sample_sheet", lab="tutorial_lab")
+    _found = await SampleSheet.find_all(lab="tutorial_lab")
     _hit = next((_a for _a in _found if _a.cid == tagged_sheet.cid), None)
 
     mo.md(
         f"""
         - `tagged_sheet.keyvalues` → `{tagged_sheet.keyvalues}`
-        - `assemble(asset="sample_sheet", lab="tutorial_lab")` found it →
+        - `SampleSheet.find_all(lab="tutorial_lab")` found it →
           **{_hit is not None}**, still a
           `{type(_hit).__name__ if _hit else "—"}`, with
           `cohort_id` `{_hit.cohort_id if _hit else "—"!r}` and
@@ -597,7 +599,7 @@ def _():
         a re-run a year later or a parameter sweep all land on fresh
         containers with empty disks). There *is* no shared path. A
         container finds its inputs by asking the graph for "the asset
-        with these properties" with `assemble()`, and the BAI lands next
+        with these properties" with `find()`, and the BAI lands next
         to the BAM everywhere because of `companion_of`. The
         **Execution** tutorial runs identical code on a remote cluster,
         with inputs resolved by CID and no paths to line up.
@@ -630,7 +632,8 @@ def _():
         | `cid` vs `path` | Identity vs location, decoupled |
         | `to_keyvalues()` / `from_keyvalues()` | Round-trip across a flat-string storage boundary |
         | `store(path, **kwargs)` | Single call: set fields, upload, get a CID |
-        | `assemble(**filters)` | Discovery by metadata, not folders |
+        | `find(**filters)` / `find_all(**filters)` | One type's assets by metadata, not folders |
+        | `assemble(**filters)` | Every type's assets matching the metadata |
         | `companion_of` and `<parent>_cid` | The asset graph's edges: belongs beside, made from |
         | Extras in `keyvalues` | Your own queryable keys on any asset |
 

@@ -12,7 +12,6 @@ spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
 from stargazer.assets import R1, R2, Alignment, Reference
-from stargazer.assets.asset import assemble
 from stargazer.config import log_execution
 from stargazer.tasks import (
     bwa_mem2_index,
@@ -49,11 +48,7 @@ async def prepare_reference(build: str) -> Reference:
         Reference asset (FASTA file)
     """
     log_execution()
-    assets = await assemble(build=build, asset="reference")
-    refs = [a for a in assets if isinstance(a, Reference)]
-    if not refs:
-        raise ValueError(f"No reference found for build={build!r}")
-    ref = refs[0]
+    ref = await Reference.find(build=build)
 
     # Fetching brings the reference's companions in beside it, so what's
     # missing on disk is what has to be built.
@@ -92,19 +87,9 @@ async def preprocess_sample(
         Alignment asset with the preprocessed BAM file
     """
     log_execution()
-    ref_assets = await assemble(build=build, asset="reference")
-    refs = [a for a in ref_assets if isinstance(a, Reference)]
-    if not refs:
-        raise ValueError(f"No reference found for build={build!r}")
-    ref = refs[0]
-
-    read_assets = await assemble(sample_id=sample_id, asset=["r1", "r2"])
-    r1_list = [a for a in read_assets if isinstance(a, R1)]
-    if not r1_list:
-        raise ValueError(f"No R1 reads found for sample_id={sample_id!r}")
-    r1 = r1_list[0]
-    r2_list = [a for a in read_assets if isinstance(a, R2)]
-    r2 = r2_list[0] if r2_list else None
+    ref = await Reference.find(build=build)
+    r1 = await R1.find(sample_id=sample_id)
+    r2 = await R2.find(sample_id=sample_id, required=False)
 
     alignment = await bwa_mem2_mem(ref=ref, r1=r1, r2=r2)
     alignment = await sort_sam(alignment=alignment, sort_order="coordinate")

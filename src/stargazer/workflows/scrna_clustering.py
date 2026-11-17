@@ -16,7 +16,6 @@ Reference:
 spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
-from stargazer.assets.asset import assemble
 from stargazer.assets.scrna import AnnData
 from stargazer.config import log_execution
 from stargazer.tasks.scrna import (
@@ -53,14 +52,7 @@ async def scrna_clustering_pipeline(
     """
     log_execution()
 
-    assets = await assemble(sample_id=sample_id, asset="anndata", stage="raw")
-    if not assets:
-        raise ValueError(
-            f"No raw AnnData found for sample_id={sample_id!r}. "
-            "Upload a .h5ad file with asset='anndata', stage='raw' and its "
-            "organism first."
-        )
-    raw = assets[0]
+    raw = await AnnData.find(sample_id=sample_id, stage="raw")
 
     filtered = await qc_filter(adata=raw, max_pct_mt=max_pct_mt)
     normalized = await normalize(adata=filtered)
