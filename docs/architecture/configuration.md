@@ -27,11 +27,12 @@ All defaults are set in `config.py`. If a variable is set (even to an empty stri
 | `STARGAZER_INDEX_URL` | Index: a SQLite file path, a `postgresql://` URL, or a `dsql://` URL | `~/.stargazer/index.db` |
 | `STARGAZER_LOCAL` | Temp space for task outputs, and the download cache | `~/.stargazer/local` |
 | `STARGAZER_OWNER` | Owner of new assets: their folder in the store, and `_owner` | unset → `local` |
-| `PINATA_JWT` | Turns on the public tier | unset |
+| `PINATA_JWT` | Turns on the public tier. On a hosted tenant it's a read key | unset |
+| `STARGAZER_PUBLISHER_URL` | The service that signs public uploads; without it, publishing uploads with `PINATA_JWT` | unset |
 | `PINATA_GATEWAY` | IPFS gateway for public downloads | The project's dedicated gateway |
 | `STARGAZER_API_KEY_SECRET` | The Flyte secret holding the project's API key (needed on a cluster with a login, such as Union) | unset |
 
-A hosted project's settings carry the store, index, owner and key secret's name to every task pod, so an environment passes no variables. `STARGAZER_ENV_VARS` forwards the submitter's explicitly-set ones for a cluster whose projects don't (the devbox), and the domain environments pass it for that reason. A cluster task whose store or index is still the local default raises on first use of the storage client instead of storing on the pod's disk.
+A hosted project's settings carry the store, index, owner, publisher and key secret's name to every task pod, so an environment passes no variables. `STARGAZER_ENV_VARS` forwards the submitter's explicitly-set ones for a cluster whose projects don't (the devbox), and the domain environments pass it for that reason. A cluster task whose store or index is still the local default raises on first use of the storage client instead of storing on the pod's disk.
 
 Where images are pushed is Flyte's own setting, `FLYTE_IMAGE_REGISTRY`; Stargazer sets none. Set it in the environment of whatever targets a cluster that needs one (the devbox's is `localhost:30000`), never in a config file a Union run might also find.
 
@@ -61,7 +62,18 @@ flowchart TD
 
 ## The public tier
 
-Shared data — bundles, reference genomes — lives on Pinata's public network, the part of the asset graph every user can read: anyone can read it, and `_owner` records who uploaded it. Every public record needs an `_owner`, so publishing needs `STARGAZER_OWNER`. The SDK reads Pinata's public index (which needs `PINATA_JWT` even for public files) and downloads public bytes from `PINATA_GATEWAY`. On Union the key is a Flyte secret every task environment, dashboard and notebook pod declares, so its value never appears in a task's or app's spec. The devbox drops app secrets, so devbox dashboards and notebook pods have no public tier.
+Shared data — bundles, reference genomes — lives on Pinata's public network, the part of the asset graph every user can read: anyone can read it, and `_owner` records who uploaded it. Every public record needs an `_owner`, so publishing needs `STARGAZER_OWNER`. The SDK reads Pinata's public index (which needs `PINATA_JWT` even for public files) and downloads public bytes from `PINATA_GATEWAY`. On Union the key is a Flyte secret every task environment, dashboard and notebook pod declares, so its value never appears in a task's or app's spec. On a hosted tenant, where a publisher signs uploads, that key only reads. The devbox drops app secrets, so devbox dashboards and notebook pods have no public tier.
+
+**On a hosted tenant, writing to the public tier goes through the publisher** (`STARGAZER_PUBLISHER_URL`). The one key that can write lives only there, outside any project a user runs code in. A pod asks it for a signed upload URL per file, signing the request with its own AWS role, which is the user's, and uploads the bytes to that URL itself; the publisher never sees them. A signed URL takes one upload, expires within minutes, and binds the file's name and keyvalues, with `_owner` stamped by the publisher as the calling user, whatever the upload sends. So a user's code can publish only as its own owner, and can't edit or delete anyone's public files. Locally and on the devbox, with no `STARGAZER_PUBLISHER_URL`, a full key in `PINATA_JWT` uploads directly.
+
+```mermaid
+flowchart LR
+    pod[Task or notebook pod] -- "query, with the read key" --> P[(Pinata public network)]
+    pod -- "sign: SigV4, the user's role" --> S[Publisher]
+    S -- "signed URL" --> pod
+    pod -- "the bytes, to the signed URL" --> P
+    S -. "full key" .- P
+```
 
 **Publishing moves a stored asset into the public tier, with its companions.** `StorageClient.publish(cid)` uploads one of the user's stored files to Pinata with its keyvalues, `_owner` restamped, then the user's own companions of it (the newest per name, the same ones `fetch()` takes first), each with its own keyvalues. A reference goes public as the set of files tools need, and since the same owner published the parent and its companions, every later `fetch()` of it takes them. Every file in the set is checked against Pinata's metadata limits before anything is sent, so a set never goes half public over a limit. A companion already public beside the parent under the same owner isn't sent again. Each CID must come back the same, or it raises. The user's own rows stay, so the assets are in both tiers. The MCP server exposes it as `publish_file`, which returns a record for each file that went public.
 

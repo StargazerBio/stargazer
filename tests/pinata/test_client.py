@@ -11,6 +11,7 @@ import uuid
 
 import pytest
 
+import stargazer.utils.pinata as pinata_mod
 import stargazer.utils.storage as storage_mod
 from stargazer.assets import R1
 from stargazer.assets.asset import Asset
@@ -195,3 +196,58 @@ async def test_publish_puts_an_asset_and_its_companion_on_the_public_network(
     finally:
         await client.public.delete(Asset(cid=parent.cid))
         await client.public.delete(Asset(cid=companion.cid))
+
+
+class _KeyHolderPublisher:
+    """Stands in for the publisher service: signs with the full key, as it does."""
+
+    def __init__(self):
+        """Sign with the key in tests/.secrets."""
+        self.pinata = PinataClient()
+
+    async def sign(self, filename: str, keyvalues: dict) -> dict:
+        """A signed upload URL for this file, bound to its keyvalues."""
+        url = await self.pinata.sign_upload(filename, keyvalues)
+        return {"url": url, "keyvalues": keyvalues}
+
+
+class _ReadOnlyPinata(PinataClient):
+    """The pod's public tier with a key that can't upload."""
+
+    async def upload(self, component, path):
+        """A read key can't upload; publishing mustn't try."""
+        raise AssertionError("the pod uploaded with its own key")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("resumable", [False, True], ids=["plain", "tus"])
+async def test_publish_through_a_signed_url_lands_on_the_public_network(
+    tmp_path, monkeypatch, resumable
+):
+    """A pod publishes through a signed URL, plain or resumable, and the file is public."""
+    if resumable:
+        monkeypatch.setattr(pinata_mod, "TUS_THRESHOLD_BYTES", 0)
+    tag = uuid.uuid4().hex
+    client = StorageClient(
+        local_dir=tmp_path / "cache",
+        store_root=str(tmp_path / "store"),
+        index=SqliteIndex(tmp_path / "index.db"),
+        public=_ReadOnlyPinata(),
+        publisher=_KeyHolderPublisher(),
+    )
+    asset = Asset(keyvalues={"asset": "publish_probe", "tag": tag})
+    await client.upload(asset, _unique_file(tmp_path, tag))
+
+    try:
+        records = await client.publish(asset.cid)
+
+        assert [r["cid"] for r in records] == [asset.cid]
+        public = await client.public.query({"tag": tag})
+        assert [(r["cid"], r["keyvalues"]) for r in public] == [
+            (
+                asset.cid,
+                {"asset": "publish_probe", "tag": tag, "_owner": "integration-test"},
+            )
+        ]
+    finally:
+        await PinataClient().delete(Asset(cid=asset.cid))
