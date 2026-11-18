@@ -29,6 +29,7 @@ nav = [
     { "CLI" = "architecture/cli.md" },
     { "Notebooks" = "architecture/notebook.md" },
     { "Notebook Runtime" = "architecture/runtime.md" },
+    { "Design Choices" = "architecture/design-choices.md" },
   ]},
   { "Reference" = [
     { "Catalog" = "reference/catalog.md" },
