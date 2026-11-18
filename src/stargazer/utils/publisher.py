@@ -13,8 +13,11 @@ takes only SigV4-signed requests, and each user's pods run as that user's
 role, so the request is signed with the pod's credentials (boto3's usual
 chain, the web identity token Flyte's project settings point it at).
 
-The publisher's contract: `POST <url>/sign` with JSON `{filename, keyvalues}`
-answers `{url, keyvalues}`, the signed URL and the keyvalues it binds.
+The publisher's contract, each a JSON `POST`: `/sign` with
+`{filename, keyvalues}` answers `{url, keyvalues}`, the signed URL and the
+keyvalues it binds; `/update` with `{cid, keyvalues}` and `/delete` with
+`{cid}` act on the caller's own public file for `cid`. The SDK only signs;
+the dashboard also edits and deletes.
 
 Without `STARGAZER_PUBLISHER_URL` there's no publisher, and a public tier
 with a full key publishes directly (locally, on the devbox).
@@ -57,19 +60,13 @@ class PublisherClient:
         region = urlparse(url).hostname.split(".")[2]
         return cls(url, region)
 
-    async def sign(self, filename: str, keyvalues: dict[str, str]) -> dict:
-        """A signed upload URL for one public file.
-
-        Args:
-            filename: The name the file lands with
-            keyvalues: Its metadata; the publisher restamps `_owner`
-
-        Returns:
-            `{url, keyvalues}`: where to upload the bytes, and the keyvalues
-            the file will carry
+    async def _post(self, route: str, payload: dict) -> dict:
+        """POST `payload` to `route`, SigV4-signed with the session's credentials.
 
         Raises:
             ValueError: when there are no AWS credentials to sign with
+            aiohttp.ClientResponseError: when the publisher refuses (403: not
+                the caller's file, or not a user's role)
         """
         credentials = self._session.get_credentials()
         if credentials is None:
@@ -78,10 +75,10 @@ class PublisherClient:
                 "to sign with: publishing runs as the user's own role"
             )
         # The bytes sent must be the bytes signed.
-        body = json.dumps({"filename": filename, "keyvalues": keyvalues}).encode()
+        body = json.dumps(payload).encode()
         request = AWSRequest(
             method="POST",
-            url=f"{self.url}/sign",
+            url=f"{self.url}{route}",
             data=body,
             headers={"Content-Type": "application/json"},
         )
@@ -96,3 +93,28 @@ class PublisherClient:
         ):
             response.raise_for_status()
             return await response.json()
+
+    async def sign(self, filename: str, keyvalues: dict[str, str]) -> dict:
+        """A signed upload URL for one public file.
+
+        Args:
+            filename: The name the file lands with
+            keyvalues: Its metadata; the publisher restamps `_owner`
+
+        Returns:
+            `{url, keyvalues}`: where to upload the bytes, and the keyvalues
+            the file will carry
+        """
+        return await self._post("/sign", {"filename": filename, "keyvalues": keyvalues})
+
+    async def update(self, cid: str, keyvalues: dict[str, str]) -> dict:
+        """Merge keyvalues onto the caller's own public file for `cid`.
+
+        Returns:
+            The updated record: `{cid, name, keyvalues, network}`
+        """
+        return await self._post("/update", {"cid": cid, "keyvalues": keyvalues})
+
+    async def delete(self, cid: str) -> dict:
+        """Delete the caller's own public file for `cid`."""
+        return await self._post("/delete", {"cid": cid})

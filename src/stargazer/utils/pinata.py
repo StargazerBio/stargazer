@@ -241,6 +241,28 @@ async def upload_signed(url: str, path: Path) -> str:
     return await _post_file(url, {}, path, {})
 
 
+async def tus_create_signed(url: str, filename: str, length: int) -> str:
+    """Start a TUS upload of ``length`` bytes against a signed URL, with no key.
+
+    For relaying a file that arrives in pieces (the dashboard's browser
+    uploads); the URL binds the file's keyvalues and network, so only its
+    name is sent.
+
+    Returns:
+        The upload's URL, which each piece is sent to (``tus_patch_signed``)
+    """
+    return await _tus_create(url, {}, _encode_tus({"filename": filename}), length)
+
+
+async def tus_patch_signed(location: str, offset: int, chunk: bytes) -> str | None:
+    """Send one piece of a signed TUS upload, at most ``TUS_CHUNK_BYTES``.
+
+    Returns:
+        The file's CID once the piece completing it lands, else None
+    """
+    return await _tus_patch(location, {}, offset, chunk)
+
+
 class PinataClient:
     """Async client for Pinata API v3, on Pinata's public network (`NETWORK`).
 

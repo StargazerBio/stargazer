@@ -21,9 +21,28 @@ def _service(seen: list) -> web.Application:
         seen.append((dict(request.headers), await request.read()))
         return web.json_response(SIGNED)
 
+    async def update(request):
+        seen.append((request.path, json.loads(await request.read())))
+        return web.json_response({"cid": "bafy1", "keyvalues": {"_owner": "s"}})
+
+    async def delete(request):
+        seen.append((request.path, json.loads(await request.read())))
+        return web.json_response({"cid": "bafy1"})
+
     app = web.Application()
     app.router.add_post("/sign", sign)
+    app.router.add_post("/update", update)
+    app.router.add_post("/delete", delete)
     return app
+
+
+def _session() -> boto3.Session:
+    """Static credentials, standing in for a pod's role."""
+    return boto3.Session(
+        aws_access_key_id="AKIDPOD",
+        aws_secret_access_key="secret",
+        aws_session_token="session-token",
+    )
 
 
 async def test_sign_sends_the_files_metadata_signed_with_the_pods_role():
@@ -50,6 +69,25 @@ async def test_sign_sends_the_files_metadata_signed_with_the_pods_role():
     assert headers["Authorization"].startswith("AWS4-HMAC-SHA256 Credential=AKIDPOD/")
     assert "/us-west-2/lambda/aws4_request" in headers["Authorization"]
     assert headers["X-Amz-Security-Token"] == "session-token"
+
+
+async def test_update_and_delete_post_to_their_routes():
+    """Edits and deletes of the caller's own public files go to the publisher too."""
+    seen: list = []
+    async with TestServer(_service(seen)) as server:
+        client = PublisherClient(
+            str(server.make_url("")), region="us-west-2", session=_session()
+        )
+
+        updated = await client.update("bafy1", {"build": "hg38"})
+        deleted = await client.delete("bafy1")
+
+    assert updated == {"cid": "bafy1", "keyvalues": {"_owner": "s"}}
+    assert deleted == {"cid": "bafy1"}
+    assert seen == [
+        ("/update", {"cid": "bafy1", "keyvalues": {"build": "hg38"}}),
+        ("/delete", {"cid": "bafy1"}),
+    ]
 
 
 def test_from_env_reads_the_url_and_its_region(monkeypatch):

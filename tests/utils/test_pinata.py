@@ -16,6 +16,8 @@ from stargazer.utils.pinata import (
     _check_keyvalue_count,
     _check_keyvalue_lengths,
     _tus_metadata,
+    tus_create_signed,
+    tus_patch_signed,
 )
 
 
@@ -77,6 +79,43 @@ async def test_upload_refuses_a_file_with_no_owner_before_sending(tmp_path):
 
     with pytest.raises(ValueError, match="no `_owner`"):
         await PinataClient(jwt="unused").upload(Asset(keyvalues={"asset": "x"}), path)
+
+
+@pytest.mark.asyncio
+async def test_a_signed_tus_upload_sends_no_key_and_only_the_filename():
+    """Relayed pieces go to a signed URL as TUS: the URL binds the rest."""
+    seen = []
+
+    async def create(request):
+        seen.append(("POST", dict(request.headers)))
+        return web.Response(status=201, headers={"Location": "/up/1"})
+
+    async def patch(request):
+        body = await request.read()
+        seen.append(("PATCH", request.headers["Upload-Offset"], body))
+        cid = "bafydone" if request.headers["Upload-Offset"] == "3" else None
+        return web.Response(status=204, headers={"Upload-Cid": cid} if cid else {})
+
+    app = web.Application()
+    app.router.add_post("/signed/1", create)
+    app.router.add_patch("/up/1", patch)
+    async with TestServer(app) as server:
+        location = await tus_create_signed(
+            str(server.make_url("/signed/1")), "x.bam", 6
+        )
+        if location.startswith("/"):
+            location = str(server.make_url(location))
+        first = await tus_patch_signed(location, 0, b"abc")
+        last = await tus_patch_signed(location, 3, b"def")
+
+    (_, created), *patches = seen
+    assert "Authorization" not in created
+    assert created["Upload-Length"] == "6"
+    assert (
+        created["Upload-Metadata"] == "filename " + base64.b64encode(b"x.bam").decode()
+    )
+    assert patches == [("PATCH", "0", b"abc"), ("PATCH", "3", b"def")]
+    assert (first, last) == (None, "bafydone")
 
 
 @pytest.mark.asyncio
