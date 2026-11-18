@@ -6,14 +6,17 @@ Provides async interface for authenticated Pinata operations:
 - Querying files by keyvalue pairs
 - Updating metadata and deleting files
 - Resumable (TUS) uploads, chunk by chunk, for a caller relaying a file
+- Signed upload URLs: minted with the full key, used with none
 
 Stargazer uses Pinata's public network only: shared data lives there,
 readable by everyone and attributed by `_owner`. Every public write needs an
 `_owner`, and reads skip a file without one. Private data lives in each
 user's own store (`stargazer.utils.storage`), never on Pinata's private
 network. `_owner` records who made a record and decides which public
-companions a fetch takes; it grants nothing, since anyone with the key can
-edit or delete any public record.
+companions a fetch takes. Writes need the full key, which only the
+publisher service holds on a hosted tenant: pods read with a read key and
+upload through signed URLs (`sign_upload`, `upload_signed`), bound to the
+owner the service stamps.
 
 spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 """
@@ -21,6 +24,7 @@ spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 import base64
 import json
 import os
+import time
 from pathlib import Path
 
 import aiofiles
@@ -57,11 +61,13 @@ def _tus_metadata(filename: str, keyvalues: dict[str, str]) -> str:
     Pinata reads ``filename``, ``network``, and ``keyvalues`` (stringified
     JSON) from this header on the creation POST.
     """
-    fields = {
-        "filename": filename,
-        "network": NETWORK,
-        "keyvalues": json.dumps(keyvalues),
-    }
+    return _encode_tus(
+        {"filename": filename, "network": NETWORK, "keyvalues": json.dumps(keyvalues)}
+    )
+
+
+def _encode_tus(fields: dict[str, str]) -> str:
+    """TUS ``Upload-Metadata`` for ``fields``: comma-joined ``key b64(value)`` pairs."""
     return ",".join(
         f"{k} {base64.b64encode(v.encode()).decode()}" for k, v in fields.items()
     )
@@ -145,6 +151,97 @@ def _check_new_file(kv: dict[str, str]) -> None:
     _check_owner(kv)
 
 
+# How long a signed upload URL stays valid. A signed URL takes one upload,
+# and the upload starts as soon as the pod has the URL.
+SIGNED_URL_SECONDS = 300
+
+
+async def _post_file(url: str, headers: dict, path: Path, fields: dict) -> str:
+    """Upload ``path`` as a multipart POST with ``fields``; return its CID."""
+    async with aiohttp.ClientSession() as session:
+        data = aiohttp.FormData()
+        data.add_field("file", open(path, "rb"), filename=path.name)
+        for name, value in fields.items():
+            data.add_field(name, value)
+        async with session.post(url, headers=headers, data=data) as response:
+            response.raise_for_status()
+            result = await response.json()
+            return result.get("data", result)["cid"]
+
+
+async def _tus_create(url: str, headers: dict, metadata: str, length: int) -> str:
+    """Start a TUS upload of ``length`` bytes at ``url``; return the upload's URL."""
+    async with (
+        aiohttp.ClientSession() as session,
+        session.post(
+            url,
+            headers={
+                **headers,
+                "Tus-Resumable": "1.0.0",
+                "Content-Type": "application/offset+octet-stream",
+                "Upload-Length": str(length),
+                "Upload-Metadata": metadata,
+            },
+        ) as response,
+    ):
+        response.raise_for_status()
+        return response.headers["Location"]
+
+
+async def _tus_patch(
+    location: str, headers: dict, offset: int, chunk: bytes
+) -> str | None:
+    """Send one TUS chunk; return the file's CID once the last one lands."""
+    async with (
+        aiohttp.ClientSession() as session,
+        session.patch(
+            location,
+            headers={
+                **headers,
+                "Tus-Resumable": "1.0.0",
+                "Upload-Offset": str(offset),
+                "Content-Type": "application/offset+octet-stream",
+            },
+            data=chunk,
+        ) as response,
+    ):
+        response.raise_for_status()
+        return response.headers.get("Upload-Cid")
+
+
+async def _upload_resumable(url: str, headers: dict, path: Path, metadata: str) -> str:
+    """Upload ``path`` over TUS in ``TUS_CHUNK_BYTES`` chunks; return its CID."""
+    location = await _tus_create(url, headers, metadata, path.stat().st_size)
+    offset = 0
+    cid = None
+    async with aiofiles.open(path, "rb") as f:
+        while chunk := await f.read(TUS_CHUNK_BYTES):
+            cid = await _tus_patch(location, headers, offset, chunk)
+            offset += len(chunk)
+    if not cid:
+        raise ValueError("TUS upload completed but returned no Upload-Cid")
+    return cid
+
+
+async def upload_signed(url: str, path: Path) -> str:
+    """Upload ``path`` to a signed upload URL, with no key; return its CID.
+
+    The URL binds the file's name, keyvalues and network, so only the bytes
+    are sent. Files over ``TUS_THRESHOLD_BYTES`` go up resumably, against
+    the same URL.
+
+    Args:
+        url: A signed upload URL (``PinataClient.sign_upload``)
+        path: The local file to upload
+    """
+    path = Path(path)
+    if path.stat().st_size > TUS_THRESHOLD_BYTES:
+        return await _upload_resumable(
+            url, {}, path, _encode_tus({"filename": path.name})
+        )
+    return await _post_file(url, {}, path, {})
+
+
 class PinataClient:
     """Async client for Pinata API v3, on Pinata's public network (`NETWORK`).
 
@@ -215,21 +312,12 @@ class PinataClient:
                 ``MAX_KEYVALUE_CHARS``, before any request is made
         """
         _check_new_file(keyvalues)
-        async with (
-            aiohttp.ClientSession() as session,
-            session.post(
-                f"{self.UPLOAD_BASE}/files",
-                headers={
-                    **self._headers(),
-                    "Tus-Resumable": "1.0.0",
-                    "Content-Type": "application/offset+octet-stream",
-                    "Upload-Length": str(length),
-                    "Upload-Metadata": _tus_metadata(filename, keyvalues),
-                },
-            ) as response,
-        ):
-            response.raise_for_status()
-            return response.headers["Location"]
+        return await _tus_create(
+            f"{self.UPLOAD_BASE}/files",
+            self._headers(),
+            _tus_metadata(filename, keyvalues),
+            length,
+        )
 
     async def tus_patch(self, location: str, offset: int, chunk: bytes) -> str | None:
         """Send one chunk of a TUS upload, at most ``TUS_CHUNK_BYTES``.
@@ -242,21 +330,7 @@ class PinataClient:
         Returns:
             The file's CID once the chunk completing it lands, else None
         """
-        async with (
-            aiohttp.ClientSession() as session,
-            session.patch(
-                location,
-                headers={
-                    **self._headers(),
-                    "Tus-Resumable": "1.0.0",
-                    "Upload-Offset": str(offset),
-                    "Content-Type": "application/offset+octet-stream",
-                },
-                data=chunk,
-            ) as response,
-        ):
-            response.raise_for_status()
-            return response.headers.get("Upload-Cid")
+        return await _tus_patch(location, self._headers(), offset, chunk)
 
     async def upload(self, component: Asset, path: Path) -> None:
         """Upload a local file to IPFS via Pinata as `component`. Sets component.cid.
@@ -285,41 +359,60 @@ class PinataClient:
         self, component: Asset, path: Path, kv: dict[str, str]
     ) -> None:
         """Plain multipart POST upload (≤ TUS_THRESHOLD_BYTES)."""
-        url = f"{self.UPLOAD_BASE}/files"
-
-        async with aiohttp.ClientSession() as session:
-            data = aiohttp.FormData()
-            data.add_field("file", open(path, "rb"), filename=path.name)
-            data.add_field("name", path.name)
-            data.add_field("network", NETWORK)
-            data.add_field("keyvalues", json.dumps(kv))
-
-            async with session.post(
-                url, headers=self._headers(), data=data
-            ) as response:
-                response.raise_for_status()
-                result = await response.json()
-                data_obj = result.get("data", result)
-                component.cid = data_obj["cid"]
+        component.cid = await _post_file(
+            f"{self.UPLOAD_BASE}/files",
+            self._headers(),
+            path,
+            {"name": path.name, "network": NETWORK, "keyvalues": json.dumps(kv)},
+        )
 
     async def _upload_tus(
         self, component: Asset, path: Path, kv: dict[str, str]
     ) -> None:
-        """Resumable TUS upload for large files (chunked, no resume yet).
+        """Resumable TUS upload for large files (chunked, no resume yet)."""
+        _check_new_file(kv)
+        component.cid = await _upload_resumable(
+            f"{self.UPLOAD_BASE}/files",
+            self._headers(),
+            path,
+            _tus_metadata(path.name, kv),
+        )
 
-        Sends the file in ``TUS_CHUNK_BYTES`` chunks and takes the CID Pinata
-        answers the last one with.
+    async def sign_upload(
+        self,
+        filename: str,
+        keyvalues: dict[str, str],
+        expires: int = SIGNED_URL_SECONDS,
+    ) -> str:
+        """A signed URL that uploads one public file, bound to its name and keyvalues.
+
+        Whoever holds the URL can upload one file through it within
+        ``expires`` seconds, with no key, and the file lands with exactly
+        these keyvalues on the public network, whatever the upload sends
+        (measured). Takes the full key: the publisher service signs, pods
+        upload (``upload_signed``).
+
+        Raises:
+            ValueError: when ``keyvalues`` has no ``_owner``, too many keys or
+                one too long, before any request is made
         """
-        location = await self.tus_create(path.name, kv, path.stat().st_size)
-        offset = 0
-        cid = None
-        async with aiofiles.open(path, "rb") as f:
-            while chunk := await f.read(TUS_CHUNK_BYTES):
-                cid = await self.tus_patch(location, offset, chunk)
-                offset += len(chunk)
-        if not cid:
-            raise ValueError("TUS upload completed but returned no Upload-Cid")
-        component.cid = cid
+        _check_new_file(keyvalues)
+        async with (
+            aiohttp.ClientSession() as session,
+            session.post(
+                f"{self.UPLOAD_BASE}/files/sign",
+                headers=self._headers(),
+                json={
+                    "date": int(time.time()),
+                    "expires": expires,
+                    "filename": filename,
+                    "keyvalues": keyvalues,
+                    "network": NETWORK,
+                },
+            ) as response,
+        ):
+            response.raise_for_status()
+            return (await response.json())["data"]
 
     async def query(self, keyvalues: dict[str, str]) -> list[dict]:
         """Query the public network's files by keyvalue metadata.

@@ -4,6 +4,8 @@ from pathlib import Path
 
 import flyte
 import pytest
+from aiohttp import web
+from aiohttp.test_utils import TestServer
 from conftest import FakePublicTier, make_client
 from flyte.io import File
 from flyte.types import TypeEngine
@@ -391,6 +393,63 @@ async def test_publish_sends_the_stored_file_and_its_keyvalues(tmp_path, monkeyp
     assert row["keyvalues"]["_owner"] == "u1"
     assert records == [
         {"cid": aln.cid, "name": "s1.bam", "keyvalues": row["keyvalues"]}
+    ]
+
+
+class _StandInPublisher:
+    """Signs every file to `url`, stamping the owner the service would."""
+
+    def __init__(self, url: str):
+        """Sign every request to `url`."""
+        self.url = url
+        self.signed: list[tuple[str, dict]] = []
+
+    async def sign(self, filename: str, keyvalues: dict) -> dict:
+        """Log the request; the signed keyvalues carry the service's `_owner`."""
+        self.signed.append((filename, dict(keyvalues)))
+        return {"url": self.url, "keyvalues": {**keyvalues, "_owner": "subject-1"}}
+
+
+@pytest.mark.asyncio
+async def test_publish_through_a_publisher_uploads_to_its_signed_url(
+    tmp_path, monkeypatch
+):
+    """With a publisher the pod's key never uploads: the bytes go to the signed URL."""
+    monkeypatch.setenv("STARGAZER_OWNER", "u1")
+    received = []
+
+    async def signed_upload(request):
+        """Pinata's answer to an upload through a signed URL."""
+        form = await request.post()
+        data = form["file"].file.read()
+        received.append((dict(request.headers).get("Authorization"), data))
+        path = tmp_path / "received"
+        path.write_bytes(data)
+        return web.json_response({"data": {"cid": compute_cid(path)}})
+
+    app = web.Application()
+    app.router.add_post("/v3/files/signed-1", signed_upload)
+    async with TestServer(app) as server:
+        publisher = _StandInPublisher(str(server.make_url("/v3/files/signed-1")))
+        public = FakePublicTier()
+        c = make_client(tmp_path, public=public, publisher=publisher)
+        monkeypatch.setattr(storage_mod, "get_client", lambda: c)
+        aln = await Alignment.store(
+            _write(tmp_path / "w" / "s1.bam", b"BAM\x08"), sample_id="S1"
+        )
+        row = await c.index.get(aln.cid)
+
+        records = await c.publish(aln.cid)
+
+    assert public.uploads == []
+    assert publisher.signed == [("s1.bam", row["keyvalues"])]
+    assert received == [(None, b"BAM\x08")]
+    assert records == [
+        {
+            "cid": aln.cid,
+            "name": "s1.bam",
+            "keyvalues": {**row["keyvalues"], "_owner": "subject-1"},
+        }
     ]
 
 

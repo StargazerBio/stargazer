@@ -47,7 +47,13 @@ import stargazer.config  # also sets the env defaults
 from stargazer.assets.asset import Asset
 from stargazer.utils.cid import compute_cid
 from stargazer.utils.index import SqlIndex, make_index
-from stargazer.utils.pinata import PinataClient, _check_new_file, _stamp_owner
+from stargazer.utils.pinata import (
+    PinataClient,
+    _check_new_file,
+    _stamp_owner,
+    upload_signed,
+)
+from stargazer.utils.publisher import PublisherClient
 from stargazer.utils.query import generate_query_combinations
 
 
@@ -120,6 +126,7 @@ class StorageClient:
         index: SqlIndex,
         public: PinataClient | None = None,
         gateway: str | None = None,
+        publisher: PublisherClient | None = None,
     ):
         """Wire the client.
 
@@ -129,12 +136,15 @@ class StorageClient:
             index: The asset index
             public: Pinata client for the public tier, or None for none
             gateway: IPFS gateway for public downloads (defaults to PINATA_GATEWAY)
+            publisher: The service that signs public uploads, or None to
+                upload with the public tier's own key
         """
         self.local_dir = Path(local_dir)
         self.local_dir.mkdir(parents=True, exist_ok=True)
         self.store_root = store_root.rstrip("/")
         self.index = index
         self.public = public
+        self.publisher = publisher
         self.gateway = (gateway or os.environ["PINATA_GATEWAY"]).rstrip("/")
 
     def _cache_path(self, cid: str, name: str) -> Path:
@@ -356,7 +366,9 @@ class StorageClient:
         name, the ones `companions()` takes first), each with its own row's
         keyvalues, so a reference goes public with the indices tools need.
         `_owner` is restamped from `STARGAZER_OWNER`, as on any upload, and
-        files over 100 MB go up in resumable chunks. A companion already
+        files over 100 MB go up in resumable chunks. With a publisher, each
+        file goes to a URL it signs, which restamps `_owner` as the caller,
+        and the public tier's key only reads. A companion already
         public beside `cid` under the same owner and CID isn't sent again.
         The user's rows stay, so the assets are in both tiers, and `query`
         keeps a row over its public duplicate.
@@ -402,14 +414,20 @@ class StorageClient:
         cid = row["cid"]
         stored = Asset(cid=cid, path=File(path=row["uri"], name=row["name"], hash=cid))
         local = await self.download(stored)
-        published = Asset(keyvalues=keyvalues)
-        await self.public.upload(published, local)
+        if self.publisher is not None:
+            signed = await self.publisher.sign(row["name"], keyvalues)
+            public_cid = await upload_signed(signed["url"], local)
+            keyvalues = signed["keyvalues"]
+        else:
+            published = Asset(keyvalues=keyvalues)
+            await self.public.upload(published, local)
+            public_cid, keyvalues = published.cid, published.to_keyvalues()
         # Our CIDs are computed to match Pinata's, so a mismatch is a bug.
-        if published.cid != cid:
+        if public_cid != cid:
             raise ValueError(
-                f"Pinata stored {cid} as {published.cid}; the CIDs should match"
+                f"Pinata stored {cid} as {public_cid}; the CIDs should match"
             )
-        return {"cid": cid, "name": row["name"], "keyvalues": published.to_keyvalues()}
+        return {"cid": cid, "name": row["name"], "keyvalues": keyvalues}
 
     async def update_metadata(self, cid: str, keyvalues: dict[str, str]) -> dict:
         """Merge a metadata patch onto the user's index row, restamping `_owner`.
@@ -434,7 +452,9 @@ def get_client() -> StorageClient:
 
     `STARGAZER_STORE_ROOT`, `STARGAZER_INDEX_URL` and `STARGAZER_LOCAL` pick
     the store, the index and the cache; a Pinata key
-    (`stargazer.config.pinata_jwt()`) turns on the public tier.
+    (`stargazer.config.pinata_jwt()`) turns on the public tier, and
+    `STARGAZER_PUBLISHER_URL` names the service that signs its uploads
+    (`stargazer.utils.publisher`).
 
     Raises:
         RuntimeError: in a cluster task with no store or index set
@@ -446,6 +466,7 @@ def get_client() -> StorageClient:
         store_root=os.environ["STARGAZER_STORE_ROOT"],
         index=make_index(os.environ["STARGAZER_INDEX_URL"]),
         public=PinataClient() if stargazer.config.pinata_jwt() else None,
+        publisher=PublisherClient.from_env(),
     )
 
 

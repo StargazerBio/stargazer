@@ -83,7 +83,11 @@ def pytest_collection_modifyitems(items):
 
 
 def make_client(
-    root: Path, cache: str = "local", public=None, gateway: str | None = None
+    root: Path,
+    cache: str = "local",
+    public=None,
+    gateway: str | None = None,
+    publisher=None,
 ) -> StorageClient:
     """A storage client whose store, index and cache (`cache`) live under `root`."""
     return StorageClient(
@@ -92,6 +96,7 @@ def make_client(
         index=SqliteIndex(root / "index.db"),
         public=public,
         gateway=gateway,
+        publisher=publisher,
     )
 
 
