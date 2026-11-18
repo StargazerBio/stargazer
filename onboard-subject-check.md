@@ -1,6 +1,6 @@
 ---
 title: onboard-subject-check
-status: backlog
+status: doing
 priority: high
 created: 2026-11-16
 ---
@@ -22,5 +22,13 @@ The only step that happens once is the first sign-in. Everything it might change
 S0 = S1, with one record: onboarding as it is today is safe, and the ticket is done. S0 ≠ S1, or two records: onboarding has to bind the subject at first sign-in, and step 5 has already left this user working.
 
 Check before step 2: the address invited must be the one Union will see from the GitHub account (its primary verified email). Unchecked how Union matches the two.
+
+## Run (2026-11-18, lily@stargazer.bio)
+
+- [x] Step 1, 00:15 UTC: `User.listall(email="lily@stargazer.bio")` returned no records. Control: the same call for `pryce@stargazer.bio` returned its one record (`387300641116005877`), so the filter works.
+- [x] Step 2, 00:16 UTC: `User.create(first_name="Lily", last_name="Adastra", email=…)` returned subject S0 = `400077837203186151` (handle `u-db862b4598dbbbc6f278c18dfc0b62f6`). Listed right after: one record, S0.
+- [ ] Step 3: first sign-in through Union's invite, with GitHub.
+- [ ] Step 4: list again; compare S1 with S0 and count the records.
+- [ ] Step 5: `stargazer-users onboard`, then sign in to the dashboard.
 
 Related: [[board]], [[per-user-dashboard]], [[self-serve-onboarding]], [[reonboard-tenant-check]].
