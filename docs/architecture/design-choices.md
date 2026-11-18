@@ -10,7 +10,7 @@ The rest of the architecture docs say what Stargazer is. This one says what it w
 
 Typed keyvalues make the contract explicit and queryable: `assemble(sample_id=..., build=...)` finds data wherever it lives, a workflow takes a question instead of a file list, and a new key is available to queries the moment it's written. Companion links replace the rule that an index sits beside its file.
 
-**Cost:** the discipline moves to whoever writes an asset. An untagged file is hard to find, and a query that matches nothing looks the same as a typo. Types and the task boundary catch the common cases; the rest is convention. See [Types](types.md).
+**Cost:** the discipline moves to whoever writes an asset. An untagged file is hard to find, and a query that matches nothing looks the same as a typo. A task tags what it writes; a file uploaded by hand carries only what its author gives it, and nothing checks that a tag was added. See [Types](types.md).
 
 ### Content addressing over locations
 
@@ -22,9 +22,9 @@ Public availability isn't the difference. A public bucket object is fetchable by
 
 ### Provenance in the data
 
-**Lineage is a property of the asset, not of the run that made it.** Every output records the CIDs of what it was made from. Execution logs and orchestrator lineage record the same thing, but they live with the run, the cluster or the vendor, and they don't travel with a file that's shared or moved. A link on the asset does, so a published VCF still leads back to its alignments, reads and reference for someone who never saw the run.
+**Lineage is a property of the asset, not of the run that made it.** Each task output records the CIDs of its main inputs: an alignment its reads and reference, a VCF the alignments it was called from. Execution logs and orchestrator lineage record the same thing, but they live with the run, the cluster or the vendor, and they don't travel with a file that's shared or moved. A link on the asset does, so a published VCF still leads back to its alignments, reads and reference for someone who never saw the run.
 
-**Cost:** it records inputs, not environment. What ran, with which image and parameters, is in the run's record; the asset says what it was made from and nothing more. See [Types](types.md#companions).
+**Cost:** it records main inputs, not every input or the environment. A recalibrated BAM names the alignment and reference it came from, not the known sites; a filtered VCF names the VCF, not the model. What ran, with which image and parameters, is in the run's record. See [Types](types.md#companions).
 
 ### An index beside the object store
 
@@ -36,7 +36,7 @@ Public availability isn't the difference. A public bucket object is fetchable by
 
 **Sharing needs a place that no single user owns.** Public references and bundles live on the IPFS network through a pinning service, and each user's own data stays in storage only they can reach. The tier is opt-in so the default is fully private, and since it's the same asset graph, public records join queries without a separate API.
 
-**Cost:** public means public, with no access control to build on. A limit that a user can route around isn't offered, so nothing here pretends otherwise: `_owner` is attribution, not permission. Pinning-service limits (the keyvalue cap on new files) shape what public records can carry.
+**Cost:** public means public, with no access control to build on. A limit that a user can route around isn't offered, so nothing here pretends otherwise: `_owner` is a claim anyone who publishes can make, not a permission. It does decide which public companions an asset picks up, so a public file's companions are only as trustworthy as the owner they name. Pinning-service limits (the keyvalue cap on new files) shape what public records can carry.
 
 ## Orchestration
 
@@ -48,15 +48,15 @@ Public availability isn't the difference. A public bucket object is fetchable by
 |-------------|---------------|---------|
 | Nextflow, Snakemake | Mature bioinformatics ecosystems, many community pipelines | A DSL beside the code. Snakemake derives its graph from filename patterns, which is the path-as-contract problem again |
 | WDL with Cromwell or miniwdl | A portable spec | A separate language and type system to keep in step with the Python around it |
-| Airflow, Prefect | General scheduling | Built around fixed, scheduled DAGs, not compute that fans out as data arrives, and without typed task boundaries |
+| Airflow, Prefect | General-purpose orchestration | Little bioinformatics built on them. Prefect is plain Python too; Flyte adds typed task boundaries and a container image per task environment as first-class features |
 
 In Flyte v2 a workflow is a task that calls tasks, control flow is `if`, loops and `asyncio.gather`, and types are enforced where tasks meet. The same function runs in a notebook, an IDE or a cluster, and an agent that writes Python writes a workflow with nothing else to learn. See [Workflows](workflows.md).
 
 **Cost:** v2 is new, so its ecosystem is smaller than Nextflow's, and hosted runs depend on Union. The local devbox and a notebook's own process run the same code without it, but a self-hosted production cluster is more to operate than a hosted one.
 
-### A container per task
+### An image per domain
 
-**Each task declares its own image and resources.** A bioinformatics step is a tool with a pinned version and a memory appetite: a workflow-wide environment makes one tool's upgrade everyone's, and one memory ceiling serves nobody. Per-domain environments keep GATK's pins from constraining scanpy's, and make "what ran" an image tag. See [Configuration → Container Images](configuration.md#container-images).
+**Each task runs in its own container, on its domain's image and resources.** A bioinformatics step is a tool with a pinned version and a memory appetite: a workflow-wide environment makes one tool's upgrade everyone's, and one memory ceiling serves nobody. Each domain's task environment sets the image and resources its tasks run with: GATK, BWA and samtools share one, scanpy has its own, so GATK's pins don't constrain scanpy's, and "what ran" is an image tag. See [Configuration → Container Images](configuration.md#container-images).
 
 **Cost:** a first run builds or pulls images, and a tool a task wraps has to be in the right environment's header before the task works.
 
@@ -88,18 +88,10 @@ In Flyte v2 a workflow is a task that calls tasks, control flow is `if`, loops a
 
 | Tool | Overlap | Difference |
 |------|---------|------------|
-| DVC, lakeFS | Hash-based data versioning | Versions live in a git repo or a branchable bucket and are found by path; there are no typed, queryable assets or cross-user public tier |
-| Galaxy | Reproducible analyses from a browser | A server-side tool wrapper catalog and histories; analyses are not code a user owns and promotes into a library |
-| Terra, Dockstore | Hosted WDL workflows and shared pipelines | Data tables tied to one cloud's workspaces; sharing is of workflows, not of the data they ran on |
+| DVC, lakeFS | Hash-based data versioning | Versions are tracked in a git repo (DVC) or as branches of a bucket (lakeFS) and addressed by path, not by typed metadata queried across users |
+| Galaxy | Reproducible analyses from a browser | Tools run on a Galaxy server and data lives in its histories; analyses are built in its interface rather than as Python a user imports and extends |
+| Terra, Dockstore | Hosted WDL workflows and shared pipelines | Data is organized in per-workspace tables; Dockstore shares workflows, not the data they ran on |
 | nf-core | Curated, versioned pipelines | Pipelines as the unit, with samplesheets and paths as the data contract |
 
 Stargazer doesn't try to replace these. A task can wrap any of their tools, and the asset graph holds what they produce.
 
-## What this costs
-
-- **Availability is the provider's.** A CID doesn't keep itself alive; a file that matters needs a second copy.
-- **Public retrieval is uneven**, and large files are better served from object storage.
-- **Metadata is a discipline** that authors carry, since nothing checks that a tag was added.
-- **Flyte v2 and Union are young dependencies**, with a smaller ecosystem than the established workflow engines.
-- **marimo is less familiar** than Jupyter.
-- **Two stores must agree**, the index and the object store.
