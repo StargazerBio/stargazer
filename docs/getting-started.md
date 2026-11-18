@@ -4,7 +4,7 @@ Stargazer runs in two places. **Hosted**, you sign in and get a workspace of not
 
 ## Hosted
 
-Sign in at [stargazer.bio/login](https://stargazer.bio/login) with GitHub, and you land on your dashboard. Hosted workspaces are set up by invitation. The first visit after an idle hour shows an *Opening your workspace* page for about a minute while it starts.
+Sign in at [stargazer.bio/login](https://stargazer.bio/login) with GitHub, and you land on your dashboard. Hosted workspaces are set up by invitation, and your GitHub profile needs a [public email](https://github.com/settings/profile) that matches the address you were invited at. The first visit after an idle hour shows an *Opening your workspace* page for about a minute while it starts.
 
 The dashboard has two halves:
 
