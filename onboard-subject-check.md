@@ -27,8 +27,8 @@ Check before step 2: the address invited must be the one Union will see from the
 
 - [x] Step 1, 00:15 UTC: `User.listall(email="lily@stargazer.bio")` returned no records. Control: the same call for `pryce@stargazer.bio` returned its one record (`387300641116005877`), so the filter works.
 - [x] Step 2, 00:16 UTC: `User.create(first_name="Lily", last_name="Adastra", email=…)` returned subject S0 = `400077837203186151` (handle `u-db862b4598dbbbc6f278c18dfc0b62f6`). Listed right after: one record, S0.
-- [ ] Step 3: first sign-in through Union's invite, with GitHub.
-- [ ] Step 4: list again; compare S1 with S0 and count the records.
+- [x] Step 3, about 02:49 UTC: Lily accepted Union's invite and signed in with GitHub, in a fresh browser.
+- [x] Step 4, 02:50 UTC: one record for the address, subject S1 = `400077837203186151` = S0. The whole org has 5 members and none other is newer than S0, so the sign-in didn't create a second member under another email. **The subject `User.create` returns is the one the first sign-in keeps.**
 - [ ] Step 5: `stargazer-users onboard`, then sign in to the dashboard.
 
 Related: [[board]], [[per-user-dashboard]], [[self-serve-onboarding]], [[reonboard-tenant-check]].
