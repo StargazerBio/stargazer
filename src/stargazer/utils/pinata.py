@@ -31,7 +31,6 @@ import aiofiles
 import aiohttp
 
 from stargazer.assets.asset import Asset
-from stargazer.config import pinata_jwt
 
 # Pinata's plain multipart POST is capped at 100MB; larger files must use the
 # resumable TUS endpoint. upload() switches paths at this threshold. Chunks
@@ -264,9 +263,9 @@ class PinataClient:
         """Initialize Pinata client.
 
         Args:
-            jwt: Pinata JWT token (defaults to `stargazer.config.pinata_jwt()`)
+            jwt: Pinata JWT token (defaults to PINATA_JWT env var)
         """
-        self._jwt = jwt or pinata_jwt()
+        self._jwt = jwt or os.environ.get("PINATA_JWT")
 
     @property
     def jwt(self) -> str:
@@ -389,8 +388,9 @@ class PinataClient:
         Whoever holds the URL can upload one file through it within
         ``expires`` seconds, with no key, and the file lands with exactly
         these keyvalues on the public network, whatever the upload sends
-        (measured). Takes the full key: the publisher service signs, pods
-        upload (``upload_signed``).
+        (measured). Takes the full key, so pods never call it: the
+        publisher signs the same request (infra's ``publisher/handler.py``),
+        and pods upload (``upload_signed``).
 
         Raises:
             ValueError: when ``keyvalues`` has no ``_owner``, too many keys or

@@ -5,8 +5,7 @@ Sets environment variable defaults at import time. Consumers read
 os.environ directly rather than importing named values from this module.
 
 Also what every task environment shares: the platform its image is built
-for, the secrets forwarded into its pods (and `STARGAZER_APP_SECRETS`, the
-same ones in the form an app pod takes), and the image recipes: a domain's
+for, the secrets forwarded into its pods, and the image recipes: a domain's
 tasks build from its `env.py`'s header (`task_image()`), and a notebook's
 own tasks from the notebook's header (`notebook_image()`).
 The environments themselves live in their domains' `env.py`
@@ -20,9 +19,7 @@ tests: an in-cluster client in a hosted notebook pod, the config file anywhere
 else.
 
 Rules:
-- PINATA_JWT: The org's Pinata key. No default: absence means no public tier
-  (Pinata) at all. In a task pod it's a mounted file, not a variable
-  (`pinata_jwt()`).
+- PINATA_JWT: No default — absence means no public tier (Pinata) at all.
 - PINATA_GATEWAY: IPFS gateway for public downloads. Defaults to the project's
   dedicated Pinata gateway.
 - STARGAZER_LOCAL: Temp space for task outputs and the download cache.
@@ -152,44 +149,19 @@ def require_cluster_storage() -> None:
         )
 
 
-# A task pod gets the Pinata key as a file, not a variable: the environment is
-# copied to every child process a task runs and shows up in /proc and in crash
-# dumps. Flyte only mounts secrets under this one directory, and keeps the
-# key's case in the file's name (measured on task pods on the devbox and on
-# Union). App pods (the dashboard, notebooks) still take it as a variable
-# (`STARGAZER_APP_SECRETS`): a file mount on an app pod is unmeasured.
-_SECRETS_DIR = Path("/etc/flyte/secrets")
-
-STARGAZER_SECRETS = [flyte.Secret(key="PINATA_JWT", mount=_SECRETS_DIR)]
-STARGAZER_APP_SECRETS = [flyte.Secret(key="PINATA_JWT", as_env_var="PINATA_JWT")]
-
-
-def pinata_jwt() -> str | None:
-    """The org's Pinata key, or None when there's no public tier.
-
-    A task pod has it as the mounted file Flyte points
-    `FLYTE_SECRETS_DEFAULT_DIR` at, which wins; anywhere else (a local run,
-    the CLI, an app pod) it's the `PINATA_JWT` variable. Read on each call,
-    since the file only exists once the task's pod is up.
-    """
-    secrets_dir = Path(os.environ.get("FLYTE_SECRETS_DEFAULT_DIR") or _SECRETS_DIR)
-    with contextlib.suppress(OSError):
-        if key := secrets_dir.joinpath("PINATA_JWT").read_text().strip():
-            return key
-    return os.environ.get("PINATA_JWT") or None
-
+STARGAZER_SECRETS = [flyte.Secret(key="PINATA_JWT", as_env_var="PINATA_JWT")]
 
 # The project's own API key, stored as a secret in the project. Union gives
 # pods no key of its own, and without one a pod's client can't call Union: a
 # workflow can't start its child tasks, and a notebook can't run them. Flyte's
 # in-cluster client reads the key from this variable.
 if os.environ.get("STARGAZER_API_KEY_SECRET"):
-    api_key = flyte.Secret(
-        key=os.environ["STARGAZER_API_KEY_SECRET"],
-        as_env_var="_UNION_EAGER_API_KEY",
+    STARGAZER_SECRETS.append(
+        flyte.Secret(
+            key=os.environ["STARGAZER_API_KEY_SECRET"],
+            as_env_var="_UNION_EAGER_API_KEY",
+        )
     )
-    STARGAZER_SECRETS.append(api_key)
-    STARGAZER_APP_SECRETS.append(api_key)
 
 
 def log_execution() -> str:
@@ -226,7 +198,7 @@ def log_execution() -> str:
     execution_id = f"{workflow}-{commit}-{timestamp}"
     logger.add(_log_dir / f"{execution_id}.log")
 
-    public = "on" if pinata_jwt() else "off"
+    public = "on" if os.environ.get("PINATA_JWT") else "off"
     logger.info(
         f"Execution started: {execution_id} "
         f"| store={os.environ['STARGAZER_STORE_ROOT']} "

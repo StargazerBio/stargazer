@@ -72,7 +72,7 @@ tests/
 Three things hold for every test, so none of them is set up per test:
 
 - **Flyte is initialized once.** A session-scoped autouse fixture calls `init_flyte()` (`stargazer.config`).
-- **No public tier.** `PINATA_JWT` is stripped and Flyte's secrets directory (`FLYTE_SECRETS_DEFAULT_DIR`, where a pod's key is mounted) points nowhere before anything imports `stargazer`, so no storage client can reach Pinata. The pinata tier's own conftest sets it back from `tests/.secrets/pinata_jwt` for each of its tests.
+- **No public tier.** `PINATA_JWT` is stripped before anything imports `stargazer`, so no storage client can reach Pinata. The pinata tier's own conftest sets it back from `tests/.secrets/pinata_jwt` for each of its tests.
 - **An empty store per test.** `isolated_storage` (autouse) patches `stargazer.utils.storage.get_client` to return a per-test `StorageClient` whose store, index and cache live under the test's `tmp_path`, and unsets `STARGAZER_OWNER`. Nothing reads or writes `~/.stargazer`. A test that needs its own client builds one with `make_client(root, cache, public, gateway)`, and `FakePublicTier` stands in for Pinata's public network (records in memory, bytes served from a local gateway directory). The devbox tier replaces this fixture with a no-op: its tests store on the devbox.
 
 ## Task Test Template

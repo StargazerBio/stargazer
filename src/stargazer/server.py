@@ -36,7 +36,7 @@ import stargazer.bundles as _bundles
 import stargazer.utils.storage as _storage
 from stargazer.assets import build_asset
 from stargazer.assets.asset import Asset, specialize
-from stargazer.config import init_flyte, pinata_jwt
+from stargazer.config import init_flyte
 from stargazer.marshal import marshal_output
 from stargazer.registry import TaskInfo, TaskRegistry
 
@@ -367,7 +367,7 @@ async def show_config() -> str:
     tasks = _registry.list_tasks(category="task")
     workflows = _registry.list_tasks(category="workflow")
     config = {
-        "pinata_jwt": "set" if pinata_jwt() else "unset",
+        "pinata_jwt": "set" if os.environ.get("PINATA_JWT") else "unset",
         "store_root": os.environ["STARGAZER_STORE_ROOT"],
         "index": os.environ["STARGAZER_INDEX_URL"],
         "local_dir": os.environ["STARGAZER_LOCAL"],

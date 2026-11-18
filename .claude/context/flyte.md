@@ -49,4 +49,4 @@ Covered only in the raw sources:
 - **Reusable environments** (actors), warm containers: [[flyte-sdk-examples#10. Reusable Tasks (Actors)]]
 - **DataFrames** passed by reference: [[flyte-v2-docs#DataFrames]]
 
-Secrets Stargazer does use: `config.py`'s `STARGAZER_SECRETS` declares `PINATA_JWT` (and the project's API key, when set) as a `flyte.Secret` on every environment. `PINATA_JWT` is file-mounted (`mount=Path("/etc/flyte/secrets")`, the only path Flyte accepts): a secret with no group lands at `/etc/flyte/secrets/<key>`, case kept, on both the devbox and Union, with `FLYTE_SECRETS_DEFAULT_DIR` set to that directory (`config.pinata_jwt()` reads it). The forms are in [[flyte-sdk-examples#14. Secrets]].
+Secrets Stargazer does use: `config.py`'s `STARGAZER_SECRETS` declares `PINATA_JWT` (and the project's API key, when set) as a `flyte.Secret` on every environment. The forms are in [[flyte-sdk-examples#14. Secrets]].

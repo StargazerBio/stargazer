@@ -6,9 +6,8 @@ tests carry that tier's marker (`TIERS`). A bare run selects the unit tier
 `-m postgres` or `-m dsql` selects another. The write-tests skill's Test
 Tiers has where each one runs.
 
-PINATA_JWT is stripped before any stargazer imports, and Flyte's secrets
-directory points nowhere, so storage runs without the public tier; the pinata
-tier's conftest sets the variable back for its own tests.
+PINATA_JWT is stripped before any stargazer imports, so storage runs without
+the public tier; the pinata tier's conftest sets it back for its own tests.
 
 Every test runs against its own empty store, index and cache under tmp_path
 (`isolated_storage`, autouse), so nothing reads or writes ~/.stargazer.
@@ -19,9 +18,8 @@ import os
 import sys
 from pathlib import Path
 
-# No Pinata key, as a variable or a mounted file, so no client gets a public tier.
+# Strip PINATA_JWT before importing stargazer so no client gets a public tier.
 os.environ.pop("PINATA_JWT", None)
-os.environ["FLYTE_SECRETS_DEFAULT_DIR"] = "/nonexistent/flyte-secrets"
 
 import pytest
 
