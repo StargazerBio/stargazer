@@ -34,6 +34,6 @@ Check before step 2: the address invited must be the one Union will see from the
 
 ## Outcome
 
-Onboarding as it is is safe for new users: the subject `User.create` returns at invite is the one the user's first GitHub sign-in keeps, and the dashboard onboarding keys on it lets them in. Measured end to end with `lily@stargazer.bio` (subject `400077837203186151`, project `u-lily`), above. No code changed. Users need a public email on their GitHub profile (https://github.com/settings/profile), and it has to be the address invited; infra's onboarding docs now say so.
+Onboarding as it is is safe for new users: the subject `User.create` returns at invite is the one the user's first GitHub sign-in keeps, and the dashboard onboarding keys on it lets them in. Measured end to end with `lily@stargazer.bio` (subject `400077837203186151`, project `u-lily`), above. No code changed. Users need a public email on their GitHub profile (https://github.com/settings/profile), and it has to be the address invited; Getting Started says so.
 
 Related: [[board]], [[per-user-dashboard]], [[self-serve-onboarding]], [[reonboard-tenant-check]].
