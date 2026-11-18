@@ -1,6 +1,6 @@
 ---
 title: split-config
-status: maybe
+status: later
 priority: low
 created: 2026-11-16
 ---

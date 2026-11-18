@@ -10,7 +10,7 @@ views:
       property: status
       direction: ASC
     groupOrder:
-      - maybe
+      - later
       - backlog
       - next
       - doing
@@ -32,6 +32,21 @@ views:
       - priority
       - created
       - file.name
+    sort:
+      - property: status
+        direction: ASC
+      - property: formula.rank
+        direction: ASC
+  - type: table
+    name: Security hardening
+    filters:
+      and:
+        - file.hasTag("security")
+    order:
+      - title
+      - status
+      - priority
+      - created
     sort:
       - property: status
         direction: ASC
