@@ -29,6 +29,7 @@ Check before step 2: the address invited must be the one Union will see from the
 - [x] Step 2, 00:16 UTC: `User.create(first_name="Lily", last_name="Adastra", email=…)` returned subject S0 = `400077837203186151` (handle `u-db862b4598dbbbc6f278c18dfc0b62f6`). Listed right after: one record, S0.
 - [x] Step 3, about 02:49 UTC: Lily accepted Union's invite and signed in with GitHub, in a fresh browser.
 - [x] Step 4, 02:50 UTC: one record for the address, subject S1 = `400077837203186151` = S0. The whole org has 5 members and none other is newer than S0, so the sign-in didn't create a second member under another email. **The subject `User.create` returns is the one the first sign-in keeps.**
-- [ ] Step 5: `stargazer-users onboard`, then sign in to the dashboard.
+- [x] Step 5a: `stargazer-users onboard` (run by the user). Read back: project `u-lily` labeled `union-subject=400077837203186151`, policy `stargazer-u-lily` assigned to that subject, and the dashboard `ACTIVE` at `https://u-lily.apps.stargazerbio.us-west-2.unionai.cloud` with `SG_OWNER_SUBJECT=400077837203186151`.
+- [ ] Step 5b: Lily opens her dashboard and gets in (the terms of use page counts; "This dashboard belongs to someone else" or Union's access error doesn't).
 
 Related: [[board]], [[per-user-dashboard]], [[self-serve-onboarding]], [[reonboard-tenant-check]].
