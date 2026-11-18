@@ -21,6 +21,7 @@ nav = [
   ]},
   { "Architecture" = [
     { "Overview" = "architecture/overview.md" },
+    { "Design Choices" = "architecture/design-choices.md" },
     { "Types & Assets" = "architecture/types.md" },
     { "Tasks" = "architecture/tasks.md" },
     { "Workflows" = "architecture/workflows.md" },
