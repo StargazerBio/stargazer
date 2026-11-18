@@ -104,10 +104,12 @@ Recorded, not solved here. Each has (or gets) a ROADMAP entry.
       **A second app asking for a taken subdomain, in another project, is
       not rejected: it hangs at "App created" with no endpoint**, so
       onboarding must detect collisions itself.)*
-- [ ] `User.create(...)` returns a subject immediately (it does, per the
+- [x] `User.create(...)` returns a subject immediately (it does, per the
       plugin source: the create response carries the id), and it is the subject
       the user's first GitHub sign-in arrives with (`X-User-Subject`). Use a
       real second address for this one test.
+      *(Measured 2026-11-18 with `lily@stargazer.bio`, ticket
+      [[onboard-subject-check]]: the subject held through the first sign-in.)*
 - [x] `flyte create user` without `--policy` attaches no org-wide policy (or
       record which one it attaches so onboarding can remove it).
       *(`User.create` sends only the user spec; `--policy` is a separate

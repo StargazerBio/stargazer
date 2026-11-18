@@ -1,6 +1,6 @@
 ---
 title: onboard-subject-check
-status: doing
+status: done
 priority: high
 created: 2026-11-16
 ---
@@ -30,6 +30,10 @@ Check before step 2: the address invited must be the one Union will see from the
 - [x] Step 3, about 02:49 UTC: Lily accepted Union's invite and signed in with GitHub, in a fresh browser.
 - [x] Step 4, 02:50 UTC: one record for the address, subject S1 = `400077837203186151` = S0. The whole org has 5 members and none other is newer than S0, so the sign-in didn't create a second member under another email. **The subject `User.create` returns is the one the first sign-in keeps.**
 - [x] Step 5a: `stargazer-users onboard` (run by the user). Read back: project `u-lily` labeled `union-subject=400077837203186151`, policy `stargazer-u-lily` assigned to that subject, and the dashboard `ACTIVE` at `https://u-lily.apps.stargazerbio.us-west-2.unionai.cloud` with `SG_OWNER_SUBJECT=400077837203186151`.
-- [ ] Step 5b: Lily opens her dashboard and gets in (the terms of use page counts; "This dashboard belongs to someone else" or Union's access error doesn't).
+- [x] Step 5b: Lily opened her dashboard and got in (reported by the user, 2026-11-18).
+
+## Outcome
+
+Onboarding as it is is safe for new users: the subject `User.create` returns at invite is the one the user's first GitHub sign-in keeps, and the dashboard onboarding keys on it lets them in. Measured end to end with `lily@stargazer.bio` (subject `400077837203186151`, project `u-lily`), above. No code changed. Left unchecked: how Union matches a GitHub sign-in to an invite when the GitHub account's email differs from the invited address; Lily's matched.
 
 Related: [[board]], [[per-user-dashboard]], [[self-serve-onboarding]], [[reonboard-tenant-check]].
