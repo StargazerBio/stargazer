@@ -27,6 +27,7 @@ import aiofiles
 import aiohttp
 
 from stargazer.assets.asset import Asset
+from stargazer.config import pinata_jwt
 
 # Pinata's plain multipart POST is capped at 100MB; larger files must use the
 # resumable TUS endpoint. upload() switches paths at this threshold. Chunks
@@ -166,17 +167,17 @@ class PinataClient:
         """Initialize Pinata client.
 
         Args:
-            jwt: Pinata JWT token (defaults to PINATA_JWT from config)
+            jwt: Pinata JWT token (defaults to `stargazer.config.pinata_jwt()`)
         """
-        self._jwt = jwt or os.environ.get("PINATA_JWT") or None
+        self._jwt = jwt or pinata_jwt()
 
     @property
     def jwt(self) -> str:
         """Get JWT token, raising error if not set."""
         if not self._jwt:
             raise ValueError(
-                "PINATA_JWT not set. Provide jwt= argument or "
-                "set PINATA_JWT environment variable."
+                "No Pinata key. Provide jwt=, set PINATA_JWT, or, on a "
+                "cluster, set the PINATA_JWT Flyte secret."
             )
         return self._jwt
 

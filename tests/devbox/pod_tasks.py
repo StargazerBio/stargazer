@@ -6,6 +6,7 @@ from the tests' conftest.
 """
 
 import json
+import os
 from pathlib import Path
 
 import flyte
@@ -13,7 +14,7 @@ from flyte.io import File
 
 from stargazer.assets import R1, R2, Reference
 from stargazer.assets.asset import Asset, assemble
-from stargazer.config import STARGAZER_ENV_VARS
+from stargazer.config import STARGAZER_ENV_VARS, STARGAZER_SECRETS
 from stargazer.tasks.gatk.env import gatk_env
 from stargazer.utils.storage import get_client
 
@@ -26,6 +27,17 @@ env = flyte.TaskEnvironment(
     name="sg_devbox_tests",
     image=gatk_env.image,
     env_vars=STARGAZER_ENV_VARS,
+    resources=flyte.Resources(cpu=1, memory=("256Mi", "512Mi")),
+)
+
+
+# With the secrets every Stargazer environment declares, the org's Pinata key
+# among them.
+public_env = flyte.TaskEnvironment(
+    name="sg_devbox_public",
+    image=gatk_env.image,
+    env_vars=STARGAZER_ENV_VARS,
+    secrets=STARGAZER_SECRETS,
     resources=flyte.Resources(cpu=1, memory=("256Mi", "512Mi")),
 )
 
@@ -138,3 +150,31 @@ async def check(cohort_id: str) -> str:
             "contigs": sorted({r[0] for r in records}),
         }
     )
+
+
+@public_env.task
+async def publish_round_trip(tag: str) -> str:
+    """Publish a small stored file, find it on the public tier, then unpublish it.
+
+    Returns JSON: whether the key was in the pod's environment, whether the
+    storage client had a public tier, and the CIDs stored, published and
+    found by a public query.
+    """
+    client = get_client()
+    path = client.local_dir / f"public_{tag}.txt"
+    path.write_text(f"stargazer devbox publish probe {tag}")
+    asset = await Asset.store(path, keyvalues={"asset": "devbox_probe", "tag": tag})
+    report = {
+        "key_in_env": "PINATA_JWT" in os.environ,
+        "public_tier": client.public is not None,
+        "stored": asset.cid,
+    }
+    try:
+        report["published"] = [r["cid"] for r in await client.publish(asset.cid)]
+        found = await client.public.query({"asset": "devbox_probe", "tag": tag})
+        report["found"] = [r["cid"] for r in found]
+    finally:
+        if client.public is not None:
+            await client.public.delete(asset)
+        await client.delete(asset)
+    return json.dumps(report)

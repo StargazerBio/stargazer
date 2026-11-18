@@ -14,9 +14,10 @@ Where asset bytes and metadata live, and the local cache in front of them.
   per CID, written after the bytes so a row never points at a missing file.
   A write that doesn't land raises; nothing is retried behind the caller's
   back.
-- **Public data** lives on Pinata's public network. When `PINATA_JWT` is
-  set, `query()` merges Pinata's public records in (the user's own row wins
-  on a shared CID), and public files download from the IPFS gateway.
+- **Public data** lives on Pinata's public network. When there's a
+  Pinata key (`stargazer.config.pinata_jwt()`), `query()` merges Pinata's
+  public records in (the user's own row wins on a shared CID), and public
+  files download from the IPFS gateway.
   `companions()` decides which public companions join the user's own.
 - **The cache** is `<STARGAZER_LOCAL>/<cid>/<name>`. Uploads seed it,
   downloads fill it, and `Asset.fetch()` hardlinks companions next to their
@@ -374,7 +375,7 @@ class StorageClient:
                 Pinata assigns a different CID
         """
         if self.public is None:
-            raise ValueError("No PINATA_JWT: there's no public tier to publish to")
+            raise ValueError("No Pinata key: there's no public tier to publish to")
         row = await self.index.get(cid)
         if row is None:
             raise ValueError(f"{cid} isn't in your storage")
@@ -427,13 +428,13 @@ class StorageClient:
 def get_client() -> StorageClient:
     """The process's storage client, built from the environment on first call.
 
-    Built on first call and not at import because Flyte injects `PINATA_JWT`
+    Built on first call and not at import because Flyte mounts the Pinata key
     just before a task runs, and a client built earlier would miss it and
     silently drop the public tier.
 
     `STARGAZER_STORE_ROOT`, `STARGAZER_INDEX_URL` and `STARGAZER_LOCAL` pick
-    the store, the index and the cache; `PINATA_JWT` turns on the public
-    tier.
+    the store, the index and the cache; a Pinata key
+    (`stargazer.config.pinata_jwt()`) turns on the public tier.
 
     Raises:
         RuntimeError: in a cluster task with no store or index set
@@ -444,7 +445,7 @@ def get_client() -> StorageClient:
         local_dir=Path(os.environ["STARGAZER_LOCAL"]),
         store_root=os.environ["STARGAZER_STORE_ROOT"],
         index=make_index(os.environ["STARGAZER_INDEX_URL"]),
-        public=PinataClient() if os.environ.get("PINATA_JWT") else None,
+        public=PinataClient() if stargazer.config.pinata_jwt() else None,
     )
 
 
