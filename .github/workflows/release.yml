@@ -1,31 +1,47 @@
-# Cuts a Stargazer release from a calendar tag (`v2026.10.28`, a second release
-# that day `v2026.10.28.1`): the package to PyPI as `stargazer-bio`, and the
-# notebook image (runtime/Dockerfile) to GHCR under the same tag and `latest`.
-# The tag has to name pyproject.toml's version. Task images aren't published:
-# whoever runs a task builds its image from the domain's `env.py` header
-# (`task_image()` in config.py).
+# Cuts a Stargazer release when a push to main changes pyproject.toml's version
+# to one with no tag yet (`2026.10.28`, a second release that day
+# `2026.10.28.1`): tags the commit `v<version>`, then publishes the package to
+# PyPI as `stargazer-bio` and the notebook image (runtime/Dockerfile) to GHCR
+# under that tag and `latest`. Any other change to pyproject.toml finds the
+# tag already there and releases nothing. A failed publish is re-run from the
+# run's page: the tag is already pushed, so no later push retries it. Task
+# images aren't published: whoever runs a task builds its image from the
+# domain's `env.py` header (`task_image()` in config.py).
 # Infra pins one release and takes the package and notebook image from it.
 # Union's nodes pull the notebook image straight from GHCR, which is public.
 name: Release
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths: [pyproject.toml]
 permissions:
   contents: read
 jobs:
   check:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v5
-      - name: The tag names the package's version
+      # A tag pushed with the workflow's token starts no other workflow, so
+      # this run is the only release of it.
+      - name: Tag a new version
+        id: tag
         run: |
           version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::$GITHUB_REF_NAME doesn't name the version in pyproject.toml ($version)"
-            exit 1
+          tag="v$version"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "$tag is already released"
+            exit 0
           fi
+          git tag "$tag" "$GITHUB_SHA"
+          git push origin "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
   package:
     needs: check
+    if: needs.check.outputs.tag != ''
     runs-on: ubuntu-latest
     # PyPI's trusted publishing: no token, PyPI trusts this workflow and
     # environment for `stargazer-bio`.
@@ -48,6 +64,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
   image:
     needs: check
+    if: needs.check.outputs.tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -68,7 +85,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/stargazerbio/stargazer:${{ github.ref_name }}
+            ghcr.io/stargazerbio/stargazer:${{ needs.check.outputs.tag }}
             ghcr.io/stargazerbio/stargazer:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
