@@ -1,6 +1,6 @@
 ---
 title: unslop-landing
-status: review
+status: done
 priority: normal
 created: 2026-11-18
 pr: 9
@@ -10,4 +10,8 @@ A polish pass on the landing page (StargazerBio/stargazer.bio `index.html`, `log
 
 PR 8 merged into `feat/waitlist` on 2026-11-18 at 19:14:43, 32 seconds after PR 7 had merged `feat/waitlist` into `main`, so its commit `7f38666` is on `feat/waitlist` and `design/unslop-landing` only, not on `main`. stargazer.bio PR 9 takes the same commit into `main`.
 
-Related: [[board]] [[unslop-dashboard]]
+## Outcome
+
+Shipped in stargazer.bio PR 9 (merge `62d7b35`, the change's commit `7f38666`): the washes, glow and frosted surfaces are gone, the starfield holds still with constellation lines near the pointer, the ink ramp and a 4px grid replace GitHub's palette, and the login page takes the same tokens. Verified by serving the branch locally at 1440×900 and 375×812 (hero, hover lines, waitlist section, login page, no horizontal scroll on the phone), and by `git merge-tree` against `main`, keeping its Formspree endpoint. The waitlist form's submission and the live site weren't checked. Left: a product view in the hero, ticket landing-product-view. The docs stylesheet shipped with ticket unslop-docs.
+
+Related: [[board]] [[unslop-dashboard]] [[landing-product-view]]
