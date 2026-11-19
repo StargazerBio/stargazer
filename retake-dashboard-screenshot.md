@@ -1,6 +1,6 @@
 ---
 title: retake-dashboard-screenshot
-status: backlog
+status: doing
 priority: low
 created: 2026-11-19
 ---
