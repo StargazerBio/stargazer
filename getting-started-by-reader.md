@@ -33,4 +33,4 @@ The README is out of scope: it's the user's.
 
 Shipped in PR 151 (merge `ddffd40`): Getting Started is the researcher's four sections; Packages and Tools moved to Where Your Code Runs, Agents got its own guide, source install and docs preview went to Contributing; the overview leads with its surfaces. Verified by a clean docs build, the nav and link checks and the rendered pages. No comments on the PR, nothing left.
 
-Related: [[board]], [[frontend-polish]].
+Related: [[board]].

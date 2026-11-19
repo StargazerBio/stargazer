@@ -1,6 +1,6 @@
 ---
 title: retake-dashboard-screenshot
-status: review
+status: done
 priority: low
 created: 2026-11-19
 pr: 168
@@ -16,5 +16,9 @@ pr: 168
 4. Tear down with `union_dashboard.py teardown`: `stopped: ['dashboard']`, `live runs: []`.
 
 Rendering the page with a CDN script and posting the image to localhost was refused by the permission classifier; the browser tool's own saved capture is what works.
+
+## Outcome
+
+Shipped in PR 168 (merge `f07f3f2`): `docs/assets/dashboard-assets.jpg` shows the redesigned dashboard's Assets graph, filtered to Public and Stargazer, all 12 assets labeled, 760×690 at 1:1. Verified by eye against the live test dashboard (`2026.11.18.1-6f76329`); the test dashboard was torn down after (`stopped: ['dashboard']`, `live runs: []`). The docs site build wasn't run, since the file's path is unchanged. Nothing left; no comments on the PR.
 
 Related: [[board]] [[unslop-docs]] [[unslop-dashboard]]
