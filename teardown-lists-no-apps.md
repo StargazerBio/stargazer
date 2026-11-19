@@ -1,6 +1,6 @@
 ---
 title: teardown-lists-no-apps
-status: backlog
+status: doing
 priority: normal
 created: 2026-11-18
 ---
