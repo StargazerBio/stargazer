@@ -1,6 +1,6 @@
 ---
 title: run-records
-status: maybe
+status: later
 priority: normal
 created: 2026-11-02
 ---
@@ -148,7 +148,7 @@ the repo root with `.flyte/config.yaml` pointing at the devbox:
 ```python
 import json, sys
 import flyte, flyte.remote as remote
-from stargazer.config import PROJECT_ROOT
+from stargazer.images import PROJECT_ROOT
 
 flyte.init_from_config(PROJECT_ROOT / ".flyte" / "config.yaml", root_dir=PROJECT_ROOT)
 
