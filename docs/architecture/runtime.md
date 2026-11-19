@@ -22,7 +22,7 @@ For what the notebooks themselves are, see [Notebooks](notebook.md). The launch,
 
 ## Releases
 
-Stargazer is released by calendar: the tag `v2026.10.28` is version `2026.10.28`, and a second release that day is `2026.10.28.1`. A release publishes the package to PyPI as `stargazer-bio`, the image to `ghcr.io/stargazerbio/stargazer` under the same tag (and `latest`), and each domain's task image to GHCR under the package's version, built from the same commit. So a pod manager pins one release and gets both halves, and a dashboard and the pods it launches agree on the asset keyvalues, the index and this contract.
+Stargazer is released by calendar: the tag `v2026.10.28` is version `2026.10.28`, and a second release that day is `2026.10.28.1`. Merging a version bump to `main` tags it and publishes the package to PyPI as `stargazer-bio` and the image to `ghcr.io/stargazerbio/stargazer` under the same tag (and `latest`), built from the same commit. So a pod manager pins one release and gets both halves, and a dashboard and the pods it launches agree on the asset keyvalues, the index and this contract.
 
 ## The Launch
 

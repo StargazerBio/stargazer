@@ -116,11 +116,4 @@ Releases publish it; the tag above lets `docker run` resolve your local build by
 
 ## Releasing
 
-A release is named by its date. Set `version` in `pyproject.toml` to today's date (`2026.11.27`, or `2026.11.27.1` for a second release that day) in a PR. Once it's merged, tag `main` with the same version and push the tag:
-
-```bash
-git tag v2026.11.27 origin/main
-git push origin v2026.11.27
-```
-
-The **Release** workflow (`.github/workflows/release.yml`) checks the tag names the version, then publishes the package to PyPI as `stargazer-bio`, and the notebook image to `ghcr.io/stargazerbio/stargazer` under the tag and `latest`. The hosted dashboard picks a release up when its pin moves to it.
+A release is named by its date. Set `version` in `pyproject.toml` to today's date (`2026.11.27`, or `2026.11.27.1` for a second release that day) in a PR. Merging it releases: the **Release** workflow (`.github/workflows/release.yml`) sees a version with no tag yet, tags the merge commit `v<version>`, then publishes the package to PyPI as `stargazer-bio` and the notebook image to `ghcr.io/stargazerbio/stargazer` under the tag and `latest`. If a publish fails, re-run the failed jobs from the run's page. The hosted dashboard picks a release up when its pin moves to it.
