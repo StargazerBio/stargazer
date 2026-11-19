@@ -1,6 +1,6 @@
 ---
 title: teardown-lists-no-apps
-status: review
+status: done
 priority: normal
 created: 2026-11-18
 pr: 43
@@ -37,5 +37,9 @@ From an infra checkout with `tenant.env` loaded and the Union login:
 1. Activate a stopped probe in `u-pryce` (`App.get(name="hdr-probe", project="u-pryce", domain="development").activate(wait=False)`), and while it reads anything but `ACTIVE`/`STARTED`/`STOPPED`/`UNASSIGNED`, call `app.deploy.stop_project_apps("u-pryce")`. It must return the probe, and the probe's desired state must read `DESIRED_STATE_STOPPED`. On `main` before the fix it returned `['dashboard']` with the probe `DEPLOYING`.
 2. Activate the test dashboard the same way and at once run `union_dashboard.py teardown`: `stopped: ['dashboard']`, `live runs: []` (measured, with the dashboard at `UNASSIGNED`, desired `STARTED`).
 3. Confirm every app in `u-pryce` reads desired state `STOPPED` and no run is live.
+
+## Outcome
+
+Shipped in infra PR 43 (merge `bb6e47f`): `stop_project_apps` stops every app whose desired state isn't `STOPPED`, so teardown, `pause` and `offboard` now stop an app that's still coming up. Verified on the tenant by the recipe above: on `main` the deploying probe was skipped; with the fix it and the just-activated test dashboard were stopped, and `u-pryce` was left with nothing up and no live runs. A unit test covers the four states. Left: `pause` and `offboard` weren't run against a real user, since they share the function checked here. No follow-ups were raised on the PR.
 
 Related: [[board]], [[private-pinata-key]] (where it turned up).
