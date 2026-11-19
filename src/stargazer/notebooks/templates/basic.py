@@ -43,10 +43,8 @@ with app.setup:
     import marimo as mo
 
     from stargazer import Asset
-    from stargazer.config import (
-        STARGAZER_SECRETS,
-        notebook_image,
-    )
+    from stargazer.config import STARGAZER_SECRETS
+    from stargazer.images import notebook_image
     from stargazer.notebooks import notebook_env
 
     # TODO: the dashboard tile's blurb.

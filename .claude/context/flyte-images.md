@@ -2,7 +2,7 @@
 sources:
   - "[[flyte-v2-docs]]"
   - "[[flyte-sdk-examples]]"
-  - src/stargazer/config.py
+  - src/stargazer/images.py
   - src/stargazer/tasks/gatk/env.py
   - src/stargazer/tasks/scrna/env.py
   - src/stargazer/notebooks/__init__.py
@@ -27,7 +27,7 @@ How a `flyte.Image` is declared and built. Examples: [[flyte-v2-docs#Container I
 
 ## In Stargazer
 
-- **The task images** are on the environments in each domain's `env.py`, built by `task_image()` in `config.py`; a notebook's own tasks build from the notebook's header with `notebook_image()`, a `from_pixi_script` on a copy of the header without its pod-only SDK path. Their docstrings say how and why; `cli/lock_envs.py` locks the headers and `pixi.lock` with the builder's pixi. Both put the SDK on top with `_with_sdk()`: a checkout's source, or an installed package's own version from PyPI, so an installed package builds them too, from the header and lock it ships with. Releases publish none. The notebooks' headers install the image's `/stargazer` non-editable, so a notebook's kernel is an installed package and builds its task images that way. The image table is in `docs/architecture/configuration.md`.
+- **The task images** are on the environments in each domain's `env.py`, built by `task_image()` in `images.py`; a notebook's own tasks build from the notebook's header with `notebook_image()`, a `from_pixi_script` on a copy of the header without its pod-only SDK path. Their docstrings say how and why; `cli/lock_envs.py` locks the headers and `pixi.lock` with the builder's pixi. Both put the SDK on top with `_with_sdk()`: a checkout's source, or an installed package's own version from PyPI, so an installed package builds them too, from the header and lock it ships with. Releases publish none. The notebooks' headers install the image's `/stargazer` non-editable, so a notebook's kernel is an installed package and builds its task images that way. The image table is in `docs/architecture/configuration.md`.
 - **The notebook images**: `notebook_base` in `src/stargazer/notebooks/__init__.py`, built on the image `runtime/Dockerfile` makes and `.github/workflows/release.yml` publishes.
 - **Devbox builds** are in `devbox/setup.sh`.
 

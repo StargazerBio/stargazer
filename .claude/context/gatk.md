@@ -27,7 +27,7 @@ The Broad Institute's Genome Analysis Toolkit, which most of Stargazer's germlin
 | SortSam | [[gatk-sortsam]] | `sort_sam` |
 | VariantRecalibrator | [[gatk-variantrecalibrator]] | `variant_recalibrator` |
 
-Each task's module is `src/stargazer/tasks/gatk/<task>.py`. `joint_call_gvcfs` runs GenomicsDBImport, then GenotypeGVCFs, in one task, and needs the amd64 image (`IMAGE_PLATFORM` in `config.py` says why).
+Each task's module is `src/stargazer/tasks/gatk/<task>.py`. `joint_call_gvcfs` runs GenomicsDBImport, then GenotypeGVCFs, in one task, and needs the amd64 image (`IMAGE_PLATFORM` in `images.py` says why).
 
 ## Related
 

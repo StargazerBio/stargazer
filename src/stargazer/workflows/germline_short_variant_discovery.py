@@ -16,7 +16,6 @@ spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 import asyncio
 
 from stargazer.assets import Variants
-from stargazer.config import log_execution
 from stargazer.tasks import (
     haplotype_caller,
     joint_call_gvcfs,
@@ -51,8 +50,6 @@ async def germline_short_variant_discovery(
     Returns:
         Joint-genotyped Variants asset
     """
-    log_execution()
-
     ref = await prepare_reference(build=build)
 
     alignments = list(

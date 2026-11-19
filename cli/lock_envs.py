@@ -34,7 +34,7 @@ from flyte._utils.pixi_script_parser import (
     render_pixi_manifest,
 )
 
-from stargazer.config import IMAGE_PLATFORM, PROJECT_ROOT
+from stargazer.images import IMAGE_PLATFORM, PROJECT_ROOT
 
 PYPROJECT = PROJECT_ROOT / "pyproject.toml"
 

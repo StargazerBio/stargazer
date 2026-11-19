@@ -6,7 +6,7 @@
 # tag already there and releases nothing. A failed publish is re-run from the
 # run's page: the tag is already pushed, so no later push retries it. Task
 # images aren't published: whoever runs a task builds its image from the
-# domain's `env.py` header (`task_image()` in config.py).
+# domain's `env.py` header (`task_image()` in images.py).
 # Infra pins one release and takes the package and notebook image from it.
 # Union's nodes pull the notebook image straight from GHCR, which is public.
 name: Release

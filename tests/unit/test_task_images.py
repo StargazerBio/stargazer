@@ -11,19 +11,19 @@ from pathlib import Path
 
 import pytest
 
-from stargazer import config
+from stargazer import config, images
 
-GATK_ENV = Path(config.__file__).parent / "tasks" / "gatk" / "env.py"
+GATK_ENV = Path(images.__file__).parent / "tasks" / "gatk" / "env.py"
 VERSION = version("stargazer-bio")
 
 
 @pytest.fixture
 def installed(monkeypatch, tmp_path):
-    """`stargazer.config` as it sits in site-packages: no checkout around it."""
-    monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
+    """`stargazer.images` as it sits in site-packages: no checkout around it."""
+    monkeypatch.setattr(images, "PROJECT_ROOT", tmp_path)
 
 
-TEMPLATE = Path(config.__file__).parent / "notebooks" / "templates" / "basic.py"
+TEMPLATE = Path(images.__file__).parent / "notebooks" / "templates" / "basic.py"
 
 
 def _pixi_manifest(image) -> str:
@@ -41,7 +41,7 @@ def _above_header(image) -> list:
 
 def test_an_installed_package_builds_its_task_image_from_the_header(installed):
     """Installed, the domain's header builds, and the installed version goes on top."""
-    image = config.task_image(GATK_ENV)
+    image = images.task_image(GATK_ENV)
 
     packages = [
         p for layer in _above_header(image) for p in getattr(layer, "packages", ())
@@ -52,7 +52,7 @@ def test_an_installed_package_builds_its_task_image_from_the_header(installed):
 
 def test_a_checkout_builds_its_task_image_with_its_source_on_top():
     """From a checkout, the source goes on top of the header's released SDK."""
-    image = config.task_image(GATK_ENV)
+    image = images.task_image(GATK_ENV)
 
     commands = [
         c for layer in _above_header(image) for c in getattr(layer, "commands", ())
@@ -62,7 +62,7 @@ def test_a_checkout_builds_its_task_image_with_its_source_on_top():
 
 def test_a_notebook_image_builds_from_its_header_without_the_pods_sdk_path():
     """The header's packages install, its SDK from PyPI; the pod-only path is gone."""
-    manifest = _pixi_manifest(config.notebook_image(TEMPLATE, "stargazer-template"))
+    manifest = _pixi_manifest(images.notebook_image(TEMPLATE, "stargazer-template"))
 
     assert 'bcftools = "1.*"' in manifest
     assert 'stargazer-bio = "*"' in manifest
@@ -71,7 +71,7 @@ def test_a_notebook_image_builds_from_its_header_without_the_pods_sdk_path():
 
 def test_a_checkout_notebook_image_installs_the_checkout_on_top():
     """From a checkout, the source goes on top of the header's released SDK."""
-    image = config.notebook_image(TEMPLATE, "stargazer-template")
+    image = images.notebook_image(TEMPLATE, "stargazer-template")
 
     commands = [
         c for layer in _above_header(image) for c in getattr(layer, "commands", ())
@@ -81,7 +81,7 @@ def test_a_checkout_notebook_image_installs_the_checkout_on_top():
 
 def test_an_installed_notebook_image_installs_the_kernels_version(installed):
     """Installed, the release of the kernel's version goes on top instead."""
-    image = config.notebook_image(TEMPLATE, "stargazer-template")
+    image = images.notebook_image(TEMPLATE, "stargazer-template")
 
     packages = [
         p for layer in _above_header(image) for p in getattr(layer, "packages", ())
@@ -94,10 +94,10 @@ def test_a_notebook_image_is_the_same_wherever_its_header_is_copied(
 ):
     """The kernel and a cluster pod each copy the header, and name the same image."""
     monkeypatch.setenv("STARGAZER_LOCAL", str(tmp_path / "kernel"))
-    kernel = config.notebook_image(TEMPLATE, "stargazer-template").uri
+    kernel = images.notebook_image(TEMPLATE, "stargazer-template").uri
     monkeypatch.setenv("STARGAZER_LOCAL", str(tmp_path / "pod"))
 
-    assert config.notebook_image(TEMPLATE, "stargazer-template").uri == kernel
+    assert images.notebook_image(TEMPLATE, "stargazer-template").uri == kernel
 
 
 def test_a_checkout_bundles_hosted_runs_from_its_source():
