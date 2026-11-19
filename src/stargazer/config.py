@@ -253,40 +253,8 @@ def init_flyte() -> None:
         )
 
 
-def _with_source(image: flyte.Image) -> flyte.Image:
-    """`image` with the checkout's stargazer installed on top, from its source.
-
-    A layer of its own, so a source change rebuilds only it; the checkout's
-    .dockerignore keeps docs, tests, git history and pixi's environments out
-    of it, and out of every other folder the image copies. It's named here
-    because Flyte otherwise reads the one in `flyte.init`'s root, which is the
-    cwd, or `src/` in a notebook pod (`init_flyte`). A task pod resolves the
-    tasks it calls as installed modules (`stargazer.tasks…`), so the package
-    must be the checkout's, wherever the run was submitted from. uv installs
-    into the pixi environment, which the layer below made `VIRTUAL_ENV`, with
-    any core dependency the checkout has gained since the release the layer
-    below installed.
-    """
-    return (
-        image.with_dockerignore(PROJECT_ROOT / ".dockerignore")
-        .with_source_folder(PROJECT_ROOT, "/opt/stargazer")
-        .with_commands(["uv pip install --no-cache /opt/stargazer"])
-    )
-
-
-def released_image(name: str, release: str) -> str:
-    """Where a release publishes a task image, tagged with its version.
-
-    `release` is the package version as installed (`importlib.metadata`
-    normalizes it, so tag `v2026.11.04` publishes `2026.11.4`).
-    `cli/publish_task_images.py` pushes there, and an installed package pulls
-    from there.
-    """
-    return f"ghcr.io/stargazerbio/{name}:{release}"
-
-
 def _checkout() -> bool:
-    """Whether the package runs from a checkout, which can build its images.
+    """Whether the package runs from a checkout, whose source its images install.
 
     Installed from PyPI, `PROJECT_ROOT` is the environment's `lib/python3.x`,
     which holds no `pyproject.toml`.
@@ -294,28 +262,48 @@ def _checkout() -> bool:
     return (PROJECT_ROOT / "pyproject.toml").is_file()
 
 
+def _with_sdk(image: flyte.Image) -> flyte.Image:
+    """`image` with the SDK this process runs installed on top.
+
+    A task pod resolves the tasks it calls as installed modules
+    (`stargazer.tasks…`), so the package must be the submitter's. From a
+    checkout that's its source, a layer of its own, so a source change
+    rebuilds only it; the checkout's .dockerignore keeps docs, tests, git
+    history and pixi's environments out of it, and out of every other folder
+    the image copies. It's named here because Flyte otherwise reads the one in
+    `flyte.init`'s root, which is the cwd, or `src/` in a notebook pod
+    (`init_flyte`). uv installs into the pixi environment, which the layer
+    below made `VIRTUAL_ENV`, with any core dependency the checkout has gained
+    since the release the layer below installed. An installed package has no
+    source to copy: its own release goes on top, from PyPI.
+    """
+    if not _checkout():
+        return image.with_pip_packages(f"stargazer-bio=={version('stargazer-bio')}")
+    return (
+        image.with_dockerignore(PROJECT_ROOT / ".dockerignore")
+        .with_source_folder(PROJECT_ROOT, "/opt/stargazer")
+        .with_commands(["uv pip install --no-cache /opt/stargazer"])
+    )
+
+
 def task_image(env: str | Path) -> flyte.Image:
-    """A domain's task image, `stargazer-<domain>`: its `env.py`'s header, then the checkout.
+    """A domain's task image, `stargazer-<domain>`: its `env.py`'s header, then the SDK.
 
     `env` is the domain's `env.py` (its `__file__`), whose PEP 723 header lists
     the environment's conda and PyPI packages, the released SDK among them,
     locked in the `env.py.pixi.lock` beside it (`cli/lock_envs.py`). Flyte
     renders the header as a pixi workspace and installs it from the header and
     lock alone, so that layer (Python, the tools, every dependency) is cached
-    until either changes, and pixi's environment is the pod's Python. The
-    checkout goes on top of the released SDK, and uv adds any core dependency
-    it has gained since the release.
-
-    An installed package has no checkout to build from: it runs on the image
-    its release built this way and published (`released_image()`), so nothing
-    builds.
+    until either changes, and pixi's environment is the pod's Python. The SDK
+    goes on top (`_with_sdk()`): a checkout's source, or the installed
+    release. The header and lock ship in the package, so an installed package
+    builds its images the same way, with whichever builder its Flyte config
+    picks.
     """
     env = Path(env)
     name = f"stargazer-{env.parent.name}"
-    if not _checkout():
-        return flyte.Image.from_base(released_image(name, version("stargazer-bio")))
     image = flyte.Image.from_pixi_script(env, name=name, platform=IMAGE_PLATFORM)
-    return _with_source(image)
+    return _with_sdk(image)
 
 
 # The PEP 723 block, as Flyte's pixi script parser reads it.
@@ -349,9 +337,8 @@ def notebook_image(notebook: str | Path, name: str) -> flyte.Image:
     header without it, under `STARGAZER_LOCAL`, and `stargazer-bio` installs
     from PyPI. Flyte names the image by the manifest the header renders to, so
     the kernel and a cluster pod, each with its own copy, name the same image.
-    The SDK then goes on top: a checkout's source, or the release of the
-    installed version. marimo writes no lock for a header, so the image
-    resolves its packages anew whenever it's built.
+    The SDK then goes on top (`_with_sdk()`). marimo writes no lock for a
+    header, so the image resolves its packages anew whenever it's built.
     """
     header = _header_without_sdk_source(Path(notebook))
     digest = hashlib.sha256(header.encode()).hexdigest()[:16]
@@ -364,6 +351,4 @@ def notebook_image(notebook: str | Path, name: str) -> flyte.Image:
     script.parent.mkdir(parents=True, exist_ok=True)
     script.write_text(header)
     image = flyte.Image.from_pixi_script(script, name=name, platform=IMAGE_PLATFORM)
-    if not _checkout():
-        return image.with_pip_packages(f"stargazer-bio=={version('stargazer-bio')}")
-    return _with_source(image)
+    return _with_sdk(image)

@@ -53,7 +53,7 @@ Once promoted, the next image release bakes a task into every notebook, where an
 
 **The SDK never imports notebooks.** Notebooks import the SDK; production code never depends on a notebook, so notebook changes can't break tasks or workflows. Notebook-to-notebook reuse is allowed: a notebook can export importable definitions via `app.setup` + `@app.function`, as the Execution tutorial does with the Workflows tutorial's workflow.
 
-**Notebooks in the image run the image's SDK.** Each notebook's header installs `stargazer-bio` from the image's `/stargazer` as a package, not editable, so a saved notebook can't change which SDK it runs, and its SDK tasks run on that release's published images ([Notebook Runtime → The Image](runtime.md#the-image)). Opened from a checkout with `pixi run marimo edit`, a notebook imports the checkout instead, editable, and images build from its source.
+**Notebooks in the image run the image's SDK.** Each notebook's header installs `stargazer-bio` from the image's `/stargazer` as a package, not editable, so a saved notebook can't change which SDK it runs, and its SDK tasks run on images built with that release on top ([Notebook Runtime → The Image](runtime.md#the-image)). Opened from a checkout with `pixi run marimo edit`, a notebook imports the checkout instead, editable, and images build from its source.
 
 ## Notebook Environment
 
