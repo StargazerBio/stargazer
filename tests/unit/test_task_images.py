@@ -1,7 +1,8 @@
-"""Tests for where the task images come from: a checkout's source, or a release.
+"""Tests for how the task images are built: from a header, then the SDK on top.
 
-An installed package has no `pyproject.toml` beside its source, so it can't
-build its images; it runs its tasks on the images its release published.
+A checkout puts its source on top. An installed package has no
+`pyproject.toml` beside its source, so it puts its own release on top, from
+PyPI.
 """
 
 import sys
@@ -22,22 +23,6 @@ def installed(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
 
 
-def test_an_installed_package_runs_its_tasks_on_its_releases_image(installed):
-    """The task image is the published one of the installed version, nothing to build."""
-    image = config.task_image(GATK_ENV)
-
-    assert image.uri.endswith(f"/stargazer-gatk:{VERSION}")
-    assert image._layers == ()
-
-
-def test_a_checkout_builds_its_task_image_from_source():
-    """A checkout's task image is built (tagged by content), not pulled by version."""
-    image = config.task_image(GATK_ENV)
-
-    assert not image.uri.endswith(f":{VERSION}")
-    assert image._layers
-
-
 TEMPLATE = Path(config.__file__).parent / "notebooks" / "templates" / "basic.py"
 
 
@@ -52,6 +37,27 @@ def _above_header(image) -> list:
     """`image`'s layers after its header's, the ones its base doesn't bring."""
     layers = list(image._layers)
     return layers[[hasattr(layer, "script") for layer in layers].index(True) + 1 :]
+
+
+def test_an_installed_package_builds_its_task_image_from_the_header(installed):
+    """Installed, the domain's header builds, and the installed version goes on top."""
+    image = config.task_image(GATK_ENV)
+
+    packages = [
+        p for layer in _above_header(image) for p in getattr(layer, "packages", ())
+    ]
+    assert 'gatk4 = "4.6.*"' in _pixi_manifest(image)
+    assert packages == [f"stargazer-bio=={VERSION}"]
+
+
+def test_a_checkout_builds_its_task_image_with_its_source_on_top():
+    """From a checkout, the source goes on top of the header's released SDK."""
+    image = config.task_image(GATK_ENV)
+
+    commands = [
+        c for layer in _above_header(image) for c in getattr(layer, "commands", ())
+    ]
+    assert commands == ["uv pip install --no-cache /opt/stargazer"]
 
 
 def test_a_notebook_image_builds_from_its_header_without_the_pods_sdk_path():

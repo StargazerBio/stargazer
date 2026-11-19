@@ -1,6 +1,6 @@
 # Where Your Code Runs
 
-1. **An environment is a header.** A domain's is the header of `tasks/<domain>/env.py`, locked and published as an image with each release. A notebook's is the header at its top, which marimo writes as you import.
+1. **An environment is a header.** A domain's is the header of `tasks/<domain>/env.py`, locked beside it and built into an image the first time a run needs it. A notebook's is the header at its top, which marimo writes as you import.
 2. **On this machine, everything runs in your notebook's kernel.** So your header lists what you run here: what your cells import, and the packages and tools of any SDK task you run on this machine.
 3. **On the cluster, each task runs in its environment's image.** An SDK task runs in its domain's image, and your notebook's own tasks in an image built from your notebook's header.
 
@@ -30,7 +30,7 @@ A notebook lists what it needs in its header, the `# /// script` block at the to
 # ///
 ```
 
-Each notebook gets its own environment, so the tool is on that notebook's path. The last line installs the SDK the image carries, so the notebook runs the image's release and its tasks run on the images that release published; keep it, and the `python` pin.
+Each notebook gets its own environment, so the tool is on that notebook's path. The last line installs the SDK the image carries, so the notebook runs the image's release and its tasks' images install that release; keep it, and the `python` pin.
 
 What the header lists depends on where its tasks run. A notebook that sends the SDK's scRNA-seq tasks to the cluster and plots what comes back lists only what its cells import, here `matplotlib` beside the two above. To run those tasks on this machine too, add what they import, here `"scanpy"`, with `"igraph"` for Leiden clustering. The header of the domain's `env.py` (`src/stargazer/tasks/scrna/env.py`) is the full list. The alignment and GATK tasks call the tools `gatk4`, `samtools`, `bwa` and `bwa-mem2`.
 
