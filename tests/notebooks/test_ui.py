@@ -12,7 +12,7 @@ from flyte._initialize import get_init_config, init_config_context
 from flyte._internal.resolvers.default import DefaultTaskResolver
 
 import stargazer.tasks.general.samtools as samtools_tasks
-from stargazer import config
+from stargazer import config, images
 from stargazer.assets import Reference
 from stargazer.notebooks.ui import dispatch, run_location
 from stargazer.tasks.general.samtools import samtools_faidx
@@ -174,7 +174,7 @@ async def test_an_installed_sdk_task_bundles_from_init_flytes_root(
     """With the SDK installed, a task imported from it keeps the root `init_flyte()`
     set, the running notebook's folder: its module is in site-packages, which Flyte
     never bundles, and in the task's image already."""
-    monkeypatch.setattr(config, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(images, "PROJECT_ROOT", tmp_path)
     workspace = tmp_path / "workspace"
 
     assert await _bundle_root_of(monkeypatch, samtools_faidx, workspace) == [workspace]

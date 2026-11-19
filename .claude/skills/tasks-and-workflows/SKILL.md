@@ -95,7 +95,6 @@ spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 import asyncio
 
 from stargazer.assets import {InputType}, {OutputType}
-from stargazer.config import log_execution
 from stargazer.tasks.gatk.env import gatk_env  # or stargazer.tasks.scrna.env's scrna_env
 from stargazer.tasks import {task1}, {task2}
 
@@ -112,7 +111,6 @@ async def {pipeline_name}(build: str, sample_ids: list[str]) -> list[{OutputType
     Returns:
         {Description of workflow outputs}
     """
-    log_execution()
     prepared = await {task1}(await {InputType}.find(build=build))
     return list(
         await asyncio.gather(*[{task2}(prepared, sample_id=s) for s in sample_ids])

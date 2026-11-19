@@ -17,7 +17,6 @@ spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
 from stargazer.assets.scrna import AnnData
-from stargazer.config import log_execution
 from stargazer.tasks.scrna import (
     cluster,
     find_markers,
@@ -50,8 +49,6 @@ async def scrna_clustering_pipeline(
     Returns:
         Annotated AnnData asset with cluster labels and ranked marker genes
     """
-    log_execution()
-
     raw = await AnnData.find(sample_id=sample_id, stage="raw")
 
     filtered = await qc_filter(adata=raw, max_pct_mt=max_pct_mt)

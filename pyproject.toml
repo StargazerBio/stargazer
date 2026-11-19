@@ -107,7 +107,7 @@ diagrams = [
 # group, with the SDK editable from this checkout. pixi turns the extras and
 # dependency groups into features of the same names. The notebook image
 # installs `mcp`, its MCP server. A domain's environment is the header of its
-# `env.py` instead (`task_image()` in config.py), and a notebook's own tasks'
+# `env.py` instead (`task_image()` in images.py), and a notebook's own tasks'
 # is the notebook's header (`notebook_image()`).
 [tool.pixi.workspace]
 channels = ["conda-forge"]

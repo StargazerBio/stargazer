@@ -13,6 +13,10 @@
 
 ::: stargazer.config
 
+## Images
+
+::: stargazer.images
+
 ## Marshal
 
 ::: stargazer.marshal
@@ -66,6 +70,7 @@
 ::: stargazer.utils.cid
 ::: stargazer.utils.index
 ::: stargazer.utils.pinata
+::: stargazer.utils.publisher
 ::: stargazer.utils.query
 ::: stargazer.utils.storage
 ::: stargazer.utils.subprocess

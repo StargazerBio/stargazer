@@ -12,7 +12,6 @@ spec: [docs/architecture/workflows.md](../architecture/workflows.md)
 """
 
 from stargazer.assets import R1, R2, Alignment, Reference
-from stargazer.config import log_execution
 from stargazer.tasks import (
     bwa_mem2_index,
     bwa_mem2_mem,
@@ -47,7 +46,6 @@ async def prepare_reference(build: str) -> Reference:
     Returns:
         Reference asset (FASTA file)
     """
-    log_execution()
     ref = await Reference.find(build=build)
 
     # Fetching brings the reference's companions in beside it, so what's
@@ -86,7 +84,6 @@ async def preprocess_sample(
     Returns:
         Alignment asset with the preprocessed BAM file
     """
-    log_execution()
     ref = await Reference.find(build=build)
     r1 = await R1.find(sample_id=sample_id)
     r2 = await R2.find(sample_id=sample_id, required=False)

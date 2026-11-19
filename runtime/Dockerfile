@@ -75,7 +75,7 @@ COPY runtime/launch-notebook.sh runtime/start-local.sh /usr/local/bin/
 # from this tree, as a package, not editable, and the build writes its
 # egg-info here. Installed, a kernel's SDK builds its task images from their
 # domains' headers with this release on top, from PyPI (`task_image()` in
-# config.py).
+# images.py).
 # pixi.lock is the MCP server's environment below, editable from this tree,
 # so the runs it starts build their task images here: a domain's `env.py`
 # header and the lock beside it in src/, or a notebook's own header.
