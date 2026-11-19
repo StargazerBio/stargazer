@@ -1,6 +1,6 @@
 ---
 title: cid-test-speed
-status: maybe
+status: later
 priority: low
 created: 2026-11-01
 ---

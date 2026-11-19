@@ -1,6 +1,6 @@
 ---
 title: publish-after-store
-status: maybe
+status: later
 priority: normal
 created: 2026-11-16
 ---

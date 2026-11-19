@@ -1,6 +1,6 @@
 ---
 title: data-aware-caching
-status: maybe
+status: later
 priority: normal
 created: 2026-05-19
 ---

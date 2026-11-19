@@ -1,6 +1,6 @@
 ---
 title: explorer-sdk-entries
-status: maybe
+status: later
 priority: low
 created: 2026-10-27
 ---

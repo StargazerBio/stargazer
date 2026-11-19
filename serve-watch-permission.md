@@ -1,6 +1,6 @@
 ---
 title: serve-watch-permission
-status: maybe
+status: later
 priority: low
 created: 2026-11-01
 ---

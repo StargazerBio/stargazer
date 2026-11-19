@@ -1,6 +1,6 @@
 ---
 title: prebuilt-notebook-environment
-status: maybe
+status: later
 priority: normal
 created: 2026-11-09
 ---

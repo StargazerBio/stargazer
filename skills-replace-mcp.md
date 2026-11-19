@@ -1,6 +1,6 @@
 ---
 title: skills-replace-mcp
-status: maybe
+status: later
 priority: normal
 created: 2026-10-28
 ---

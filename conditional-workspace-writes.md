@@ -1,6 +1,6 @@
 ---
 title: conditional-workspace-writes
-status: maybe
+status: later
 priority: low
 created: 2026-10-30
 ---

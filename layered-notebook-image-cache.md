@@ -1,6 +1,6 @@
 ---
 title: layered-notebook-image-cache
-status: maybe
+status: later
 priority: normal
 created: 2026-11-03
 ---
