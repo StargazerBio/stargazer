@@ -34,7 +34,7 @@
 #     measured). Scheduling counts requests, and a parent task holds
 #     its request while it waits on its children, so a workflow's pods must fit
 #     together in ~6 GiB. That's why gatk_env requests 1 GiB
-#     (stargazer.config).
+#     (stargazer.tasks.gatk.env).
 #   - Stopping an app only scales it to zero. flyte-binary keeps the app's
 #     Knative service when it's deactivated (Union removes it), so the next
 #     request starts a pod again: a stopped notebook's open tab polls every
@@ -44,7 +44,7 @@
 #   - Architecture. On Apple silicon the node is arm64 (an x86_64 devbox
 #     can't start pods: seccomp is unsupported under emulation). The
 #     images are x86_64 only, because GATK's GenomicsDB native library is, so
-#     its pods run emulated (IMAGE_PLATFORM in stargazer.config).
+#     its pods run emulated (IMAGE_PLATFORM in stargazer.images).
 #     The images a run builds push as plain images, not multi-platform
 #     indexes, with FLYTE_DOCKER_BUILD_EXTRA_ARGS=--provenance=false:
 #     an arm64 node won't pull an index with no arm64 entry.

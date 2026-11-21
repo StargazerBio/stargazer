@@ -29,7 +29,8 @@ spec: [docs/architecture/configuration.md](../architecture/configuration.md)
 
 import flyte
 
-from stargazer.config import STARGAZER_ENV_VARS, STARGAZER_SECRETS, task_image
+from stargazer.config import STARGAZER_ENV_VARS, STARGAZER_SECRETS
+from stargazer.images import task_image
 
 gatk_env = flyte.TaskEnvironment(
     name="gatk",

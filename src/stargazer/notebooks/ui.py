@@ -35,7 +35,8 @@ import flyte
 import marimo as mo
 from flyte._initialize import get_init_config, init_config_context, is_initialized
 
-from stargazer.config import _checkout, init_flyte
+from stargazer.config import init_flyte
+from stargazer.images import _checkout
 
 
 def run_location() -> mo.ui.radio:

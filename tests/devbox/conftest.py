@@ -22,7 +22,7 @@ from urllib.parse import urlsplit
 import flyte
 import pytest
 
-from stargazer.config import PROJECT_ROOT
+from stargazer.images import PROJECT_ROOT
 from stargazer.utils.index import PostgresIndex
 
 # Where a pod on the devbox stores assets: the devbox's bucket, its Postgres
@@ -80,7 +80,7 @@ def init_flyte_context():
     Uploads go to the in-cluster signed-URL host, which the forward of the
     object store (rustfs) answers on this machine. The registry has to be in
     the environment before the session starts: Flyte fixes each image's
-    registry when `stargazer.config` defines it, at import.
+    registry when a domain's `env.py` defines it, at import.
     """
     if os.environ.get("FLYTE_IMAGE_REGISTRY") != "localhost:30000":
         pytest.fail("The devbox tier needs FLYTE_IMAGE_REGISTRY=localhost:30000")

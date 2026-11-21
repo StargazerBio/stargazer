@@ -42,10 +42,8 @@ with app.setup:
     import marimo as mo
 
     from stargazer import Asset
-    from stargazer.config import (
-        STARGAZER_SECRETS,
-        notebook_image,
-    )
+    from stargazer.config import STARGAZER_SECRETS
+    from stargazer.images import notebook_image
     from stargazer.notebooks.tutorials.assets import SampleSheet
 
     # Declared in the setup block so `summarize_cohort` can use it and stay

@@ -32,7 +32,7 @@ import flyte
 import yaml
 from flyte._internal.imagebuild.docker_builder import DockerImageBuilder
 
-from stargazer.config import PROJECT_ROOT
+from stargazer.images import PROJECT_ROOT
 from stargazer.tasks.gatk.env import gatk_env
 from stargazer.tasks.scrna.env import scrna_env
 
