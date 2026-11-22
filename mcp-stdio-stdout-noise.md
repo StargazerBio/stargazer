@@ -1,6 +1,6 @@
 ---
 title: mcp-stdio-stdout-noise
-status: later
+status: doing
 priority: low
 created: 2026-11-16
 ---
