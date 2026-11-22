@@ -97,6 +97,10 @@ async def _asset_by_cid(param: str, cid: Any, cls: type[Asset]) -> Asset:
 
 mcp = MCPServer("stargazer")
 
+# flyte.init() gives Flyte's logger a Rich handler, which writes to stdout,
+# the stdio transport, so its warnings would reach the client as lines that
+# aren't JSON-RPC. Without Rich, Flyte logs to stderr.
+os.environ.setdefault("DISABLE_RICH_LOGGING", "1")
 init_flyte()
 _registry = TaskRegistry()
 
