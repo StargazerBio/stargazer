@@ -14,13 +14,19 @@ import asyncio
 import json
 import os
 import sys
+import threading
 import time
+from typing import ClassVar
 
 import httpx
 import pytest
+import uvicorn
+import websockets.asyncio.server
 from conftest import load_proxy
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
+from websockets.exceptions import ConnectionClosed
+from websockets.sync.client import connect
 
 proxy = load_proxy()
 
@@ -329,6 +335,8 @@ def test_agent_bridge_closes_when_the_agent_exits(owner_client, monkeypatch):
 class _DroppedPanel:
     """A panel connection whose client hung up without a close frame."""
 
+    query_params: ClassVar[dict[str, str]] = {}
+
     async def accept(self) -> None:
         """Accept, as starlette's WebSocket does."""
 
@@ -351,6 +359,141 @@ async def test_agent_bridge_returns_when_the_panel_hung_up(monkeypatch):
     )
 
     await proxy.agent_bridge(_DroppedPanel(), "claude")
+
+
+# ---------------------------------------------------------------------------
+# Handing a channel over to a successor connection
+# ---------------------------------------------------------------------------
+
+# Answers each line with its process id, the line's number and the line, so a
+# test can tell whether two connections reached the same process, and in what
+# order its lines arrived.
+_COUNTING_AGENT = """
+import os, sys
+for n, line in enumerate(sys.stdin, 1):
+    print(os.getpid(), n, line.rstrip(), flush=True)
+"""
+
+
+@pytest.fixture
+def counting_agent(monkeypatch):
+    """`claude` is the counting agent."""
+    monkeypatch.setitem(
+        proxy.AGENT_COMMANDS, "claude", [sys.executable, "-c", _COUNTING_AGENT]
+    )
+
+
+@pytest.fixture
+def live_proxy():
+    """The proxy under a real uvicorn server on a free port; yields its ws:// base.
+
+    A handover spans two connections on one event loop, which TestClient, with
+    a loop per connection, can't give.
+    """
+    config = uvicorn.Config(
+        proxy.asgi_app, host="127.0.0.1", port=0, lifespan="off", log_level="warning"
+    )
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        time.sleep(0.01)
+    yield f"ws://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}"
+    server.should_exit = True
+    thread.join(5)
+
+
+def test_a_successor_connection_takes_over_the_agent(live_proxy, counting_agent):
+    """The successor reaches the same agent process, and the old connection is closed with 4000."""
+    url = f"{live_proxy}/__sg__/agent/claude?__sg_rid=r1"
+    with connect(url) as old:
+        old.send("a")
+        pid, _, _ = old.recv(timeout=5).split()
+        old.send("b")
+        assert old.recv(timeout=5) == f"{pid} 2 b"
+        with connect(f"{url}&__sg_resume=2") as new:
+            with pytest.raises(ConnectionClosed) as closed:
+                old.recv(timeout=5)
+            new.send("c")
+            assert new.recv(timeout=5) == f"{pid} 3 c"
+    assert closed.value.rcvd.code == 4000
+
+
+def test_a_successor_waits_for_what_the_old_connection_sent(live_proxy, counting_agent):
+    """A frame the page sent on the old connection reaches the agent before any sent on the successor."""
+    url = f"{live_proxy}/__sg__/agent/claude?__sg_rid=r2"
+    with connect(url) as old:
+        old.send("a")
+        pid, _, _ = old.recv(timeout=5).split()
+        with connect(f"{url}&__sg_resume=2") as new:
+            new.send("c")
+            old.send("b")
+            with pytest.raises(ConnectionClosed):
+                while True:
+                    old.recv(timeout=5)
+            heard = [new.recv(timeout=5)]
+            if heard[0] != f"{pid} 3 c":
+                heard.append(new.recv(timeout=5))
+    assert heard[-1] == f"{pid} 3 c"
+
+
+def test_taking_over_a_channel_that_is_gone_is_refused(live_proxy, counting_agent):
+    """A channel whose connection closed with no successor ends with it."""
+    url = f"{live_proxy}/__sg__/agent/claude?__sg_rid=r3"
+    with connect(url) as ws:
+        ws.send("a")
+        ws.recv(timeout=5)
+    with (
+        connect(f"{url}&__sg_resume=0") as late,
+        pytest.raises(ConnectionClosed) as refused,
+    ):
+        late.recv(timeout=5)
+    assert refused.value.rcvd.code == 4404
+
+
+@pytest.fixture
+def marimo_socket(monkeypatch):
+    """A websocket echo server standing in for marimo; returns the paths it was opened at."""
+    paths: list[str] = []
+    ready = threading.Event()
+    loop = asyncio.new_event_loop()
+    stop = loop.create_future()
+
+    async def echo(conn):
+        """Record the path, then echo every frame."""
+        paths.append(conn.request.path)
+        async for msg in conn:
+            await conn.send(msg)
+
+    async def serve():
+        """Serve on a free port until told to stop."""
+        async with websockets.asyncio.server.serve(echo, "127.0.0.1", 0) as server:
+            monkeypatch.setattr(
+                proxy, "MARIMO_HTTP_PORT", server.sockets[0].getsockname()[1]
+            )
+            ready.set()
+            await stop
+
+    thread = threading.Thread(target=lambda: loop.run_until_complete(serve()))
+    thread.start()
+    ready.wait(5)
+    yield paths
+    loop.call_soon_threadsafe(stop.set_result, None)
+    thread.join(5)
+
+
+def test_a_successor_takes_over_the_marimo_socket(live_proxy, marimo_socket):
+    """marimo sees one connection, opened without the page's channel parameters."""
+    url = f"{live_proxy}/ws?session_id=s_1&__sg_rid=r4"
+    with connect(url) as old:
+        old.send("x")
+        assert old.recv(timeout=5) == "x"
+        with connect(f"{url}&__sg_resume=1") as new:
+            with pytest.raises(ConnectionClosed):
+                old.recv(timeout=5)
+            new.send(b"y")
+            assert new.recv(timeout=5) == b"y"
+    assert marimo_socket == ["/ws?session_id=s_1"]
 
 
 # ---------------------------------------------------------------------------

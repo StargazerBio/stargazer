@@ -46,11 +46,24 @@ passes when they change, and deleted from the store on a sign-out.
 **Agents.** The terminal and the agents are marimo's own. marimo's agent panel
 dials each agent at a fixed port on the page's host, which a hosted pod
 doesn't serve, so every `text/html` response gets a script spliced in before
-`</body>` that points Claude Code's and OpenCode's at `/__sg__/agent/<name>`
-below. Beside it goes a
+`</body>` (`sockets.html`) that points Claude Code's and OpenCode's at
+`/__sg__/agent/<name>` below. Beside it goes a
 banner naming any file over `MAX_SAVED_BYTES`, which isn't saved, with the
 cell that stores it as an asset instead, and the open notebook when it didn't
 hydrate, since nothing typed into the blank is saved.
+
+**Long-lived sockets.** The platform cuts every request to the pod at its
+request timeout, websockets included: the editor's session, the terminal and
+the agent panel's would close every few minutes. Only the browser's leg is
+cut, so the proxy keeps each socket's upstream (marimo's socket, an agent's
+stdio) in a `_Channel`, apart from the browser connection carrying it, and the
+same script hands each socket over to a successor connection before the cut.
+A connection names its channel with `__sg_rid`; one that also passes
+`__sg_resume=<n>` takes the channel over once the proxy has received the `n`
+frames the page sent on the old connection, which is then closed with 4000.
+A channel ends when its connection does with no successor waiting, so a
+connection the network drops still closes as it did. A connection naming no
+channel is relayed on its own.
 
 Reserved paths the proxy handles itself instead of forwarding:
 
@@ -140,18 +153,27 @@ STARGAZER_MCP_SERVER = {
 # in one: well past asyncio's 64 KiB default line limit.
 _AGENT_LINE_LIMIT = 64 * 1024**2
 
+# The query parameters the page script adds to a socket: the channel it names,
+# and on a successor, how many frames the page sent on the connection it takes
+# over. They're the proxy's, never passed on to marimo.
+_CHANNEL_PARAM = "__sg_rid"
+_RESUME_PARAM = "__sg_resume"
+# How long a successor waits for the old connection's last frames before it's
+# refused (4409), leaving the old connection in place.
+_HANDOVER_SECONDS = 10
+
 # Request headers that never reach marimo: the platform session cookies and the
 # identity headers it injects (notably `X-User-Token`, the visitor's ID token).
 _STRIPPED_PREFIXES = ("x-user-",)
 _STRIPPED_HEADERS = {"host", "cookie"}
 
-# The script pointing marimo's agent panel at `/__sg__/agent/`, spliced into
-# every marimo HTML page before </body>. Kept as a static asset
-# (agent_redirect.html) so it gets real HTML/JS tooling instead of living as a
-# Python string. Read once at import. In the image it's baked next to this
-# module (runtime/Dockerfile), so resolving it relative to __file__ works both
-# in-repo and in-pod.
-_AGENT_REDIRECT_INJECTION = (Path(__file__).parent / "agent_redirect.html").read_bytes()
+# The script that points marimo's agent panel at `/__sg__/agent/` and hands the
+# page's sockets over before the platform cuts them, spliced into every marimo
+# HTML page before </body>. Kept as a static asset (sockets.html) so it gets
+# real HTML/JS tooling instead of living as a Python string. Read once at
+# import. In the image it's baked next to this module (runtime/Dockerfile), so
+# resolving it relative to __file__ works both in-repo and in-pod.
+_SOCKETS_INJECTION = (Path(__file__).parent / "sockets.html").read_bytes()
 # The notice naming files too big to save, spliced in the same way when the pod
 # has a store, and baked beside it.
 _SAVE_BANNER_INJECTION = (Path(__file__).parent / "save_banner.html").read_bytes()
@@ -778,64 +800,225 @@ def _with_stargazer_mcp(message: bytes) -> bytes:
     return json.dumps(request).encode()
 
 
+class _AgentUpstream:
+    """An agent process's stdio as a channel's upstream: one line per frame."""
+
+    def __init__(self, process: asyncio.subprocess.Process) -> None:
+        """Wrap a started agent process."""
+        self.process = process
+
+    async def send(self, data: str | bytes) -> None:
+        """Write a frame from the panel to the agent's stdin as one line.
+
+        The pod's MCP server is added to the session requests
+        (`_with_stargazer_mcp`).
+        """
+        if isinstance(data, str):
+            data = data.encode()
+        self.process.stdin.write(_with_stargazer_mcp(data.rstrip(b"\r\n")) + b"\n")
+        await self.process.stdin.drain()
+
+    async def _lines(self):
+        """Each non-empty line the agent prints, until it exits."""
+        async for line in self.process.stdout:
+            if line := line.rstrip(b"\r\n"):
+                yield line.decode()
+
+    def __aiter__(self):
+        """Iterate the agent's output lines as text frames."""
+        return self._lines()
+
+    async def close(self) -> None:
+        """Kill the agent if it's still running, and reap it."""
+        if self.process.returncode is None:
+            self.process.kill()
+        await self.process.wait()
+
+
+# The channels open now, by the name the page gave them (`_CHANNEL_PARAM`).
+_channels: dict[str, _Channel] = {}
+
+
+class _Channel:
+    """One upstream, carried by a browser connection and then its successors.
+
+    The upstream is anything with `send(frame)`, async iteration over its
+    frames and `close()`: marimo's socket or an `_AgentUpstream`. Frames from
+    the upstream go to the connection carrying the channel, under `_lock`, so a
+    handover never splits one. The channel ends, closing its upstream and its
+    connection, when the upstream ends, or when its connection does with no
+    successor waiting.
+    """
+
+    def __init__(self, name: str | None, upstream) -> None:
+        """A channel for `upstream`, registered under `name` if it has one."""
+        self.name = name
+        self.upstream = upstream
+        self.downstream: WebSocket | None = None
+        # Frames received from the current connection, and whether it has
+        # gone, which a waiting successor watches (`_changed`).
+        self.received = 0
+        self.downstream_gone = False
+        self.successor_waiting = False
+        self.closed = False
+        self._changed = asyncio.Condition()
+        self._lock = asyncio.Lock()
+        self._pump: asyncio.Task | None = None
+        if name:
+            _channels[name] = self
+
+    async def serve(self, websocket: WebSocket) -> None:
+        """Carry the channel on its first connection, starting the upstream's relay."""
+        self.downstream = websocket
+        self._pump = asyncio.create_task(self._relay_upstream())
+        await self._carry(websocket)
+
+    async def take_over(self, websocket: WebSocket, sent: int) -> None:
+        """Move the channel to `websocket` once the old connection's `sent` frames are in.
+
+        Refused with 4404 when the channel has ended or a successor is already
+        waiting, and with 4409 when the frames don't arrive within
+        `_HANDOVER_SECONDS`, both leaving the old connection as it was. The old
+        connection is closed with 4000 after the last frame sent on it.
+        """
+        if self.closed or self.successor_waiting:
+            await websocket.close(code=4404)
+            return
+        self.successor_waiting = True
+        try:
+            async with self._changed:
+                await asyncio.wait_for(
+                    self._changed.wait_for(
+                        lambda: (
+                            self.closed or self.downstream_gone or self.received >= sent
+                        )
+                    ),
+                    _HANDOVER_SECONDS,
+                )
+        except TimeoutError:
+            self.successor_waiting = False
+            await websocket.close(code=4409)
+            if self.downstream_gone:
+                await self.close()
+            return
+        if self.closed:
+            await websocket.close(code=4404)
+            return
+        async with self._lock:
+            old, self.downstream = self.downstream, websocket
+            self.received = 0
+            self.downstream_gone = False
+            self.successor_waiting = False
+            with suppress(RuntimeError, WebSocketDisconnect):
+                await old.close(code=4000)
+        await self._carry(websocket)
+
+    async def _carry(self, websocket: WebSocket) -> None:
+        """Relay `websocket`'s frames upstream until it disconnects.
+
+        Then the channel ends, unless a successor has taken it over or is
+        waiting to.
+        """
+        try:
+            while True:
+                msg = await websocket.receive()
+                if msg["type"] == "websocket.disconnect":
+                    break
+                if (data := msg.get("text")) is None and (
+                    data := msg.get("bytes")
+                ) is None:
+                    continue
+                await self.upstream.send(data)
+                async with self._changed:
+                    self.received += 1
+                    self._changed.notify_all()
+        except Exception:
+            pass
+        if self.downstream is not websocket:
+            return
+        if self.successor_waiting:
+            async with self._changed:
+                self.downstream_gone = True
+                self._changed.notify_all()
+            return
+        await self.close()
+
+    async def _relay_upstream(self) -> None:
+        """Send each upstream frame to the connection carrying the channel, then end it."""
+        try:
+            async for msg in self.upstream:
+                async with self._lock:
+                    with suppress(Exception):
+                        if isinstance(msg, bytes):
+                            await self.downstream.send_bytes(msg)
+                        else:
+                            await self.downstream.send_text(msg)
+        except Exception:
+            pass
+        await self.close()
+
+    async def close(self) -> None:
+        """End the channel: close its upstream and its connection, wake a waiting successor."""
+        if self.closed:
+            return
+        self.closed = True
+        if self.name:
+            _channels.pop(self.name, None)
+        if self._pump is not None and self._pump is not asyncio.current_task():
+            self._pump.cancel()
+        with suppress(Exception):
+            await self.upstream.close()
+        with suppress(RuntimeError, WebSocketDisconnect):
+            await self.downstream.close()
+        async with self._changed:
+            self._changed.notify_all()
+
+
+async def _relay(websocket: WebSocket, open_upstream) -> None:
+    """Carry `websocket` on a channel: a new one around `open_upstream()`, or the one it takes over."""
+    name = websocket.query_params.get(_CHANNEL_PARAM)
+    resume = websocket.query_params.get(_RESUME_PARAM)
+    await websocket.accept()
+    if name and resume is not None:
+        if (channel := _channels.get(name)) is None:
+            await websocket.close(code=4404)
+            return
+        await channel.take_over(websocket, int(resume))
+        return
+    await _Channel(name, await open_upstream()).serve(websocket)
+
+
 @asgi_app.websocket("/__sg__/agent/{name}")
 async def agent_bridge(websocket: WebSocket, name: str) -> None:
     """Bridge marimo's agent panel to an agent process over its stdio.
 
     Starts `name`'s entry in `AGENT_COMMANDS`, refusing any other name with
-    1008, with a secret-scrubbed environment (`_agent_env`)
-    in the pod's working directory, `/workspace`. Each frame from the panel,
-    text or binary, is written to the agent's stdin as one line, with the
-    pod's MCP server added to the session requests (`_with_stargazer_mcp`),
-    and each line
-    the agent prints is sent back as one text frame. Its stderr goes to the pod's log. The
-    agent is killed when the panel disconnects, and the panel is disconnected
-    when the agent exits.
+    1008, with a secret-scrubbed environment (`_agent_env`) in the pod's
+    working directory, `/workspace`, as a channel's upstream (`_relay`), so a
+    successor connection keeps the same process. Each frame from the panel,
+    text or binary, is written to the agent's stdin as one line, with the pod's
+    MCP server added to the session requests, and each line the agent prints is
+    sent back as one text frame. Its stderr goes to the pod's log. The agent is
+    killed when the panel disconnects with no successor, and the panel is
+    disconnected when the agent exits.
     """
     if (command := AGENT_COMMANDS.get(name)) is None:
         await websocket.close(code=1008)
         return
-    await websocket.accept()
-    agent = await asyncio.create_subprocess_exec(
-        *command,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        env=_agent_env(),
-        limit=_AGENT_LINE_LIMIT,
-    )
 
-    async def agent_to_panel() -> None:
-        """Send each line the agent prints to the panel until it exits."""
-        async for line in agent.stdout:
-            if line := line.rstrip(b"\r\n"):
-                await websocket.send_text(line.decode())
+    async def start() -> _AgentUpstream:
+        """Start the agent process."""
+        return _AgentUpstream(
+            await asyncio.create_subprocess_exec(
+                *command,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                env=_agent_env(),
+                limit=_AGENT_LINE_LIMIT,
+            )
+        )
 
-    async def panel_to_agent() -> None:
-        """Write each frame from the panel to the agent until it disconnects."""
-        while True:
-            msg = await websocket.receive()
-            if msg["type"] == "websocket.disconnect":
-                return
-            # marimo sends each message as a binary frame.
-            if (data := msg.get("bytes")) is None:
-                data = msg.get("text", "").encode()
-            agent.stdin.write(_with_stargazer_mcp(data.rstrip(b"\r\n")) + b"\n")
-            await agent.stdin.drain()
-
-    tasks = {
-        asyncio.create_task(agent_to_panel()),
-        asyncio.create_task(panel_to_agent()),
-    }
-    try:
-        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-    finally:
-        for task in tasks:
-            task.cancel()
-        if agent.returncode is None:
-            agent.kill()
-        await agent.wait()
-        with suppress(RuntimeError, WebSocketDisconnect):
-            await websocket.close()
+    await _relay(websocket, start)
 
 
 # ---------------------------------------------------------------------------
@@ -866,7 +1049,7 @@ async def http_proxy(request: Request, path: str) -> Response:
 
     Runs on the shared keep-alive client. Platform cookies and identity headers
     are dropped before forwarding. Only `text/html` responses are buffered —
-    the agent redirect and the save banner are spliced in before `</body>`
+    the sockets script and the save banner are spliced in before `</body>`
     (on every page, no marimo plugin needed). Everything else — static bundles, API
     JSON, downloads — streams through chunk-by-chunk with its original headers,
     so large bodies never sit in proxy memory. The raw query string passes
@@ -902,7 +1085,7 @@ async def http_proxy(request: Request, path: str) -> Response:
         # headers and let Starlette recompute the length.
         content = await resp.aread()
         await resp.aclose()
-        injection = _AGENT_REDIRECT_INJECTION
+        injection = _SOCKETS_INJECTION
         # Without a store nothing is saved, so there's nothing to warn about.
         if _user_prefix("workspace") is not None:
             injection += _SAVE_BANNER_INJECTION
@@ -939,41 +1122,23 @@ async def http_proxy(request: Request, path: str) -> Response:
 
 @asgi_app.websocket("/{path:path}")
 async def ws_proxy(websocket: WebSocket, path: str) -> None:
-    """Bridge a client websocket to marimo's websocket.
+    """Bridge a client websocket to marimo's websocket, as a channel's upstream (`_relay`).
 
     The upstream connection is opened without the client's headers, so no
-    cookie or identity header reaches marimo here either.
+    cookie or identity header reaches marimo here either, and without the
+    channel's query parameters.
     """
-    await websocket.accept()
+    query = "&".join(
+        part
+        for part in websocket.url.query.split("&")
+        if part and part.split("=", 1)[0] not in (_CHANNEL_PARAM, _RESUME_PARAM)
+    )
     upstream_url = f"ws://{MARIMO_HOST}:{MARIMO_HTTP_PORT}/{path}"
-    if websocket.url.query:
-        upstream_url = f"{upstream_url}?{websocket.url.query}"
+    if query:
+        upstream_url = f"{upstream_url}?{query}"
 
-    async with websockets.connect(upstream_url) as upstream:
+    async def connect():
+        """Open marimo's socket."""
+        return await websockets.connect(upstream_url)
 
-        async def client_to_upstream() -> None:
-            """Pump frames from the browser to marimo."""
-            try:
-                while True:
-                    msg = await websocket.receive()
-                    if msg["type"] == "websocket.disconnect":
-                        return
-                    if (data := msg.get("text")) is not None or (
-                        data := msg.get("bytes")
-                    ) is not None:
-                        await upstream.send(data)
-            except Exception:
-                return
-
-        async def upstream_to_client() -> None:
-            """Pump frames from marimo back to the browser."""
-            try:
-                async for msg in upstream:
-                    if isinstance(msg, bytes):
-                        await websocket.send_bytes(msg)
-                    else:
-                        await websocket.send_text(msg)
-            except Exception:
-                return
-
-        await asyncio.gather(client_to_upstream(), upstream_to_client())
+    await _relay(websocket, connect)
