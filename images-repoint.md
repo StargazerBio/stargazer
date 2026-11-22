@@ -1,6 +1,6 @@
 ---
 title: images-repoint
-status: review
+status: done
 priority: normal
 created: 2026-11-21
 pr: 50
@@ -20,5 +20,9 @@ Ticket [[split-config]] moved the image recipes from `stargazer.config` to `star
 2. In infra's worktree, `uv run pytest` on the new pin.
 3. `union_dashboard.py deploy`; the dashboard's footer shows the release; `POST /launch` `slug=assets mode=edit section=tutorials`; `union_dashboard.py check nb-assets-edit` serves the release tag's digest (`docker buildx imagetools inspect`); run all cells in the editor, none errors.
 4. `union_dashboard.py teardown`; live runs `[]`.
+
+## Outcome
+
+Shipped in infra PR 50 (merge `9c9b52a`) and community-notebooks PR 8 (merge `d53e3d3`), both on release `2026.11.22`. Verified as in the plan: unit tier 447 passed on the new pin, the Assets tutorial ran all 22 cells on the tenant, and the community notebooks import against the release (measured 2026-11-22). Left: users' dashboards pick up the pin on their next `stargazer-users upgrade`.
 
 Related: [[board]], [[split-config]], [[infra-sdk-pin-bump]].
