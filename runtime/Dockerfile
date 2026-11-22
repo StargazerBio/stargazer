@@ -69,7 +69,7 @@ RUN python -m venv /opt/venv \
 # The proxy is a top-level module, not under `app/`: a hosted pod's code bundle
 # unpacks an `app/` package into the working directory, which would shadow it.
 COPY runtime/proxy.py /usr/local/lib/sg_proxy.py
-COPY runtime/agent_redirect.html runtime/save_banner.html /usr/local/lib/
+COPY runtime/sockets.html runtime/save_banner.html /usr/local/lib/
 COPY runtime/launch-notebook.sh runtime/start-local.sh /usr/local/bin/
 # Owned by the runtime user: each notebook's environment builds `stargazer-bio`
 # from this tree, as a package, not editable, and the build writes its

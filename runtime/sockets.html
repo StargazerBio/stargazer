@@ -1,0 +1,234 @@
+<!--
+  Spliced into every marimo HTML page before the closing body tag by
+  runtime/proxy.py (read into `_SOCKETS_INJECTION` at import), beside the save
+  banner. It replaces `window.WebSocket` for the page's own sockets, for two
+  reasons:
+
+  1. marimo's agent panel dials each agent at a fixed port on the page's host,
+     ws(s)://<host>:<port>/message, which a hosted pod doesn't serve: the
+     platform routes only the pod's one port. The URLs of the agents the image
+     installs, at marimo's ports for them, go to the proxy's
+     /__sg__/agent/<name> on the page's own origin, behind the same sign-in as
+     the page.
+
+  2. The platform cuts every request to the pod at its request timeout,
+     websockets included, five minutes by default. Each of the page's sockets
+     names a channel the proxy keeps its upstream in (`__sg_rid`), and every
+     ROTATE_MS hands it over to a successor connection: it stops sending, opens
+     the successor with the count of frames it sent on the old connection
+     (`__sg_resume`), delivers the old connection's frames until the proxy
+     closes it with 4000, then the successor's, held until then, and sends what
+     it queued. marimo and the panel see one socket throughout. A successor
+     that fails leaves the old connection in place, and the handover is tried
+     again after RETRY_MS.
+
+  Sockets to anywhere else are the browser's own. The panel and marimo open
+  their sockets with `new WebSocket(url)` long after this runs.
+-->
+<script>
+(function () {
+  if (window.__sgSockets) return; window.__sgSockets = true;
+  var Native = window.WebSocket;
+  var ROTATE_MS = 4 * 60 * 1000;
+  var RETRY_MS = 30 * 1000;
+  var origin = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host;
+  var agents = {};
+  agents['//' + location.hostname + ':3017/message'] = 'claude';
+  agents['//' + location.hostname + ':3023/message'] = 'opencode';
+
+  // Where a socket for `url` goes through the proxy, or null if it doesn't.
+  function routed(url) {
+    var u = String(url);
+    var name = agents[u.slice(u.indexOf('//'))];
+    if (name) return origin + '/__sg__/agent/' + name;
+    var parsed;
+    try { parsed = new URL(u, location.href); } catch (e) { return null; }
+    return parsed.host === location.host ? u : null;
+  }
+
+  function channelName() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+
+  class SgSocket extends EventTarget {
+    constructor(url, protocols) {
+      var target = routed(url);
+      if (target === null) {
+        return protocols === undefined ? new Native(url) : new Native(url, protocols);
+      }
+      super();
+      this.url = target;
+      this.readyState = SgSocket.CONNECTING;
+      this.protocol = '';
+      this.extensions = '';
+      this._target = target;
+      this._protocols = protocols;
+      this._channel = channelName();
+      this._binaryType = 'blob';
+      this._handlers = {};
+      // Frames sent on the current connection, which a successor reports.
+      this._sent = 0;
+      // What the page sent while it couldn't go out, in order.
+      this._queue = [];
+      // During a handover: the successor, and its frames held until the old
+      // connection's last one is delivered.
+      this._handing = false;
+      this._next = null;
+      this._held = null;
+      this._closeArgs = null;
+      this._timer = null;
+      this._cur = this._open(false);
+    }
+
+    get binaryType() { return this._binaryType; }
+    set binaryType(value) {
+      this._binaryType = value;
+      this._cur.binaryType = value;
+      if (this._next) this._next.binaryType = value;
+    }
+    get bufferedAmount() { return this._cur.bufferedAmount; }
+
+    send(data) {
+      if (this.readyState === SgSocket.CONNECTING) {
+        throw new DOMException(
+          "Failed to execute 'send' on 'WebSocket': Still in CONNECTING state.",
+          'InvalidStateError');
+      }
+      if (this.readyState !== SgSocket.OPEN) return;
+      this._queue.push(data);
+      this._flush();
+    }
+
+    close(code, reason) {
+      if (this.readyState === SgSocket.CLOSING || this.readyState === SgSocket.CLOSED) return;
+      this.readyState = SgSocket.CLOSING;
+      clearTimeout(this._timer);
+      this._closeArgs = [code, reason];
+      if (!this._handing) this._finishClose();
+    }
+
+    _open(resume) {
+      var url = this._target + (this._target.indexOf('?') < 0 ? '?' : '&') +
+        '__sg_rid=' + encodeURIComponent(this._channel);
+      if (resume) url += '&__sg_resume=' + this._sent;
+      var ws = this._protocols === undefined ? new Native(url) : new Native(url, this._protocols);
+      ws.binaryType = this._binaryType;
+      var self = this;
+      ws.onopen = function () {
+        if (self._cur !== ws) return;
+        if (self.readyState === SgSocket.CONNECTING) {
+          self.readyState = SgSocket.OPEN;
+          self.protocol = ws.protocol;
+          self.extensions = ws.extensions;
+          self._emit(new Event('open'));
+          self._schedule(ROTATE_MS);
+        }
+        self._flush();
+      };
+      ws.onmessage = function (e) {
+        if (self._cur === ws) self._emit(new MessageEvent('message', { data: e.data, origin: e.origin }));
+        else if (self._next === ws) self._held.push(e);
+      };
+      ws.onerror = function () {
+        if (self._cur === ws && !self._next) self._emit(new Event('error'));
+      };
+      ws.onclose = function (e) { self._closed(ws, e); };
+      return ws;
+    }
+
+    _schedule(ms) {
+      var self = this;
+      clearTimeout(this._timer);
+      this._timer = setTimeout(function () { self._handOver(); }, ms);
+    }
+
+    _handOver() {
+      if (this.readyState !== SgSocket.OPEN || this._next || this._cur.readyState !== Native.OPEN) return;
+      this._handing = true;
+      this._held = [];
+      this._next = this._open(true);
+    }
+
+    _closed(ws, e) {
+      if (ws === this._next) {
+        // The successor was refused or failed: keep the old connection.
+        this._next = null;
+        this._held = null;
+        this._handing = false;
+        this._resume(RETRY_MS);
+        return;
+      }
+      if (ws !== this._cur) return;
+      // 4000: the proxy moved the channel to the successor. 1006: the platform
+      // cut the old connection first, and the proxy moves it all the same.
+      if (this._next && (e.code === 4000 || e.code === 1006)) {
+        var held = this._held;
+        this._cur = this._next;
+        this._next = null;
+        this._held = null;
+        this._sent = 0;
+        this._handing = false;
+        for (var i = 0; i < held.length; i++) {
+          this._emit(new MessageEvent('message', { data: held[i].data, origin: held[i].origin }));
+        }
+        this._resume(ROTATE_MS);
+        return;
+      }
+      clearTimeout(this._timer);
+      if (this._next) {
+        var next = this._next;
+        this._next = null;
+        next.close();
+      }
+      this.readyState = SgSocket.CLOSED;
+      this._emit(new CloseEvent('close', { code: e.code, reason: e.reason, wasClean: e.wasClean }));
+    }
+
+    // After a handover ends either way: send what queued, then close if the
+    // page asked to meanwhile, or schedule the next handover.
+    _resume(ms) {
+      this._flush();
+      if (this._closeArgs) this._finishClose();
+      else this._schedule(ms);
+    }
+
+    _flush() {
+      while (this._queue.length && !this._handing && this._cur.readyState === Native.OPEN) {
+        this._cur.send(this._queue.shift());
+        this._sent++;
+      }
+    }
+
+    _finishClose() {
+      this._flush();
+      var code = this._closeArgs[0], reason = this._closeArgs[1];
+      if (code === undefined) this._cur.close();
+      else this._cur.close(code, reason);
+    }
+
+    _emit(event) {
+      this.dispatchEvent(event);
+      var handler = this._handlers[event.type];
+      if (handler) handler.call(this, event);
+    }
+  }
+
+  ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'].forEach(function (k, i) {
+    SgSocket[k] = i;
+    SgSocket.prototype[k] = i;
+  });
+  ['open', 'message', 'error', 'close'].forEach(function (type) {
+    Object.defineProperty(SgSocket.prototype, 'on' + type, {
+      get: function () { return this._handlers[type] || null; },
+      set: function (fn) { this._handlers[type] = typeof fn === 'function' ? fn : null; },
+    });
+  });
+  // A socket the browser opened for somewhere else still passes
+  // `instanceof WebSocket`.
+  Object.defineProperty(SgSocket, Symbol.hasInstance, {
+    value: function (obj) { return obj instanceof Native || SgSocket.prototype.isPrototypeOf(obj); },
+  });
+  window.WebSocket = SgSocket;
+})();
+</script>
