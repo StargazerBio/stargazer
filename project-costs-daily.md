@@ -1,16 +1,17 @@
 ---
 title: project-costs-daily
-status: doing
+status: review
 priority: low
 created: 2026-10-28
+pr: 44
 ---
 
-Run the per-project cost report (ticket [[project-costs]], the `project_costs` task in infra's `admin` project) on a daily schedule, with Flyte's own trigger, so an admin no longer starts it by hand. Showing each user their project's share on their dashboard is ticket [[project-costs-on-dashboard]].
+Run the per-project cost report (ticket [[project-costs]], the `project_costs` task in infra's `admin` project) on a daily schedule, with Flyte's own trigger, so an admin no longer starts it by hand. Work in StargazerBio/infra#44. Showing each user their project's share on their dashboard is ticket [[project-costs-on-dashboard]].
 
 ## Plan
 
 - [x] `flyte.Trigger.daily()` on `project_costs` (midnight UTC, the latest period), registered by `stargazer-costs deploy`
-- [x] Deployed to `admin` on the tenant: `flyte get trigger` lists `daily`, `cron: 0 0 * * * (UTC)`, `active: true`
+- [x] Deployed to `admin` on the tenant: `flyte get trigger` lists `daily`, `cron: 0 0 * * * (UTC)`, `active: true`; run `uj8qwkjpljhjnl7n9lwl` of the deployed version succeeded on `2026-11` ($529.33 of $535.57 node cost split)
 - [ ] A scheduled run seen to succeed after the first midnight UTC
 
 ## Verification recipe
