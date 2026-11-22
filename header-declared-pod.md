@@ -8,7 +8,7 @@ created: 2026-11-16
 A notebook says what it runs in from three places: its script header (conda and PyPI packages), `main_env` in its setup block (the pod's image and size) and a task environment (its own tasks). Since the pixi sandbox, the header covers every package and command-line tool, so `main_env` adds two things: system packages conda doesn't have, and the pod's CPU and memory. Supporting it costs, in infra (line counts measured 2026-11-16):
 
 - `app/notebook_meta.py` (266 lines) and `app/notebook_environment.py` (103): finding the setup block with `ast`, evaluating the `main_env` expression, rewriting the block from the tile's gear.
-- The launch's build path in `app/admin_app.py` (`_serve_notebook`, `_settle_launch`, `_keep_failure`, `_serve_built`, `_forget_build`) and the launch rows in the state table, so a build outlives a request and a redeploy.
+- The launch's build path in `app/launch.py` (`_serve_notebook`, `_settle_launch`, `_keep_failure`, `_serve_built`, `_forget_build`) and the launch rows in the state table, so a build outlives a request and a redeploy.
 - Pinning a built image by digest (`app/image_digest.py`, 113 lines, its ECR branch).
 - In this repo, `notebook_base`, `notebook_env` and their helpers in `notebooks/__init__.py`, the template's Pod section, and the Notebook Environment section of `docs/architecture/notebook.md`.
 
