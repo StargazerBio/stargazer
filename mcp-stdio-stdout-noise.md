@@ -1,6 +1,6 @@
 ---
 title: mcp-stdio-stdout-noise
-status: review
+status: done
 priority: low
 created: 2026-11-16
 pr: 170
@@ -13,5 +13,9 @@ The warning comes from `images.task_image()`'s `flyte.Image.from_pixi_script`, w
 ## Verification recipe
 
 Drive a stdio session the way `.mcp.json` starts the server (`pixi run stargazer`): write `initialize`, `notifications/initialized`, `tools/list` and a `tools/call` of `list_tasks` to its stdin, one JSON object per line, and read stdout until the `list_tasks` reply arrives. Every stdout line must parse as JSON, and Flyte's warning should be on stderr. Run it with the tenant `.flyte/config.yaml` and with none. On 2026-11-21, `main` printed 3 non-JSON lines before the `initialize` reply; the branch printed 0 in both cases. `tests/unit/test_server_stdio.py` checks the first line.
+
+## Outcome
+
+Shipped as StargazerBio/stargazer#170 (merged 2026-11-22, 08c1247): `server.py` sets `DISABLE_RICH_LOGGING=1` before `init_flyte()`, so Flyte logs to stderr and stdout carries only JSON-RPC; `tests/unit/test_server_stdio.py` checks the first stdout line; `docs/architecture/mcp-server.md` says so. Verified with the recipe: 3 non-JSON stdout lines on `main`, 0 on the branch with the tenant config and with none. Nothing left.
 
 Related: [[board]], [[mcp-tool-errors-reach-client]], [[robust-logging]].

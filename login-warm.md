@@ -1,6 +1,6 @@
 ---
 title: login-warm
-status: review
+status: done
 priority: low
 created: 2026-10-30
 pr: 45
@@ -13,8 +13,8 @@ A cold login waited ~60 s on GitHub's page while the login app (infra `app/login
 - [x] A pod template on `login_env` whose node selector pins it to `node.kubernetes.io/instance-type: t3a.large` (StargazerBio/infra#45, draft). The selector names the instance type, which every node is labeled with, so it holds whatever Union calls the pool.
 - [x] Union accepts pod templates on apps now (it refused them in May). Measured 2026-11-21 with a throwaway `pool-probe` app in `flytesnacks`: pinned to `r7i.2xlarge` it was scheduled on that pool. Pinned to `t3a.large` it stayed Pending, `incompatible requirements, key node.kubernetes.io/instance-type`, with no scale-up. Deactivated afterwards.
 - [x] The pin moved to infra `app/small_node.py` (`SMALL_NODE`), shared by `login_env` and, on Union only, the dashboard's `app_env` (the devbox's node is another type). The login image now installs `kubernetes`: with only its packages, `import app.login` failed on the first commit with `No module named 'kubernetes'`, and imports now.
-- [ ] Once the pool exists: deploy the login app and see it and a woken dashboard run on t3a.large nodes, then merge. Not before, since `stargazer-users upgrade` redeploys the login app and every dashboard, and their pods couldn't schedule.
-- [ ] Later: `Scaling(replicas=(1, 1))` on `login_env`, so a sign-in skips the cold start. Tried on infra#45's first commit and taken back out.
+- [ ] Moved to [[small-node-pool]]. Once the pool exists: deploy the login app and see it and a woken dashboard run on t3a.large nodes, then merge. Not before, since `stargazer-users upgrade` redeploys the login app and every dashboard, and their pods couldn't schedule.
+- [ ] Moved to [[small-node-pool]]. Later: `Scaling(replicas=(1, 1))` on `login_env`, so a sign-in skips the cold start. Tried on infra#45's first commit and taken back out.
 
 ## Verification recipe
 
@@ -23,5 +23,9 @@ A cold login waited ~60 s on GitHub's page while the login app (infra `app/login
 3. Open `stargazer.bio/login` to wake it, then `kubectl get pods -n admin-development -o wide | grep login` and `kubectl get node <node> -L node.kubernetes.io/instance-type`: `t3a.large`. Once always up, the pod also stays up past an hour idle.
 4. Wake the test account's dashboard (open it) and check its pod the same way in its project's namespace (`<project>-development`): `t3a.large`.
 5. Once always up, after the login app's idle hour, open `stargazer.bio/login` as the test account: GitHub's page passes straight to "Opening your workspace", with no ~60 s wait.
+
+## Outcome
+
+Shipped as StargazerBio/infra#45 (merged 2026-11-22, 60412f6): `app/small_node.py` (`SMALL_NODE`, a `t3a.large` node selector), the login image installing `kubernetes`, and the login app still scaling to zero. Union hasn't added the t3a.large pool yet (read-only kubectl, 2026-11-22: only g5.2xlarge, r7i.2xlarge and the buildkit nodes), so the user commented out login's pin before merging (655babe), and the dashboard's is commented out in StargazerBio/infra#46 (ticket [[small-node-off]]). Verified: tests and the per-target pod templates, the login image's imports, and the hard pin on the tenant with a throwaway app (above). Not deployed with the pin. Left: turning the pin back on once the pool exists, and one login replica always up, in ticket [[small-node-pool]].
 
 Related: [[board]], [[login-cold-start]].
