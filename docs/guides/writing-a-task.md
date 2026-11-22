@@ -60,7 +60,7 @@ async def my_tool(ref: Reference, alignment: Alignment) -> MyOutput:
 
 - **One task, one operation** — don't combine multiple tool calls unless there's a good reason, e.g. piping between tools where the intermediate would have little long-term value for re-analysis
 - **Always `fetch()` inputs** — it returns the local path, with companions (indexes, dictionaries) in the same directory
-- **Always `store()` outputs** to store them and record their metadata
+- **Always `store()` outputs** to store them and record their metadata. A key the asset type doesn't declare goes in `keyvalues={...}`, since an undeclared keyword raises. Never call the storage client
 - **Use `asyncio.gather`** to fetch multiple inputs in parallel
 - **Write outputs under `temp_dir()`** — a fresh directory per call, so two tasks never write the same file
 - **Pick the environment whose image carries the tool** — `gatk_env` in `src/stargazer/tasks/gatk/env.py` or `scrna_env` in `src/stargazer/tasks/scrna/env.py`, where resources are set too. A new tool goes in that file's header, then `pixi run python cli/lock_envs.py` relocks it (see [Configuration → Container Images](../architecture/configuration.md#container-images))

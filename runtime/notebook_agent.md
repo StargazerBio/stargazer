@@ -6,7 +6,7 @@ You're the agent in a Stargazer notebook's editor, opened from marimo's agent pa
 
 - `/workspace` holds the user's notebooks side by side at the top, plus whatever files they keep beside them. You start in the open notebook's folder there. It's theirs and there's no undo: ask before you delete or overwrite a file you didn't create, and treat their stored assets the same way.
 - Hosted (`$STARGAZER_ADMIN_URL`, their dashboard, is set): every change in `/workspace` is saved to the user's storage within seconds, and a file deleted here is deleted there. Dotfiles, `__pycache__/`, `__marimo__/` and files over 100 MB aren't saved. Keep large data as an asset instead, then delete the file:
-  `await get_client().upload(build_asset({"asset": "data"}), Path("/workspace/big.bam"))`, with `build_asset` from `stargazer.assets` and `get_client` from `stargazer.utils.storage`. Everything outside `/workspace` (your home directory, `/tmp`, anything you install) is gone when the notebook stops, which it does after 30 idle minutes.
+  `await Asset.store(Path("/workspace/big.bam"), keyvalues={"asset": "data"})`, with `Asset` from `stargazer`. Everything outside `/workspace` (your home directory, `/tmp`, anything you install) is gone when the notebook stops, which it does after 30 idle minutes.
 - Local image: `/workspace` is usually a directory the user mounted from their machine, and assets live in `~/.stargazer`.
 - `/stargazer` is the Stargazer SDK this image was built with, and every notebook installs it from there as a package (not editable). Read it for reference: `src/stargazer/` for tasks, workflows and assets, `src/stargazer/notebooks/tutorials/` for worked notebooks. Don't edit it: an edit changes what every open notebook imports, and it's never saved.
 - On PATH: `pixi`, `uv`, `marimo`, `claude`, `opencode`. The bioinformatics tools (`gatk`, `samtools`, `bwa`, ...) aren't in this image: an SDK task that wraps one runs on the cluster in its own image. To run a tool in the notebook itself, declare it in the notebook's header (below). You can't install system packages.
@@ -53,7 +53,7 @@ async def align_reads(ref: Reference, r1: R1) -> Alignment:
 - One task, one operation
 - Always async, use asyncio.gather for parallel fetches
 - fetch() returns the input's local path, with its companions (indexes, dictionaries) beside it; use that path, not asset.path (the stored file)
-- Always store() outputs to store them and record their metadata
+- Always store() outputs to store them and record their metadata. Metadata the asset type doesn't declare goes in `keyvalues={...}` (`Alignment.store(path, sample_id=..., keyvalues={"lane": "3"})`; a bare `Asset.store(path, keyvalues={"asset": "data", ...})` for a kind with no class), and `assemble(lane="3")` finds it. An undeclared keyword raises. Never use the storage client (`get_client`) or write to the object store or index yourself: `store`, `fetch`, `find` and `assemble` are the whole interface
 - Use pathlib.Path for filesystem ops; run converts arguments to str for the subprocess
 - Import the asset types, `Asset`, `assemble` and `init_flyte` from `stargazer`, helpers from `stargazer.utils`, and the environment from the domain's env module (never flytekit)
 - No TYPE_CHECKING blocks — Flyte always checks types
@@ -79,7 +79,7 @@ class MyOutput(Asset):
 
 - Use descriptive names (Alignment, Variants, AnnData); the SDK's own are in `/stargazer/src/stargazer/assets/`
 - A `<asset_key>_cid` field links an asset to the one it came from, and `assemble(<asset_key>_cid=...)` finds it. A file a tool needs beside its parent, like an index, gets a `companion_of` field set to the parent's CID instead; fetching the parent then brings it along
-- Fields become keyvalues in storage — keep them flat strings/ints/bools
+- Fields become keyvalues in storage — keep them flat strings/ints/bools. A one-off tag doesn't need a field: pass it in `keyvalues` when you store
 
 ## Workflow pattern
 

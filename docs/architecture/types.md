@@ -28,6 +28,8 @@ Subclasses declare `_asset_key`, a unique string naming the kind, plus typed dat
 
 **Extra keys.** A typed asset can carry keyvalues its class doesn't declare, as strings in `keyvalues`: an `Alignment` tagged `lane=3` stays an `Alignment`, and `assemble(lane="3")` finds it. Extras ride along between tasks, into the index and back through `assemble()`. A key is either a declared field or an extra, never both.
 
+A task writes an extra through `store`'s `keyvalues` argument: `Alignment.store(path, sample_id=..., keyvalues={"lane": "3"})`, or `Asset.store(path, keyvalues={"asset": "data", "lane": "3"})` for a kind no class describes. Passing an undeclared name as a keyword (`lane="3"`) raises, so a typo never becomes a key. Neither needs the storage client.
+
 **Serialization.** `str` fields pass through unchanged; everything else round-trips through JSON (`True` → `"true"`, `12` → `"12"`, a list → a JSON array).
 
 **The catchall.** A bare `Asset` (no `_asset_key`) carries a free-form `keyvalues` dict, for kinds of file no class describes yet. When a matching subclass is later defined, those records type-promote on the next query.
@@ -67,4 +69,4 @@ For one type, `Type.find_all(**filters)` is `assemble()` narrowed to that type's
 
 `utils/storage.py` defines `StorageClient`, the one storage interface. Bytes go to the object store, metadata to the index (one row per CID), public data joins queries from Pinata when `PINATA_JWT` is set, and a local cache sits in front of downloads. The CID comes from `utils/cid.py`, which builds the same UnixFS DAG Pinata does, so identity never depends on where a file is stored. Locations and settings are in [Configuration](configuration.md).
 
-Tasks never call storage directly. All storage interaction flows through `Asset.fetch()`, `Asset.store()` and `assemble()`.
+Tasks and notebooks never call the storage client directly, whatever metadata they write: all storage interaction flows through `Asset.fetch()`, `Asset.store()` and `assemble()`, and keys a type doesn't declare go in `store`'s `keyvalues` argument.
