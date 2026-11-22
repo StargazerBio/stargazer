@@ -1,6 +1,6 @@
 ---
 title: project-costs-daily
-status: later
+status: doing
 priority: low
 created: 2026-10-28
 ---
