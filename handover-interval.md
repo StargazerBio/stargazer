@@ -1,6 +1,6 @@
 ---
 title: handover-interval
-status: review
+status: done
 priority: normal
 created: 2026-11-22
 pr: 172
@@ -19,5 +19,9 @@ The page hands each socket over every four minutes (`ROTATE_MS` in `runtime/sock
 2. Launch a notebook in edit mode and open it in the browser; its page has `ROTATE_MS = 19 * 60 * 1000`.
 3. After 22 minutes, read-only kubectl (`KUBECONFIG=~/.kube/union`, `-n u-pryce-development`): the notebook container's log shows each socket's successor (`__sg_resume=`) at about 19 minutes and no close of the channel, and queue-proxy logs no timeout.
 4. Tear down: `union_dashboard.py teardown`.
+
+## Outcome
+
+Shipped in PR 172 (merge into `main` 2026-11-22): the page hands each socket over every 19 minutes, and the pod contract asks the pod manager for a request timeout of at least 20 minutes. Verified on the tenant on the branch's debug image: the session and agent sockets' successors joined their channels 19 min 1 s after they opened, and past the 20-minute mark none had been opened afresh and queue-proxy had logged no timeout. The PR drew no review comments. Nothing left.
 
 Related: [[board]], [[notebook-ws-timeout]], [[notebook-request-timeout]].
