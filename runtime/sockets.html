@@ -12,7 +12,8 @@
      the page.
 
   2. The platform cuts every request to the pod at its request timeout,
-     websockets included, five minutes by default. Each of the page's sockets
+     websockets included, which the pod contract has the pod manager set to
+     at least 20 minutes (docs/architecture/runtime.md). Each of the page's sockets
      names a channel the proxy keeps its upstream in (`__sg_rid`), and every
      ROTATE_MS hands it over to a successor connection: it stops sending, opens
      the successor with the count of frames it sent on the old connection
@@ -29,7 +30,9 @@
 (function () {
   if (window.__sgSockets) return; window.__sgSockets = true;
   var Native = window.WebSocket;
-  var ROTATE_MS = 4 * 60 * 1000;
+  // A minute inside the contract's 20-minute timeout leaves room for the
+  // retry after a failed handover.
+  var ROTATE_MS = 19 * 60 * 1000;
   var RETRY_MS = 30 * 1000;
   var origin = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host;
   var agents = {};
