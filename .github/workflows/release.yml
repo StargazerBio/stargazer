@@ -7,7 +7,10 @@
 # run's page: the tag is already pushed, so no later push retries it. Task
 # images aren't published: whoever runs a task builds its image from the
 # domain's `env.py` header (`task_image()` in images.py).
-# Infra pins one release and takes the package and notebook image from it.
+# Infra pins one release and takes the package and notebook image from it:
+# once both are published, the `pin` job opens the PR there that moves the
+# pin, for its owner to merge. It needs the `INFRA_PR_TOKEN` secret, a token
+# that can push branches and open PRs in StargazerBio/infra.
 # Union's nodes pull the notebook image straight from GHCR, which is public.
 name: Release
 on:
@@ -89,3 +92,38 @@ jobs:
             ghcr.io/stargazerbio/stargazer:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+  pin:
+    needs: [check, package, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.INFRA_PR_TOKEN }}
+      TAG: ${{ needs.check.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: StargazerBio/infra
+          token: ${{ secrets.INFRA_PR_TOKEN }}
+      - uses: astral-sh/setup-uv@v6
+      - name: Move infra's pin to the release
+        run: |
+          version="${TAG#v}"
+          branch="release/stargazer-$version"
+          sed -i "s/\"stargazer-bio==[^\"]*\"/\"stargazer-bio==$version\"/" pyproject.toml
+          # PyPI's index can lag the upload by a few minutes.
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            uv lock --upgrade-package stargazer-bio && break
+            [ "$attempt" = 10 ] && exit 1
+            sleep 30
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git commit -am "Pin Stargazer $version"
+          git push --force origin "$branch"
+          if [ -z "$(gh pr list --repo StargazerBio/infra --head "$branch" --json number -q '.[].number')" ]; then
+            gh pr create --repo StargazerBio/infra --base main --head "$branch" \
+              --title "Pin Stargazer $version" \
+              --body "Moves the pin to [$TAG](https://github.com/StargazerBio/stargazer/releases/tag/$TAG): the dashboard's package and the notebook pods' image."
+          fi
