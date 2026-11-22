@@ -1,6 +1,6 @@
 ---
 title: notebook-ws-timeout
-status: review
+status: done
 priority: high
 created: 2026-11-22
 pr: 171
@@ -25,5 +25,11 @@ Out of scope: a connection dropped by the network, not the platform's timeout, s
 2. Build the branch's image, push it to `ghcr.io/stargazerbio/debug:<tag>`, and deploy the test account's dashboard with it as the notebook image. Launch a notebook in edit mode, open the terminal and the agent panel, and leave them for 10 minutes.
 3. The terminal is still open with its shell's history, the agent answers in the same session, and no "session reconnected" appeared. Read-only kubectl (`~/.kube/union`): the pod's queue-proxy logs no `Request timeout`, and its notebook container logs each socket's handoffs every 4 minutes (`WebSocket ... __sg_resume=`).
 4. Tear down: deactivate the notebook app and the test account's dashboard.
+
+## Outcome
+
+Shipped in PR 171 (merge `adebe05`): the proxy keeps each socket's upstream in a channel, and `runtime/sockets.html` hands every same-origin socket over to a new connection before the platform's cut. Verified on the tenant on `ghcr.io/stargazerbio/debug:notebook-ws-timeout` (`e4b89096…`): the same shell from 05:12:40 to 05:23:28 UTC, an agent socket answering in one session ten minutes apart, every socket handed over each four minutes, and no `Request timeout`; four handover tests in `tests/unit/test_proxy.py`.
+
+The request timeout was raised to 20 minutes afterwards after all (infra PR 48, ticket notebook-request-timeout), and the handover interval follows it in ticket handover-interval. A connection the network drops still closes as before.
 
 Related: [[board]].

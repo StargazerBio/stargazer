@@ -1,6 +1,6 @@
 ---
 title: notebook-scaledown-setting
-status: review
+status: done
 priority: normal
 created: 2026-11-22
 pr: 47
@@ -22,5 +22,9 @@ A notebook pod kept running a fixed 30 minutes after its last connection closed 
 3. Launch a workspace notebook (`fetch('/launch', ...)` from the dashboard page), then read the app's spec: `App.get(name="nb-<slug>-edit", project="u-pryce").pb2.spec.autoscaling.scaledown_period` is 600 s; the dashboard's stays 3600 s.
 4. With no tab open on it, watch the pod (`KUBECONFIG=~/.kube/union kubectl get pods -n u-pryce-development`, read-only): it terminates about 10 minutes after it was ready.
 5. Put Keep running back to 30 and tear down (`union_dashboard.py teardown`).
+
+## Outcome
+
+Shipped in infra PR 47 (merge `c8747ed`): the `notebook_idle_minutes` setting, 5 to 120 minutes and 30 by default, in the Settings modal, passed to each launch's `scaledown_after`. Verified on the tenant: the saved 10 reached the app's spec as 600 s, 500 was refused with a 400, and an idle pod scaled to zero 9 min 57 s after it was ready; 447 unit tests. Nothing left: the dashboard's own scale-down stays fixed on purpose.
 
 Related: [[board]], [[notebook-ws-timeout]].

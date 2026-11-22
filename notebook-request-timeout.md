@@ -1,6 +1,6 @@
 ---
 title: notebook-request-timeout
-status: review
+status: done
 priority: normal
 created: 2026-11-22
 pr: 48
@@ -22,5 +22,9 @@ Conflicts with infra PR 47 on adjacent lines of `app/per_notebook.py`; whichever
 3. Open the notebook in the browser and wait seven minutes. The notebook container's log shows the `/ws` and `/__sg__/agent/<name>` sockets accepted once and never closed, and queue-proxy logs no timeout.
 4. `flyte --config .flyte/union.yaml update app nb-<slug>-edit --deactivate -p u-pryce -d development` with the tab open: the pod is gone within about a minute.
 5. Tear down: `union_dashboard.py teardown`.
+
+## Outcome
+
+Shipped in infra PR 48 (merge `a9627ab`, rebased onto PR 47): notebook pods set a 20-minute request timeout. Verified on the tenant: `timeoutSeconds: 1200` and a 1200 s grace period on the pod, the session and agent sockets open past seven minutes with no close, and a pod deactivated with sockets open gone in 53 s. Left: the page still hands sockets over every four minutes, which ticket handover-interval moves to 19.
 
 Related: [[board]], [[notebook-ws-timeout]], [[notebook-scaledown-setting]].
