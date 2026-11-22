@@ -53,7 +53,7 @@ async def align_reads(ref: Reference, r1: R1) -> Alignment:
 - One task, one operation
 - Always async, use asyncio.gather for parallel fetches
 - fetch() returns the input's local path, with its companions (indexes, dictionaries) beside it; use that path, not asset.path (the stored file)
-- Always store() outputs to store them and record their metadata. Metadata the asset type doesn't declare goes in `keyvalues={...}` (`Alignment.store(path, sample_id=..., keyvalues={"lane": "3"})`; a bare `Asset.store(path, keyvalues={"asset": "data", ...})` for a kind with no class), and `assemble(lane="3")` finds it. An undeclared keyword raises. Never use the storage client (`get_client`) or write to the object store or index yourself: `store`, `fetch`, `find` and `assemble` are the whole interface
+- Always store() outputs to store them and record their metadata. Metadata the asset type doesn't declare goes in `keyvalues={...}` (`Alignment.store(path, sample_id=..., keyvalues={"lane": "3"})`; a bare `Asset.store(path, keyvalues={"asset": "data", ...})` for a kind with no class), and `assemble(lane="3")` finds it. An undeclared keyword raises. `get_client` (from `stargazer.utils.storage`) is an escape hatch, a last resort for what `store`, `fetch`, `find` and `assemble` can't do: reach for it only after those fall short, never to write metadata
 - Use pathlib.Path for filesystem ops; run converts arguments to str for the subprocess
 - Import the asset types, `Asset`, `assemble` and `init_flyte` from `stargazer`, helpers from `stargazer.utils`, and the environment from the domain's env module (never flytekit)
 - No TYPE_CHECKING blocks — Flyte always checks types

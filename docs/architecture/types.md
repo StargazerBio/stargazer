@@ -69,4 +69,4 @@ For one type, `Type.find_all(**filters)` is `assemble()` narrowed to that type's
 
 `utils/storage.py` defines `StorageClient`, the one storage interface. Bytes go to the object store, metadata to the index (one row per CID), public data joins queries from Pinata when `PINATA_JWT` is set, and a local cache sits in front of downloads. The CID comes from `utils/cid.py`, which builds the same UnixFS DAG Pinata does, so identity never depends on where a file is stored. Locations and settings are in [Configuration](configuration.md).
 
-Tasks and notebooks never call the storage client directly, whatever metadata they write: all storage interaction flows through `Asset.fetch()`, `Asset.store()` and `assemble()`, and keys a type doesn't declare go in `store`'s `keyvalues` argument.
+Tasks and notebooks reach storage through `Asset.fetch()`, `Asset.store()` and `assemble()`, and keys a type doesn't declare go in `store`'s `keyvalues` argument. `get_client()` is an escape hatch for what those can't do, a last resort and not a way to write metadata.
