@@ -16,6 +16,16 @@ For what the notebooks themselves are, see [Notebooks](notebook.md). The launch,
 - **Claude Code and OpenCode**, pinned, for marimo's agent panel, with `/workspace/AGENTS.md` telling them where they are and how Stargazer notebooks, tasks and runs work. marimo's user config turns the panel on, and OpenCode's gives an MCP request an hour, since a run's tools answer when the run ends.
 - **The [MCP server](mcp-server.md)** in a venv of its own, built from the lock and installed from `/stargazer`, for the agents in the panel.
 
+### Where a notebook's packages come from
+
+A notebook's header is the only thing that says what it runs on. When it opens, its environment is built from that header, and each package comes from the nearest of three places:
+
+1. **The release's SDK, in the image.** `stargazer-bio` is installed from `/stargazer`, so the SDK is never downloaded and always matches the image.
+2. **The warm cache.** The packages the built-in notebooks list, and each domain's (GATK and its tools, scanpy) in the `amd64` image, are already on disk. Building an environment from them is a copy and a link, with nothing fetched.
+3. **The network.** Anything else a header lists, including a package a user installs from marimo's interface, is fetched when the environment is built. marimo adds an installed package to the header, so it's fetched again whenever that notebook's environment is rebuilt, for example on a new pod.
+
+No environment is prebuilt, tutorials included, because a header can change at any time: an environment kept for a header would serve only a notebook nobody has edited, at the one path it was built for. The cache holds packages, so a header that adds one package to a cached set still downloads only that one. A new domain's packages join the cache through its `env.py` header, and the notebooks themselves never grow the image.
+
 **Run locally**, the image's entrypoint copies its notebooks into `/workspace` (a file already there is left alone, so a mounted directory keeps the user's edits) and opens the first tutorial in edit mode. Runs stay in the notebook's own process, with their records in SQLite. There's no sign-in and no store, so the proxy only forwards.
 
 **Run on a cluster**, Flyte replaces the entrypoint with its own, which runs the launch command the pod manager gives it.
