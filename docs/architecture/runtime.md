@@ -10,11 +10,21 @@ For what the notebooks themselves are, see [Notebooks](notebook.md). The launch,
 
 - **The SDK's source at `/stargazer`.** Notebooks don't run in the image's Python: each notebook's PEP 723 header installs `stargazer-bio` from `/stargazer` as a package, not editable, and marimo's pixi sandbox builds the notebook an environment from that header when it opens, conda packages and PyPI ones. So a notebook's kernel runs the image's release, the SDK's tasks on images built from their domains' headers with that release on top, and a notebook's own tasks on an image built from its header. The built-in notebooks are under `/stargazer/src/stargazer/notebooks/`.
 - **pixi**, which builds those environments, newer than the pixi Flyte's image builder uses, since marimo needs its `install --script`.
-- **A warm cache** at `/opt/pixi-cache` and `/opt/uv-cache`: the built-in notebooks' packages, each domain's packages and tools (in the `amd64` image), and the marimo layers marimo puts over the server and each kernel, plus a ready environment for each tutorial at the path a hosted pod opens it from. There a tutorial opens without installing anything, and any other notebook downloads only what its header adds. How the cache is built and kept matching is commented in `runtime/Dockerfile`.
+- **A warm cache** at `/opt/pixi-cache` and `/opt/uv-cache`: the built-in notebooks' packages, each domain's packages and tools (in the `amd64` image), and the marimo layer marimo puts over the server. A notebook's environment is built from it where the notebook is opened, tutorials included, so it downloads only what its header adds. How the cache is built and kept matching is commented in `runtime/Dockerfile`.
 - **The runtime venv**: `flyte`, the launcher marimo (pinned, and put into every sandbox, so the kernel and the launcher are the same build), `pydantic-ai-slim` with the OpenAI and Anthropic providers for marimo's AI chat and completions, and the proxy's web packages.
 - **No bioinformatics tools installed.** A task run on the cluster gets its tools from its own environment's image. A notebook that runs a tool in its own process, in a cell or in a task run on its own machine, declares it in its header ([Notebook Environment](notebook.md#notebook-environment)).
 - **Claude Code and OpenCode**, pinned, for marimo's agent panel, with `/workspace/AGENTS.md` telling them where they are and how Stargazer notebooks, tasks and runs work. marimo's user config turns the panel on, and OpenCode's gives an MCP request an hour, since a run's tools answer when the run ends.
 - **The [MCP server](mcp-server.md)** in a venv of its own, built from the lock and installed from `/stargazer`, for the agents in the panel.
+
+### Where a notebook's packages come from
+
+A notebook's header is the only thing that says what it runs on. When it opens, its environment is built from that header, and each package comes from the nearest of three places:
+
+1. **The release's SDK, in the image.** `stargazer-bio` is installed from `/stargazer`, so the SDK is never downloaded and always matches the image.
+2. **The warm cache.** The packages the built-in notebooks list, and each domain's (GATK and its tools, scanpy) in the `amd64` image, are already on disk. Building an environment from them is a copy and a link, with nothing fetched.
+3. **The network.** Anything else a header lists, including a package a user installs from marimo's interface, is fetched when the environment is built. marimo adds an installed package to the header, so it's fetched again whenever that notebook's environment is rebuilt, for example on a new pod.
+
+No environment is prebuilt, tutorials included, because a header can change at any time: an environment kept for a header would serve only a notebook nobody has edited, at the one path it was built for. The cache holds packages, so a header that adds one package to a cached set still downloads only that one. A new domain's packages join the cache through its `env.py` header, and the notebooks themselves never grow the image.
 
 **Run locally**, the image's entrypoint copies its notebooks into `/workspace` (a file already there is left alone, so a mounted directory keeps the user's edits) and opens the first tutorial in edit mode. Runs stay in the notebook's own process, with their records in SQLite. There's no sign-in and no store, so the proxy only forwards.
 

@@ -147,11 +147,10 @@ USER flyte
 # the server starts under a `--with marimo[lsp]` layer over the runtime venv,
 # and a notebook's sandbox installs its header's environment with pixi, then
 # starts the kernel under a `--with marimo` layer over it, both layers by uv
-# through `pixi exec`. pixi keys a notebook's environment on its path, so the
-# tutorials' are built where a hosted pod opens them, under /stargazer; any
-# other path builds its own from the cache. The templates are only ever opened
-# as copies, so only their packages are kept. So are each domain's, from its
-# `env.py` header: a notebook that runs a domain's tasks in its kernel lists
+# through `pixi exec`. pixi keys a notebook's environment on its path, so none
+# is kept: every notebook builds its own from the cache where it's opened, and
+# only the packages of each notebook's header stay. So are each domain's, from
+# its `env.py` header: a notebook that runs a domain's tasks in its kernel lists
 # those packages in its own header. The domains are locked for linux-64, the
 # cluster's platform, so only that build of this image holds them. Within this
 # layer hardlinks cost nothing. The marimo layers resolve as of this step's
@@ -170,10 +169,7 @@ RUN export PIXI_NO_HARD_LINKS=false PIXI_NO_REF_LINKS=false \
         env="$(pixi install --script "$nb" 2>&1 \
             | sed -n "s/.*installed at '\(.*\)'\.$/\1/p")" \
         && [ -n "$env" ] \
-        && case "$nb" in */templates/*|*/tasks/*) \
-            rm -rf "${env%/envs/*}"; continue ;; esac \
-        && $UV run -q --no-project --python "$env/bin/python" \
-            --with marimo==0.25.1 -- python -c 'import marimo, stargazer' \
+        && rm -rf "${env%/envs/*}" \
         || exit 1; \
     done
 
