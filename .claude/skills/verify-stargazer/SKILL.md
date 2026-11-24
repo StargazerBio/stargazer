@@ -85,7 +85,7 @@ Preconditions: the devbox is up, `devbox/setup.sh` has run since it was last cre
 
 ## Union tenant
 
-For what only Union has: its login and RBAC, the remote image builder, notebook launch. Tasks and workflows run there from a checkout with `.flyte/union.yaml` and `STARGAZER_API_KEY_SECRET=UNION_API_KEY` exported.
+For what only Union has: its login and RBAC, the remote image builder, notebook launch. Tasks and workflows run there from a checkout with `--config ~/.flyte/union.yaml` and `STARGAZER_API_KEY_SECRET=UNION_API_KEY` exported.
 
 A notebook or runtime change reaches Union in the image a dashboard launches, which is a release's. To drive it before a release:
 

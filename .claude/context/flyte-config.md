@@ -18,7 +18,7 @@ How the `flyte` CLI and SDK find the cluster they talk to. Source: [[flyte-v2-do
 
 ## In Stargazer
 
-- **The two local configs** (`.flyte/config.yaml` for the devbox, `.flyte/union.yaml` for the tenant) and why `image.registry` stays out of them are in `AGENTS.md`.
+- **The two local configs** (`~/.flyte/config.yaml` for the devbox, `~/.flyte/union.yaml` for the tenant) and why `image.registry` stays out of them are in `AGENTS.md`.
 - **The one init** is `init_flyte()` in `config.py`, whose comments say why a hosted pod inits differently.
 
 ## Related

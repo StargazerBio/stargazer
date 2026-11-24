@@ -4,7 +4,7 @@ These tests run on the local devbox, so they need it up, `devbox/setup.sh`
 applied since it was created (it also starts the Postgres server that holds
 the asset index), kubectl pointed at it, and `FLYTE_IMAGE_REGISTRY` naming
 its registry, `localhost:30000`. The session points Flyte at the devbox with
-`.flyte/config.yaml`, bundling code from the repo root as SDK code does by
+`~/.flyte/config.yaml`, bundling code from the repo root as SDK code does by
 default, and holds the store port-forward open while runs upload their code
 and inputs.
 Runs carry the devbox storage settings in their run context, so nothing needs
