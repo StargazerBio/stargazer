@@ -5,7 +5,7 @@ Exposes storage tools and a dynamic task runner via the MCP SDK's
 high-level `MCPServer`.
 Tasks and workflows are auto-discovered from the registry and executed
 with `flyte.run`: remotely when `init_flyte()` finds an endpoint in
-`.flyte/config.yaml`, in-process otherwise.
+`~/.flyte/config.yaml`, in-process otherwise.
 
 Usage:
     stargazer              # stdio transport (default)

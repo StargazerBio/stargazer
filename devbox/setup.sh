@@ -88,7 +88,7 @@ while [ $# -gt 0 ]; do
 done
 
 dex()  { docker exec "$CONTAINER" "$@"; }
-flyte_cli() { pixi run --manifest-path "$REPO/pyproject.toml" flyte --config "$REPO/.flyte/config.yaml" "$@"; }
+flyte_cli() { pixi run --manifest-path "$REPO/pyproject.toml" flyte --config "$HOME/.flyte/config.yaml" "$@"; }
 kc()   { docker exec "$CONTAINER" kubectl "$@"; }
 # Run a mutating command, or just print it under --dry-run.
 run()  { if [ "$DRY_RUN" = 1 ]; then printf '   %s[dry-run]%s %s\n' "$c_yellow" "$c_off" "$*"; else "$@"; fi; }

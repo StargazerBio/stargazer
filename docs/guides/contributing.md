@@ -77,7 +77,7 @@ Every change goes through a pull request — nothing is committed directly to `m
     git worktree add --no-track .claude/worktrees/scrna-oom -b fix/scrna-oom origin/main
     ```
 
-    The worktree starts without your Flyte configs and test secrets; link `.flyte/{config,union}.yaml` and `tests/.secrets` from the main checkout as the change needs them.
+    The worktree starts without your test secrets; link `tests/.secrets` from the main checkout when the change needs them. Your Flyte configs live in `~/.flyte/`, so every worktree finds them.
 
 2. Commit as you go, one change per worktree.
 3. When tests pass and the change works on its real surface, push and open a PR with `gh pr create --base main`. Say what changed and why, how you verified it, and anything deferred.
