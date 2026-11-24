@@ -1,8 +1,9 @@
 ---
 title: relaunch-splits-session
-status: doing
+status: review
 priority: high
 created: 2026-11-24
+pr: 56
 ---
 
 Opening a running notebook from the dashboard (Open, or Edit/Run again)
@@ -26,20 +27,22 @@ marimo reader, and its three Take over POSTs got `401` from the new pod.
 
 Fix is in `StargazerBio/infra`, branch `fix/relaunch-splits-session`.
 
-- [ ] Version a per-notebook app by its spec: the md5 of the app spec Flyte
+- [x] Version a per-notebook app by its spec: the md5 of the app spec Flyte
       deploys (`translate_app_env_to_idl`, with the version left empty),
       passed to `with_servecontext(version=...)`. Same spec, same version, so
       no new revision. Any real change (image, resources, env, settings)
       still makes a new version.
-- [ ] Serve per-notebook apps with `copy_style="none"`: the pod runs the
+- [x] Serve per-notebook apps with `copy_style="none"`: the pod runs the
       image's launch script, and the dashboard's code bundle in its spec
       only ties notebook pods to dashboard code changes.
-- [ ] Unit test: two separately built envs for one launch get the same
+- [x] Unit test: two separately built envs for one launch get the same
       version, and changing what the pod runs changes it.
-- [ ] Verify on the tenant: Open a running notebook, then redeploy the
+- [x] Verify on the tenant: Open a running notebook, then redeploy the
       dashboard and Open again. The revision count stays at one and the open
       tab keeps editing. Stop then Launch still brings the pod back, and a
       changed setting still redeploys it.
+      PR is StargazerBio/infra#56, with the evidence. The changed-setting case
+      wasn't driven on the tenant; the unit test covers it.
 
 A real spec change on Open still replaces a pod that has a tab open, with
 the same split. That's left for a follow-up, if it bites.
