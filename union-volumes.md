@@ -1,13 +1,13 @@
 ---
 title: union-volumes
-status: later
+status: doing
 priority: normal
 created: 2026-11-25
 ---
 
-Union shipped Volumes: a durable, versioned filesystem a task or app mounts like a directory. It's JuiceFS over the cluster's bucket, plus a metadata store for versions and copy-on-write forks, mounted through a broker DaemonSet (`volumes.union.ai` CSI driver), so a pod needs no `CAP_SYS_ADMIN` or `/dev/fuse`. This ticket weighs where it simplifies Stargazer's state and where it doesn't.
+Union shipped Volumes: a durable, versioned filesystem a task or app mounts like a directory. It's JuiceFS over the cluster's bucket, plus a metadata store for versions and copy-on-write forks, mounted through a broker DaemonSet (`volumes.union.ai` CSI driver), so a pod needs no `CAP_SYS_ADMIN` or `/dev/fuse`. The aim: put the notebook workspace on volumes and delete the autosave and workspace-state code built around the object-per-file store.
 
-**Where it stands (2026-11-25):** nothing worth building yet. A spike on the tenant found that under our per-user roles no volume can be written at all, that a read-only volume can't hold a notebook's environment because pixi writes into it, and that the environment it would have saved builds in 3 to 6 s from the image's warm cache anyway. Revisit if Union lets a volume's chunks live under a prefix, or if notebooks start needing environments the warm cache doesn't cover.
+**Where it stands (2026-11-25):** a spike on the tenant (below) showed volumes work on the cluster but no per-user role could write one, since a volume's chunks live at the bucket root. Infra PR 57 grants each role `vol-<subject>-*`; it waits on apply. Notebook environments stay in the image and its warm cache: a read-only volume can't hold one (pixi writes into it), and they build in 3 to 6 s anyway. The open decision is which writer model the workspace takes ([Plan](#plan-the-workspace-on-volumes)).
 
 ## What it is
 
@@ -23,7 +23,7 @@ Read in the docs (`user-guide/tasks/task-programming/volumes/` and its `in-tasks
 
 **The cluster is ready.** The `volumes.union.ai` CSI driver and the `union-uvol-broker` DaemonSet (worker nodes, 2/2 ready) are installed, and Knative's `config-features` has `kubernetes.podspec-volumes-csi` and `kubernetes.podspec-volumes-mount-propagation` enabled (read with `kubectl get`). An app pod with `allow_volumes()` was ready about 4 s after deploy.
 
-**Per-user roles can't write a volume.** In `u-pryce`, as `stargazer-user-u-pryce`, `juicefs format` failed with S3 `AccessDenied` on `PutObject` to `s3://stargazerbio-users/volprobe-p1/`. The bucket policy gives each role only `users/${aws:PrincipalTag/stargazer-subject}/*`, and a volume's chunks land at the bucket root. Making it work would take a bucket-policy statement keyed on a name prefix (say `stargazerbio-users/v-${aws:PrincipalTag/stargazer-subject}-*`, with names to match), or a chunk prefix option from Union. Run `u5qpkqtbld7dq4nl4v6k`, aborted.
+**Per-user roles can't write a volume.** In `u-pryce`, as `stargazer-user-u-pryce`, `juicefs format` failed with S3 `AccessDenied` on `PutObject` to `s3://stargazerbio-users/volprobe-p1/`. The bucket policy gave each role only `users/${aws:PrincipalTag/stargazer-subject}/*`, and a volume's chunks land at the bucket root. Run `u5qpkqtbld7dq4nl4v6k`, aborted. Infra PR 57 adds `vol-${aws:PrincipalTag/stargazer-subject}-*` to the role's objects and listing: a fork's chunk branch is its own name's first 50 characters plus a random suffix (`_fresh_format_name`), so every volume and fork named `vol-<subject>-...` stays inside it.
 
 **Volumes work under the shared role.** The rest ran in `flytesnacks`, as `union-us-west-2-stargazerbio-userflyterole`, with `bucket="s3://union-us-west-2-stargazerbio"`, 2 CPU and 4Gi:
 
@@ -39,17 +39,45 @@ Read in the docs (`user-guide/tasks/task-programming/volumes/` and its `in-tasks
 
 **And the build it would save is short.** The same header built cold in 3.05 s in task C and 3.2 to 6.5 s in app `volprobe-novol`, which reached `/__sg__/ready` in 8.3 to 10.4 s and got `kernel-ready` 6 to 7 s later. A volume mount costs about 1 to 1.5 s, so even working it would save a few seconds on a header like this. Larger headers weren't measured.
 
-## Where it could still fit
+## Plan: the workspace on volumes
 
-- **Environments the warm cache doesn't cover.** Only if a writable mount works: a pod forks the header's volume and mounts the fork read-write, so pixi can take its lock and relink the path dependency, and the fork is thrown away. Untested, and worth it only for headers that download a lot.
-- **Reference data for task fan-outs.** A read-only volume of a reference and its companions, with a shared node cache, read lazily once per node instead of downloaded by every task pod. It cuts across the asset model, so measure first how long task pods spend fetching a full-size reference.
-- Both need the per-user write path above first.
+### What it replaces
 
-## Where it doesn't
+Today every file in a user's workspace is an object at `<STARGAZER_WORKSPACE_ROOT>/users/<subject>/workspace/<path>`, and each notebook pod copies the whole workspace in and syncs it back (line counts on `main`, 2026-11-25):
 
-- **The asset store and index.** An asset is a file named by its CID, stored once per user, listed and queried by the dashboard and every pod at once, and published to Pinata by CID. The index takes concurrent writes from parallel tasks. A single-writer volume can do neither, and the SDK has to run the same locally and on the devbox, which have no broker.
-- **The workspace.** A volume would replace hydrate and the save loop in `runtime/proxy.py` with `mount()` and a periodic `commit()`, with version history for free. But every notebook pod hydrates the owner's whole workspace and saves back to it, so a user with two notebooks open is two writers, and the dashboard deletes and uploads notebooks while pods are live. It fits only if a user's workspace has one writer, which is a change to the pod model.
-- **Agent sign-ins and the state table.** Small, and fine as they are.
+- `runtime/proxy.py`: hydrate and the prefix download (about 100 lines), and the save pass, sign-in save, save status and the shutdown flush (about 190): diffing by size and mtime, mirroring deletes, not resurrecting a file the dashboard deleted, never saving the blank of a notebook that didn't hydrate, the 100 MB cap. Plus `runtime/save_banner.html` (142 lines) and the save tests in `tests/unit/test_proxy.py`.
+- Infra: `app/workspace_store.py` (128 lines, the object-per-file layout), the workspace store's layout in the pod contract, `SG_SAVE_INTERVAL_SECONDS`, and every dashboard route that reads or writes a notebook's object.
+- The races they guard, each with a ticket: [[conditional-workspace-writes]], [[gear-save-race]], [[delete-running-notebook-resurrects]], [[unhydrated-notebook-banner]], [[save-status-poll]].
+
+### What a volume gives, and what it doesn't
+
+A pod mounts in about 1 s whatever the workspace's size, reads lazily, has no file-size cap, and every commit is a version a user could go back to. But a volume has **one writer**. JuiceFS keeps the filesystem's metadata on the pod's disk (`badger:///home/flyte/.flyte-volume/...`) until `commit()` uploads it, so:
+
+- **Saving doesn't disappear, it shrinks.** A pod still commits on a timer and once more at shutdown (`finalize()`), or a crash loses everything since the last commit. That's a few lines in place of the diffing and mirroring above.
+- **Something has to name the latest version.** A pod forks it to write, so each commit produces a new locator, recorded where the next pod and the dashboard read it: a row in the user's state table, updated only if it still names the version the pod forked (a compare-and-set, which turns today's silent last-writer-wins into a refusal).
+- **Versions pile up.** Each commit is kept until pruned, and the SDK has no prune or delete. Commit only when something changed, and work out retention before it ships.
+- **Two writers can't share one volume.** Today a user with two notebooks open has two pods writing one workspace, and the dashboard writes notebooks (create, copy, open from GitHub, the gear, delete) while pods run. That's the decision below.
+
+### Decision: who writes a workspace
+
+- **A. One volume per user, one pod per user.** One workspace pod mounts it read-write and serves every notebook. The dashboard's notebook routes become file operations in that pod, or the dashboard joins it. Removes the most: the sync, and also per-notebook apps and their launch state. But it's a new pod model: one pod's memory for every open kernel, no per-notebook size (`main_env`), and run-mode pods that only read a version. Unknown whether marimo serves a directory with a pixi sandbox per notebook.
+- **B. One volume per notebook (recommended).** A notebook's folder is its own volume. Its edit pod is the only writer, which the per-notebook app already guarantees (one replica per notebook and mode), and its run-mode pod mounts the latest version read-only, so it runs a consistent snapshot. The dashboard writes a notebook's volume only while no pod has it, as the gear already checks (`_notebook_running`): create, copy and open-from-GitHub make a new volume holding the file, and delete stops the pods and drops the pointer. Tiles read each notebook's name and description from the state table, written when the dashboard or the pod commits, so listing mounts nothing. The cost: a notebook sees only its own folder, so files shared between notebooks go, and data belongs in the asset store, as it already does across pods. Agent sign-ins are per user and written by every pod, so they keep today's small sync under `agents/`.
+
+Both drop the devbox's persistence: it has no mount broker, and Union comes first. Locally nothing changes, since nothing is saved there today.
+
+### Pieces (for B)
+
+- [ ] Infra PR 57: each role may write `vol-<subject>-*` (waits on apply), then a task in `u-pryce` creates, commits and remounts a `vol-<subject>-...` volume as the user's own role.
+- [ ] Flyte to `>=2.13.4` in the lock and `flyteplugins-union` in the image's runtime venv (it has `flyte` 2.14.0); infra's too.
+- [ ] Pod side, `runtime/proxy.py`: mount the notebook's volume (fork the latest version in edit mode, read-only in run mode) at `/workspace`, commit when something changed, finalize at shutdown, compare-and-set the pointer. `UNION_VOLUME_BUCKET=s3://stargazerbio-users` and `UNION_VOLUME_METADATA_PREFIX=<store>/users/<subject>/volumes`: outside a task the client's default metadata prefix is `<bucket>/versions`, at the root, which the role can't write. Delete hydrate, the save pass, the save status and the banner. The pod contract changes.
+- [ ] Infra side: `allow_volumes()` on notebook apps and the dashboard (merged with `SMALL_NODE`), the pointer and tile rows in the state table, the dashboard's notebook routes on volumes, `workspace_store.py` gone. Existing workspaces move once (no backwards compatibility).
+- [ ] Retention: how many versions a notebook keeps, and how older ones go.
+
+## Elsewhere
+
+- **Environments the warm cache doesn't cover.** A pod would fork the header's volume and mount the fork read-write, so pixi can take its lock and relink the path dependency. Untested, and worth it only for headers that download a lot.
+- **Reference data for task fan-outs.** A read-only volume of a reference and its companions, with a shared node cache, read once per node instead of downloaded by every task pod. Measure how long task pods spend fetching a full-size reference first.
+- **Not the asset store or index.** An asset is a file named by its CID, listed and queried by the dashboard and every pod at once and published to Pinata by CID, and the index takes concurrent writes from parallel tasks.
 
 ## Gotchas
 
