@@ -1,8 +1,9 @@
 ---
 title: union-volumes
-status: doing
+status: review
 priority: normal
 created: 2026-11-25
+pr: 178
 ---
 
 Union shipped Volumes: a durable, versioned filesystem a task or app mounts like a directory. It's JuiceFS over the cluster's bucket, plus a metadata store for versions and copy-on-write forks, mounted through a broker DaemonSet (`volumes.union.ai` CSI driver), so a pod needs no `CAP_SYS_ADMIN` or `/dev/fuse`. The aim: put the notebook workspace on volumes and delete the autosave and workspace-state code built around the object-per-file store.
