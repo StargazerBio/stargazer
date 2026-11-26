@@ -4,10 +4,12 @@ The proxy is baked into the notebook image as a standalone module; here we
 import it directly. Covered: what the proxy forwards from the platform-forwarded
 `X-User-Subject`, the signed-token gate on Union, what is (not) forwarded to
 marimo, the starting page while marimo is cold, the agent bridge, agent-redirect
-and save-banner injection and streaming passthrough, and the workspace
-hydrate/sync against a local store root through the real `flyte.storage`
-calls. The upstream marimo server is faked with an
-`httpx.MockTransport` installed as the proxy's shared upstream client.
+and refused-write banner injection and streaming passthrough, the notebook
+manifest's conditional writes against an in-memory object store, and the agents'
+sign-ins against a local store root through the real `flyte.storage` calls. The
+upstream marimo server is faked with an `httpx.MockTransport` installed as the
+proxy's shared upstream client. The volume mount itself needs Union's broker and
+isn't covered here.
 """
 
 import asyncio
@@ -19,6 +21,8 @@ import time
 from typing import ClassVar
 
 import httpx
+import obstore
+import obstore.store
 import pytest
 import uvicorn
 import websockets.asyncio.server
@@ -512,31 +516,33 @@ def _serve_html(upstream):
     )
 
 
-def test_proxy_injects_the_agent_redirect_and_banner_into_html(
-    owner_client, upstream, monkeypatch, tmp_path
-):
-    """With a store, HTML gets the agent redirect and the save banner before </body>."""
-    monkeypatch.setenv("STARGAZER_WORKSPACE_ROOT", str(tmp_path / "store"))
+def test_proxy_injects_the_agent_redirect_into_html(owner_client, upstream):
+    """HTML gets the agent redirect before </body>, and no banner."""
     _serve_html(upstream)
 
     resp = owner_client.get("/")
 
     assert resp.status_code == 200
-    for injected in (b"/__sg__/agent/", b"sg-save-banner"):
-        assert resp.content.index(injected) < resp.content.index(b"</body>")
-    assert b"/__sg__/term" not in resp.content
-    assert b"/__sg__/save-status" in resp.content
-
-
-def test_proxy_leaves_the_banner_out_without_a_store(owner_client, upstream):
-    """Without a store nothing is saved, so HTML gets the agent redirect but no banner."""
-    _serve_html(upstream)
-
-    resp = owner_client.get("/")
-
     assert resp.content.index(b"/__sg__/agent/") < resp.content.index(b"</body>")
-    assert b"sg-save-banner" not in resp.content
-    assert b"/__sg__/save-status" not in resp.content
+    assert b"/__sg__/term" not in resp.content
+    assert b"no longer save" not in resp.content
+
+
+def test_proxy_warns_on_every_page_once_the_manifest_refused_a_write(
+    owner_client, upstream, monkeypatch, tmp_path
+):
+    """After a refused manifest write the page says its changes no longer save."""
+    notebook = proxy._NotebookVolume(
+        obstore.store.MemoryStore(), "m.json", tmp_path, True
+    )
+    monkeypatch.setattr(proxy, "_notebook", notebook)
+    _serve_html(upstream)
+    assert b"no longer save" not in owner_client.get("/").content
+
+    notebook.refused = True
+
+    page = owner_client.get("/").content
+    assert page.index(b"no longer save") < page.index(b"</body>")
 
 
 def test_proxy_streams_non_html_untouched(owner_client, upstream):
@@ -579,235 +585,92 @@ def test_proxy_forwards_method_and_body(owner_client, upstream):
 
 
 # ---------------------------------------------------------------------------
-# Workspace hydrate + sync against a local store root
+# The notebook's volume: change detection and the manifest's conditional writes
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def pod_dirs(tmp_path, monkeypatch):
-    """Point the pod's workspace dir and the store root at tmp paths."""
-    store = tmp_path / "store"
-    monkeypatch.setenv("STARGAZER_WORKSPACE_ROOT", str(store))
-    monkeypatch.setattr(proxy, "WORKSPACE_DIR", tmp_path / "workspace")
-    monkeypatch.setattr(proxy, "_synced", {})
-    monkeypatch.setattr(proxy, "_sign_ins_synced", {})
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    return tmp_path / "workspace", store / "users" / OWNER / "workspace"
+def _manifest_store(tmp_path):
+    """An in-memory store holding a notebook's manifest, and a volume wrapper on it.
+
+    The wrapper has no volume: only the manifest side is exercised.
+    """
+    store = obstore.store.MemoryStore()
+    first = obstore.put(
+        store,
+        "m.json",
+        json.dumps({"locator": "s3://b/v1", "file": "nb.py", "source": "v1"}).encode(),
+        mode="create",
+    )
+    notebook = proxy._NotebookVolume(store, "m.json", tmp_path, True)
+    notebook.file = "nb.py"
+    notebook.etag = first["e_tag"]
+    return store, notebook
 
 
-@pytest.fixture
-def pod_home(pod_dirs, tmp_path):
-    """The pod's home directory and where the owner's sign-ins are stored."""
-    return tmp_path / "home", tmp_path / "store" / "users" / OWNER / "agents"
+def _manifest(store):
+    """The manifest object's current content."""
+    return json.loads(bytes(obstore.get(store, "m.json").bytes()))
 
 
-def test_hydrate_restores_every_file_at_its_path(pod_dirs):
-    """Launch fills /workspace with every stored file, folders included."""
-    workspace, stored = pod_dirs
-    (stored / "data").mkdir(parents=True)
-    (stored / "qc.py").write_text("# qc\n")
-    (stored / "data" / "counts.csv").write_text("a,b\n")
+async def test_manifest_names_each_version_with_the_notebook_text(tmp_path):
+    """Each commit's locator and the file's text replace the manifest's, in turn."""
+    store, notebook = _manifest_store(tmp_path)
 
-    proxy.hydrate()
+    await notebook._write_manifest("s3://b/v2", "second")
+    await notebook._write_manifest("s3://b/v3", "third")
 
-    assert (workspace / "qc.py").read_text() == "# qc\n"
-    assert (workspace / "data" / "counts.csv").read_text() == "a,b\n"
-
-
-def test_hydrate_new_user_gets_an_empty_dir(pod_dirs):
-    """A user with nothing stored starts with an empty, existing directory."""
-    workspace, _ = pod_dirs
-
-    proxy.hydrate()
-
-    assert sorted(p.name for p in workspace.iterdir()) == []
-
-
-async def test_sync_saves_changed_files_at_their_paths(pod_dirs):
-    """Unchanged hydrated files stay put; edits and new files of any kind save."""
-    workspace, stored = pod_dirs
-    stored.mkdir(parents=True)
-    (stored / "qc.py").write_text("# qc\n")
-    await proxy.hydrate_async()
-    proxy._seed_from_disk()
-
-    assert await proxy.sync_once() == []
-
-    (workspace / "qc.py").write_text("# qc v2\n")
-    (workspace / "data").mkdir()
-    (workspace / "data" / "counts.csv").write_text("a,b\n")
-    (workspace / "_scratch.py").write_text("# scratch\n")
-
-    assert await proxy.sync_once() == ["_scratch.py", "data/counts.csv", "qc.py"]
-    assert (stored / "qc.py").read_text() == "# qc v2\n"
-    assert (stored / "data" / "counts.csv").read_text() == "a,b\n"
-    assert await proxy.sync_once() == []
-
-
-async def test_sync_skips_dotfiles_and_caches(pod_dirs):
-    """Dotfiles, and Python's and marimo's caches, are never saved."""
-    workspace, stored = pod_dirs
-    for rel in (
-        ".env",
-        ".ipynb_checkpoints/a.py",
-        "__marimo__/session/qc.py.json",
-        "__pycache__/qc.cpython-313.pyc",
-        "lib/__pycache__/helpers.cpython-313.pyc",
-    ):
-        (workspace / rel).parent.mkdir(parents=True, exist_ok=True)
-        (workspace / rel).write_text("x")
-
-    assert await proxy.sync_once() == []
-    assert not stored.exists()
-
-
-async def test_same_size_and_mtime_is_not_read(pod_dirs):
-    """An edit that keeps a file's size and mtime goes unseen: it isn't read."""
-    workspace, stored = pod_dirs
-    workspace.mkdir()
-    path = workspace / "a.txt"
-    path.write_text("aaaa")
-    assert await proxy.sync_once() == ["a.txt"]
-
-    before = path.stat()
-    path.write_text("bbbb")
-    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
-
-    assert await proxy.sync_once() == []
-    assert (stored / "a.txt").read_text() == "aaaa"
-
-
-async def test_deleted_file_is_deleted_from_the_store(pod_dirs):
-    """A hydrated file deleted from /workspace is deleted from the store too."""
-    workspace, stored = pod_dirs
-    (stored / "data").mkdir(parents=True)
-    (stored / "qc.py").write_text("# qc\n")
-    (stored / "data" / "old.csv").write_text("x\n")
-    await proxy.hydrate_async()
-    proxy._seed_from_disk()
-
-    (workspace / "data" / "old.csv").unlink()
-    await proxy.sync_once()
-
-    assert not (stored / "data" / "old.csv").exists()
-    assert (stored / "qc.py").read_text() == "# qc\n"
-
-
-async def test_a_file_deleted_from_the_store_is_not_put_back(pod_dirs):
-    """A file the dashboard deletes while the pod holds it stays deleted, edits and all."""
-    workspace, stored = pod_dirs
-    stored.mkdir(parents=True)
-    (stored / "qc.py").write_text("# qc\n")
-    await proxy.hydrate_async()
-    proxy._seed_from_disk()
-    (workspace / "made.py").write_text("# made here\n")
-    assert await proxy.sync_once() == ["made.py"]
-
-    (stored / "qc.py").unlink()
-    (stored / "made.py").unlink()
-    (workspace / "qc.py").write_text("# qc, as marimo rewrote it on open\n")
-    (workspace / "made.py").write_text("# made here, edited\n")
-    (workspace / "new.py").write_text("# new\n")
-
-    assert await proxy.sync_once() == ["new.py"]
-    assert not (stored / "qc.py").exists()
-    assert not (stored / "made.py").exists()
-    (workspace / "qc.py").write_text("# qc, edited again\n")
-    assert await proxy.sync_once() == []
-    assert not (stored / "qc.py").exists()
-
-
-async def test_a_notebook_that_did_not_hydrate_is_never_saved(pod_dirs, monkeypatch):
-    """The blank marimo opens for a notebook gone from the store never reaches it."""
-    workspace, stored = pod_dirs
-    monkeypatch.setenv("SG_UNSAVED_NOTEBOOK", "qc.py")
-    await proxy.hydrate_async()
-    proxy._seed_from_disk()
-    (workspace / "qc.py").write_text("")
-    (workspace / "other.py").write_text("# other\n")
-
-    assert await proxy.sync_once() == ["other.py"]
-    (workspace / "qc.py").write_text("# typed into the blank\n")
-    assert await proxy.sync_once() == []
-    assert not (stored / "qc.py").exists()
-
-
-async def test_store_files_the_pod_never_had_are_kept(pod_dirs):
-    """After a failed hydrate the workspace is empty, and saving mustn't wipe the store."""
-    workspace, stored = pod_dirs
-    stored.mkdir(parents=True)
-    (stored / "qc.py").write_text("# qc\n")
-    workspace.mkdir()
-
-    await proxy.sync_once()
-
-    assert (stored / "qc.py").read_text() == "# qc\n"
-
-
-def test_file_over_the_limit_is_not_saved_and_is_reported(
-    pod_dirs, owner_client, monkeypatch
-):
-    """A file over the limit isn't saved, and the save status names it for the banner."""
-    monkeypatch.setattr(proxy, "MAX_SAVED_BYTES", 10)
-    workspace, stored = pod_dirs
-    workspace.mkdir()
-    (workspace / "qc.py").write_text("# qc\n")
-    assert owner_client.get("/__sg__/save-status").json() == {
-        "limit_bytes": 10,
-        "unsaved": [],
-        "not_loaded": None,
+    assert _manifest(store) == {
+        "locator": "s3://b/v3",
+        "file": "nb.py",
+        "source": "third",
     }
-
-    big = workspace / "data" / "big.h5ad"
-    big.parent.mkdir()
-    big.write_bytes(b"x" * 11)
-
-    assert asyncio.run(proxy.sync_once()) == ["qc.py"]
-    assert not (stored / "data" / "big.h5ad").exists()
-    assert owner_client.get("/__sg__/save-status").json() == {
-        "limit_bytes": 10,
-        "unsaved": [{"path": "data/big.h5ad", "bytes": 11}],
-        "not_loaded": None,
-    }
+    assert not notebook.refused
 
 
-def test_save_status_names_the_notebook_that_did_not_load(
-    pod_dirs, owner_client, monkeypatch
-):
-    """The banner learns the open notebook didn't load, so it can say edits are lost."""
-    workspace, _ = pod_dirs
-    workspace.mkdir()
-    monkeypatch.setenv("SG_UNSAVED_NOTEBOOK", "qc.py")
+async def test_a_manifest_written_elsewhere_stops_this_pod_writing_it(tmp_path, capsys):
+    """A refused write leaves the other writer's manifest alone, for good."""
+    store, notebook = _manifest_store(tmp_path)
+    other = {"locator": "s3://b/dashboard", "file": "nb.py", "source": "theirs"}
+    obstore.put(store, "m.json", json.dumps(other).encode(), mode="overwrite")
 
-    assert owner_client.get("/__sg__/save-status").json()["not_loaded"] == "qc.py"
+    await notebook._write_manifest("s3://b/v2", "mine")
+    await notebook._write_manifest("s3://b/v3", "mine too")
 
-
-def test_interval_from_env_saves_while_serving(pod_dirs, monkeypatch):
-    """The pod saves on the interval its env sets, while it serves."""
-    workspace, stored = pod_dirs
-    monkeypatch.setenv("SG_SAVE_INTERVAL_SECONDS", "0.1")
-    proxy.hydrate()
-
-    with TestClient(proxy.asgi_app):
-        (workspace / "live.py").write_text("# live\n")
-        deadline = time.monotonic() + 2
-        while not (stored / "live.py").exists() and time.monotonic() < deadline:
-            time.sleep(0.05)
-        assert (stored / "live.py").read_text() == "# live\n"
+    assert _manifest(store) == other
+    assert notebook.refused
+    out = capsys.readouterr().out
+    assert "s3://b/v2" in out
+    assert "s3://b/v3" in out
 
 
-def test_interval_zero_saves_only_at_shutdown(pod_dirs, monkeypatch):
-    """An interval of 0 turns the periodic save off; shutdown still saves."""
-    workspace, stored = pod_dirs
-    monkeypatch.setenv("SG_SAVE_INTERVAL_SECONDS", "0")
-    proxy.hydrate()
+def test_volume_changes_are_files_that_changed_outside_the_caches(tmp_path):
+    """A new or rewritten file changes the stamp; caches and sessions don't."""
+    folder = tmp_path / "notebook"
+    folder.mkdir()
+    (folder / "nb.py").write_text("v1")
+    before = proxy._volume_stamp(folder)
 
-    with TestClient(proxy.asgi_app):
-        (workspace / "late.py").write_text("# late edit\n")
-        time.sleep(0.5)
-        assert not (stored / "late.py").exists()
+    (folder / "__pycache__").mkdir()
+    (folder / "__pycache__" / "nb.pyc").write_text("x")
+    (folder / "__marimo__").mkdir()
+    (folder / "__marimo__" / "session.json").write_text("x")
+    assert proxy._volume_stamp(folder) == before
+    assert list(before) == ["nb.py"]
 
-    assert (stored / "late.py").read_text() == "# late edit\n"
+    (folder / "nb.py").write_text("v2, longer")
+    assert proxy._volume_stamp(folder) != before
+    (folder / "data").mkdir()
+    (folder / "data" / "counts.csv").write_text("a,b\n")
+    assert sorted(proxy._volume_stamp(folder)) == ["data/counts.csv", "nb.py"]
+
+
+async def test_no_manifest_mounts_nothing(monkeypatch):
+    """A built-in notebook, or a local run, has no volume and keeps its directory."""
+    monkeypatch.delenv("SG_NOTEBOOK_MANIFEST", raising=False)
+    cwd = os.getcwd()
+
+    assert await proxy._open_notebook() is None
+    assert os.getcwd() == cwd
 
 
 # ---------------------------------------------------------------------------
@@ -815,24 +678,32 @@ def test_interval_zero_saves_only_at_shutdown(pod_dirs, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_hydrate_puts_back_stored_sign_ins_for_the_owner_only(pod_home):
+@pytest.fixture
+def pod_home(tmp_path, monkeypatch):
+    """The pod's home directory and where the owner's sign-ins are stored."""
+    monkeypatch.setenv("STARGAZER_WORKSPACE_ROOT", str(tmp_path / "store"))
+    monkeypatch.setattr(proxy, "_sign_ins_synced", {})
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    return tmp_path / "home", tmp_path / "store" / "users" / OWNER / "agents"
+
+
+def test_restore_puts_back_stored_sign_ins_for_the_owner_only(pod_home):
     """A sign-in stored by an earlier pod is back in the home dir, readable by the owner alone."""
     home, stored = pod_home
     (stored / ".claude").mkdir(parents=True)
     (stored / ".claude" / ".credentials.json").write_text('{"token": "t"}')
 
-    proxy.hydrate()
+    proxy.restore_sign_ins()
 
     restored = home / ".claude" / ".credentials.json"
     assert restored.read_text() == '{"token": "t"}'
     assert restored.stat().st_mode & 0o777 == 0o600
-    assert not (proxy.WORKSPACE_DIR / ".claude").exists()
 
 
 async def test_a_sign_in_is_saved_once_and_nothing_else_from_home(pod_home):
     """Each agent's sign-in file saves when it changes; the rest of home never does."""
     home, stored = pod_home
-    await proxy.hydrate_async()
+    await proxy.restore_sign_ins_async()
     (home / ".claude").mkdir(parents=True)
     (home / ".claude" / ".credentials.json").write_text('{"token": "t"}')
     (home / ".claude.json").write_text('{"oauthAccount": {}}')
@@ -856,7 +727,7 @@ async def test_signing_out_deletes_the_stored_sign_in(pod_home):
     home, stored = pod_home
     (stored / ".claude").mkdir(parents=True)
     (stored / ".claude" / ".credentials.json").write_text('{"token": "t"}')
-    await proxy.hydrate_async()
+    await proxy.restore_sign_ins_async()
     proxy._seed_from_disk()
 
     (home / ".claude" / ".credentials.json").unlink()
@@ -869,7 +740,7 @@ def test_a_sign_in_is_saved_at_shutdown(pod_home, monkeypatch):
     """A sign-in made just before the pod stops survives it."""
     home, stored = pod_home
     monkeypatch.setenv("SG_SAVE_INTERVAL_SECONDS", "0")
-    proxy.hydrate()
+    proxy.restore_sign_ins()
 
     with TestClient(proxy.asgi_app):
         (home / ".local" / "share" / "opencode").mkdir(parents=True)

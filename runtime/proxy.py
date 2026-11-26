@@ -1,12 +1,12 @@
 """
-### Reverse proxy in front of marimo, with workspace hydrate + sync.
+### Reverse proxy in front of marimo, which also holds the notebook's volume.
 
 Standalone ASGI app baked into the Stargazer image as the top-level module
-`/usr/local/lib/sg_proxy.py`, beside its two HTML fragments. It imports no
+`/usr/local/lib/sg_proxy.py`, beside its HTML fragment. It imports no
 stargazer code: it runs in the image's runtime venv (the project's `runtime`
-group), with the `flyte` SDK for storage. Listens on the per-notebook pod's
-public port (8080) and forwards HTTP + websocket traffic to marimo on
-`127.0.0.1:8081`.
+group), with the `flyte` SDK for storage and `flyteplugins-union` for volumes.
+Listens on the per-notebook pod's public port (8080) and forwards HTTP +
+websocket traffic to marimo on `127.0.0.1:8081`.
 
 **Auth.** The pod runs behind the platform login (`requires_auth=True`), but
 it also answers at an in-cluster address that skips the login, where any pod
@@ -15,43 +15,46 @@ Union (`SG_AUTH_ISSUER` set) `_TokenGate` checks every HTTP and websocket
 request for a token the issuer signed, `X-User-Token`, whose subject is the
 owner (`SG_OWNER_SUBJECT`) or one of `SG_ADMIN_SUBJECTS`: 401 without one, 403
 for anyone else. The dashboard checks its own requests the same way.
-`SG_OWNER_SUBJECT` also keys where the pod hydrates from and saves to.
+`SG_OWNER_SUBJECT` also keys where the pod keeps the agents' sign-ins.
 Platform cookies and `X-User-*` headers are stripped before anything reaches
 marimo, so notebook code never sees the visitor's platform token through a
 request.
 
-**Workspace.** Every file in the user's workspace lives in the workspace store,
-one object per file at its path, under
-`<STARGAZER_WORKSPACE_ROOT>/users/<subject>/workspace/`, a layout the dashboard
-reads and writes too (the pod contract in the runtime doc). The pod does
-both ends of hydrate and save itself, because the pod manager never calls a
-pod: one behind the platform login is unreachable server to server. At
-launch, `hydrate()` copies the owner's whole workspace into `/workspace`. While the pod runs, a background loop saves every file whose size
-or modification time changed, every `SG_SAVE_INTERVAL_SECONDS` (30 by default,
-0 for none; the pod manager sets it at launch, so a running pod keeps the
-interval it started with), and deletes from the store the files deleted from `/workspace`.
-A file it holds that's gone from the store was deleted there, by the
-dashboard, and isn't put back, and nor is the blank marimo opens for a
-notebook that didn't hydrate (`SG_UNSAVED_NOTEBOOK`).
-The `lifespan` shutdown hook does a final pass when the pod scales to zero.
-Dotfiles, `__pycache__/`, `__marimo__/` and files over `MAX_SAVED_BYTES` are
-never saved.
+**Workspace.** A workspace notebook is its own volume, mounted at the
+notebook's folder, `/workspace/<slug>`, the directory of `SG_NOTEBOOK_PATH`.
+`SG_NOTEBOOK_MANIFEST` is the URI of the notebook's manifest,
+`{"locator", "file", "source"}`: the latest version's locator, the notebook's
+file name and that file's text in that version (the pod contract in the runtime
+doc has the layout). `lifespan` mounts at startup, since the process that
+mounts is the one that commits, and the launch script starts marimo once the
+notebook's file shows up in the mount. In edit mode the pod forks the latest
+version and mounts the fork read-write. Every `SG_SAVE_INTERVAL_SECONDS` (30
+by default, 0 for only at shutdown) a file under the mount that changed since
+the last commit is committed as a new version and the manifest is written to
+name it; shutdown finalizes the volume, which commits and unmounts. In run mode
+the latest version is mounted read-only and nothing is written. With no
+manifest (a built-in notebook, a local `docker run`) nothing is mounted.
+
+The manifest write is conditional on the ETag the pod last read or wrote
+(`If-Match`): the dashboard writes it too while no pod has the notebook, and
+nothing else coordinates the two. A refused write means someone else wrote a
+newer version. The pod then stops writing the manifest for the rest of its
+life, logs each version it commits after that by locator, and the page carries
+a banner saying its changes no longer reach the notebook. A commit or write
+that fails for any other reason is logged and tried again on the next pass.
 
 **Sign-ins.** The agents' sign-ins (`AGENT_SIGN_INS`, in the home directory)
-are kept the same way under `<STARGAZER_WORKSPACE_ROOT>/users/<subject>/agents/`,
-beside the workspace rather than in it, so they never show up among the user's
-files: put back at launch, readable by the owner alone, saved by the same
-passes when they change, and deleted from the store on a sign-out.
+are per user, shared by all of a user's pods, so they're kept under
+`<STARGAZER_WORKSPACE_ROOT>/users/<subject>/agents/`: put back at launch by
+`restore_sign_ins()`, readable by the owner alone, saved by the same passes as
+the volume when they change, and deleted from the store on a sign-out.
 
 **Agents.** The terminal and the agents are marimo's own. marimo's agent panel
 dials each agent at a fixed port on the page's host, which a hosted pod
 doesn't serve, so every `text/html` response gets a script spliced in before
 `</body>` (`sockets.html`) that points Claude Code's and OpenCode's at
-`/__sg__/agent/<name>` below. Beside it goes a
-banner naming any file over `MAX_SAVED_BYTES`, which isn't saved, with the
-cell that stores it as an asset instead, and the open notebook when it didn't
-hydrate, since nothing typed into the blank is saved.
-
+`/__sg__/agent/<name>` below. The proxy changes into the notebook's folder
+once it's mounted, so the agents start there.
 **Long-lived sockets.** The platform cuts every request to the pod at its
 request timeout, websockets included: the editor's session, the terminal and
 the agent panel's would close every few minutes. Only the browser's leg is
@@ -70,9 +73,6 @@ Reserved paths the proxy handles itself instead of forwarding:
 - `GET /__sg__/dashboard` — 302 to the owner's dashboard
   (`STARGAZER_ADMIN_URL`), so notebooks can link back with a stable relative
   path.
-- `GET /__sg__/save-status` — the files in `/workspace` over `MAX_SAVED_BYTES`
-  and the notebook that didn't hydrate, which aren't saved; the injected
-  banner polls it.
 - `GET /__sg__/ready` — 200 once local marimo answers, 503 while it's still
   cold-starting.
 - `WS  /__sg__/agent/<name>` — marimo's agent panel. Runs the agent's entry
@@ -105,23 +105,19 @@ import flyte
 import flyte.storage
 import httpx
 import jwt
+import obstore
 import websockets
 from fastapi import FastAPI, Request, Response, WebSocket
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from obstore.exceptions import PreconditionError
 from starlette.background import BackgroundTask
 from starlette.websockets import WebSocketDisconnect
 
 MARIMO_HOST = "127.0.0.1"
 MARIMO_HTTP_PORT = 8081
-# The pod-local dir the launch hydrates into, where the dashboard points
-# notebook paths.
-WORKSPACE_DIR = Path("/workspace")
-# Never saved: Python's bytecode caches and marimo's per-notebook session caches.
+# Not counted as a change to a notebook's volume: Python's bytecode caches and
+# marimo's per-notebook session caches.
 _SKIPPED_DIRS = {"__pycache__", "__marimo__"}
-# A file over this isn't saved with the workspace: big data belongs in the asset
-# store, and the save at SIGTERM has to fit in the pod's grace period. The same
-# limit as an upload through the dashboard's asset browser.
-MAX_SAVED_BYTES = 100 * 1024**2
 
 # Env keys never handed to the agent. The suffix list catches future
 # secret-shaped vars without an explicit entry per name. The org's Pinata key is
@@ -174,9 +170,18 @@ _STRIPPED_HEADERS = {"host", "cookie"}
 # import. In the image it's baked next to this module (runtime/Dockerfile), so
 # resolving it relative to __file__ works both in-repo and in-pod.
 _SOCKETS_INJECTION = (Path(__file__).parent / "sockets.html").read_bytes()
-# The notice naming files too big to save, spliced in the same way when the pod
-# has a store, and baked beside it.
-_SAVE_BANNER_INJECTION = (Path(__file__).parent / "save_banner.html").read_bytes()
+
+# Spliced into every page once the manifest has refused a write, so a user who
+# is still typing sees that it no longer saves. A fixed fragment: the proxy
+# fills nothing into it.
+_REFUSED_BANNER = (
+    b'<div style="position:fixed;bottom:0;left:0;right:0;z-index:2147483647;'
+    b"padding:8px 16px;background:#b3261e;color:#fff;font:14px system-ui,sans-serif;"
+    b'text-align:center">This notebook was changed from somewhere else. '
+    b"Changes made here no longer save to it: copy what you need, then reopen "
+    b"the notebook.</div>"
+)
+
 
 _STARTING_PAGE = """<!doctype html>
 <html><head><meta charset="utf-8"><meta http-equiv="refresh" content="2">
@@ -204,15 +209,15 @@ AGENT_SIGN_INS = (
     ".local/share/opencode/auth.json",
 )
 
-# Relative path -> (size, mtime) of each file as it was last stored. Seeded at
-# proxy startup from the freshly hydrated disk, so nothing re-uploads needlessly,
-# and the set of files a pass may delete from the store.
-_synced: dict[str, tuple[int, int]] = {}
-
-# The same for `AGENT_SIGN_INS`, relative to the home directory.
+# Relative path -> (size, mtime) of each of `AGENT_SIGN_INS` as it was last
+# stored, relative to the home directory. Seeded at proxy startup from what
+# `restore_sign_ins()` put back, so nothing re-uploads needlessly.
 _sign_ins_synced: dict[str, tuple[int, int]] = {}
 
 _storage_ready = False
+
+# The notebook volume this pod holds, once `lifespan` has mounted it.
+_notebook: _NotebookVolume | None = None
 
 
 def _upstream_client() -> httpx.AsyncClient:
@@ -239,7 +244,7 @@ def _forwardable(headers) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Workspace store: hydrate at launch, sync while running and at shutdown
+# Agent sign-ins: per user, in the workspace store
 # ---------------------------------------------------------------------------
 
 
@@ -267,24 +272,6 @@ def _user_prefix(kind: str) -> str | None:
     if not root or not owner:
         return None
     return f"{root}/users/{owner}/{kind}"
-
-
-def _workspace_files() -> dict[str, Path]:
-    """Every file in `/workspace` that's saved, by its POSIX path relative to it.
-
-    Skips dotfiles and dot-dirs, Python's `__pycache__/`, and the session
-    caches marimo writes in `__marimo__/`. Symlinks aren't followed, so a link
-    to data elsewhere on the pod isn't copied into the store.
-    """
-    files: dict[str, Path] = {}
-    for root, dirs, names in os.walk(WORKSPACE_DIR):
-        dirs[:] = [d for d in dirs if not (d.startswith(".") or d in _SKIPPED_DIRS)]
-        for name in names:
-            path = Path(root) / name
-            if name.startswith(".") or path.is_symlink():
-                continue
-            files[path.relative_to(WORKSPACE_DIR).as_posix()] = path
-    return files
 
 
 def _stamp(path: Path) -> tuple[int, int]:
@@ -316,18 +303,15 @@ async def _download_prefix(prefix: str, dest: Path) -> int:
     return count
 
 
-async def hydrate_async() -> None:
-    """Async body of `hydrate()`."""
-    WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
-    prefix = _user_prefix("workspace")
+async def restore_sign_ins_async() -> None:
+    """Async body of `restore_sign_ins()`."""
+    prefix = _user_prefix("agents")
     if prefix is None:
-        print("[sg] workspace store not configured; nothing to load")
+        print("[sg] workspace store not configured; no agent sign-ins to restore")
         return
     _init_storage()
-    n = await _download_prefix(prefix, WORKSPACE_DIR)
-    print(f"[sg] hydrated {n} file(s)")
     home = Path.home()
-    n = await _download_prefix(_user_prefix("agents"), home)
+    n = await _download_prefix(prefix, home)
     for rel in AGENT_SIGN_INS:
         with suppress(FileNotFoundError):
             (home / rel).chmod(0o600)
@@ -335,15 +319,13 @@ async def hydrate_async() -> None:
         print(f"[sg] restored {n} agent sign-in file(s)")
 
 
-def hydrate() -> None:
-    """Fill `/workspace` from the owner's stored workspace, and the home
-    directory from their stored sign-ins.
+def restore_sign_ins() -> None:
+    """Put the owner's stored agent sign-ins back in the home directory.
 
-    Run by the launch script, as its own process, before marimo starts, so the
-    notebook marimo opens already exists on disk. Always leaves the dir in
-    place, empty for a new user or an unconfigured store.
+    Run by the launch script, as its own process, before marimo starts. A new
+    user, or a deploy without a store, restores none.
     """
-    asyncio.run(hydrate_async())
+    asyncio.run(restore_sign_ins_async())
 
 
 def _script_header(lines: list[str]) -> tuple[int, int, dict] | None:
@@ -449,21 +431,16 @@ def use_image_sdk(notebook: str | Path) -> None:
 
 
 def _seed_from_disk() -> None:
-    """Record every file now in `/workspace` as already stored.
+    """Record each agent sign-in now in the home directory as already stored.
 
     Called by `lifespan` at proxy startup, after the launch script's
-    `hydrate()` (a separate process), so the first pass doesn't re-upload what
-    was just downloaded, and the same for the agents' sign-ins. It's also what a later pass may delete from the
-    store: only files this pod knew about. After a failed
-    hydrate the workspace is empty, so nothing stored is ever deleted.
+    `restore_sign_ins()` (a separate process), so the first pass doesn't
+    re-upload what was just downloaded. It's also what a later pass may delete
+    from the store: only sign-ins this pod knew about.
     """
     for rel in AGENT_SIGN_INS:
         with suppress(FileNotFoundError):
             _sign_ins_synced.setdefault(rel, _stamp(Path.home() / rel))
-    if not WORKSPACE_DIR.is_dir():
-        return
-    for rel, path in _workspace_files().items():
-        _synced.setdefault(rel, _stamp(path))
 
 
 async def _upload(uri: str, data: bytes) -> None:
@@ -479,64 +456,6 @@ def _delete_sync(uri: str) -> None:
     """Remove one object; one already gone counts as deleted."""
     with suppress(FileNotFoundError):
         flyte.storage.get_underlying_filesystem(path=uri).rm(uri)
-
-
-async def sync_once() -> list[str]:
-    """Save every changed file in `/workspace`; return their relative paths.
-
-    A file whose size and modification time match what was last stored isn't
-    read at all, and nor is one over `MAX_SAVED_BYTES`. A file deleted from
-    `/workspace` is deleted from the store, if this pod hydrated or saved it.
-    One this pod hydrated or saved that's gone from the store was deleted
-    elsewhere, by the dashboard's delete while the pod was still up, and
-    isn't put back: the pass after the delete would otherwise undo it,
-    whenever the file changed since the last pass (marimo rewrites a notebook
-    as it opens). Nor is the pod's notebook when it didn't hydrate
-    (`SG_UNSAVED_NOTEBOOK`, set by the launch script): the blank marimo opens
-    in its place would undo the delete, or, after a failed hydrate, overwrite
-    the stored notebook. A failed upload or delete is logged and retried on
-    the next pass rather than raised.
-    """
-    prefix = _user_prefix("workspace")
-    if prefix is None or not WORKSPACE_DIR.is_dir():
-        return []
-    _init_storage()
-    files = _workspace_files()
-    unsaved = os.environ.get("SG_UNSAVED_NOTEBOOK")
-    saved = []
-    for rel, path in sorted(files.items()):
-        try:
-            stamp = _stamp(path)
-            if (
-                rel == unsaved
-                or _synced.get(rel) == stamp
-                or stamp[0] > MAX_SAVED_BYTES
-            ):
-                continue
-            uri = f"{prefix}/{rel}"
-            if rel in _synced and not await flyte.storage.exists(uri):
-                _synced[rel] = stamp
-                continue
-            await _upload(uri, path.read_bytes())
-        except Exception as exc:
-            print(f"[sg] saving {rel} failed: {exc}")
-            continue
-        _synced[rel] = stamp
-        saved.append(rel)
-    deleted = []
-    for rel in sorted(_synced.keys() - files.keys()):
-        try:
-            await asyncio.to_thread(_delete_sync, f"{prefix}/{rel}")
-        except Exception as exc:
-            print(f"[sg] deleting {rel} failed: {exc}")
-            continue
-        del _synced[rel]
-        deleted.append(rel)
-    if saved:
-        print(f"[sg] saved {', '.join(saved)}")
-    if deleted:
-        print(f"[sg] deleted {', '.join(deleted)}")
-    return saved
 
 
 async def save_sign_ins() -> list[str]:
@@ -575,54 +494,224 @@ async def save_sign_ins() -> list[str]:
     return changed
 
 
+# ---------------------------------------------------------------------------
+# The notebook's volume
+# ---------------------------------------------------------------------------
+
+
+def _manifest_target(uri: str):
+    """The object store and key of the manifest at `uri`, with the pod's own
+    credentials.
+
+    Flyte's own obstore bypass builds its store the same way; the manifest's
+    conditional writes need the store itself, which `flyte.storage` doesn't
+    wrap.
+    """
+    _init_storage()
+    fs = flyte.storage.get_underlying_filesystem(path=uri)
+    bucket, key = fs._split_path(uri)
+    return fs._construct_store(bucket), key
+
+
+def _volume_stamp(folder: Path) -> dict[str, tuple[int, int]]:
+    """Every file under `folder` that counts as a change: its path relative to
+    `folder` -> size and modification time.
+
+    Skips `_SKIPPED_DIRS`. Symlinks aren't followed.
+    """
+    files = {}
+    for root, dirs, names in os.walk(folder):
+        dirs[:] = [d for d in dirs if d not in _SKIPPED_DIRS]
+        for name in names:
+            path = Path(root) / name
+            if not path.is_symlink():
+                with suppress(FileNotFoundError):
+                    files[path.relative_to(folder).as_posix()] = _stamp(path)
+    return files
+
+
+class _NotebookVolume:
+    """A workspace notebook's volume, mounted in this pod, and its manifest.
+
+    `store` and `key` are the manifest's object. Built by `open()`, which
+    reads the manifest and mounts; in edit mode `save()` commits and writes
+    the manifest, and `close()` finalizes. Nothing here writes in run mode.
+    """
+
+    def __init__(self, store, key: str, folder: Path, edit: bool) -> None:
+        """A volume for the manifest at `key` in `store`, to mount at `folder`."""
+        self.store = store
+        self.key = key
+        self.folder = folder
+        self.edit = edit
+        self.file = ""
+        self.etag = ""
+        self.volume = None
+        self.stamp: dict[str, tuple[int, int]] = {}
+        # The version committed but not yet named by the manifest, with the
+        # notebook's text in it, which can't be read after the unmount.
+        self.pending: tuple[str, str] | None = None
+        self.refused = False
+
+    async def open(self) -> None:
+        """Read the manifest and mount the latest version at `folder`.
+
+        Edit mode mounts a fork of it read-write, named like the volume it
+        branches from, so the fork stays under the same prefix; run mode
+        mounts it read-only.
+        """
+        from flyteplugins.union.io import ROVolume
+
+        result = await obstore.get_async(self.store, self.key)
+        self.etag = result.meta["e_tag"]
+        manifest = json.loads(bytes(await result.bytes_async()))
+        self.file = manifest["file"]
+        latest = await ROVolume.from_locator(manifest["locator"])
+        self.volume = await latest.fork(latest.name) if self.edit else latest
+        await self.volume.mount(mount_path=str(self.folder))
+        self.stamp = _volume_stamp(self.folder)
+        print(f"[sg] mounted {self.volume.name} at {self.folder}")
+
+    def _source(self) -> str:
+        """The notebook's text now, empty if the file is gone."""
+        with suppress(FileNotFoundError):
+            return (self.folder / self.file).read_text(encoding="utf-8")
+        return ""
+
+    async def save(self, *, final: bool = False) -> None:
+        """Commit what changed since the last commit, and write the manifest.
+
+        `final` finalizes the volume instead (commit and unmount), for the pod's
+        last pass. Run mode does nothing. A manifest write that failed is
+        tried again here before anything new is committed.
+        """
+        if not self.edit:
+            return
+        stamp = _volume_stamp(self.folder)
+        changed = stamp != self.stamp
+        if changed or final:
+            source = self._source()
+            if final:
+                version = await self.volume.finalize(message="shutdown")
+            else:
+                version = await self.volume.commit(message="autosave")
+            if changed:
+                self.stamp = stamp
+                self.pending = (version.locator, source)
+        if self.pending is not None:
+            await self._write_manifest(*self.pending)
+
+    async def _write_manifest(self, locator: str, source: str) -> None:
+        """Name `locator` as the latest version, if nobody else has written since
+        this pod last did.
+
+        After a refusal it only logs the version, so every one the pod commits
+        stays findable.
+        """
+        if self.refused:
+            print(f"[sg] notebook version not named in its manifest: {locator}")
+            self.pending = None
+            return
+        body = json.dumps({"locator": locator, "file": self.file, "source": source})
+        try:
+            result = await obstore.put_async(
+                self.store, self.key, body.encode(), mode={"e_tag": self.etag}
+            )
+        except PreconditionError:
+            self.refused = True
+            self.pending = None
+            print(
+                "[sg] ERROR: the notebook was changed somewhere else while this pod "
+                f"had it; this pod's changes are kept as version {locator} and "
+                "no longer named in the notebook's manifest"
+            )
+            return
+        self.etag = result["e_tag"]
+        self.pending = None
+        print(f"[sg] saved notebook version {locator}")
+
+
+async def _open_notebook() -> _NotebookVolume | None:
+    """Mount the notebook's volume when the pod has a manifest to read.
+
+    The launch script exports `SG_NOTEBOOK_MANIFEST`, `SG_NOTEBOOK_PATH` and
+    `SG_NOTEBOOK_MODE`; without a manifest (a built-in notebook, a local run)
+    nothing is mounted. A failure to mount stops the pod, since marimo would
+    have nothing to open. Changes into the folder afterwards: the agents start
+    in the proxy's working directory.
+    """
+    uri = os.environ.get("SG_NOTEBOOK_MANIFEST")
+    if not uri:
+        return None
+    folder = Path(os.environ["SG_NOTEBOOK_PATH"]).parent
+    store, key = _manifest_target(uri)
+    notebook = _NotebookVolume(
+        store, key, folder, edit=os.environ.get("SG_NOTEBOOK_MODE") == "edit"
+    )
+    await notebook.open()
+    os.chdir(folder)
+    return notebook
+
+
 def _save_interval() -> float:
     """Seconds between save passes, from the pod's env; 0 means none.
 
     The dashboard sets it at launch from the owner's settings, 30 unless they
-    changed it. The pass reads only files whose size or mtime changed, so a
-    short interval costs little and bounds what a pod that dies without
-    SIGTERM loses.
+    changed it. A pass commits only when a file changed, so a short interval
+    costs little and bounds what a pod that dies without SIGTERM loses.
     """
     return float(os.environ.get("SG_SAVE_INTERVAL_SECONDS", "30"))
 
 
-async def _sync_loop(interval: float) -> None:
+async def _save_pass(*, final: bool = False) -> None:
+    """One save: the notebook's volume, then the agents' sign-ins.
+
+    Each is tried on its own, so a failure in one is logged and never keeps the
+    other from saving or stops the pod.
+    """
+    try:
+        if _notebook is not None:
+            await _notebook.save(final=final)
+    except Exception as exc:
+        print(f"[sg] saving the notebook failed: {exc}")
+    try:
+        await save_sign_ins()
+    except Exception as exc:
+        print(f"[sg] saving sign-ins failed: {exc}")
+
+
+async def _save_loop(interval: float) -> None:
     """Save every `interval` seconds for the life of the pod."""
     while True:
         await asyncio.sleep(interval)
-        try:
-            await sync_once()
-            await save_sign_ins()
-        except Exception as exc:  # keep the loop alive whatever happens
-            print(f"[sg] workspace sync pass failed: {exc}")
+        await _save_pass()
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Run the save loop while serving; flush pending edits on shutdown.
+    """Mount the notebook's volume, run the save loop while serving, and save
+    once more on shutdown.
 
-    `/workspace` is ephemeral, so anything not written before the pod idles is
-    lost. With the interval at 0 there's no loop, and this flush is the only
-    save. Flyte's `fserve` wrapper is PID 1 and forwards the Knative SIGTERM to
-    its one direct child; the launch script's `exec` chain (args prepend `exec`,
-    then the script `exec`s uvicorn) makes uvicorn that direct child, so it
-    receives SIGTERM and runs this hook. See runtime/launch-notebook.sh — an
-    intermediate shell anywhere in that chain would swallow the signal and skip
-    this flush.
+    Nothing in the pod outlives it but the volume's versions and the sign-ins,
+    so a change not committed before the pod idles is lost. With the interval
+    at 0 there's no loop, and this last pass is the only save. Flyte's `fserve`
+    wrapper is PID 1 and forwards the Knative SIGTERM to its one direct child;
+    the launch script's `exec` chain (args prepend `exec`, then the script
+    `exec`s uvicorn) makes uvicorn that direct child, so it receives SIGTERM
+    and runs this hook. See runtime/launch-notebook.sh — an intermediate shell
+    anywhere in that chain would swallow the signal and skip it.
     """
+    global _notebook
     _seed_from_disk()
+    _notebook = await _open_notebook()
     interval = _save_interval()
-    loop_task = asyncio.create_task(_sync_loop(interval)) if interval > 0 else None
+    loop_task = asyncio.create_task(_save_loop(interval)) if interval > 0 else None
     yield
     if loop_task is not None:
         loop_task.cancel()
         with suppress(asyncio.CancelledError):
             await loop_task
-    try:
-        await sync_once()
-        await save_sign_ins()
-    except Exception as exc:  # never block shutdown
-        print(f"[sg] workspace shutdown sync failed: {exc}")
+    await _save_pass(final=True)
     global _upstream
     if _upstream is not None:
         await _upstream.aclose()
@@ -729,29 +818,6 @@ async def dashboard_redirect() -> Response:
     """
     target = os.environ.get("STARGAZER_ADMIN_URL") or "/"
     return RedirectResponse(target, status_code=302)
-
-
-@asgi_app.get("/__sg__/save-status")
-async def save_status() -> dict:
-    """What the pod won't save, for the injected banner.
-
-    `unsaved` is the files in `/workspace` too big to save, read from disk on
-    each request rather than from the last save pass, so the banner works
-    with the periodic save turned off too. `not_loaded` is the open notebook
-    when it didn't hydrate (`SG_UNSAVED_NOTEBOOK`), else `None`.
-    """
-    unsaved = []
-    if WORKSPACE_DIR.is_dir():
-        for rel, path in sorted(_workspace_files().items()):
-            with suppress(FileNotFoundError):
-                size = path.stat().st_size
-                if size > MAX_SAVED_BYTES:
-                    unsaved.append({"path": rel, "bytes": size})
-    return {
-        "limit_bytes": MAX_SAVED_BYTES,
-        "unsaved": unsaved,
-        "not_loaded": os.environ.get("SG_UNSAVED_NOTEBOOK"),
-    }
 
 
 @asgi_app.get("/__sg__/ready")
@@ -1049,8 +1115,8 @@ async def http_proxy(request: Request, path: str) -> Response:
 
     Runs on the shared keep-alive client. Platform cookies and identity headers
     are dropped before forwarding. Only `text/html` responses are buffered —
-    the sockets script and the save banner are spliced in before `</body>`
-    (on every page, no marimo plugin needed). Everything else — static bundles, API
+    the sockets script, and the refused-write banner when it applies, are
+    spliced in before `</body>` (on every page, no marimo plugin needed). Everything else — static bundles, API
     JSON, downloads — streams through chunk-by-chunk with its original headers,
     so large bodies never sit in proxy memory. The raw query string passes
     through untouched (duplicate params intact). While marimo is still starting,
@@ -1086,9 +1152,8 @@ async def http_proxy(request: Request, path: str) -> Response:
         content = await resp.aread()
         await resp.aclose()
         injection = _SOCKETS_INJECTION
-        # Without a store nothing is saved, so there's nothing to warn about.
-        if _user_prefix("workspace") is not None:
-            injection += _SAVE_BANNER_INJECTION
+        if _notebook is not None and _notebook.refused:
+            injection += _REFUSED_BANNER
         content = content.replace(b"</body>", injection + b"</body>", 1)
         forbidden = _HOP_BY_HOP | {"content-encoding", "content-length"}
         out_headers = {
