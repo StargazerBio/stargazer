@@ -87,9 +87,9 @@ What the pod and the dashboard agree on, replacing the workspace store's layout 
 - [x] Infra PR 57: each role may write `vol-<subject>-*` (waits on apply), then a task in `u-pryce` creates, commits and remounts a `vol-<subject>-...` volume as the user's own role.
 - [x] Infra PR 58: a writable mount also claims a slice domain in a per-bucket ledger at `_uvol/domains/` (the client's fixed `_LEDGER_ROOT`, shared by every fork so their chunk keys never collide), which PR 57 didn't cover: in `u-pryce` the format worked and the mount failed with AccessDenied on `_uvol/domains/labels/...` (run `uq85d7bphgbt2dfhjkzc`). PR 58 grants users' roles create-only writes there (`s3:if-none-match: *`), plus reads and listing. Another user's `vol-<subject>-` name is refused (run `u9fmqz2nhdndm8hvsm5c`, measured). With both applied, as `stargazer-user-u-pryce` (measured 2026-11-25): a new `vol-387300641116005877-probe2` mounted read-write in 0.97 s, committed in 0.92 s and finalized in 0.81 s (run `udrcpnsrsz6lnqwzwfrd`); another pod forked it in 0.09 s, read every file back with matching sha256 and finalized its own write (run `ujscd4psdgmzvfxlx6r6`); a third mounted the result read-only, found both pods' files and was refused a write (run `uz9ptmsrzm9jr5rmgqbw`).
 - [x] Fork depth: 300 forks in a row, each writing a small file (run `ulb92ltxksb7wpbcs487`, `flytesnacks`, 2026-11-25). Per session the read-write mount stayed 0.24 to 0.27 s and finalize went from 0.97 s (first 10) to about 1.3 s; a fresh read-only mount was 0.06 s at depth 1 and 0.10 s from depth 10 to 300, with the client flat at about 120 MB. A `clone` of the 300-deep version took 1.07 s and mounted no faster. No clone schedule needed at this write volume; larger writes per layer weren't tried.
-- [ ] Stargazer: `flyte>=2.13.4` and `flyteplugins-union` in the runtime group; the proxy and launch script on the contract above; hydrate, the save pass, the save status, `save_banner.html` and `SG_UNSAVED_NOTEBOOK` gone; the pod contract in `docs/architecture/runtime.md` rewritten.
+- [x] Stargazer: `flyte>=2.13.4` and `flyteplugins-union` in the runtime group; the proxy and launch script on the contract above; hydrate, the save pass, the save status, `save_banner.html` and `SG_UNSAVED_NOTEBOOK` gone; the pod contract in `docs/architecture/runtime.md` rewritten.
 - [ ] Infra: `flyteplugins-union` bumped; `allow_volumes()` on notebook apps and the dashboard, merged with `SMALL_NODE`; the dashboard's notebook routes on manifests and volumes; `workspace_store.py` gone; the launch passing `SG_NOTEBOOK_MANIFEST` and the new path.
-- [ ] End to end on the tenant as the test account: create a notebook, edit it, stop the pod, relaunch and find the edit; run mode shows it; the gear and delete work; the manifest's ETag refuses a stale write.
+- [ ] End to end on the tenant as the test account: passed 2026-11-25 (recipe and evidence below) but for the guard's starting-pod gap, fixed on the infra branch and to recheck. A pod's refused manifest write is covered by unit tests only (the `claude` AWS profile can't write the manifest to provoke it).
 
 Retention waits for Union to ship one (decided 2026-11-25): until then every version is kept. The aim is a month, with each notebook's latest version kept however old. An S3 lifecycle rule can't do it, since an untouched notebook's only version would expire and an old chunk can back the newest version.
 
@@ -98,6 +98,57 @@ Retention waits for Union to ship one (decided 2026-11-25): until then every ver
 - **Environments the warm cache doesn't cover.** A pod would fork the header's volume and mount the fork read-write, so pixi can take its lock and relink the path dependency. Untested, and worth it only for headers that download a lot.
 - **Reference data for task fan-outs.** A read-only volume of a reference and its companions, with a shared node cache, read once per node instead of downloaded by every task pod. Measure how long task pods spend fetching a full-size reference first.
 - **Not the asset store or index.** An asset is a file named by its CID, listed and queried by the dashboard and every pod at once and published to Pinata by CID, and the index takes concurrent writes from parallel tasks.
+
+## Verification recipe: notebook workspace on volumes
+
+A workspace notebook is created from the dashboard, edited in its pod with every edit kept across pod restarts, opened in run mode without changing anything, changed from the dashboard's gear while no pod has it, and deleted.
+
+### Sub-features
+
+- **V1** create: a new notebook's manifest names a version of a new `vol-<subject>-*` volume and carries its source.
+- **V2** autosave: an edit in the editor reaches the manifest within the save interval.
+- **V3** look-only session: a pod that changed nothing since its last commit adds no version at shutdown.
+- **V4** relaunch: a new edit pod opens the latest version.
+- **V5** gear: a stopped notebook's setup change forks, writes and moves the manifest.
+- **V6** guard: the gear refuses while either mode's pod is wanted up, starting included.
+- **V7** run mode: runs the latest version on a throwaway fork and writes nothing.
+- **V8** delete: the manifest goes and the notebook 404s.
+
+### How to get to it (user POV)
+
+The test account's dashboard, Workspace: create a notebook (Basic), Edit, Run, the tile's gear and bin.
+
+### Driving it
+
+Preconditions: infra PRs 57 and 58 applied; the Stargazer branch's image pushed as `ghcr.io/stargazerbio/debug:<slug>`; the test account's dashboard deployed from the infra branch with `STARGAZER_NOTEBOOK_IMAGE` set to it (infra's `verify-dashboard` skill, `union_dashboard.py deploy`, with `AWS_PROFILE=claude` over `tenant.env`'s); the browser pane signed in to the console as the test account. Manifests read with `aws s3api get-object --bucket stargazerbio-users --key users/387300641116005877/notebooks/<slug>.json --profile claude`; pod logs with read-only `kubectl logs -n u-pryce-development <pod> -c app`.
+
+1. Create `Volume Check` (Basic). Pass: the manifest exists, `file` is `volume-check.py`, `locator` is under `users/<subject>/`, and `aws s3 ls s3://stargazerbio-users/` lists a new `vol-<subject>-<hex>/`.
+2. Edit; change `main_description`; save in marimo. Pass: within the interval the manifest's ETag changes and its `source` has the edit; the pod logs `[sg] saved notebook version <locator>`.
+3. `POST /stop` (slug, mode=edit). Pass: the log ends with `[Volume.abandon] ... let go of /uvol/mnt without a commit`, and the ETag is unchanged.
+4. `POST /launch` edit again and open it. Pass: the editor shows the edit.
+5. Stop it, then `POST /workspace/setup` with a changed `main_description`. Pass: 200 with the new description, and the manifest moves to a new version with it.
+6. `POST /launch` run mode; `POST /workspace/setup` right away and again once it serves. Pass: 409 both times.
+7. Open run mode. Pass: the notebook runs; after `POST /stop`, the log shows the abandon and the ETag is unchanged.
+8. `POST /workspace/delete`. Pass: 200, `GET /workspace/setup` 404s, and the manifest's `head-object` 404s.
+9. Teardown: `union_dashboard.py teardown` shows `live runs: []`.
+
+### Evidence (2026-11-25, debug image from `96b326f`, dashboard `2026.11.22-468432f`)
+
+- V1: manifest ETag `1bb3581a...`, volume `vol-387300641116005877-4b0e550b`, 7482-character Basic source.
+- V2: ETag `11a130aa...` with the edit, about 20 s after saving.
+- V3: both edit sessions and the run-mode session ended with the abandon line; the ETag stayed `6488fee6...` through the run-mode session.
+- V4: the relaunched editor showed `main_description = "volume e2e edit"`.
+- V5: 200 in 2.1 s; ETag `dc04a856...`, source with `"gear e2e edit"`.
+- V6: **gap**: 3 s after launching run mode the gear returned 200 and wrote a version (`App.is_active()` is false while an app deploys); once the pod served it returned 409. Fixed on the infra branch, to recheck.
+- V7: run mode executed the notebook, `bcftools` resolving from `/opt/pixi-cache/cached-envs-v0/volume-check-.../bin/bcftools`.
+- V8: 200, then 404 from the dashboard and from S3.
+- Teardown: `stopped: ['dashboard', 'nb-crop-gmm-edit']`, `live runs: []`.
+
+### Gotchas
+
+- `App.is_active()` is false while an app is still deploying, so a guard on it misses a starting pod.
+- The volume client appends `volumes/` to `metadata_prefix`.
+- A gear save with an unchanged setup made a new version (fixed on the infra branch).
 
 ## Gotchas
 
