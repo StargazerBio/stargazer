@@ -55,7 +55,7 @@ A pod mounts in about 1 s whatever the workspace's size, reads lazily, has no fi
 
 - **Saving doesn't disappear, it shrinks.** A pod still commits on a timer and once more at shutdown (`finalize()`), or a crash loses everything since the last commit. That's a few lines in place of the diffing and mirroring above.
 - **Something has to name the latest version.** A pod forks it to write, so each commit produces a new locator, recorded where the next pod and the dashboard read it: a row in the user's state table, updated only if it still names the version the pod forked (a compare-and-set, which turns today's silent last-writer-wins into a refusal).
-- **Versions pile up.** Each commit is kept until pruned, and the SDK has no prune or delete. Commit only when something changed, and work out retention before it ships.
+- **Versions pile up.** Each commit is kept, with the chunks it wrote, and the SDK has no prune or delete. A fork or a new version costs only what it changes, since unchanged chunks stay shared (read in the docs and `chunk_branch`'s comment, not measured), so a notebook file's edits cost little. What lasts is a big file written into a notebook's folder: deleting it leaves its chunks in the versions that held it. Commit only when something changed.
 - **Two writers can't share one volume.** Today a user with two notebooks open has two pods writing one workspace, and the dashboard writes notebooks (create, copy, open from GitHub, the gear, delete) while pods run. That's the decision below.
 
 ### Decision: who writes a workspace
@@ -73,7 +73,7 @@ Both drop the devbox's persistence: it has no mount broker, and Union comes firs
 - [ ] Flyte to `>=2.13.4` in the lock and `flyteplugins-union` in the image's runtime venv (it has `flyte` 2.14.0); infra's too.
 - [ ] Pod side, `runtime/proxy.py`: mount the notebook's volume (fork the latest version in edit mode, read-only in run mode) at `/workspace`, commit when something changed, finalize at shutdown, compare-and-set the pointer. `UNION_VOLUME_BUCKET=s3://stargazerbio-users` and `UNION_VOLUME_METADATA_PREFIX=<store>/users/<subject>/volumes`: outside a task the client's default metadata prefix is `<bucket>/versions`, at the root, which the role can't write. Delete hydrate, the save pass, the save status and the banner. The pod contract changes.
 - [ ] Infra side: `allow_volumes()` on notebook apps and the dashboard (merged with `SMALL_NODE`), the pointer and tile rows in the state table, the dashboard's notebook routes on volumes, `workspace_store.py` gone. Existing workspaces move once (no backwards compatibility).
-- [ ] Retention: versions are kept a month (decided 2026-11-25), and the latest version of every notebook is kept however old it is. Not an S3 lifecycle rule: an untouched notebook's only version would expire, and a chunk under `vol-*` can back every later version, so chunks can't go by age. It takes a sweep that drops versions older than a month that no pointer names, then frees the chunks no remaining version uses (`juicefs gc`, or Union's prune if one ships). The SDK has neither today; ask Union before building one.
+Retention waits for Union to ship one (decided 2026-11-25): until then every version is kept. The aim is a month, with each notebook's latest version kept however old. An S3 lifecycle rule can't do it, since an untouched notebook's only version would expire and an old chunk can back the newest version.
 
 ## Elsewhere
 
