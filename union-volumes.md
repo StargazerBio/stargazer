@@ -7,7 +7,7 @@ created: 2026-11-25
 
 Union shipped Volumes: a durable, versioned filesystem a task or app mounts like a directory. It's JuiceFS over the cluster's bucket, plus a metadata store for versions and copy-on-write forks, mounted through a broker DaemonSet (`volumes.union.ai` CSI driver), so a pod needs no `CAP_SYS_ADMIN` or `/dev/fuse`. The aim: put the notebook workspace on volumes and delete the autosave and workspace-state code built around the object-per-file store.
 
-**Where it stands (2026-11-25):** a spike on the tenant (below) showed volumes work on the cluster but no per-user role could write one, since a volume's chunks live at the bucket root. Infra PR 57 grants each role `vol-<subject>-*`; it waits on apply. Notebook environments stay in the image and its warm cache: a read-only volume can't hold one (pixi writes into it), and they build in 3 to 6 s anyway. The open decision is which writer model the workspace takes ([Plan](#plan-the-workspace-on-volumes)).
+**Where it stands (2026-11-25):** a spike on the tenant (below) showed volumes work on the cluster but no per-user role could write one, since a volume's chunks live at the bucket root. Infra PR 57 grants each role `vol-<subject>-*`; it waits on apply. Notebook environments stay in the image and its warm cache: a read-only volume can't hold one (pixi writes into it), and they build in 3 to 6 s anyway. Each notebook gets its own volume (decided, [Plan](#plan-the-workspace-on-volumes)).
 
 ## What it is
 
@@ -59,6 +59,8 @@ A pod mounts in about 1 s whatever the workspace's size, reads lazily, has no fi
 - **Two writers can't share one volume.** Today a user with two notebooks open has two pods writing one workspace, and the dashboard writes notebooks (create, copy, open from GitHub, the gear, delete) while pods run. That's the decision below.
 
 ### Decision: who writes a workspace
+
+**Decided 2026-11-25: B, one volume per notebook.**
 
 - **A. One volume per user, one pod per user.** One workspace pod mounts it read-write and serves every notebook. The dashboard's notebook routes become file operations in that pod, or the dashboard joins it. Removes the most: the sync, and also per-notebook apps and their launch state. But it's a new pod model: one pod's memory for every open kernel, no per-notebook size (`main_env`), and run-mode pods that only read a version. Unknown whether marimo serves a directory with a pixi sandbox per notebook.
 - **B. One volume per notebook (recommended).** A notebook's folder is its own volume. Its edit pod is the only writer, which the per-notebook app already guarantees (one replica per notebook and mode), and its run-mode pod mounts the latest version read-only, so it runs a consistent snapshot. The dashboard writes a notebook's volume only while no pod has it, as the gear already checks (`_notebook_running`): create, copy and open-from-GitHub make a new volume holding the file, and delete stops the pods and drops the pointer. Tiles read each notebook's name and description from the state table, written when the dashboard or the pod commits, so listing mounts nothing. The cost: a notebook sees only its own folder, so files shared between notebooks go, and data belongs in the asset store, as it already does across pods. Agent sign-ins are per user and written by every pod, so they keep today's small sync under `agents/`.
