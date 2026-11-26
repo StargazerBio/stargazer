@@ -71,13 +71,25 @@ Forks don't make one workspace writable by several pods. A fork is a separate br
 
 Both drop the devbox's persistence: it has no mount broker, and Union comes first. Locally nothing changes, since nothing is saved there today.
 
-### Pieces (for B)
+### The contract (decided 2026-11-25)
+
+What the pod and the dashboard agree on, replacing the workspace store's layout in the pod contract:
+
+- **A manifest per workspace notebook**, the object `<STARGAZER_WORKSPACE_ROOT>/users/<subject>/notebooks/<slug>.json`: `{"locator": <the latest version's locator>, "file": <the notebook's filename>, "source": <that file's text in that version>}`. It names the latest version and carries the notebook's source with it, so the dashboard's tiles, gear, download, publish and launch read one small object and never mount a volume to read. Every write is conditional: a new notebook's with `If-None-Match: *`, every other with `If-Match` on the ETag the writer last read or wrote (obstore's `put(mode=...)`). A refused write means someone else wrote it; the writer stops and says so, and its versions stay reachable by locator.
+- **Volumes** are named `vol-<subject>-<8 hex>`, in the workspace root's bucket, with version metadata under `<root>/users/<subject>/volumes` (passed as `bucket=` and `metadata_prefix=` to `Volume.new`; forks inherit both, and their chunk branches extend the name, so they stay in `vol-<subject>-*`).
+- **The pod** gets the manifest's URI in `SG_NOTEBOOK_MANIFEST` and the notebook's path as `/workspace/<slug>/<file>`, and mounts the notebook's volume at `/workspace/<slug>` before marimo starts (`/workspace` is `flyte`'s, so the client can make its link there; `/workspace/AGENTS.md` stays the agents' context, a parent of the notebook's folder). In edit mode it forks the latest version and mounts the fork read-write, commits every `SG_SAVE_INTERVAL_SECONDS` when a file changed since the last commit, finalizes at shutdown, and writes the manifest after each commit. In run mode it mounts the latest version read-only and writes nothing. With no `SG_NOTEBOOK_MANIFEST` (a built-in notebook, locally) it mounts nothing. The proxy holds the mount, since the process that mounts is the one that commits.
+- **The dashboard** writes a notebook only while no pod has it (`_notebook_running`): create, copy and open-from-GitHub make a new volume holding the file, finalize it and create the manifest; the gear forks the latest version, writes the file, finalizes and updates the manifest; delete stops the pods and deletes the manifest.
+- **Agent sign-ins** keep today's save under `users/<subject>/agents/`.
+- **Not carried over:** the old `users/<subject>/workspace/` objects, and files a notebook shared with others. The devbox has no workspace notebooks (no mount broker).
+
+### Pieces
 
 - [ ] Infra PR 57: each role may write `vol-<subject>-*` (waits on apply), then a task in `u-pryce` creates, commits and remounts a `vol-<subject>-...` volume as the user's own role.
 - [ ] Fork depth: fork, write and commit a volume a few hundred times in a row, and time a mount and a read at the end against the first.
-- [ ] Flyte to `>=2.13.4` in the lock and `flyteplugins-union` in the image's runtime venv (it has `flyte` 2.14.0); infra's too.
-- [ ] Pod side, `runtime/proxy.py`: mount the notebook's volume (fork the latest version in edit mode, read-only in run mode) at `/workspace`, commit when something changed, finalize at shutdown, compare-and-set the pointer. `UNION_VOLUME_BUCKET=s3://stargazerbio-users` and `UNION_VOLUME_METADATA_PREFIX=<store>/users/<subject>/volumes`: outside a task the client's default metadata prefix is `<bucket>/versions`, at the root, which the role can't write. Delete hydrate, the save pass, the save status and the banner. The pod contract changes.
-- [ ] Infra side: `allow_volumes()` on notebook apps and the dashboard (merged with `SMALL_NODE`), the pointer and tile rows in the state table, the dashboard's notebook routes on volumes, `workspace_store.py` gone. Existing workspaces move once (no backwards compatibility).
+- [ ] Stargazer: `flyte>=2.13.4` and `flyteplugins-union` in the runtime group; the proxy and launch script on the contract above; hydrate, the save pass, the save status, `save_banner.html` and `SG_UNSAVED_NOTEBOOK` gone; the pod contract in `docs/architecture/runtime.md` rewritten.
+- [ ] Infra: `flyteplugins-union` bumped; `allow_volumes()` on notebook apps and the dashboard, merged with `SMALL_NODE`; the dashboard's notebook routes on manifests and volumes; `workspace_store.py` gone; the launch passing `SG_NOTEBOOK_MANIFEST` and the new path.
+- [ ] End to end on the tenant as the test account: create a notebook, edit it, stop the pod, relaunch and find the edit; run mode shows it; the gear and delete work; the manifest's ETag refuses a stale write.
+
 Retention waits for Union to ship one (decided 2026-11-25): until then every version is kept. The aim is a month, with each notebook's latest version kept however old. An S3 lifecycle rule can't do it, since an untouched notebook's only version would expire and an old chunk can back the newest version.
 
 ## Elsewhere
