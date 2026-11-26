@@ -31,8 +31,12 @@ notebook's file shows up in the mount. In edit mode the pod forks the latest
 version and mounts the fork read-write. Every `SG_SAVE_INTERVAL_SECONDS` (30
 by default, 0 for only at shutdown) a file under the mount that changed since
 the last commit is committed as a new version and the manifest is written to
-name it; shutdown finalizes the volume, which commits and unmounts. In run mode
-the latest version is mounted read-only and nothing is written. With no
+name it; shutdown finalizes the volume, which commits and unmounts, or, when
+nothing changed since the last commit, abandons it, so a session that only
+looked at the notebook adds no version. In run mode the pod mounts a throwaway
+fork of the latest version read-write, since the header fixes and marimo's own
+session caches write beside the notebook: it never commits or writes the
+manifest, and its edits are thrown away when the pod stops. With no
 manifest (a built-in notebook, a local `docker run`) nothing is mounted.
 
 The manifest write is conditional on the ETag the pod last read or wrote
@@ -535,7 +539,10 @@ class _NotebookVolume:
 
     `store` and `key` are the manifest's object. Built by `open()`, which
     reads the manifest and mounts; in edit mode `save()` commits and writes
-    the manifest, and `close()` finalizes. Nothing here writes in run mode.
+    the manifest, and its final pass finalizes the volume or abandons it when
+    nothing changed. In run mode the mount is a throwaway fork: `save()`
+    commits nothing and its final pass abandons it, so nothing it holds
+    outlives the pod.
     """
 
     def __init__(self, store, key: str, folder: Path, edit: bool) -> None:
@@ -556,9 +563,10 @@ class _NotebookVolume:
     async def open(self) -> None:
         """Read the manifest and mount the latest version at `folder`.
 
-        Edit mode mounts a fork of it read-write, named like the volume it
-        branches from, so the fork stays under the same prefix; run mode
-        mounts it read-only.
+        Both modes mount a fork of it read-write, named like the volume it
+        branches from, so the fork stays under the same prefix. Run mode's is
+        never committed: the header fixes and marimo's session caches write
+        beside the notebook, which a read-only mount would refuse.
         """
         from flyteplugins.union.io import ROVolume
 
@@ -567,7 +575,7 @@ class _NotebookVolume:
         manifest = json.loads(bytes(await result.bytes_async()))
         self.file = manifest["file"]
         latest = await ROVolume.from_locator(manifest["locator"])
-        self.volume = await latest.fork(latest.name) if self.edit else latest
+        self.volume = await latest.fork(latest.name)
         await self.volume.mount(mount_path=str(self.folder))
         self.stamp = _volume_stamp(self.folder)
         print(f"[sg] mounted {self.volume.name} at {self.folder}")
@@ -581,14 +589,22 @@ class _NotebookVolume:
     async def save(self, *, final: bool = False) -> None:
         """Commit what changed since the last commit, and write the manifest.
 
-        `final` finalizes the volume instead (commit and unmount), for the pod's
-        last pass. Run mode does nothing. A manifest write that failed is
+        `final` ends the volume instead, for the pod's last pass: finalized
+        (commit and unmount) when files changed since the last commit, else
+        abandoned (released without a commit), so a session that changed
+        nothing adds no version. Run mode's last pass abandons its throwaway
+        fork and nothing else happens there. A manifest write that failed is
         tried again here before anything new is committed.
         """
         if not self.edit:
+            if final:
+                await self.volume.abandon()
             return
         stamp = _volume_stamp(self.folder)
         changed = stamp != self.stamp
+        if final and not changed and self.pending is None:
+            await self.volume.abandon()
+            return
         if changed or final:
             source = self._source()
             if final:

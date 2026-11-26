@@ -95,8 +95,7 @@ start_marimo() {
   # sandbox, which marimo's own packages may not have builds for, and the
   # kernel never starts. A header saved before the pixi sandbox sources the
   # SDK only in `[tool.uv.sources]`, which pixi doesn't read, so its kernel
-  # would install the SDK from PyPI. A failure here leaves the notebook as it
-  # is, which is all a run-mode volume, mounted read-only, allows.
+  # would install the SDK from PyPI. A failure here leaves the notebook as it is.
   python -c "import sys, sg_proxy; sg_proxy.pin_python(sys.argv[1]); sg_proxy.use_image_sdk(sys.argv[1])" "${NOTEBOOK_PATH}" \
     || echo "warning: could not check the notebook's header" >&2
 
