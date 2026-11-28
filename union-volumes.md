@@ -1,6 +1,6 @@
 ---
 title: union-volumes
-status: review
+status: done
 priority: normal
 created: 2026-11-25
 pr: 178
@@ -158,5 +158,14 @@ Preconditions: infra PRs 57 and 58 applied; the Stargazer branch's image pushed 
 - A task on the Stargazer image runs its `ENTRYPOINT` (`start-local.sh`), which ignores Flyte's arguments and fails on `flyte create config`. An app's entrypoint is replaced, so notebook pods are fine; a task on that image needs the entrypoint overridden (the spike linked `start-local.sh` to `/usr/bin/env`).
 - A pixi environment holds about 15,500 symlinks into the uv cache. Copying it into a volume has to dereference them: a 192 MB environment became 521 MB and took 20 s.
 - The spike's chunks (`volprobe-p1`, `volprobe-env`) are left in `union-us-west-2-stargazerbio`, and its images (`volprobe-img`) in ECR.
+
+## Outcome
+
+Shipped in StargazerBio/stargazer#178 (the pod) and StargazerBio/infra#59 (the dashboard), released in 2026.11.27 (#181). Each workspace notebook is a volume of its own with a manifest; the copy-in, the save pass and the 100 MB cap are gone. Verified end to end on the tenant as the test account (recipe above).
+
+- **Refused writes:** a pod's write to a manifest the dashboard deleted is refused like one to a manifest someone else wrote. S3 answers it with 404 `NoSuchKey`, which obstore raises as `PreconditionError` (run `uzr4zthrq65ghshblqcn`, measured). Pinned by a test in #180.
+- **Migration:** the test account was the only one with old `users/<subject>/workspace/` notebooks (the whole bucket listed). A one-off task in `u-pryce` (run `uzr4zthrq65ghshblqcn`) made its 7 notebooks volumes with manifests, each manifest's `source` matching the old object byte for byte. `r3-isolation.txt` was left, and the old objects stay in place.
+- **Copy:** the dashboard and the docs say each notebook's folder is its own, with the reason in the architecture docs (StargazerBio/infra#60, #179).
+- **Left:** version retention and volumes nothing names, ticket `volume-retention`. The devbox has no workspace notebooks.
 
 Related: [[board]], [[prebuilt-notebook-environment]], [[layered-notebook-image-cache]], [[header-declared-pod]], [[warm-uv-cache]], [[data-aware-caching]], [[conditional-workspace-writes]], [[flyte-apps]], [[flyte-io]], [[marimo-sandbox]].
