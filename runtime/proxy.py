@@ -42,7 +42,9 @@ manifest (a built-in notebook, a local `docker run`) nothing is mounted.
 The manifest write is conditional on the ETag the pod last read or wrote
 (`If-Match`): the dashboard writes it too while no pod has the notebook, and
 nothing else coordinates the two. A refused write means someone else wrote a
-newer version. The pod then stops writing the manifest for the rest of its
+newer version, or deleted the notebook: S3 answers a write conditional on an
+object that's gone with 404, which obstore raises as the same
+`PreconditionError`. The pod then stops writing the manifest for the rest of its
 life, logs each version it commits after that by locator, and the page carries
 a banner saying its changes no longer reach the notebook. A commit or write
 that fails for any other reason is logged and tried again on the next pass.
@@ -182,7 +184,7 @@ _SOCKETS_INJECTION = (Path(__file__).parent / "sockets.html").read_bytes()
 _REFUSED_BANNER = (
     b'<div style="position:fixed;bottom:0;left:0;right:0;z-index:2147483647;'
     b"padding:8px 16px;background:#b3261e;color:#fff;font:14px system-ui,sans-serif;"
-    b'text-align:center">This notebook was changed from somewhere else. '
+    b'text-align:center">This notebook was changed or deleted from somewhere else. '
     b"Changes made here no longer save to it: copy what you need, then reopen "
     b"the notebook.</div>"
 )
@@ -638,8 +640,8 @@ class _NotebookVolume:
             self.refused = True
             self.pending = None
             print(
-                "[sg] ERROR: the notebook was changed somewhere else while this pod "
-                f"had it; this pod's changes are kept as version {locator} and "
+                "[sg] ERROR: the notebook was changed or deleted somewhere else "
+                f"while this pod had it; this pod's changes are kept as version {locator} and "
                 "no longer named in the notebook's manifest"
             )
             return
