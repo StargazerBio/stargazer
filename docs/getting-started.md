@@ -13,7 +13,7 @@ The dashboard has two halves:
 
 ![The dashboard's Assets graph, showing public data and Stargazer's notebooks](assets/dashboard-assets.jpg)
 
-Your workspace is saved as you work, every 30 seconds and when a notebook stops, and comes back the next time you open it. A file over 100 MB in the workspace isn't saved: a banner names it, with a cell that stores it as an asset instead. **"On the cluster" runs go to your own project**, and your files are reachable only by your own notebooks and runs.
+Your workspace is saved as you work, every 30 seconds and when a notebook stops, and comes back the next time you open it. **Each notebook has a folder of its own**: the files you keep beside it, of any size, are saved with it, and no other notebook can see them. To use a file in more than one notebook, store it as an asset and find it from each one with `assemble()`. **"On the cluster" runs go to your own project**, and your files are reachable only by your own notebooks and runs.
 
 ## Run It Locally
 

@@ -59,6 +59,7 @@ doesn't serve, so every `text/html` response gets a script spliced in before
 `</body>` (`sockets.html`) that points Claude Code's and OpenCode's at
 `/__sg__/agent/<name>` below. The proxy changes into the notebook's folder
 once it's mounted, so the agents start there.
+
 **Long-lived sockets.** The platform cuts every request to the pod at its
 request timeout, websockets included: the editor's session, the terminal and
 the agent panel's would close every few minutes. Only the browser's leg is
