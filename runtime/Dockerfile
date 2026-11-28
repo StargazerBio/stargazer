@@ -69,7 +69,7 @@ RUN python -m venv /opt/venv \
 # The proxy is a top-level module, not under `app/`: a hosted pod's code bundle
 # unpacks an `app/` package into the working directory, which would shadow it.
 COPY runtime/proxy.py /usr/local/lib/sg_proxy.py
-COPY runtime/sockets.html runtime/save_banner.html /usr/local/lib/
+COPY runtime/sockets.html /usr/local/lib/
 COPY runtime/launch-notebook.sh runtime/start-local.sh /usr/local/bin/
 # Owned by the runtime user: each notebook's environment builds `stargazer-bio`
 # from this tree, as a package, not editable, and the build writes its
@@ -96,10 +96,11 @@ RUN PIXI_CACHE_DIR=/tmp/pixi-cache pixi install --locked \
     && ln -s /stargazer/.pixi/envs/mcp /opt/mcp \
     && chown -R flyte:flyte /stargazer
 
-# /workspace starts with the agent's context: Claude Code starts there and
-# reads its AGENTS.md. The proxy records what's already there at startup as
-# saved, so a hosted pod keeps this copy out of the user's store until they
-# edit it. ~/.stargazer exists so a volume mounted there takes its ownership.
+# /workspace holds the agent's context, AGENTS.md, a parent of the folder a
+# hosted notebook's volume is mounted at (/workspace/<slug>) and of the agents'
+# working directory there. It's owned by the runtime user, so the volume
+# client can make that mount's link.
+# ~/.stargazer exists so a volume mounted there takes its ownership.
 COPY --chown=flyte:flyte runtime/notebook_agent.md /workspace/AGENTS.md
 COPY --chown=flyte:flyte runtime/marimo.toml /home/flyte/.config/marimo/marimo.toml
 COPY --chown=flyte:flyte runtime/opencode.jsonc /home/flyte/.config/opencode/opencode.jsonc
@@ -174,8 +175,8 @@ RUN export PIXI_NO_HARD_LINKS=false PIXI_NO_REF_LINKS=false \
     done
 
 # Not /workspace: a hosted pod's `fserve` unpacks its code bundle and writes
-# its parameters file into the working directory, and the proxy saves
-# everything in /workspace to the user's store. The launch script moves there.
+# its parameters file into the working directory, and a notebook's volume is
+# mounted under /workspace. The launch script moves into the notebook's folder.
 WORKDIR /home/flyte
 
 EXPOSE 8080

@@ -23,9 +23,9 @@ A cluster can only run tasks its pods can import: the SDK's, and those a noteboo
 | **Tutorials** | `tutorials/` | Image-baked | Learn the building blocks, in order: Assets → Tasks → Workflows → Execution |
 | **Templates** | `templates/` | Image-baked | Starting points for a new Workspace notebook (`blank`, `basic`) |
 | **Community** | `<domain>/<slug>.py` | The `StargazerBio/community-notebooks` repo | Production pipelines, parameterized — bring your own data (e.g. the scRNA-seq and germline pipelines) |
-| **Workspace** | — | The user's workspace store | The user's own notebooks, persisted across sessions |
+| **Workspace** | — | The user's volumes | The user's own notebooks, persisted across sessions |
 
-Tutorials and templates are baked into the image and pinned by its release: they teach and scaffold the SDK of the same version. Community notebooks live in git, outside the image: a tutorial is read once, while a pipeline notebook is meant to be run repeatedly on new data, so it's opened into a Workspace and run from there. A user's Workspace is one folder saved whole in the [workspace store](runtime.md#the-pod-contract): notebooks side by side so they can import each other, plus any data or helper files kept beside them.
+Tutorials and templates are baked into the image and pinned by its release: they teach and scaffold the SDK of the same version. Community notebooks live in git, outside the image: a tutorial is read once, while a pipeline notebook is meant to be run repeatedly on new data, so it's opened into a Workspace and run from there. A Workspace notebook is a folder of its own, a [volume](runtime.md#the-pod-contract) holding the notebook and any data or helper files kept beside it, so it can import its own helpers but not another notebook's.
 
 A notebook is served in **Edit** (full marimo UI) or **Run** (a read-only app view), one at a time; either mode can dispatch locally or to a cluster.
 
@@ -72,7 +72,7 @@ The setup block also declares the dashboard tile's `main_name` and `main_descrip
 
 ## Adding Notebooks
 
-- **Workspace notebooks** are created from the dashboard (the blank or basic template in `notebooks/templates/`) and live in the user's workspace store, with no repo change.
+- **Workspace notebooks** are created from the dashboard (the blank or basic template in `notebooks/templates/`) and live in the user's own volumes, one per notebook, with no repo change.
 - **Built-in notebooks** are a `.py` file (standard marimo format, importing only public `stargazer` APIs) under `src/stargazer/notebooks/tutorials/` or `templates/`. It ships in the next release's image, and the dashboard lists it once its tile is registered there.
 - **Community notebooks** are published to the community repo (below), with no release of Stargazer needed.
 
@@ -88,6 +88,6 @@ Notebooks are code, so they're shared through git: the `StargazerBio/community-n
 
 ## In-Notebook AI
 
-Claude Code and OpenCode ride along in the notebook editor, in marimo's agent panel: each works in the open notebook's folder in `/workspace`, with a condensed context file (`runtime/notebook_agent.md`) as `AGENTS.md`, and the editor watches the open notebook's file, so an agent's edits show up in it. marimo's terminal (Ctrl+`) has `claude` and `opencode` on its path for signing in, and a hosted pod keeps each sign-in for the user's next session. The panel and the terminal are part of the editor, not run mode. The panel's agents have the stargazer MCP server's tools (`list_tasks`, `run_task`, `query_files` and the rest of the catalog) against the user's own storage and project, and the same server serves agent users through external coding tools.
+Claude Code and OpenCode ride along in the notebook editor, in marimo's agent panel: each works in the open notebook's folder, with a condensed context file (`runtime/notebook_agent.md`) as `AGENTS.md`, and the editor watches the open notebook's file, so an agent's edits show up in it. marimo's terminal (Ctrl+`) has `claude` and `opencode` on its path for signing in, and a hosted pod keeps each sign-in for the user's next session. The panel and the terminal are part of the editor, not run mode. The panel's agents have the stargazer MCP server's tools (`list_tasks`, `run_task`, `query_files` and the rest of the catalog) against the user's own storage and project, and the same server serves agent users through external coding tools.
 
 The mechanics behind this page are in the docstrings of `src/stargazer/notebooks/__init__.py` (`main_env`) and `src/stargazer/notebooks/ui.py` (dispatch).
