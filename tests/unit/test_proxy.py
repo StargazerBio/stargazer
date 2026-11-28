@@ -643,6 +643,21 @@ async def test_a_manifest_written_elsewhere_stops_this_pod_writing_it(tmp_path, 
     assert "s3://b/v3" in out
 
 
+async def test_a_manifest_deleted_elsewhere_stops_this_pod_writing_it(tmp_path, capsys):
+    """A notebook deleted from the dashboard stays deleted: the pod's write is refused."""
+    store, notebook = _manifest_store(tmp_path)
+    obstore.delete(store, "m.json")
+
+    await notebook._write_manifest("s3://b/v2", "mine")
+    await notebook._write_manifest("s3://b/v3", "mine too")
+
+    assert notebook.refused
+    assert obstore.list(store).collect() == []
+    out = capsys.readouterr().out
+    assert "s3://b/v2" in out
+    assert "s3://b/v3" in out
+
+
 def test_volume_changes_are_files_that_changed_outside_the_caches(tmp_path):
     """A new or rewritten file changes the stamp; caches and sessions don't."""
     folder = tmp_path / "notebook"
